@@ -1,6 +1,7 @@
 // Schéma Prisma — PMS Hôtel Makarim
-// Squelette uniquement : aucun modèle métier pour l'instant.
-// Voir docs/plan-execution-claude-code.md §3 pour le schéma cible.
+// Voir docs/plan-execution-claude-code.md §3 pour le schéma cible complet.
+// Construit module par module (note d'implémentation §3) : ce fichier ne
+// contient que ce qui est nécessaire aux modules déjà livrés.
 
 datasource db {
   provider = "mysql"
@@ -9,4 +10,96 @@ datasource db {
 
 generator client {
   provider = "prisma-client-js"
+}
+
+// ------------------------------------------------------------------
+// 5.4 — Réservations
+// ------------------------------------------------------------------
+
+enum CanalReservation {
+  WALK_IN
+  DIRECT
+  BOOKING_COM
+}
+
+enum StatutReservation {
+  CONFIRMEE
+  ANNULEE
+  NO_SHOW
+  TRANSFORMEE_EN_SEJOUR
+}
+
+enum StatutChambre {
+  LIBRE_PROPRE
+  RESERVEE
+  OCCUPEE
+  DEPART_PREVU
+  A_NETTOYER
+  EN_NETTOYAGE
+  EN_MAINTENANCE
+}
+
+model RoomType {
+  id       Int     @id @default(autoincrement())
+  nom      String
+  prixBase Decimal @db.Decimal(10, 2)
+  capacite Int
+  rooms    Room[]
+}
+
+model Room {
+  id           Int           @id @default(autoincrement())
+  numero       String        @unique
+  roomTypeId   Int
+  roomType     RoomType      @relation(fields: [roomTypeId], references: [id])
+  statut       StatutChambre @default(LIBRE_PROPRE)
+  reservations Reservation[]
+  nights       RoomNight[]
+}
+
+// Fiche client minimale, suffisante pour rattacher une réservation.
+// Le module CRM (5.7) enrichira ce modèle (catégorie, préférences, historique...).
+model Guest {
+  id            Int           @id @default(autoincrement())
+  nom           String
+  prenom        String
+  pieceIdentite String?
+  telephone     String?
+  email         String?
+  reservations  Reservation[]
+  createdAt     DateTime      @default(now())
+}
+
+model Reservation {
+  id          Int               @id @default(autoincrement())
+  canal       CanalReservation  @default(DIRECT)
+  guestId     Int
+  guest       Guest             @relation(fields: [guestId], references: [id])
+  roomId      Int
+  room        Room              @relation(fields: [roomId], references: [id])
+  dateArrivee DateTime          @db.Date
+  dateDepart  DateTime          @db.Date
+  statut      StatutReservation @default(CONFIRMEE)
+  sourceBrute String?
+  nights      RoomNight[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+// Une ligne par nuit occupée (roomId, date). La contrainte unique ci-dessous
+// est le verrou anti-double-réservation (docs/plan-execution-claude-code.md §8) :
+// deux transactions concurrentes qui tentent d'occuper la même nuit pour la
+// même chambre ne peuvent jamais réussir toutes les deux — InnoDB fait
+// respecter l'unicité au niveau de l'index, indépendamment de l'isolation
+// de transaction. Les lignes sont supprimées quand une réservation est
+// annulée ou que ses dates/chambre changent.
+model RoomNight {
+  id            Int         @id @default(autoincrement())
+  roomId        Int
+  room          Room        @relation(fields: [roomId], references: [id])
+  date          DateTime    @db.Date
+  reservationId Int
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, date])
 }

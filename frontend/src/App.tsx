@@ -1,12 +1,9 @@
-import { Button } from '@/components/ui/button';
+import { ReservationsCalendarPage } from '@/features/reservations/pages/ReservationsCalendarPage';
 
+// Pas de routeur pour l'instant (un seul écran) — sera introduit avec le
+// module core (layout/routing), voir docs/plan-execution-claude-code.md §1.
 function App() {
-  return (
-    <div className="flex min-h-svh flex-col items-center justify-center gap-4">
-      <h1 className="text-2xl font-medium">PMS Hôtel Makarim</h1>
-      <Button>shadcn/ui</Button>
-    </div>
-  );
+  return <ReservationsCalendarPage />;
 }
 
 export default App;
