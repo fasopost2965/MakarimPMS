@@ -72,6 +72,7 @@ model Room {
   statut       StatutChambre @default(LIBRE_PROPRE)
   reservations Reservation[]
   nights       RoomNight[]
+  stays        Stay[]
 }
 
 // Fiche client minimale, suffisante pour rattacher une réservation.
@@ -84,6 +85,7 @@ model Guest {
   telephone     String?
   email         String?
   reservations  Reservation[]
+  stays         Stay[]
   createdAt     DateTime      @default(now())
 }
 
@@ -107,24 +109,102 @@ model Reservation {
   ajustementManuel Boolean           @default(false)
   motifAjustement  String?
   nights           RoomNight[]
+  stay             Stay?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 }
 
 // Une ligne par nuit occupée (roomId, date). La contrainte unique ci-dessous
-// est le verrou anti-double-réservation (docs/plan-execution-claude-code.md §8) :
-// deux transactions concurrentes qui tentent d'occuper la même nuit pour la
-// même chambre ne peuvent jamais réussir toutes les deux — InnoDB fait
-// respecter l'unicité au niveau de l'index, indépendamment de l'isolation
-// de transaction. Les lignes sont supprimées quand une réservation est
-// annulée ou que ses dates/chambre changent.
+// est le verrou anti-double-réservation/double-occupation (docs/plan-execution-claude-code.md
+// §8) : deux transactions concurrentes qui tentent d'occuper la même nuit
+// pour la même chambre ne peuvent jamais réussir toutes les deux — InnoDB
+// fait respecter l'unicité au niveau de l'index, indépendamment de
+// l'isolation de transaction. Les lignes sont supprimées quand une
+// réservation est annulée/déplacée, ou quand un séjour est clôturé
+// (check-out, voir CheckinService.checkout).
+//
+// reservationId et stayId sont tous deux optionnels : une nuit verrouillée
+// par une réservation est rattachée au séjour (stayId) au moment du
+// check-in sans être recréée (même ligne, même contrainte d'unicité) ; une
+// nuit issue d'un check-in walk-in n'a jamais de reservationId.
 model RoomNight {
-  id            Int         @id @default(autoincrement())
+  id            Int          @id @default(autoincrement())
   roomId        Int
-  room          Room        @relation(fields: [roomId], references: [id])
-  date          DateTime    @db.Date
-  reservationId Int
-  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  room          Room         @relation(fields: [roomId], references: [id])
+  date          DateTime     @db.Date
+  reservationId Int?
+  reservation   Reservation? @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  stayId        Int?
+  stay          Stay?        @relation(fields: [stayId], references: [id], onDelete: Cascade)
 
   @@unique([roomId, date])
+}
+
+// ------------------------------------------------------------------
+// 5.5 — Check-in / Check-out / Séjours
+// ------------------------------------------------------------------
+
+enum StatutSejour {
+  EN_COURS
+  CHECKOUT
+  ANNULE
+}
+
+// Le séjour est l'objet central (CLAUDE.md règle 1) : une réservation peut
+// devenir un séjour (check-in), mais un séjour peut aussi exister sans
+// réservation préalable (walk-in) — reservationId est donc optionnel.
+model Stay {
+  id                 Int          @id @default(autoincrement())
+  reservationId      Int?         @unique
+  reservation        Reservation? @relation(fields: [reservationId], references: [id])
+  roomId             Int
+  room               Room         @relation(fields: [roomId], references: [id])
+  guestId            Int
+  guest              Guest        @relation(fields: [guestId], references: [id])
+  dateCheckin        DateTime     @default(now())
+  dateCheckoutPrevue DateTime     @db.Date
+  dateCheckoutReelle DateTime?
+  statut             StatutSejour @default(EN_COURS)
+  nights             RoomNight[]
+  folios             Folio[]
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+}
+
+enum TypeLigneFolio {
+  HEBERGEMENT
+  EXTRA
+  TAXE_SEJOUR
+  PAIEMENT
+}
+
+// Règles 2 et 3 (CLAUDE.md) : un séjour peut avoir plusieurs folios ; ce
+// module ne crée que le "Folio principal" à l'ouverture du séjour (une ligne
+// HEBERGEMENT reprenant Reservation.prixTotalFinal ou le prix calculé pour
+// un walk-in). Le module billing (5.13) ajoutera folios secondaires,
+// transferts de lignes et génération de factures — jamais en contournement
+// de ce modèle (règle 5).
+model Folio {
+  id        Int         @id @default(autoincrement())
+  stayId    Int
+  stay      Stay        @relation(fields: [stayId], references: [id])
+  libelle   String
+  lignes    FolioLine[]
+  createdAt DateTime    @default(now())
+}
+
+// tauxTva volontairement absent à ce stade (pas encore de TaxRateConfig en
+// base) : sera ajouté par le module billing (5.13) qui calculera la TVA/taxe
+// de séjour depuis la configuration, jamais en dur (CLAUDE.md, points de
+// vigilance §8).
+model FolioLine {
+  id              Int            @id @default(autoincrement())
+  folioId         Int
+  folio           Folio          @relation(fields: [folioId], references: [id])
+  type            TypeLigneFolio
+  libelle         String
+  montant         Decimal        @db.Decimal(10, 2)
+  annulee         Boolean        @default(false)
+  motifAnnulation String?
+  createdAt       DateTime       @default(now())
 }

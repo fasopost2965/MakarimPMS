@@ -8,7 +8,10 @@ const prisma = new PrismaClient();
 // réservation/tarification à chaque exécution — c'est un seed de dev, pas
 // une migration : ne jamais le lancer contre une base de production.
 async function main() {
+  await prisma.folioLine.deleteMany();
+  await prisma.folio.deleteMany();
   await prisma.roomNight.deleteMany();
+  await prisma.stay.deleteMany();
   await prisma.reservation.deleteMany();
   await prisma.guest.deleteMany();
   await prisma.seasonRate.deleteMany();

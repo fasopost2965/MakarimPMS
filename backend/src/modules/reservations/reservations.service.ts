@@ -258,7 +258,16 @@ export class ReservationsService {
   // Annulation = statut ANNULEE + libération des nuits, pas de suppression
   // physique (historique client conservé).
   async remove(id: number) {
-    await this.findOne(id);
+    const existing = await this.findOne(id);
+    // Une réservation déjà transformée en séjour (module checkin) partage
+    // ses lignes RoomNight avec ce séjour actif : les annuler ici casserait
+    // le verrou anti-double-occupation en place. L'annulation d'un séjour se
+    // fait via le check-out, pas via cette route.
+    if (existing.statut === StatutReservation.TRANSFORMEE_EN_SEJOUR) {
+      throw new ConflictException(
+        'Cette réservation a déjà été transformée en séjour — utilisez le check-out pour la clôturer.',
+      );
+    }
 
     return this.prisma.$transaction(async (tx) => {
       await tx.roomNight.deleteMany({ where: { reservationId: id } });

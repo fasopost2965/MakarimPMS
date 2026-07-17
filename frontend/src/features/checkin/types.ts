@@ -1,0 +1,56 @@
+import type { Guest, Reservation, Room } from '../reservations/types';
+
+export type StatutSejour = 'EN_COURS' | 'CHECKOUT' | 'ANNULE';
+export type TypeLigneFolio =
+  'HEBERGEMENT' | 'EXTRA' | 'TAXE_SEJOUR' | 'PAIEMENT';
+
+export interface FolioLine {
+  id: number;
+  folioId: number;
+  type: TypeLigneFolio;
+  libelle: string;
+  montant: string;
+  annulee: boolean;
+  motifAnnulation: string | null;
+  createdAt: string;
+}
+
+export interface Folio {
+  id: number;
+  stayId: number;
+  libelle: string;
+  lignes: FolioLine[];
+  createdAt: string;
+}
+
+export interface Stay {
+  id: number;
+  reservationId: number | null;
+  reservation: Reservation | null;
+  roomId: number;
+  room: Room;
+  guestId: number;
+  guest: Guest;
+  dateCheckin: string;
+  dateCheckoutPrevue: string;
+  dateCheckoutReelle: string | null;
+  statut: StatutSejour;
+  folios: Folio[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StayWithSolde extends Stay {
+  soldeDu: string;
+}
+
+export interface WalkinCheckinInput {
+  roomId: number;
+  dateCheckoutPrevue: string;
+  guest: {
+    nom: string;
+    prenom: string;
+    telephone?: string;
+    email?: string;
+  };
+}
