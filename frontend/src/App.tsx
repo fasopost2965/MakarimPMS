@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/ui/button';
 
 function App() {
   return (
@@ -6,7 +6,7 @@ function App() {
       <h1 className="text-2xl font-medium">PMS Hôtel Makarim</h1>
       <Button>shadcn/ui</Button>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
