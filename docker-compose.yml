@@ -1,0 +1,45 @@
+services:
+  mysql:
+    image: mysql:8
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-pms_makarim}
+      MYSQL_USER: ${MYSQL_USER:-pms}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-pms}
+    ports:
+      # Port hôte 3307 : un service MySQL natif occupe déjà 3306 sur cette machine.
+      - '3307:3306'
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: mysql://${MYSQL_USER:-pms}:${MYSQL_PASSWORD:-pms}@mysql:3306/${MYSQL_DATABASE:-pms_makarim}
+      PORT: 3000
+    ports:
+      - '3000:3000'
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    ports:
+      # Port hôte 8081 : 8080 est déjà utilisé par un autre projet local.
+      - '8081:80'
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:
