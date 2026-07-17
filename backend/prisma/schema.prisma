@@ -190,13 +190,10 @@ model Folio {
   stay      Stay        @relation(fields: [stayId], references: [id])
   libelle   String
   lignes    FolioLine[]
+  invoices  Invoice[]
   createdAt DateTime    @default(now())
 }
 
-// tauxTva volontairement absent à ce stade (pas encore de TaxRateConfig en
-// base) : sera ajouté par le module billing (5.13) qui calculera la TVA/taxe
-// de séjour depuis la configuration, jamais en dur (CLAUDE.md, points de
-// vigilance §8).
 model FolioLine {
   id              Int            @id @default(autoincrement())
   folioId         Int
@@ -204,7 +201,65 @@ model FolioLine {
   type            TypeLigneFolio
   libelle         String
   montant         Decimal        @db.Decimal(10, 2)
+  tauxTva         Decimal        @default(0) @db.Decimal(5, 2)
   annulee         Boolean        @default(false)
   motifAnnulation String?
   createdAt       DateTime       @default(now())
+}
+
+// ------------------------------------------------------------------
+// 5.13 — Billing (facturation, TVA, taxe de séjour, paiements)
+// ------------------------------------------------------------------
+
+model TaxRateConfig {
+  id           Int      @id @default(autoincrement())
+  type         String   // "TVA_HEBERGEMENT" | "TVA_ANNEXE" | "TAXE_SEJOUR"
+  taux         Decimal  @db.Decimal(5, 2)
+  applicableA  String?  // catégorie hôtel / commune si pertinent
+  actifDepuis  DateTime @default(now())
+  createdAt    DateTime @default(now())
+}
+
+enum StatutFacture {
+  EMISE
+  ANNULEE_PAR_AVOIR
+}
+
+model Invoice {
+  id           Int           @id @default(autoincrement())
+  numero       String        @unique
+  folioId      Int
+  folio        Folio         @relation(fields: [folioId], references: [id])
+  montantTotal Decimal       @db.Decimal(10, 2)
+  statut       StatutFacture @default(EMISE)
+  pdfUrl       String?
+  creditNotes  CreditNote[]
+  payments     Payment[]
+  createdAt    DateTime      @default(now())
+}
+
+model CreditNote {
+  id        Int      @id @default(autoincrement())
+  invoiceId Int
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id])
+  motif     String
+  montant   Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+}
+
+enum MoyenPaiement {
+  ESPECES
+  CARTE
+  VIREMENT
+  ACOMPTE
+}
+
+model Payment {
+  id             Int           @id @default(autoincrement())
+  invoiceId      Int?
+  invoice        Invoice?      @relation(fields: [invoiceId], references: [id])
+  moyen          MoyenPaiement
+  montant        Decimal       @db.Decimal(10, 2)
+  idempotencyKey String        @unique
+  createdAt      DateTime      @default(now())
 }

@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -8,12 +8,16 @@ const prisma = new PrismaClient();
 // réservation/tarification à chaque exécution — c'est un seed de dev, pas
 // une migration : ne jamais le lancer contre une base de production.
 async function main() {
+  await prisma.payment.deleteMany();
+  await prisma.creditNote.deleteMany();
+  await prisma.invoice.deleteMany();
   await prisma.folioLine.deleteMany();
   await prisma.folio.deleteMany();
   await prisma.roomNight.deleteMany();
   await prisma.stay.deleteMany();
   await prisma.reservation.deleteMany();
   await prisma.guest.deleteMany();
+  await prisma.taxRateConfig.deleteMany();
   await prisma.seasonRate.deleteMany();
   await prisma.room.deleteMany();
   await prisma.roomType.deleteMany();
@@ -146,8 +150,24 @@ async function main() {
     }
   }
 
+  // Configuration des taux TVA et taxe de séjour (module billing 5.13).
+  // Jamais de taux codé en dur — toujours lus depuis cette table.
+  const taxRates = [
+    { type: 'TVA_HEBERGEMENT', taux: 10 },
+    { type: 'TVA_ANNEXE', taux: 20 },
+    { type: 'TAXE_SEJOUR', taux: 2 },
+  ];
+  for (const rate of taxRates) {
+    await prisma.taxRateConfig.create({
+      data: {
+        type: rate.type,
+        taux: new Prisma.Decimal(rate.taux),
+      },
+    });
+  }
+
   console.log(
-    `Seed OK : ${roomTypesData.length} types de chambre, ${seasonRatesData.length} tarifs saisonniers, ${totalRooms} chambres.`,
+    `Seed OK : ${roomTypesData.length} types de chambre, ${seasonRatesData.length} tarifs saisonniers, ${totalRooms} chambres, ${taxRates.length} taux de taxe.`,
   );
 }
 
