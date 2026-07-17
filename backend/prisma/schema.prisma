@@ -1,0 +1,12 @@
+// Schéma Prisma — PMS Hôtel Makarim
+// Squelette uniquement : aucun modèle métier pour l'instant.
+// Voir docs/plan-execution-claude-code.md §3 pour le schéma cible.
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
