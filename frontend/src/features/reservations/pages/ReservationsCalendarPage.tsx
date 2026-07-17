@@ -19,6 +19,7 @@ import {
   CreateReservationDialog,
   type CreateReservationSelection,
 } from '../components/CreateReservationDialog';
+import { ReservationDetailsDialog } from '../components/ReservationDetailsDialog';
 
 const VISIBLE_DAYS = 14;
 const ROW_HEIGHT = 44;
@@ -54,6 +55,10 @@ export function ReservationsCalendarPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [viewingReservation, setViewingReservation] =
+    useState<Reservation | null>(null);
+  const [savingDetails, setSavingDetails] = useState(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
 
   const days = useMemo(
     () => getDateRange(windowStart, VISIBLE_DAYS),
@@ -196,6 +201,30 @@ export function ReservationsCalendarPage() {
     }
   }
 
+  async function handleSaveDetails(input: {
+    prixTotalFinal?: number;
+    motifAjustement?: string;
+  }) {
+    if (!viewingReservation) return;
+    if (input.prixTotalFinal === undefined) {
+      setViewingReservation(null);
+      return;
+    }
+    setSavingDetails(true);
+    setDetailsError(null);
+    try {
+      await updateReservation(viewingReservation.id, input);
+      setViewingReservation(null);
+      await refetch();
+    } catch (err) {
+      setDetailsError(
+        err instanceof Error ? err.message : 'Erreur de mise à jour du prix',
+      );
+    } finally {
+      setSavingDetails(false);
+    }
+  }
+
   const gridTemplateColumns = `${LABEL_COL_WIDTH}px repeat(${VISIBLE_DAYS}, minmax(64px, 1fr))`;
 
   return (
@@ -315,6 +344,9 @@ export function ReservationsCalendarPage() {
                             days={days}
                             dayIndex={dayIndex}
                             onCancel={() => handleCancel(reservationHere.id)}
+                            onView={() =>
+                              setViewingReservation(reservationHere)
+                            }
                             // Pendant un drag de création, la barre ne doit
                             // pas intercepter les événements souris des
                             // colonnes qu'elle recouvre visuellement — sinon
@@ -348,6 +380,17 @@ export function ReservationsCalendarPage() {
         submitting={submitting}
         error={submitError}
       />
+
+      <ReservationDetailsDialog
+        reservation={viewingReservation}
+        onClose={() => {
+          setViewingReservation(null);
+          setDetailsError(null);
+        }}
+        onSave={handleSaveDetails}
+        saving={savingDetails}
+        error={detailsError}
+      />
     </div>
   );
 }
@@ -357,12 +400,14 @@ function ReservationBar({
   days,
   dayIndex,
   onCancel,
+  onView,
   disablePointerEvents,
 }: {
   reservation: Reservation;
   days: Date[];
   dayIndex: number;
   onCancel: () => void;
+  onView: () => void;
   disablePointerEvents: boolean;
 }) {
   const depart = startOfDay(new Date(reservation.dateDepart));
@@ -375,12 +420,14 @@ function ReservationBar({
       onDragStart={(e) =>
         e.dataTransfer.setData('text/plain', String(reservation.id))
       }
+      onClick={onView}
       className={`bg-primary text-primary-foreground absolute inset-y-0.5 left-0.5 z-10 flex cursor-grab items-center justify-between gap-1 truncate rounded px-2 text-xs active:cursor-grabbing ${disablePointerEvents ? 'pointer-events-none' : ''}`}
       style={{ width: `calc(${span * 100}% - 4px)` }}
-      title={`${reservation.guest.nom} ${reservation.guest.prenom} — ${reservation.dateArrivee.slice(0, 10)} → ${reservation.dateDepart.slice(0, 10)}`}
+      title={`${reservation.guest.nom} ${reservation.guest.prenom} — ${reservation.dateArrivee.slice(0, 10)} → ${reservation.dateDepart.slice(0, 10)} — ${reservation.prixTotalFinal} DH${reservation.ajustementManuel ? ' (ajusté)' : ''}`}
     >
       <span className="truncate">
         {reservation.guest.nom} {reservation.guest.prenom}
+        {reservation.ajustementManuel && ' *'}
       </span>
       <button
         type="button"

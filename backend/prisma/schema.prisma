@@ -40,11 +40,28 @@ enum StatutChambre {
 }
 
 model RoomType {
-  id       Int     @id @default(autoincrement())
-  nom      String
-  prixBase Decimal @db.Decimal(10, 2)
-  capacite Int
-  rooms    Room[]
+  id          Int          @id @default(autoincrement())
+  nom         String
+  prixBase    Decimal      @db.Decimal(10, 2)
+  capacite    Int
+  rooms       Room[]
+  seasonRates SeasonRate[]
+}
+
+// Grille tarifaire saisonnière (cahier des charges §5.1/§5.4) — configurable
+// via le module 5.1, jamais de tarif codé en dur dans le calcul (voir
+// ReservationsService.calculatePrixTotal). Une plage [dateDebut, dateFin]
+// (bornes incluses) par libellé et par type de chambre.
+model SeasonRate {
+  id         Int      @id @default(autoincrement())
+  roomTypeId Int
+  roomType   RoomType @relation(fields: [roomTypeId], references: [id])
+  libelle    String
+  dateDebut  DateTime @db.Date
+  dateFin    DateTime @db.Date
+  prixNuit   Decimal  @db.Decimal(10, 2)
+
+  @@unique([roomTypeId, libelle])
 }
 
 model Room {
@@ -71,19 +88,27 @@ model Guest {
 }
 
 model Reservation {
-  id          Int               @id @default(autoincrement())
-  canal       CanalReservation  @default(DIRECT)
-  guestId     Int
-  guest       Guest             @relation(fields: [guestId], references: [id])
-  roomId      Int
-  room        Room              @relation(fields: [roomId], references: [id])
-  dateArrivee DateTime          @db.Date
-  dateDepart  DateTime          @db.Date
-  statut      StatutReservation @default(CONFIRMEE)
-  sourceBrute String?
-  nights      RoomNight[]
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  id               Int               @id @default(autoincrement())
+  canal            CanalReservation  @default(DIRECT)
+  guestId          Int
+  guest            Guest             @relation(fields: [guestId], references: [id])
+  roomId           Int
+  room             Room              @relation(fields: [roomId], references: [id])
+  dateArrivee      DateTime          @db.Date
+  dateDepart       DateTime          @db.Date
+  statut           StatutReservation @default(CONFIRMEE)
+  sourceBrute      String?
+  // Tarification saisonnière (cahier des charges §5.1/§5.4). Le défaut à 0
+  // n'existe que pour la migration (colonnes non-nullables sur une table
+  // pouvant déjà contenir des lignes) — le service calcule et renseigne
+  // toujours ces valeurs explicitement à la création.
+  prixTotalCalcule Decimal           @default(0) @db.Decimal(10, 2)
+  prixTotalFinal   Decimal           @default(0) @db.Decimal(10, 2)
+  ajustementManuel Boolean           @default(false)
+  motifAjustement  String?
+  nights           RoomNight[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 }
 
 // Une ligne par nuit occupée (roomId, date). La contrainte unique ci-dessous

@@ -10,6 +10,7 @@ import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationDto } from './dto/update-reservation.dto';
 import { CheckAvailabilityDto } from './dto/check-availability.dto';
 import { getNightsBetween } from './utils/nights';
+import { calculateNightlyTotal } from './utils/pricing';
 
 const RESERVATION_INCLUDE = {
   guest: true,
@@ -26,6 +27,23 @@ export class ReservationsService {
         'dateDepart doit être postérieure à dateArrivee.',
       );
     }
+  }
+
+  // Tarification saisonnière (cahier des charges §5.1/§5.4) : jamais de taux
+  // codé en dur, toujours dérivé de RoomType.prixBase / SeasonRate en base.
+  private async calculatePrixTotal(
+    tx: Prisma.TransactionClient,
+    roomTypeId: number,
+    nights: Date[],
+  ) {
+    const roomType = await tx.roomType.findUnique({
+      where: { id: roomTypeId },
+    });
+    if (!roomType) {
+      throw new NotFoundException(`Type de chambre ${roomTypeId} introuvable.`);
+    }
+    const seasonRates = await tx.seasonRate.findMany({ where: { roomTypeId } });
+    return calculateNightlyTotal(nights, roomType.prixBase, seasonRates);
   }
 
   // Verrouillage anti-double-réservation (docs/plan-execution-claude-code.md §8) :
@@ -46,6 +64,12 @@ export class ReservationsService {
 
         const guest = await tx.guest.create({ data: dto.guest });
 
+        const prixTotalCalcule = await this.calculatePrixTotal(
+          tx,
+          room.roomTypeId,
+          nights,
+        );
+
         const reservation = await tx.reservation.create({
           data: {
             canal: dto.canal,
@@ -54,6 +78,11 @@ export class ReservationsService {
             dateArrivee: new Date(dto.dateArrivee),
             dateDepart: new Date(dto.dateDepart),
             sourceBrute: dto.sourceBrute,
+            // À la création, prixTotalFinal suit toujours prixTotalCalcule
+            // (pas d'ajustement manuel possible avant que la réservation
+            // existe — voir update()).
+            prixTotalCalcule,
+            prixTotalFinal: prixTotalCalcule,
           },
           include: RESERVATION_INCLUDE,
         });
@@ -164,16 +193,43 @@ export class ReservationsService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
+        // Prix : recalculé chaque fois que les dates/la chambre changent
+        // (base de calcul différente). prixTotalFinal :
+        //  - un prixTotalFinal explicite dans la requête = ajustement
+        //    manuel de la réception, toujours prioritaire ;
+        //  - sinon, s'il n'y a pas déjà d'ajustement manuel en cours, il
+        //    suit automatiquement le nouveau prixTotalCalcule ;
+        //  - sinon (ajustement manuel déjà en place, pas de nouvelle
+        //    valeur fournie), on ne l'écrase pas silencieusement.
+        let prixTotalCalcule: Prisma.Decimal | undefined;
         if (datesOrRoomChanged) {
-          // Libère les nuits actuelles puis retente l'occupation des nouvelles
-          // — la contrainte unique protège toujours contre un conflit avec
-          // une autre réservation, même en cas de changement de chambre/dates.
+          const room = await tx.room.findUnique({ where: { id: roomId } });
+          if (!room) {
+            throw new NotFoundException(`Chambre ${roomId} introuvable.`);
+          }
+
+          // Libère les nuits actuelles puis retente l'occupation des
+          // nouvelles — la contrainte unique protège toujours contre un
+          // conflit avec une autre réservation.
           await tx.roomNight.deleteMany({ where: { reservationId: id } });
           const nights = getNightsBetween(dateArrivee, dateDepart);
           await tx.roomNight.createMany({
             data: nights.map((date) => ({ roomId, date, reservationId: id })),
           });
+
+          prixTotalCalcule = await this.calculatePrixTotal(
+            tx,
+            room.roomTypeId,
+            nights,
+          );
         }
+
+        const manualOverride = dto.prixTotalFinal !== undefined;
+        const prixTotalFinal = manualOverride
+          ? new Prisma.Decimal(dto.prixTotalFinal!)
+          : prixTotalCalcule && !existing.ajustementManuel
+            ? prixTotalCalcule
+            : undefined;
 
         return tx.reservation.update({
           where: { id },
@@ -186,6 +242,10 @@ export class ReservationsService {
             dateDepart: dto.dateDepart ? new Date(dto.dateDepart) : undefined,
             statut: dto.statut,
             sourceBrute: dto.sourceBrute,
+            prixTotalCalcule,
+            prixTotalFinal,
+            ajustementManuel: manualOverride ? true : undefined,
+            motifAjustement: dto.motifAjustement,
           },
           include: RESERVATION_INCLUDE,
         });

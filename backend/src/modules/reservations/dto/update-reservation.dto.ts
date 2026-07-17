@@ -2,8 +2,10 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
+  Min,
 } from 'class-validator';
 import { CanalReservation, StatutReservation } from '@prisma/client';
 
@@ -33,4 +35,15 @@ export class UpdateReservationDto {
   @IsOptional()
   @IsString()
   sourceBrute?: string;
+
+  // Ajustement manuel du prix par la réception (cahier des charges §5.4).
+  // Toute valeur fournie ici passe ajustementManuel à true côté service.
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  prixTotalFinal?: number;
+
+  @IsOptional()
+  @IsString()
+  motifAjustement?: string;
 }

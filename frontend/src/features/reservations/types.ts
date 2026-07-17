@@ -45,6 +45,12 @@ export interface Reservation {
   dateDepart: string;
   statut: StatutReservation;
   sourceBrute: string | null;
+  // Tarification saisonnière (cahier des charges §5.1/§5.4). Décimaux
+  // Prisma sérialisés en string par l'API.
+  prixTotalCalcule: string;
+  prixTotalFinal: string;
+  ajustementManuel: boolean;
+  motifAjustement: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -68,4 +74,6 @@ export interface UpdateReservationInput {
   dateDepart?: string;
   canal?: CanalReservation;
   statut?: StatutReservation;
+  prixTotalFinal?: number;
+  motifAjustement?: string;
 }
