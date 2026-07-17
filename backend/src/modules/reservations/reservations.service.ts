@@ -158,13 +158,6 @@ export class ReservationsService {
     });
   }
 
-  async listRooms() {
-    return this.prisma.room.findMany({
-      include: { roomType: true },
-      orderBy: { numero: 'asc' },
-    });
-  }
-
   async findOne(id: number) {
     const reservation = await this.prisma.reservation.findUnique({
       where: { id },

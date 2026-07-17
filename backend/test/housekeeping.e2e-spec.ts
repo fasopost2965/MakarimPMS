@@ -1,0 +1,160 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import request from 'supertest';
+import { App } from 'supertest/types';
+import { AppModule } from './../src/app.module';
+import { PrismaService } from './../src/prisma/prisma.service';
+
+interface RoomResponse {
+  id: number;
+  numero: string;
+  statut: string;
+}
+
+interface ReservationResponse {
+  id: number;
+}
+
+interface StayResponse {
+  id: number;
+  roomId: number;
+}
+
+// Housekeeping simplifié (cahier des charges §5.6, Phase 1). Vérifie en
+// particulier le contrôle croisé non négociable avec le module
+// checkin/reservations : une chambre OCCUPEE ne doit jamais pouvoir être
+// "libérée" par un changement manuel de statut — seul le check-out (qui
+// libère aussi le verrou RoomNight) le peut. Vrais appels HTTP contre une
+// vraie base MySQL, aucun mock.
+describe('Housekeeping — statuts de chambre (e2e)', () => {
+  let app: INestApplication<App>;
+  let prisma: PrismaService;
+  let roomTypeId: number;
+  let roomId: number;
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('api');
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
+    await app.init();
+
+    prisma = app.get(PrismaService);
+
+    const roomType = await prisma.roomType.create({
+      data: { nom: 'TEST-HOUSEKEEPING-TYPE', prixBase: 300, capacite: 2 },
+    });
+    roomTypeId = roomType.id;
+
+    const room = await prisma.room.create({
+      data: { numero: `TEST-HK-${Date.now()}`, roomTypeId },
+    });
+    roomId = room.id;
+  });
+
+  afterAll(async () => {
+    await prisma.roomNight.deleteMany({ where: { roomId } });
+    await prisma.folioLine.deleteMany({
+      where: { folio: { stay: { roomId } } },
+    });
+    await prisma.folio.deleteMany({ where: { stay: { roomId } } });
+    await prisma.stay.deleteMany({ where: { roomId } });
+    await prisma.reservation.deleteMany({ where: { roomId } });
+    await prisma.room.deleteMany({ where: { id: roomId } });
+    await prisma.roomType.deleteMany({ where: { id: roomTypeId } });
+    await app.close();
+  });
+
+  const server = () => app.getHttpServer();
+
+  it('liste les chambres avec leur statut via GET /rooms', async () => {
+    const res = await request(server()).get('/api/rooms');
+    expect(res.status).toBe(200);
+    const rooms = res.body as RoomResponse[];
+    const ours = rooms.find((r) => r.id === roomId);
+    expect(ours).toBeDefined();
+    expect(ours!.statut).toBe('LIBRE_PROPRE');
+  });
+
+  it("n'accepte que les trois statuts pilotables manuellement", async () => {
+    const res = await request(server())
+      .patch(`/api/rooms/${roomId}/statut`)
+      .send({ statut: 'RESERVEE' });
+    expect(res.status).toBe(400);
+  });
+
+  it('change librement le statut entre LIBRE_PROPRE / A_NETTOYER / EN_MAINTENANCE', async () => {
+    const toMaintenance = await request(server())
+      .patch(`/api/rooms/${roomId}/statut`)
+      .send({ statut: 'EN_MAINTENANCE' });
+    expect(toMaintenance.status).toBe(200);
+    expect((toMaintenance.body as RoomResponse).statut).toBe('EN_MAINTENANCE');
+
+    const backToClean = await request(server())
+      .patch(`/api/rooms/${roomId}/statut`)
+      .send({ statut: 'LIBRE_PROPRE' });
+    expect(backToClean.status).toBe(200);
+    expect((backToClean.body as RoomResponse).statut).toBe('LIBRE_PROPRE');
+  });
+
+  it(
+    'refuse tout changement manuel tant que la chambre est OCCUPEE (contrôle croisé avec checkin), ' +
+      "et l'autorise de nouveau après le check-out",
+    async () => {
+      const reservation = await request(server())
+        .post('/api/reservations')
+        .send({
+          roomId,
+          dateArrivee: new Date().toISOString().slice(0, 10),
+          dateDepart: new Date(Date.now() + 2 * 86_400_000)
+            .toISOString()
+            .slice(0, 10),
+          guest: { nom: 'Housekeeping', prenom: 'Test' },
+        });
+      const reservationId = (reservation.body as ReservationResponse).id;
+
+      const checkin = await request(server())
+        .post(`/api/checkin/${reservationId}`)
+        .send();
+      expect(checkin.status).toBe(201);
+      const stayId = (checkin.body as StayResponse).id;
+
+      const roomAfterCheckin = await request(server()).get('/api/rooms');
+      const ours = (roomAfterCheckin.body as RoomResponse[]).find(
+        (r) => r.id === roomId,
+      );
+      expect(ours!.statut).toBe('OCCUPEE');
+
+      // Contrôle croisé : impossible de "libérer" manuellement la chambre
+      // pendant que le séjour est en cours.
+      const blocked = await request(server())
+        .patch(`/api/rooms/${roomId}/statut`)
+        .send({ statut: 'LIBRE_PROPRE' });
+      expect(blocked.status).toBe(409);
+
+      const checkout = await request(server())
+        .post(`/api/checkout/${stayId}`)
+        .send();
+      expect(checkout.status).toBe(201);
+
+      const roomAfterCheckout = await request(server()).get('/api/rooms');
+      const oursAfter = (roomAfterCheckout.body as RoomResponse[]).find(
+        (r) => r.id === roomId,
+      );
+      expect(oursAfter!.statut).toBe('A_NETTOYER');
+
+      // Le check-out a bien libéré la chambre : le changement manuel est de
+      // nouveau accepté.
+      const allowed = await request(server())
+        .patch(`/api/rooms/${roomId}/statut`)
+        .send({ statut: 'LIBRE_PROPRE' });
+      expect(allowed.status).toBe(200);
+      expect((allowed.body as RoomResponse).statut).toBe('LIBRE_PROPRE');
+    },
+  );
+});

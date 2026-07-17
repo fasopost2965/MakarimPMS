@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ReservationsCalendarPage } from '@/features/reservations/pages/ReservationsCalendarPage';
 import { CheckinPage } from '@/features/checkin/pages/CheckinPage';
+import { HousekeepingPage } from '@/features/housekeeping/pages/HousekeepingPage';
 
-type Tab = 'reservations' | 'checkin';
+type Tab = 'reservations' | 'checkin' | 'housekeeping';
 
 // Pas de routeur pour l'instant — sera introduit avec le module core
 // (layout/routing), voir docs/plan-execution-claude-code.md §1. Un simple
-// switch d'onglet suffit tant qu'il n'y a que deux écrans de premier niveau.
+// switch d'onglet suffit tant qu'il n'y a que trois écrans de premier niveau.
 function App() {
   const [tab, setTab] = useState<Tab>('reservations');
 
@@ -28,13 +29,18 @@ function App() {
         >
           Check-in
         </Button>
+        <Button
+          variant={tab === 'housekeeping' ? 'default' : 'ghost'}
+          size="sm"
+          onClick={() => setTab('housekeeping')}
+        >
+          Housekeeping
+        </Button>
       </nav>
       <div className="flex-1 overflow-auto">
-        {tab === 'reservations' ? (
-          <ReservationsCalendarPage />
-        ) : (
-          <CheckinPage />
-        )}
+        {tab === 'reservations' && <ReservationsCalendarPage />}
+        {tab === 'checkin' && <CheckinPage />}
+        {tab === 'housekeeping' && <HousekeepingPage />}
       </div>
     </div>
   );

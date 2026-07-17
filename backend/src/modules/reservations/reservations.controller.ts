@@ -21,11 +21,6 @@ import { CheckAvailabilityDto } from './dto/check-availability.dto';
 export class ReservationsController {
   constructor(private readonly reservationsService: ReservationsService) {}
 
-  @Get('rooms')
-  listRooms() {
-    return this.reservationsService.listRooms();
-  }
-
   @Get('arrivees-du-jour')
   arrivalsToday() {
     return this.reservationsService.arrivalsToday();

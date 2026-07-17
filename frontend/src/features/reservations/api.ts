@@ -6,8 +6,10 @@ import type {
   UpdateReservationInput,
 } from './types';
 
+// GET /rooms est possédé par le module housekeeping (cahier des charges
+// §5.6) : réutilisé ici plutôt que dupliqué, cf. CLAUDE.md règle 5.
 export function listRooms() {
-  return apiRequest<Room[]>('/reservations/rooms');
+  return apiRequest<Room[]>('/rooms');
 }
 
 export function arrivalsToday() {
