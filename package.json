@@ -1,0 +1,17 @@
+{
+  "name": "pms-makarim",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Monorepo (backend NestJS + frontend React) du PMS Hôtel Makarim. Voir docs/plan-execution-claude-code.md.",
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.1"
+  },
+  "lint-staged": {
+    "backend/**/*.ts": "bash -c 'cd backend && npx eslint --fix'",
+    "frontend/**/*.{ts,tsx}": "bash -c 'cd frontend && npx eslint --fix'"
+  }
+}
