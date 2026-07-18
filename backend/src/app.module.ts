@@ -10,6 +10,7 @@ import { CheckinModule } from './modules/checkin/checkin.module';
 import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
@@ -25,6 +26,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     HousekeepingModule,
     BillingModule,
     DashboardModule,
+    MaintenanceModule,
   ],
   controllers: [AppController],
   providers: [

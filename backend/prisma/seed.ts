@@ -34,6 +34,7 @@ async function main() {
   await prisma.taxRateConfig.deleteMany();
   await prisma.seasonRate.deleteMany();
   await prisma.roomStatusLog.deleteMany();
+  await prisma.maintenanceTicket.deleteMany();
   await prisma.room.deleteMany();
   await prisma.roomType.deleteMany();
 
@@ -196,18 +197,20 @@ async function main() {
   });
 
   // Rôles, permissions et comptes de développement (module core 5.2/5.2.1).
-  // Modules métier existants seulement — maintenance/guests/stock/RH
-  // recevront leurs permissions quand ces modules seront construits en
-  // Phase 2 (voir CLAUDE.md règle 5 : les rôles Maintenance/RH existent déjà
-  // en base pour ne pas devoir migrer le schéma à ce moment-là, mais restent
-  // sans permission active — donc invisibles sur la landing page tant
-  // qu'aucune permission ne leur est accordée, cf. AuthService.rolesActifs).
+  // Modules métier existants seulement — guests/stock/RH recevront leurs
+  // permissions quand ces modules seront construits en Phase 2 (voir
+  // CLAUDE.md règle 5 : le rôle RH existe déjà en base pour ne pas devoir
+  // migrer le schéma à ce moment-là, mais reste sans permission active —
+  // donc invisible sur la landing page tant qu'aucune permission ne lui est
+  // accordée, cf. AuthService.rolesActifs). Le rôle Maintenance, lui, devient
+  // actif avec ce module (5.8).
   const ALL_MODULES = [
     'reservations',
     'checkin',
     'housekeeping',
     'billing',
     'dashboard',
+    'maintenance',
   ] as const;
   const ALL_ACTIONS = ['read', 'write', 'delete', 'export'] as const;
 
@@ -243,13 +246,23 @@ async function main() {
     },
     {
       nom: 'Gouvernante',
-      permissionKeys: ['housekeeping:read', 'housekeeping:write'],
+      // maintenance:read en plus de housekeeping : voit les tickets qui
+      // bloquent ses chambres (statut EN_MAINTENANCE), sans pouvoir en
+      // créer/résoudre (write réservé au rôle Maintenance).
+      permissionKeys: [
+        'housekeeping:read',
+        'housekeeping:write',
+        'maintenance:read',
+      ],
     },
     {
       nom: 'Comptable',
       permissionKeys: ['billing:read', 'billing:write', 'dashboard:read'],
     },
-    { nom: 'Maintenance', permissionKeys: [] },
+    {
+      nom: 'Maintenance',
+      permissionKeys: ['maintenance:read', 'maintenance:write'],
+    },
     { nom: 'RH', permissionKeys: [] },
   ];
 

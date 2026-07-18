@@ -65,15 +65,16 @@ model SeasonRate {
 }
 
 model Room {
-  id           Int             @id @default(autoincrement())
-  numero       String          @unique
-  roomTypeId   Int
-  roomType     RoomType        @relation(fields: [roomTypeId], references: [id])
-  statut       StatutChambre   @default(LIBRE_PROPRE)
-  reservations Reservation[]
-  nights       RoomNight[]
-  stays        Stay[]
-  statusLogs   RoomStatusLog[]
+  id                 Int                  @id @default(autoincrement())
+  numero             String               @unique
+  roomTypeId         Int
+  roomType           RoomType             @relation(fields: [roomTypeId], references: [id])
+  statut             StatutChambre        @default(LIBRE_PROPRE)
+  reservations       Reservation[]
+  nights             RoomNight[]
+  stays              Stay[]
+  statusLogs         RoomStatusLog[]
+  maintenanceTickets MaintenanceTicket[]
 }
 
 // Traçabilité des transitions de Room.statut (cahier des charges §5.6 Phase 2,
@@ -368,4 +369,33 @@ model PasswordResetToken {
   expiresAt DateTime
   utiliseAt DateTime?
   createdAt DateTime  @default(now())
+}
+
+// ------------------------------------------------------------------
+// 5.8 — Maintenance & Incidents
+// ------------------------------------------------------------------
+
+enum PrioriteTicket {
+  BASSE
+  MOYENNE
+  HAUTE
+  URGENTE
+}
+
+// roomId nullable : un ticket peut concerner une panne hors chambre (partie
+// commune) sans lieu structuré dans cette itération (pas de concept de zone
+// — décision Phase 2, voir plan de génération). Quand roomId est renseigné,
+// la création/résolution du ticket pilote automatiquement le statut
+// EN_MAINTENANCE de la chambre via HousekeepingService.transitionRoom (le
+// seul chemin d'écriture de Room.statut) — jamais d'écriture directe ici.
+model MaintenanceTicket {
+  id        Int            @id @default(autoincrement())
+  roomId    Int?
+  room      Room?          @relation(fields: [roomId], references: [id])
+  typePanne String
+  priorite  PrioriteTicket @default(MOYENNE)
+  photoUrl  String?
+  assigneA  String?
+  resoluAt  DateTime?
+  createdAt DateTime       @default(now())
 }

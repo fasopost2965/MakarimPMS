@@ -4,12 +4,14 @@ import { ReservationsCalendarPage } from '@/features/reservations/pages/Reservat
 import { CheckinPage } from '@/features/checkin/pages/CheckinPage';
 import { HousekeepingPage } from '@/features/housekeeping/pages/HousekeepingPage';
 import { DashboardPage } from '@/features/dashboard/pages/DashboardPage';
+import { MaintenancePage } from '@/features/maintenance/pages/MaintenancePage';
 import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { ForgotPasswordPage } from '@/features/auth/pages/ForgotPasswordPage';
 import { onAuthFailure } from '@/lib/api-client';
 import { clearTokens, getAccessToken } from '@/lib/token-storage';
 
-type Tab = 'dashboard' | 'reservations' | 'checkin' | 'housekeeping';
+type Tab =
+  'dashboard' | 'reservations' | 'checkin' | 'housekeeping' | 'maintenance';
 type AuthScreen = 'login' | 'forgot-password';
 
 // Pas de routeur pour l'instant — sera introduit avec le module core
@@ -85,6 +87,13 @@ function App() {
           Housekeeping
         </Button>
         <Button
+          variant={tab === 'maintenance' ? 'default' : 'ghost'}
+          size="sm"
+          onClick={() => setTab('maintenance')}
+        >
+          Maintenance
+        </Button>
+        <Button
           variant="ghost"
           size="sm"
           className="ml-auto"
@@ -98,6 +107,7 @@ function App() {
         {tab === 'reservations' && <ReservationsCalendarPage />}
         {tab === 'checkin' && <CheckinPage />}
         {tab === 'housekeeping' && <HousekeepingPage />}
+        {tab === 'maintenance' && <MaintenancePage />}
       </div>
     </div>
   );
