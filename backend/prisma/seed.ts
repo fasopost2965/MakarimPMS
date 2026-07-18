@@ -33,6 +33,7 @@ async function main() {
   await prisma.guest.deleteMany();
   await prisma.taxRateConfig.deleteMany();
   await prisma.seasonRate.deleteMany();
+  await prisma.roomStatusLog.deleteMany();
   await prisma.room.deleteMany();
   await prisma.roomType.deleteMany();
 

@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   Prisma,
   StatutChambre,
@@ -15,8 +16,10 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { getTodayRange } from '../../common/utils/date-range';
 import { getNightsBetween } from '../reservations/utils/nights';
 import { calculateNightlyTotal } from '../reservations/utils/pricing';
+import { HousekeepingService } from '../housekeeping/housekeeping.service';
 import { WalkinCheckinDto } from './dto/walkin-checkin.dto';
 import { computeSoldeDu } from './utils/solde';
+import { CheckoutEffectueEvent } from './events/checkout-effectue.event';
 
 const STAY_INCLUDE = {
   reservation: true,
@@ -27,14 +30,18 @@ const STAY_INCLUDE = {
 
 @Injectable()
 export class CheckinService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly housekeepingService: HousekeepingService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   // Transformation réservation → séjour (CLAUDE.md règle 1 : le séjour
   // devient l'objet central). Les nuits sont déjà verrouillées depuis la
   // création de la réservation (RoomNight) : on les rattache au séjour au
   // lieu d'en recréer, la contrainte unique (roomId, date) reste la même
   // ligne physique.
-  async checkinFromReservation(reservationId: number) {
+  async checkinFromReservation(reservationId: number, userId?: number) {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const reservation = await tx.reservation.findUnique({
@@ -70,10 +77,11 @@ export class CheckinService {
           where: { id: reservation.id },
           data: { statut: StatutReservation.TRANSFORMEE_EN_SEJOUR },
         });
-        await tx.room.update({
-          where: { id: reservation.roomId },
-          data: { statut: StatutChambre.OCCUPEE },
-        });
+        await this.housekeepingService.transitionRoom(
+          reservation.roomId,
+          StatutChambre.OCCUPEE,
+          { motif: 'Check-in depuis réservation', userId, tx },
+        );
 
         const nights = getNightsBetween(
           reservation.dateArrivee,
@@ -107,7 +115,7 @@ export class CheckinService {
   // par nuit, protégée par la contrainte unique (roomId, date). Un walk-in
   // n'a pas de réservation préexistante : les nuits n'existent pas encore,
   // on les crée directement rattachées au séjour.
-  async checkinWalkIn(dto: WalkinCheckinDto) {
+  async checkinWalkIn(dto: WalkinCheckinDto, userId?: number) {
     const dateCheckin = new Date();
     const { today: firstNight } = getTodayRange();
 
@@ -147,10 +155,11 @@ export class CheckinService {
           })),
         });
 
-        await tx.room.update({
-          where: { id: room.id },
-          data: { statut: StatutChambre.OCCUPEE },
-        });
+        await this.housekeepingService.transitionRoom(
+          room.id,
+          StatutChambre.OCCUPEE,
+          { motif: 'Check-in walk-in', userId, tx },
+        );
 
         const montant = calculateNightlyTotal(
           nights,
@@ -227,7 +236,13 @@ export class CheckinService {
   // (départ anticipé compris) pour que la chambre redevienne réservable
   // immédiatement, et calcul du solde dû à partir des lignes de folio
   // existantes (jamais un nouveau calcul indépendant, CLAUDE.md règle 3).
-  async checkout(id: number) {
+  // Le passage de la chambre en À nettoyer ne se fait plus ici directement :
+  // il est déclenché par l'événement checkout.effectue (cahier des charges
+  // §5.6 Phase 2), écouté par le module housekeeping — checkin n'a pas
+  // besoin de connaître sa machine à états. emitAsync (pas emit) : le
+  // listener écrit en base de façon asynchrone, on l'attend pour que
+  // Room.statut soit déjà à jour quand checkout() répond à l'appelant.
+  async checkout(id: number, userId?: number) {
     const stay = await this.findOne(id);
     if (stay.statut !== StatutSejour.EN_COURS) {
       throw new ConflictException(
@@ -240,7 +255,7 @@ export class CheckinService {
     const updated = await this.prisma.$transaction(async (tx) => {
       await tx.roomNight.deleteMany({ where: { stayId: id } });
 
-      const result = await tx.stay.update({
+      return tx.stay.update({
         where: { id },
         data: {
           statut: StatutSejour.CHECKOUT,
@@ -248,14 +263,12 @@ export class CheckinService {
         },
         include: STAY_INCLUDE,
       });
-
-      await tx.room.update({
-        where: { id: stay.roomId },
-        data: { statut: StatutChambre.A_NETTOYER },
-      });
-
-      return result;
     });
+
+    await this.eventEmitter.emitAsync(
+      'checkout.effectue',
+      new CheckoutEffectueEvent(stay.roomId, stay.id, userId),
+    );
 
     return { ...updated, soldeDu: soldeDu.toFixed(2) };
   }

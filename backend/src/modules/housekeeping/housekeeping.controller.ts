@@ -7,6 +7,8 @@ import {
   Patch,
 } from '@nestjs/common';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { HousekeepingService } from './housekeeping.service';
 import { UpdateRoomStatusDto } from './dto/update-room-status.dto';
 
@@ -25,7 +27,8 @@ export class HousekeepingController {
   updateStatus(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateRoomStatusDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.housekeepingService.updateStatus(id, dto.statut);
+    return this.housekeepingService.updateStatus(id, dto.statut, user.sub);
   }
 }

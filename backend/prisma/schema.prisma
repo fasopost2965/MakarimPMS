@@ -65,14 +65,30 @@ model SeasonRate {
 }
 
 model Room {
-  id           Int           @id @default(autoincrement())
-  numero       String        @unique
+  id           Int             @id @default(autoincrement())
+  numero       String          @unique
   roomTypeId   Int
-  roomType     RoomType      @relation(fields: [roomTypeId], references: [id])
-  statut       StatutChambre @default(LIBRE_PROPRE)
+  roomType     RoomType        @relation(fields: [roomTypeId], references: [id])
+  statut       StatutChambre   @default(LIBRE_PROPRE)
   reservations Reservation[]
   nights       RoomNight[]
   stays        Stay[]
+  statusLogs   RoomStatusLog[]
+}
+
+// Traçabilité des transitions de Room.statut (cahier des charges §5.6 Phase 2,
+// CLAUDE.md règle 4 : les opérations sensibles laissent une trace d'audit).
+// Alimenté exclusivement par HousekeepingService.transitionRoom — le seul
+// chemin d'écriture de Room.statut dans toute l'application.
+model RoomStatusLog {
+  id            Int           @id @default(autoincrement())
+  roomId        Int
+  room          Room          @relation(fields: [roomId], references: [id])
+  ancienStatut  StatutChambre
+  nouveauStatut StatutChambre
+  motif         String?
+  userId        Int?
+  createdAt     DateTime      @default(now())
 }
 
 // Fiche client minimale, suffisante pour rattacher une réservation.

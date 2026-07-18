@@ -10,15 +10,25 @@ import {
 import { listRooms, updateRoomStatus } from '../api';
 import type { Room, StatutChambre } from '../../reservations/types';
 
-// Housekeeping simplifié (cahier des charges §5.6, Phase 1) : seuls ces
-// trois statuts sont pilotables manuellement — les autres (RESERVEE,
-// OCCUPEE, DEPART_PREVU, EN_NETTOYAGE) sont gérés par d'autres modules ou
-// arriveront avec la machine à états complète de la Phase 2.
+// Machine à états complète (cahier des charges §5.6, Phase 2) : ces quatre
+// statuts sont pilotables manuellement. RESERVEE, OCCUPEE et DEPART_PREVU
+// sont exclusivement pilotés par le système (réservation du jour, check-in,
+// check-out — voir HousekeepingService côté backend) — jamais par un choix
+// manuel ici.
 const STATUTS_MANUELS: StatutChambre[] = [
-  'LIBRE_PROPRE',
   'A_NETTOYER',
+  'EN_NETTOYAGE',
+  'LIBRE_PROPRE',
   'EN_MAINTENANCE',
 ];
+
+// Texte explicatif affiché à la place du sélecteur pour les statuts pilotés
+// par le système (pas de changement manuel possible).
+const NON_MODIFIABLE_MANUELLEMENT: Partial<Record<StatutChambre, string>> = {
+  RESERVEE: 'Passera en Occupée au check-in',
+  OCCUPEE: 'Libérée via le check-out',
+  DEPART_PREVU: 'Libérée via le check-out',
+};
 
 const STATUT_LABEL: Record<StatutChambre, string> = {
   LIBRE_PROPRE: 'Libre & propre',
@@ -114,9 +124,9 @@ export function HousekeepingPage() {
                 </Badge>
               </div>
 
-              {room.statut === 'OCCUPEE' ? (
+              {NON_MODIFIABLE_MANUELLEMENT[room.statut] ? (
                 <p className="text-muted-foreground max-w-32 text-right text-xs">
-                  Libérée via le check-out
+                  {NON_MODIFIABLE_MANUELLEMENT[room.statut]}
                 </p>
               ) : (
                 <Select

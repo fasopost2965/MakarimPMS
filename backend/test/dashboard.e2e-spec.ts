@@ -96,6 +96,9 @@ describe('Dashboard — résumé (e2e)', () => {
     await prisma.reservation.deleteMany({
       where: { roomId: { in: [roomId, roomId2] } },
     });
+    await prisma.roomStatusLog.deleteMany({
+      where: { roomId: { in: [roomId, roomId2] } },
+    });
     await prisma.room.deleteMany({ where: { id: { in: [roomId, roomId2] } } });
     await prisma.roomType.deleteMany({ where: { id: roomTypeId } });
     await app.close();

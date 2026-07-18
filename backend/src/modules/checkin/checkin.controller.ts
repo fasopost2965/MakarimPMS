@@ -7,6 +7,8 @@ import {
   Post,
 } from '@nestjs/common';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { CheckinService } from './checkin.service';
 import { WalkinCheckinDto } from './dto/walkin-checkin.dto';
 
@@ -16,16 +18,20 @@ export class CheckinController {
 
   @RequirePermission('checkin', 'write')
   @Post('checkin/walk-in')
-  checkinWalkIn(@Body() dto: WalkinCheckinDto) {
-    return this.checkinService.checkinWalkIn(dto);
+  checkinWalkIn(
+    @Body() dto: WalkinCheckinDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.checkinService.checkinWalkIn(dto, user.sub);
   }
 
   @RequirePermission('checkin', 'write')
   @Post('checkin/:reservationId')
   checkinFromReservation(
     @Param('reservationId', ParseIntPipe) reservationId: number,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.checkinService.checkinFromReservation(reservationId);
+    return this.checkinService.checkinFromReservation(reservationId, user.sub);
   }
 
   @RequirePermission('checkin', 'read')
@@ -48,7 +54,10 @@ export class CheckinController {
 
   @RequirePermission('checkin', 'write')
   @Post('checkout/:stayId')
-  checkout(@Param('stayId', ParseIntPipe) stayId: number) {
-    return this.checkinService.checkout(stayId);
+  checkout(
+    @Param('stayId', ParseIntPipe) stayId: number,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.checkinService.checkout(stayId, user.sub);
   }
 }
