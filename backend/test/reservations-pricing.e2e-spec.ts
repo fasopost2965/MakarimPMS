@@ -1,9 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/prisma/prisma.service';
+import { authedRequest, loginAs } from './helpers/auth';
 
 interface ReservationResponse {
   id: number;
@@ -21,6 +21,7 @@ describe('Reservations — tarification saisonnière (e2e)', () => {
   let prisma: PrismaService;
   let roomTypeId: number;
   let roomId: number;
+  let client: ReturnType<typeof authedRequest>;
 
   const PRIX_BASE = 500;
   const PRIX_SAISON_1 = 600;
@@ -39,6 +40,8 @@ describe('Reservations — tarification saisonnière (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
+    const token = await loginAs(app.getHttpServer(), 'reception');
+    client = authedRequest(app.getHttpServer(), token);
 
     const roomType = await prisma.roomType.create({
       data: { nom: 'TEST-PRICING-TYPE', prixBase: PRIX_BASE, capacite: 2 },
@@ -82,14 +85,12 @@ describe('Reservations — tarification saisonnière (e2e)', () => {
   it('calcule le prix nuit par nuit pour une réservation à cheval sur deux saisons', async () => {
     // 18, 19 juillet -> Haute saison 1 (600) ; 20, 21 juillet -> Haute
     // saison 2 (700). dateDepart = 22 (exclue, jour de départ non facturé).
-    const res = await request(app.getHttpServer())
-      .post('/api/reservations')
-      .send({
-        roomId,
-        dateArrivee: '2026-07-18',
-        dateDepart: '2026-07-22',
-        guest: { nom: 'Cheval', prenom: 'Saisons' },
-      });
+    const res = await client.post('/api/reservations').send({
+      roomId,
+      dateArrivee: '2026-07-18',
+      dateDepart: '2026-07-22',
+      guest: { nom: 'Cheval', prenom: 'Saisons' },
+    });
     const body = res.body as ReservationResponse;
 
     expect(res.status).toBe(201);
@@ -108,14 +109,12 @@ describe('Reservations — tarification saisonnière (e2e)', () => {
   it('retombe sur RoomType.prixBase pour une nuit hors de toute plage SeasonRate', async () => {
     // 28, 29, 30 juin -> aucune plage ne couvre ces dates (la première
     // commence le 1er juillet) -> tarif de base.
-    const res = await request(app.getHttpServer())
-      .post('/api/reservations')
-      .send({
-        roomId,
-        dateArrivee: '2026-06-28',
-        dateDepart: '2026-07-01',
-        guest: { nom: 'Hors', prenom: 'Saison' },
-      });
+    const res = await client.post('/api/reservations').send({
+      roomId,
+      dateArrivee: '2026-06-28',
+      dateDepart: '2026-07-01',
+      guest: { nom: 'Hors', prenom: 'Saison' },
+    });
     const body = res.body as ReservationResponse;
 
     expect(res.status).toBe(201);
@@ -126,19 +125,17 @@ describe('Reservations — tarification saisonnière (e2e)', () => {
   });
 
   it('marque ajustementManuel à true quand la réception modifie prixTotalFinal, sans jamais recalculer prixTotalCalcule', async () => {
-    const created = await request(app.getHttpServer())
-      .post('/api/reservations')
-      .send({
-        roomId,
-        dateArrivee: '2026-07-18',
-        dateDepart: '2026-07-20',
-        guest: { nom: 'Ajustement', prenom: 'Manuel' },
-      });
+    const created = await client.post('/api/reservations').send({
+      roomId,
+      dateArrivee: '2026-07-18',
+      dateDepart: '2026-07-20',
+      guest: { nom: 'Ajustement', prenom: 'Manuel' },
+    });
     const createdBody = created.body as ReservationResponse;
     const reservationId = createdBody.id;
     const prixCalculeInitial = createdBody.prixTotalCalcule;
 
-    const patched = await request(app.getHttpServer())
+    const patched = await client
       .patch(`/api/reservations/${reservationId}`)
       .send({ prixTotalFinal: 1000, motifAjustement: 'Geste commercial' });
     const patchedBody = patched.body as ReservationResponse;
@@ -151,7 +148,7 @@ describe('Reservations — tarification saisonnière (e2e)', () => {
 
     // Déplacer la réservation (chambre inchangée mais dates décalées) ne
     // doit pas écraser silencieusement l'ajustement manuel déjà en place.
-    const moved = await request(app.getHttpServer())
+    const moved = await client
       .patch(`/api/reservations/${reservationId}`)
       .send({ dateArrivee: '2026-07-19', dateDepart: '2026-07-21' });
     const movedBody = moved.body as ReservationResponse;

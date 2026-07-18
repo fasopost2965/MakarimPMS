@@ -1,6 +1,13 @@
 import { PrismaClient, Prisma } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
+
+// Mot de passe de développement commun à tous les comptes de seed — jamais
+// utilisé tel quel en production (ce script refuse par convention de
+// tourner contre une base de prod, voir commentaire plus bas). Toujours
+// haché avant stockage, même ici.
+const DEV_PASSWORD = 'Password123!';
 
 // Données de référence pour le développement local (24 chambres, cf.
 // CLAUDE.md), cohérentes avec le cahier des charges §5.1/§5.4 (grille
@@ -8,6 +15,13 @@ const prisma = new PrismaClient();
 // réservation/tarification à chaque exécution — c'est un seed de dev, pas
 // une migration : ne jamais le lancer contre une base de production.
 async function main() {
+  await prisma.passwordResetToken.deleteMany();
+  await prisma.loginLog.deleteMany();
+  await prisma.user.deleteMany();
+  await prisma.rolePermission.deleteMany();
+  await prisma.permission.deleteMany();
+  await prisma.role.deleteMany();
+  await prisma.hotelConfig.deleteMany();
   await prisma.payment.deleteMany();
   await prisma.creditNote.deleteMany();
   await prisma.invoice.deleteMany();
@@ -166,8 +180,125 @@ async function main() {
     });
   }
 
+  // Configuration légale/fiscale de l'hôtel (module core 5.1) — singleton,
+  // une seule ligne, réutilisée par la facturation (en-tête de facture) et
+  // l'UI (devise, format de date).
+  await prisma.hotelConfig.create({
+    data: {
+      raisonSociale: 'Hôtel Makarim SARL',
+      ice: '000000000000000',
+      identifiantFiscal: '00000000',
+      rc: '00000',
+      adresse: 'Tétouan, Maroc',
+      categorieEtoiles: 3,
+    },
+  });
+
+  // Rôles, permissions et comptes de développement (module core 5.2/5.2.1).
+  // Modules métier existants seulement — maintenance/guests/stock/RH
+  // recevront leurs permissions quand ces modules seront construits en
+  // Phase 2 (voir CLAUDE.md règle 5 : les rôles Maintenance/RH existent déjà
+  // en base pour ne pas devoir migrer le schéma à ce moment-là, mais restent
+  // sans permission active — donc invisibles sur la landing page tant
+  // qu'aucune permission ne leur est accordée, cf. AuthService.rolesActifs).
+  const ALL_MODULES = [
+    'reservations',
+    'checkin',
+    'housekeeping',
+    'billing',
+    'dashboard',
+  ] as const;
+  const ALL_ACTIONS = ['read', 'write', 'delete', 'export'] as const;
+
+  const permissions: Record<string, { id: number }> = {};
+  for (const module of ALL_MODULES) {
+    for (const action of ALL_ACTIONS) {
+      const key = `${module}:${action}`;
+      permissions[key] = await prisma.permission.create({
+        data: { module, action },
+      });
+    }
+  }
+
+  const rolesData: Array<{
+    nom: string;
+    permissionKeys: string[];
+  }> = [
+    {
+      nom: 'Administrateur',
+      permissionKeys: Object.keys(permissions),
+    },
+    {
+      nom: 'Réception',
+      permissionKeys: [
+        'reservations:read',
+        'reservations:write',
+        'checkin:read',
+        'checkin:write',
+        'housekeeping:read',
+        'housekeeping:write',
+        'dashboard:read',
+      ],
+    },
+    {
+      nom: 'Gouvernante',
+      permissionKeys: ['housekeeping:read', 'housekeeping:write'],
+    },
+    {
+      nom: 'Comptable',
+      permissionKeys: ['billing:read', 'billing:write', 'dashboard:read'],
+    },
+    { nom: 'Maintenance', permissionKeys: [] },
+    { nom: 'RH', permissionKeys: [] },
+  ];
+
+  const roles: Record<string, { id: number }> = {};
+  for (const { nom, permissionKeys } of rolesData) {
+    const role = await prisma.role.create({ data: { nom } });
+    roles[nom] = role;
+    for (const key of permissionKeys) {
+      await prisma.rolePermission.create({
+        data: { roleId: role.id, permissionId: permissions[key].id },
+      });
+    }
+  }
+
+  // Un compte de développement par rôle, mot de passe commun DEV_PASSWORD
+  // (haché bcrypt). Emails prévisibles pour les tests e2e et la
+  // vérification manuelle en local.
+  const motDePasseHash = await bcrypt.hash(DEV_PASSWORD, 10);
+  const usersData = [
+    { nom: 'Admin Test', email: 'admin@makarim.test', role: 'Administrateur' },
+    {
+      nom: 'Réception Test',
+      email: 'reception@makarim.test',
+      role: 'Réception',
+    },
+    {
+      nom: 'Gouvernante Test',
+      email: 'gouvernante@makarim.test',
+      role: 'Gouvernante',
+    },
+    {
+      nom: 'Comptable Test',
+      email: 'comptable@makarim.test',
+      role: 'Comptable',
+    },
+    {
+      nom: 'Maintenance Test',
+      email: 'maintenance@makarim.test',
+      role: 'Maintenance',
+    },
+    { nom: 'RH Test', email: 'rh@makarim.test', role: 'RH' },
+  ];
+  for (const { nom, email, role } of usersData) {
+    await prisma.user.create({
+      data: { nom, email, motDePasseHash, roleId: roles[role].id },
+    });
+  }
+
   console.log(
-    `Seed OK : ${roomTypesData.length} types de chambre, ${seasonRatesData.length} tarifs saisonniers, ${totalRooms} chambres, ${taxRates.length} taux de taxe.`,
+    `Seed OK : ${roomTypesData.length} types de chambre, ${seasonRatesData.length} tarifs saisonniers, ${totalRooms} chambres, ${taxRates.length} taux de taxe, ${rolesData.length} rôles, ${usersData.length} utilisateurs de dev (mot de passe commun : ${DEV_PASSWORD}).`,
   );
 }
 

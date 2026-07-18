@@ -1,9 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/prisma/prisma.service';
+import { authedRequest, loginAs } from './helpers/auth';
 
 interface DashboardResume {
   tauxOccupation: number;
@@ -34,6 +34,7 @@ describe('Dashboard — résumé (e2e)', () => {
   let roomTypeId: number;
   let roomId: number;
   let roomId2: number;
+  let client: ReturnType<typeof authedRequest>;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -48,6 +49,8 @@ describe('Dashboard — résumé (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
+    const token = await loginAs(app.getHttpServer(), 'admin');
+    client = authedRequest(app.getHttpServer(), token);
 
     const roomType = await prisma.roomType.create({
       data: {
@@ -98,8 +101,6 @@ describe('Dashboard — résumé (e2e)', () => {
     await app.close();
   });
 
-  const server = () => app.getHttpServer();
-
   it("renvoie une structure de résumé avec un taux d'occupation cohérent", async () => {
     // Note : ce test ne compare pas totalChambres à un second appel Prisma
     // indépendant — les autres suites e2e du fichier tournent en parallèle
@@ -107,7 +108,7 @@ describe('Dashboard — résumé (e2e)', () => {
     // suppriment des chambres pendant ce test, ce qui rendrait une telle
     // comparaison instable. On vérifie plutôt la cohérence interne d'une
     // seule et même réponse.
-    const res = await request(server()).get('/api/dashboard/resume');
+    const res = await client.get('/api/dashboard/resume');
     expect(res.status).toBe(200);
 
     const resume = res.body as DashboardResume;
@@ -127,23 +128,21 @@ describe('Dashboard — résumé (e2e)', () => {
       'GET /reservations/arrivees-du-jour (même fenêtre de date, pas de bug UTC/local)',
     async () => {
       // Créer une réservation arrivant aujourd'hui.
-      await request(server())
-        .post('/api/reservations')
-        .send({
-          roomId,
-          dateArrivee: new Date().toISOString().slice(0, 10),
-          dateDepart: new Date(Date.now() + 2 * 86_400_000)
-            .toISOString()
-            .slice(0, 10),
-          guest: { nom: 'Dashboard', prenom: 'Arrivee' },
-        });
+      await client.post('/api/reservations').send({
+        roomId,
+        dateArrivee: new Date().toISOString().slice(0, 10),
+        dateDepart: new Date(Date.now() + 2 * 86_400_000)
+          .toISOString()
+          .slice(0, 10),
+        guest: { nom: 'Dashboard', prenom: 'Arrivee' },
+      });
 
       // Appels quasi-simultanés (Promise.all) pour réduire au minimum la
       // fenêtre de course avec les autres suites e2e qui tournent en
       // parallèle et peuvent muter des réservations/séjours pendant le test.
       const [arrivalsRes, dashboardRes] = await Promise.all([
-        request(server()).get('/api/reservations/arrivees-du-jour'),
-        request(server()).get('/api/dashboard/resume'),
+        client.get('/api/reservations/arrivees-du-jour'),
+        client.get('/api/dashboard/resume'),
       ]);
 
       const arrivals = arrivalsRes.body as unknown[];
@@ -165,15 +164,13 @@ describe('Dashboard — résumé (e2e)', () => {
       // check-in normal avec départ demain, puis on avance directement la
       // date en base pour simuler un départ prévu aujourd'hui sans dépendre
       // de la validation métier hors-sujet ici).
-      const checkin = await request(server())
-        .post('/api/checkin/walk-in')
-        .send({
-          roomId: roomId2,
-          dateCheckoutPrevue: new Date(Date.now() + 86_400_000)
-            .toISOString()
-            .slice(0, 10),
-          guest: { nom: 'Dashboard', prenom: 'Depart' },
-        });
+      const checkin = await client.post('/api/checkin/walk-in').send({
+        roomId: roomId2,
+        dateCheckoutPrevue: new Date(Date.now() + 86_400_000)
+          .toISOString()
+          .slice(0, 10),
+        guest: { nom: 'Dashboard', prenom: 'Depart' },
+      });
       expect(checkin.status).toBe(201);
       const stayId = (checkin.body as StayResponse).id;
 
@@ -183,8 +180,8 @@ describe('Dashboard — résumé (e2e)', () => {
       });
 
       const [departsRes, dashboardRes] = await Promise.all([
-        request(server()).get('/api/stays/departs-du-jour'),
-        request(server()).get('/api/dashboard/resume'),
+        client.get('/api/stays/departs-du-jour'),
+        client.get('/api/dashboard/resume'),
       ]);
 
       const departs = departsRes.body as unknown[];
@@ -195,18 +192,18 @@ describe('Dashboard — résumé (e2e)', () => {
 
       // Nettoyer ce séjour tout de suite pour ne pas fausser les tests
       // suivants du fichier (chambresOccupees, etc.).
-      await request(server()).post(`/api/checkout/${stayId}`).send();
+      await client.post(`/api/checkout/${stayId}`).send();
     },
   );
 
   it('le nombre de chambres à nettoyer correspond exactement à GET /rooms filtré sur A_NETTOYER', async () => {
-    await request(server())
+    await client
       .patch(`/api/rooms/${roomId}/statut`)
       .send({ statut: 'A_NETTOYER' });
 
     const [roomsRes, dashboardRes] = await Promise.all([
-      request(server()).get('/api/rooms'),
-      request(server()).get('/api/dashboard/resume'),
+      client.get('/api/rooms'),
+      client.get('/api/dashboard/resume'),
     ]);
 
     interface RoomResponse {
@@ -230,7 +227,7 @@ describe('Dashboard — résumé (e2e)', () => {
     // (Prisma) quasi simultanément à l'appel du dashboard, et on compare les
     // deux chiffres pris au même instant.
     const idempotencyKey = `test-dashboard-payment-${Date.now()}`;
-    await request(server()).post('/api/payments').send({
+    await client.post('/api/payments').send({
       moyen: 'ESPECES',
       montant: '123.45',
       idempotencyKey,
@@ -245,7 +242,7 @@ describe('Dashboard — résumé (e2e)', () => {
     })();
 
     const [dashboardRes, expectedSum] = await Promise.all([
-      request(server()).get('/api/dashboard/resume'),
+      client.get('/api/dashboard/resume'),
       prisma.payment.aggregate({
         where: { createdAt: { gte: today, lt: tomorrow } },
         _sum: { montant: true },

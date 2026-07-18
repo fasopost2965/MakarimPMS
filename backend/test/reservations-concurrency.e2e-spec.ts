@@ -1,9 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/prisma/prisma.service';
+import { authedRequest, loginAs } from './helpers/auth';
 
 // Preuve du verrouillage anti-double-réservation (docs/plan-execution-claude-code.md
 // §8) : deux requêtes de création concurrentes sur la MÊME chambre et les
@@ -15,6 +15,7 @@ describe('Reservations — verrouillage anti-double-réservation (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
   let roomId: number;
+  let token: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -29,6 +30,7 @@ describe('Reservations — verrouillage anti-double-réservation (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
+    token = await loginAs(app.getHttpServer(), 'reception');
 
     const roomType = await prisma.roomType.create({
       data: { nom: 'TEST-CONCURRENCY-TYPE', prixBase: 100, capacite: 2 },
@@ -61,11 +63,11 @@ describe('Reservations — verrouillage anti-double-réservation (e2e)', () => {
       guest: { nom, prenom: 'Concurrence' },
     });
 
-    const server = app.getHttpServer();
+    const client = authedRequest(app.getHttpServer(), token);
 
     const [resA, resB] = await Promise.all([
-      request(server).post('/api/reservations').send(payload('Poste-A')),
-      request(server).post('/api/reservations').send(payload('Poste-B')),
+      client.post('/api/reservations').send(payload('Poste-A')),
+      client.post('/api/reservations').send(payload('Poste-B')),
     ]);
 
     const statuses = [resA.status, resB.status].sort();

@@ -1,9 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/prisma/prisma.service';
+import { authedRequest, loginAs } from './helpers/auth';
 
 // Preuve des deux verrous de concurrence du module checkin
 // (docs/plan-execution-claude-code.md §8) : aucun des deux ne doit jamais
@@ -13,6 +13,7 @@ describe('Checkin — verrouillages de concurrence (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
   let roomTypeId: number;
+  let client: ReturnType<typeof authedRequest>;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -27,6 +28,8 @@ describe('Checkin — verrouillages de concurrence (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
+    const token = await loginAs(app.getHttpServer(), 'reception');
+    client = authedRequest(app.getHttpServer(), token);
 
     const roomType = await prisma.roomType.create({
       data: { nom: 'TEST-CHECKIN-CONC-TYPE', prixBase: 300, capacite: 2 },
@@ -56,20 +59,17 @@ describe('Checkin — verrouillages de concurrence (e2e)', () => {
       data: { numero: `TEST-CHECKIN-CONC-${Date.now()}`, roomTypeId },
     });
 
-    const createRes = await request(app.getHttpServer())
-      .post('/api/reservations')
-      .send({
-        roomId: room.id,
-        dateArrivee: '2027-02-10',
-        dateDepart: '2027-02-12',
-        guest: { nom: 'Double', prenom: 'Checkin' },
-      });
+    const createRes = await client.post('/api/reservations').send({
+      roomId: room.id,
+      dateArrivee: '2027-02-10',
+      dateDepart: '2027-02-12',
+      guest: { nom: 'Double', prenom: 'Checkin' },
+    });
     const reservationId = (createRes.body as { id: number }).id;
 
-    const server = app.getHttpServer();
     const [resA, resB] = await Promise.all([
-      request(server).post(`/api/checkin/${reservationId}`).send(),
-      request(server).post(`/api/checkin/${reservationId}`).send(),
+      client.post(`/api/checkin/${reservationId}`).send(),
+      client.post(`/api/checkin/${reservationId}`).send(),
     ]);
 
     const statuses = [resA.status, resB.status].sort();
@@ -90,10 +90,9 @@ describe('Checkin — verrouillages de concurrence (e2e)', () => {
       guest: { nom, prenom: 'WalkIn' },
     });
 
-    const server = app.getHttpServer();
     const [resA, resB] = await Promise.all([
-      request(server).post('/api/checkin/walk-in').send(payload('Poste-A')),
-      request(server).post('/api/checkin/walk-in').send(payload('Poste-B')),
+      client.post('/api/checkin/walk-in').send(payload('Poste-A')),
+      client.post('/api/checkin/walk-in').send(payload('Poste-B')),
     ]);
 
     const statuses = [resA.status, resB.status].sort();

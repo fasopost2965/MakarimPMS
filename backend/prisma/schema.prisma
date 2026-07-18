@@ -263,3 +263,93 @@ model Payment {
   idempotencyKey String        @unique
   createdAt      DateTime      @default(now())
 }
+
+// ------------------------------------------------------------------
+// 5.1 / 5.2 / 5.2.1 — Core (config hôtel, auth, rôles, permissions)
+// ------------------------------------------------------------------
+
+// Singleton (id fixé à 1 par convention applicative, jamais créé en
+// deuxième ligne) : informations légales/fiscales de l'hôtel, réutilisées
+// par la facturation (en-tête de facture) et par l'UI (devise, format de
+// date). Pas de multi-hôtel dans ce projet (voir CLAUDE.md).
+model HotelConfig {
+  id                Int      @id @default(autoincrement())
+  raisonSociale     String
+  ice               String
+  identifiantFiscal String
+  rc                String
+  adresse           String
+  logoUrl           String?
+  categorieEtoiles  Int
+  devise            String   @default("MAD")
+  formatDate        String   @default("DD/MM/YYYY")
+  updatedAt         DateTime @updatedAt
+}
+
+model Role {
+  id          Int              @id @default(autoincrement())
+  nom         String           @unique
+  permissions RolePermission[]
+  users       User[]
+}
+
+// Une permission = (module, action). "module" reprend le nom de base de
+// route des modules métier existants ("reservations", "checkin",
+// "housekeeping", "billing", "dashboard") ou futurs — volontairement une
+// String plutôt qu'un enum, pour ne pas devoir migrer le schéma à chaque
+// nouveau module (cahier des charges règle 5 : les modules futurs se
+// branchent sans contournement, y compris sur le système de permissions).
+model Permission {
+  id     Int              @id @default(autoincrement())
+  module String
+  action String // "read" | "write" | "delete" | "export"
+  roles  RolePermission[]
+
+  @@unique([module, action])
+}
+
+model RolePermission {
+  roleId       Int
+  permissionId Int
+  role         Role       @relation(fields: [roleId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+}
+
+model User {
+  id             Int         @id @default(autoincrement())
+  nom            String
+  email          String      @unique
+  motDePasseHash String
+  roleId         Int
+  role           Role        @relation(fields: [roleId], references: [id])
+  actif          Boolean     @default(true)
+  createdAt      DateTime    @default(now())
+  loginLogs      LoginLog[]
+  passwordResets PasswordResetToken[]
+}
+
+model LoginLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  succes    Boolean
+  ip        String?
+  createdAt DateTime @default(now())
+}
+
+// Jeton à usage unique pour le flux "mot de passe oublié" — pas d'envoi
+// d'email réel à ce stade (cahier des charges, cette itération) : le jeton
+// est stocké en base et exposé tel quel par l'API pour valider le flux.
+// Expire après 30 minutes ; utiliseAt marque la consommation (empêche la
+// réutilisation du même lien).
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id])
+  token     String    @unique
+  expiresAt DateTime
+  utiliseAt DateTime?
+  createdAt DateTime  @default(now())
+}

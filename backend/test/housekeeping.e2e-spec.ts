@@ -1,9 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/prisma/prisma.service';
+import { authedRequest, loginAs } from './helpers/auth';
 
 interface RoomResponse {
   id: number;
@@ -31,6 +31,7 @@ describe('Housekeeping — statuts de chambre (e2e)', () => {
   let prisma: PrismaService;
   let roomTypeId: number;
   let roomId: number;
+  let client: ReturnType<typeof authedRequest>;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -45,6 +46,8 @@ describe('Housekeeping — statuts de chambre (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
+    const token = await loginAs(app.getHttpServer(), 'reception');
+    client = authedRequest(app.getHttpServer(), token);
 
     const roomType = await prisma.roomType.create({
       data: { nom: 'TEST-HOUSEKEEPING-TYPE', prixBase: 300, capacite: 2 },
@@ -70,10 +73,8 @@ describe('Housekeeping — statuts de chambre (e2e)', () => {
     await app.close();
   });
 
-  const server = () => app.getHttpServer();
-
   it('liste les chambres avec leur statut via GET /rooms', async () => {
-    const res = await request(server()).get('/api/rooms');
+    const res = await client.get('/api/rooms');
     expect(res.status).toBe(200);
     const rooms = res.body as RoomResponse[];
     const ours = rooms.find((r) => r.id === roomId);
@@ -82,20 +83,20 @@ describe('Housekeeping — statuts de chambre (e2e)', () => {
   });
 
   it("n'accepte que les trois statuts pilotables manuellement", async () => {
-    const res = await request(server())
+    const res = await client
       .patch(`/api/rooms/${roomId}/statut`)
       .send({ statut: 'RESERVEE' });
     expect(res.status).toBe(400);
   });
 
   it('change librement le statut entre LIBRE_PROPRE / A_NETTOYER / EN_MAINTENANCE', async () => {
-    const toMaintenance = await request(server())
+    const toMaintenance = await client
       .patch(`/api/rooms/${roomId}/statut`)
       .send({ statut: 'EN_MAINTENANCE' });
     expect(toMaintenance.status).toBe(200);
     expect((toMaintenance.body as RoomResponse).statut).toBe('EN_MAINTENANCE');
 
-    const backToClean = await request(server())
+    const backToClean = await client
       .patch(`/api/rooms/${roomId}/statut`)
       .send({ statut: 'LIBRE_PROPRE' });
     expect(backToClean.status).toBe(200);
@@ -106,25 +107,21 @@ describe('Housekeeping — statuts de chambre (e2e)', () => {
     'refuse tout changement manuel tant que la chambre est OCCUPEE (contrôle croisé avec checkin), ' +
       "et l'autorise de nouveau après le check-out",
     async () => {
-      const reservation = await request(server())
-        .post('/api/reservations')
-        .send({
-          roomId,
-          dateArrivee: new Date().toISOString().slice(0, 10),
-          dateDepart: new Date(Date.now() + 2 * 86_400_000)
-            .toISOString()
-            .slice(0, 10),
-          guest: { nom: 'Housekeeping', prenom: 'Test' },
-        });
+      const reservation = await client.post('/api/reservations').send({
+        roomId,
+        dateArrivee: new Date().toISOString().slice(0, 10),
+        dateDepart: new Date(Date.now() + 2 * 86_400_000)
+          .toISOString()
+          .slice(0, 10),
+        guest: { nom: 'Housekeeping', prenom: 'Test' },
+      });
       const reservationId = (reservation.body as ReservationResponse).id;
 
-      const checkin = await request(server())
-        .post(`/api/checkin/${reservationId}`)
-        .send();
+      const checkin = await client.post(`/api/checkin/${reservationId}`).send();
       expect(checkin.status).toBe(201);
       const stayId = (checkin.body as StayResponse).id;
 
-      const roomAfterCheckin = await request(server()).get('/api/rooms');
+      const roomAfterCheckin = await client.get('/api/rooms');
       const ours = (roomAfterCheckin.body as RoomResponse[]).find(
         (r) => r.id === roomId,
       );
@@ -132,17 +129,15 @@ describe('Housekeeping — statuts de chambre (e2e)', () => {
 
       // Contrôle croisé : impossible de "libérer" manuellement la chambre
       // pendant que le séjour est en cours.
-      const blocked = await request(server())
+      const blocked = await client
         .patch(`/api/rooms/${roomId}/statut`)
         .send({ statut: 'LIBRE_PROPRE' });
       expect(blocked.status).toBe(409);
 
-      const checkout = await request(server())
-        .post(`/api/checkout/${stayId}`)
-        .send();
+      const checkout = await client.post(`/api/checkout/${stayId}`).send();
       expect(checkout.status).toBe(201);
 
-      const roomAfterCheckout = await request(server()).get('/api/rooms');
+      const roomAfterCheckout = await client.get('/api/rooms');
       const oursAfter = (roomAfterCheckout.body as RoomResponse[]).find(
         (r) => r.id === roomId,
       );
@@ -150,7 +145,7 @@ describe('Housekeeping — statuts de chambre (e2e)', () => {
 
       // Le check-out a bien libéré la chambre : le changement manuel est de
       // nouveau accepté.
-      const allowed = await request(server())
+      const allowed = await client
         .patch(`/api/rooms/${roomId}/statut`)
         .send({ statut: 'LIBRE_PROPRE' });
       expect(allowed.status).toBe(200);

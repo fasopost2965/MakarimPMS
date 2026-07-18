@@ -3,7 +3,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import request from 'supertest';
 import {
   MoyenPaiement,
   Prisma,
@@ -12,18 +11,23 @@ import {
 } from '@prisma/client';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { authedRequest, loginAs } from './helpers/auth';
 
 describe('Billing Module (5.13)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
+  let client: ReturnType<typeof authedRequest>;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
     app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('api');
     await app.init();
     prisma = moduleFixture.get<PrismaService>(PrismaService);
+    const token = await loginAs(app.getHttpServer(), 'comptable');
+    client = authedRequest(app.getHttpServer(), token);
   });
 
   afterAll(async () => {
@@ -94,8 +98,8 @@ describe('Billing Module (5.13)', () => {
 
       // Générer la facture via POST /invoices/generer?folioId=...
       // (Note: le endpoint prend folioId en param, pas dans le body)
-      const invoiceRes = await request(app.getHttpServer())
-        .post(`/invoices/generer?folioId=${folio.id}`)
+      const invoiceRes = await client
+        .post(`/api/invoices/generer?folioId=${folio.id}`)
         .send({});
 
       expect(invoiceRes.status).toBe(201);
@@ -130,8 +134,8 @@ describe('Billing Module (5.13)', () => {
       });
 
       // Générer la deuxième facture
-      const invoice2Res = await request(app.getHttpServer())
-        .post(`/invoices/generer?folioId=${folio2.id}`)
+      const invoice2Res = await client
+        .post(`/api/invoices/generer?folioId=${folio2.id}`)
         .send({});
 
       expect(invoice2Res.status).toBe(201);
@@ -207,36 +211,32 @@ describe('Billing Module (5.13)', () => {
         },
       });
 
-      const invoiceRes = await request(app.getHttpServer())
-        .post(`/invoices/generer?folioId=${folio.id}`)
+      const invoiceRes = await client
+        .post(`/api/invoices/generer?folioId=${folio.id}`)
         .send({});
 
       const invoiceId = invoiceRes.body.id;
       const idempotencyKey = `test-payment-${Date.now()}`;
 
       // Envoyer la première requête de paiement
-      const pay1Res = await request(app.getHttpServer())
-        .post('/payments')
-        .send({
-          invoiceId,
-          moyen: MoyenPaiement.CARTE,
-          montant: '550.00',
-          idempotencyKey,
-        });
+      const pay1Res = await client.post('/api/payments').send({
+        invoiceId,
+        moyen: MoyenPaiement.CARTE,
+        montant: '550.00',
+        idempotencyKey,
+      });
 
       expect(pay1Res.status).toBe(201);
       expect(pay1Res.body).toHaveProperty('id');
       const payment1Id = pay1Res.body.id;
 
       // Envoyer la même requête une deuxième fois
-      const pay2Res = await request(app.getHttpServer())
-        .post('/payments')
-        .send({
-          invoiceId,
-          moyen: MoyenPaiement.CARTE,
-          montant: '550.00',
-          idempotencyKey,
-        });
+      const pay2Res = await client.post('/api/payments').send({
+        invoiceId,
+        moyen: MoyenPaiement.CARTE,
+        montant: '550.00',
+        idempotencyKey,
+      });
 
       expect(pay2Res.status).toBe(201);
       // Doit retourner le même paiement (même ID)
@@ -304,8 +304,8 @@ describe('Billing Module (5.13)', () => {
       });
 
       // Ajouter une ligne EXTRA via POST /folios/:id/lignes
-      const addLineRes = await request(app.getHttpServer())
-        .post(`/folios/${folio.id}/lignes`)
+      const addLineRes = await client
+        .post(`/api/folios/${folio.id}/lignes`)
         .send({
           type: TypeLigneFolio.EXTRA,
           libelle: 'Room service',

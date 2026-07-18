@@ -1,9 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/prisma/prisma.service';
+import { authedRequest, loginAs } from './helpers/auth';
 
 interface ReservationResponse {
   id: number;
@@ -39,6 +39,7 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
   let app: INestApplication<App>;
   let prisma: PrismaService;
   let roomTypeId: number;
+  let client: ReturnType<typeof authedRequest>;
 
   const PRIX_BASE = 400;
   const PRIX_SAISON = 550;
@@ -56,6 +57,8 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
     await app.init();
 
     prisma = app.get(PrismaService);
+    const token = await loginAs(app.getHttpServer(), 'reception');
+    client = authedRequest(app.getHttpServer(), token);
 
     const roomType = await prisma.roomType.create({
       data: { nom: 'TEST-CHECKIN-FLOW-TYPE', prixBase: PRIX_BASE, capacite: 2 },
@@ -93,31 +96,26 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
     const room = await prisma.room.create({
       data: { numero: `TEST-CHECKIN-FLOW-${Date.now()}`, roomTypeId },
     });
-    const server = app.getHttpServer();
 
-    const created = await request(server)
-      .post('/api/reservations')
-      .send({
-        roomId: room.id,
-        dateArrivee: '2027-04-10',
-        dateDepart: '2027-04-12',
-        guest: { nom: 'Flow', prenom: 'Checkin' },
-      });
+    const created = await client.post('/api/reservations').send({
+      roomId: room.id,
+      dateArrivee: '2027-04-10',
+      dateDepart: '2027-04-12',
+      guest: { nom: 'Flow', prenom: 'Checkin' },
+    });
     const reservation = created.body as ReservationResponse;
     expect(Number(reservation.prixTotalFinal)).toBe(PRIX_SAISON * 2);
 
     // Ajustement manuel avant le check-in : la ligne HEBERGEMENT doit
     // reprendre CETTE valeur, pas prixTotalCalcule.
-    const patched = await request(server)
+    const patched = await client
       .patch(`/api/reservations/${reservation.id}`)
       .send({ prixTotalFinal: 900, motifAjustement: 'Geste commercial' });
     expect(Number((patched.body as ReservationResponse).prixTotalFinal)).toBe(
       900,
     );
 
-    const checkin = await request(server)
-      .post(`/api/checkin/${reservation.id}`)
-      .send();
+    const checkin = await client.post(`/api/checkin/${reservation.id}`).send();
     expect(checkin.status).toBe(201);
     const stay = checkin.body as StayResponse;
     expect(stay.reservationId).toBe(reservation.id);
@@ -131,26 +129,22 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
     // La réservation d'origine est marquée transformée, et une chambre
     // occupée doit refuser une nouvelle vente sur les mêmes dates tant que
     // le séjour est en cours.
-    const reservationAfter = await request(server).get(
+    const reservationAfter = await client.get(
       `/api/reservations/${reservation.id}`,
     );
     expect((reservationAfter.body as ReservationResponse).statut).toBe(
       'TRANSFORMEE_EN_SEJOUR',
     );
 
-    const blockedBooking = await request(server)
-      .post('/api/reservations')
-      .send({
-        roomId: room.id,
-        dateArrivee: '2027-04-10',
-        dateDepart: '2027-04-12',
-        guest: { nom: 'Refuse', prenom: 'CarOccupe' },
-      });
+    const blockedBooking = await client.post('/api/reservations').send({
+      roomId: room.id,
+      dateArrivee: '2027-04-10',
+      dateDepart: '2027-04-12',
+      guest: { nom: 'Refuse', prenom: 'CarOccupe' },
+    });
     expect(blockedBooking.status).toBe(409);
 
-    const checkout = await request(server)
-      .post(`/api/checkout/${stay.id}`)
-      .send();
+    const checkout = await client.post(`/api/checkout/${stay.id}`).send();
     expect(checkout.status).toBe(201);
     const checkedOut = checkout.body as StayResponse;
     expect(checkedOut.statut).toBe('CHECKOUT');
@@ -159,14 +153,12 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
     expect(Number(checkedOut.soldeDu)).toBe(900);
 
     // La chambre redevient réservable après le check-out.
-    const rebooking = await request(server)
-      .post('/api/reservations')
-      .send({
-        roomId: room.id,
-        dateArrivee: '2027-04-10',
-        dateDepart: '2027-04-12',
-        guest: { nom: 'Nouvelle', prenom: 'Vente' },
-      });
+    const rebooking = await client.post('/api/reservations').send({
+      roomId: room.id,
+      dateArrivee: '2027-04-10',
+      dateDepart: '2027-04-12',
+      guest: { nom: 'Nouvelle', prenom: 'Vente' },
+    });
     expect(rebooking.status).toBe(201);
     await prisma.roomNight.deleteMany({
       where: { reservationId: (rebooking.body as ReservationResponse).id },
@@ -180,7 +172,6 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
     const room = await prisma.room.create({
       data: { numero: `TEST-CHECKIN-WI-${Date.now()}`, roomTypeId },
     });
-    const server = app.getHttpServer();
 
     // Se caler sur une date de check-in future n'est pas possible (le
     // service utilise "aujourd'hui" comme première nuit) : on vérifie donc
@@ -189,13 +180,11 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
     const dateCheckoutPrevue = new Date();
     dateCheckoutPrevue.setUTCDate(dateCheckoutPrevue.getUTCDate() + 3);
 
-    const res = await request(server)
-      .post('/api/checkin/walk-in')
-      .send({
-        roomId: room.id,
-        dateCheckoutPrevue: dateCheckoutPrevue.toISOString().slice(0, 10),
-        guest: { nom: 'Walk', prenom: 'In' },
-      });
+    const res = await client.post('/api/checkin/walk-in').send({
+      roomId: room.id,
+      dateCheckoutPrevue: dateCheckoutPrevue.toISOString().slice(0, 10),
+      guest: { nom: 'Walk', prenom: 'In' },
+    });
     expect(res.status).toBe(201);
     const stay = res.body as StayResponse;
 
