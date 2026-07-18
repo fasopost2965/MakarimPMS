@@ -3,18 +3,26 @@ import { Button } from '@/components/ui/button';
 import { ReservationsCalendarPage } from '@/features/reservations/pages/ReservationsCalendarPage';
 import { CheckinPage } from '@/features/checkin/pages/CheckinPage';
 import { HousekeepingPage } from '@/features/housekeeping/pages/HousekeepingPage';
+import { DashboardPage } from '@/features/dashboard/pages/DashboardPage';
 
-type Tab = 'reservations' | 'checkin' | 'housekeeping';
+type Tab = 'dashboard' | 'reservations' | 'checkin' | 'housekeeping';
 
 // Pas de routeur pour l'instant — sera introduit avec le module core
 // (layout/routing), voir docs/plan-execution-claude-code.md §1. Un simple
-// switch d'onglet suffit tant qu'il n'y a que trois écrans de premier niveau.
+// switch d'onglet suffit tant qu'il n'y a que quatre écrans de premier niveau.
 function App() {
-  const [tab, setTab] = useState<Tab>('reservations');
+  const [tab, setTab] = useState<Tab>('dashboard');
 
   return (
     <div className="flex h-screen flex-col">
       <nav className="flex items-center gap-1 border-b p-2">
+        <Button
+          variant={tab === 'dashboard' ? 'default' : 'ghost'}
+          size="sm"
+          onClick={() => setTab('dashboard')}
+        >
+          Tableau de bord
+        </Button>
         <Button
           variant={tab === 'reservations' ? 'default' : 'ghost'}
           size="sm"
@@ -38,6 +46,7 @@ function App() {
         </Button>
       </nav>
       <div className="flex-1 overflow-auto">
+        {tab === 'dashboard' && <DashboardPage onNavigate={setTab} />}
         {tab === 'reservations' && <ReservationsCalendarPage />}
         {tab === 'checkin' && <CheckinPage />}
         {tab === 'housekeeping' && <HousekeepingPage />}

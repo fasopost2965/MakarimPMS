@@ -12,6 +12,7 @@ import {
   TypeLigneFolio,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { getTodayRange } from '../../common/utils/date-range';
 import { getNightsBetween } from '../reservations/utils/nights';
 import { calculateNightlyTotal } from '../reservations/utils/pricing';
 import { WalkinCheckinDto } from './dto/walkin-checkin.dto';
@@ -108,8 +109,7 @@ export class CheckinService {
   // on les crée directement rattachées au séjour.
   async checkinWalkIn(dto: WalkinCheckinDto) {
     const dateCheckin = new Date();
-    const firstNight = new Date();
-    firstNight.setUTCHours(0, 0, 0, 0);
+    const { today: firstNight } = getTodayRange();
 
     if (new Date(dto.dateCheckoutPrevue) <= firstNight) {
       throw new BadRequestException(
@@ -200,10 +200,7 @@ export class CheckinService {
   }
 
   async departsToday() {
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const { today, tomorrow } = getTodayRange();
 
     return this.prisma.stay.findMany({
       where: {

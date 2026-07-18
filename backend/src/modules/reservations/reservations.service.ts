@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, StatutReservation } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { getTodayRange } from '../../common/utils/date-range';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationDto } from './dto/update-reservation.dto';
 import { CheckAvailabilityDto } from './dto/check-availability.dto';
@@ -120,10 +121,7 @@ export class ReservationsService {
   }
 
   async arrivalsToday() {
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const { today, tomorrow } = getTodayRange();
 
     return this.prisma.reservation.findMany({
       where: {
