@@ -1,25 +1,63 @@
-# PMS Hôtel Makarim
+# CLAUDE.md
 
-Projet interne (pas de logique SaaS multi-hôtels). Hôtel 3 étoiles, 24 chambres, Tétouan.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Stack
-- Backend : NestJS + Prisma + MySQL 8 (voir `backend/prisma/schema.prisma`)
-- Frontend : React + Vite + TypeScript + Tailwind + shadcn/ui
-- Auth : JWT (access + refresh token)
-- Déploiement : VPS Hostinger, Docker Compose, Nginx, Certbot
+## Projet
+
+PMS Hôtel Makarim — projet interne (pas de logique SaaS multi-hôtels). Hôtel 3 étoiles, 24 chambres, Tétouan. Monorepo `backend/` (NestJS + Prisma + MySQL 8) + `frontend/` (React + Vite + TS + Tailwind + shadcn/ui), auth JWT (access + refresh), déploiement VPS Hostinger via Docker Compose + Nginx + Certbot.
 
 ## Commandes
-- Backend dev : `cd backend && npm run start:dev`
-- Frontend dev : `cd frontend && npm run dev`
-- Migration Prisma : `cd backend && npx prisma migrate dev --name <nom>`
-- Tests backend : `cd backend && npm run test`
-- Build complet : `docker compose -f docker-compose.yml build`
+
+### Backend (`cd backend`)
+- Dev (watch) : `npm run start:dev`
+- Build : `npm run build`
+- Lint (fix) : `npm run lint`
+- Tests unitaires : `npm run test`
+- Tests e2e (vraie base MySQL, jamais de mock) : `npm run test:e2e`
+- Un seul fichier e2e : `npx jest --config ./test/jest-e2e.json <fichier>.e2e-spec.ts`
+- Un seul scénario e2e : `npx jest --config ./test/jest-e2e.json <fichier>.e2e-spec.ts -t "<nom du test>"`
+- Migration Prisma : `npx prisma migrate dev --name <nom>`
+- Reseed (rôles/permissions/données de démo) : `npx prisma db seed` — à relancer après toute migration ou après avoir touché `ALL_MODULES`/`rolesData` dans `prisma/seed.ts`
+- Comptes de seed : mot de passe commun `Password123!`, emails du type `admin@makarim.test`, `reception@makarim.test`, `comptable@makarim.test`, `gouvernante@makarim.test`, `maintenance@makarim.test`, `rh@makarim.test` (voir `prisma/seed.ts`)
+
+### Frontend (`cd frontend`)
+- Dev : `npm run dev`
+- Build : `npm run build` (= `tsc -b && vite build`)
+- Lint (fix) : `npm run lint`
+
+### Racine
+- Docker Compose : `docker compose build && docker compose up -d` — **reconstruire les deux images `backend` ET `frontend`** après toute modification (un rebuild du backend seul laisse le frontend servir une image périmée)
+- Hook pre-commit (Husky + lint-staged, `eslint --fix` sur les fichiers backend/frontend modifiés) : automatique au `git commit`
+
+## Architecture backend
+
+- Un module métier = un dossier sous `backend/src/modules/<domaine>/` avec `<domaine>.module.ts` / `.controller.ts` / `.service.ts` / `dto/`. Modules actuels : `auth`, `reservations`, `checkin`, `housekeeping`, `maintenance`, `guests` (contient aussi `CompaniesController`/`CompaniesService` — Company reste une responsabilité du module guests, pas de module séparé), `billing`, `dashboard`, `audit`.
+- **RBAC** : `Permission` est une paire `(module, action)` en base (`module`/`action` sont des `String` libres, pas des enums — un nouveau module n'exige pas de migration de schéma). `@RequirePermission(module, action)` (decorator) + `PermissionsGuard` (global via `APP_GUARD`, exécuté après `JwtAuthGuard`) vérifient une requête Prisma fraîche à chaque appel — aucune permission n'est mise en cache dans le JWT, retirer un droit à un rôle prend effet immédiatement. `backend/prisma/seed.ts` (`ALL_MODULES`, `rolesData`) est la seule source de vérité des attributions rôle → permission. Exception : quand l'autorisation dépend du **contenu de la requête** (ex. `guests:blacklist` — seule une transition de catégorie vers/depuis `BLACKLIST` l'exige, pas les autres) le contrôle ne peut pas être exprimé par le décorateur statique et se fait par une requête `permission.findFirst` manuelle dans le service (voir `GuestsService.updateCategorie`).
+- **Un seul chemin d'écriture par champ sensible** : chaque état métier a une méthode canonique unique qui l'écrit, journalise dans une table de log dédiée, et est réutilisée par tous les appelants (jamais dupliquée). Exemples : `HousekeepingService.transitionRoom` est le seul point d'écriture de `Room.statut` (écrit aussi `RoomStatusLog`) ; `GuestsService.updateCategorie` est le seul point d'écriture de `Guest.categorie` (écrit `GuestCategoryLog` + `AuditLog`). Tout nouveau champ métier sensible doit suivre ce pattern plutôt que d'être modifié directement via Prisma depuis plusieurs endroits.
+- **Audit** (`backend/src/modules/audit/`) : `AuditService` est append-only (`writeLog()` + `findMany()` seulement, jamais d'update/delete). Toute opération sensible doit appeler `writeLog(tx, …)` **dans la même transaction Prisma** que la modification métier qu'elle audite — jamais après coup, jamais en asynchrone détaché (sinon un log peut silencieusement manquer). `tx` y est un paramètre obligatoire, pas optionnel.
+- **Frontières de module** : un module ne doit jamais lire directement les tables d'un autre domaine via Prisma — il passe par le service exposé par le module propriétaire (`exports: […]` + import du module). Exemple : `GuestsService.factures()` appelle `BillingService.findInvoicesByGuestId()` plutôt que d'interroger `prisma.invoice` lui-même.
+- **Découplage événementiel** (`@nestjs/event-emitter`) : utilisé pour les transitions inter-modules qui doivent rester lâchement couplées (ex. `checkout.effectue`, écouté par `housekeeping` pour repasser la chambre à `A_NETTOYER`). Toujours `emitAsync` (jamais `emit`) quand l'appelant a besoin d'attendre l'effet du listener avant de répondre.
+- **États relatifs à « aujourd'hui »** (ex. `RESERVEE`, `DEPART_PREVU`) : pas d'infrastructure de cron dans ce projet. Ces statuts sont recalculés de façon idempotente à chaque lecture pertinente (« rattrapage à la lecture »), dans les deux sens (avancée et retour en arrière si la situation qui les justifiait disparaît).
+- **Réutilisation/blacklist client** : `CreateReservationDto`/`WalkinCheckinDto` acceptent soit un `guestId` existant (déclenche `GuestsService.assertNotBlacklisted`), soit un objet `guest` pour en créer un nouveau (jamais `BLACKLIST` par défaut). `assertNotBlacklisted` est la seule règle bloquante associée à une catégorie client — les autres catégories (VIP/ENTREPRISE/AGENCE) sont de simples étiquettes.
+
+## Architecture frontend
+
+- `frontend/src/features/<domaine>/` : `api.ts` (appels `apiRequest<T>`), `types.ts`, `components/`, `pages/`. Pas de routeur (`react-router` absent) — navigation via un simple `useState<Tab>` + rendu conditionnel dans `App.tsx`.
+- `lib/api-client.ts` (`apiRequest`) : intercepte les 401, tente un refresh de token, mutualise les refresh concurrents (une seule requête `/auth/refresh` même si plusieurs appels échouent en même temps), puis redirige vers l'écran de connexion si le refresh échoue aussi.
+
+## Tests
+
+- Toujours contre une vraie base MySQL, jamais de mock (`backend/test/*.e2e-spec.ts`).
+- `backend/test/jest-e2e.json` a `maxWorkers: 1` et `testTimeout: 30000` — **ne pas retirer** (bcrypt sous parallélisme Jest casse le teardown : erreurs "unsupported charset" / "requiring a file after Jest environment torn down").
+- Pour toute règle qualifiée de non-négociable, la couverture de test doit inclure une **preuve de rigueur sabotage/restore** documentée en commentaire : casser temporairement le mécanisme testé, confirmer que le test échoue bien de la manière attendue, restaurer, revérifier le vert. Un test qui reste vert après sabotage n'est pas discriminant (vérifier qu'aucune autre couche indépendante ne bloque déjà le même scénario).
 
 ## Architecture gelée — référentiel unique de vérité
 
 **`docs/` est désormais l'unique source de vérité architecturale du projet.** L'architecture n'est plus à définir : elle est validée et figée dans ce référentiel. Toute nouvelle fonctionnalité doit s'y conformer intégralement ; tout écart nécessite une nouvelle ADR validée avant le code, jamais l'inverse. Point d'entrée : [docs/README.md](docs/README.md) — lire dans l'ordre `BUSINESS_RULES.md` → `DATA_DICTIONARY.md` → les ADR (`ADR_INDEX.md`) → `SYSTEM_ARCHITECTURE.md` → `modules/`+`api/` → `execution/EXECUTION_MASTER_PLAN.md` et les `SPRINT_XX.md`.
 
 Le projet est désormais structuré en **13 modules fonctionnels** (voir [docs/modules/MODULES_INDEX.md](docs/modules/MODULES_INDEX.md)) — cette numérotation remplace l'ancien découpage `§5.x` du plan d'exécution historique (supprimé). Toujours citer le module concerné (nom + fichier spec, ex. `stay` / `docs/modules/stay.md`) dans les commits et PR.
+
+En cas de conflit entre documents, **les specs de module détaillées (`docs/modules/*.md`) font foi sur les vues résumées** (`RBAC_MATRIX.md` tableau global, `audit-api.md`) — ces dernières peuvent être désynchronisées ou plus génériques que la spec détaillée.
 
 ## Règles non négociables
 
