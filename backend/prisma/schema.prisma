@@ -75,6 +75,10 @@ model Room {
   stays              Stay[]
   statusLogs         RoomStatusLog[]
   maintenanceTickets MaintenanceTicket[]
+  // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
+  deletedAt          DateTime?
+
+  @@index([deletedAt])
 }
 
 // Traçabilité des transitions de Room.statut (cahier des charges §5.6 Phase 2,
@@ -118,6 +122,10 @@ model Guest {
   stays         Stay[]
   categoryLogs  GuestCategoryLog[]
   createdAt     DateTime           @default(now())
+  // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
+  deletedAt     DateTime?
+
+  @@index([deletedAt])
 }
 
 // Trace d'audit dédiée aux changements de catégorie (CLAUDE.md règle 4 :
@@ -186,6 +194,12 @@ model Reservation {
   stay             Stay?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
+  // Soft delete (ADR-005 §3.1) — toujours null pour l'instant, aucun code
+  // n'écrit ce champ cette itération (colonne posée en avance de la
+  // fonctionnalité qui l'exploitera réellement).
+  deletedAt        DateTime?
+
+  @@index([deletedAt])
 }
 
 // Une ligne par nuit occupée (roomId, date). La contrainte unique ci-dessous
@@ -243,6 +257,10 @@ model Stay {
   folios             Folio[]
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
+  // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
+  deletedAt          DateTime?
+
+  @@index([deletedAt])
 }
 
 enum TypeLigneFolio {
@@ -336,6 +354,10 @@ model Payment {
   montant        Decimal       @db.Decimal(10, 2)
   idempotencyKey String        @unique
   createdAt      DateTime      @default(now())
+  // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
+  deletedAt      DateTime?
+
+  @@index([deletedAt])
 }
 
 // ------------------------------------------------------------------
@@ -402,6 +424,11 @@ model User {
   createdAt      DateTime    @default(now())
   loginLogs      LoginLog[]
   passwordResets PasswordResetToken[]
+  auditLogs      AuditLog[]
+  // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
+  deletedAt      DateTime?
+
+  @@index([deletedAt])
 }
 
 model LoginLog {
@@ -455,4 +482,48 @@ model MaintenanceTicket {
   assigneA  String?
   resoluAt  DateTime?
   createdAt DateTime       @default(now())
+}
+
+// ------------------------------------------------------------------
+// Audit & Sécurité (ADR-005, audit de conformité architecture gelée)
+// ------------------------------------------------------------------
+
+enum AuditEntity {
+  Guest
+  Reservation
+  Stay
+  Room
+  Payment
+  Invoice
+}
+
+enum AuditAction {
+  CHANGE_CATEGORY
+  BLACKLIST_CLIENT
+  UPDATE_PRICE
+  CANCEL_RESERVATION
+}
+
+// Registre d'audit transverse (ADR-005 §3.2). Append-only : aucune méthode
+// de service ni route d'API n'expose de update/delete sur cette table
+// (INV-AUD-001) — voir AuditService (writeLog + findMany uniquement). id en
+// UUID (seule table du schéma à utiliser ce type, ADR-005 §3.2.1 — toutes
+// les autres tables restent en Int autoincrement). oldValue/newValue ne
+// contiennent jamais un snapshot complet de l'entité, uniquement les champs
+// réellement modifiés.
+model AuditLog {
+  id           String      @id @default(uuid())
+  userId       Int?
+  user         User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action       AuditAction
+  targetEntity AuditEntity
+  targetId     Int
+  oldValue     Json?
+  newValue     Json?
+  motif        String
+  createdAt    DateTime    @default(now())
+
+  @@index([targetEntity, targetId])
+  @@index([userId])
+  @@index([createdAt])
 }

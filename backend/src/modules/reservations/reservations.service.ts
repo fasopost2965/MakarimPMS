@@ -4,13 +4,20 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, StatutReservation } from '@prisma/client';
+import {
+  AuditAction,
+  AuditEntity,
+  Prisma,
+  StatutReservation,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { getTodayRange } from '../../common/utils/date-range';
 import { GuestsService } from '../guests/guests.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationDto } from './dto/update-reservation.dto';
 import { CheckAvailabilityDto } from './dto/check-availability.dto';
+import { CancelReservationDto } from './dto/cancel-reservation.dto';
 import { getNightsBetween } from './utils/nights';
 import { calculateNightlyTotal } from './utils/pricing';
 
@@ -24,6 +31,7 @@ export class ReservationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly guestsService: GuestsService,
+    private readonly auditService: AuditService,
   ) {}
 
   private assertDateRangeValid(dateArrivee: string, dateDepart: string) {
@@ -178,7 +186,7 @@ export class ReservationsService {
     return reservation;
   }
 
-  async update(id: number, dto: UpdateReservationDto) {
+  async update(id: number, dto: UpdateReservationDto, userId?: number) {
     const existing = await this.findOne(id);
 
     const dateArrivee = dto.dateArrivee ?? existing.dateArrivee.toISOString();
@@ -233,6 +241,21 @@ export class ReservationsService {
             ? prixTotalCalcule
             : undefined;
 
+        // Ajustement manuel de tarif = opération sensible auditée (ADR-005
+        // §6.1, BR-AUD-002). motifAjustement est déjà validé requis/≥10
+        // caractères par le DTO quand prixTotalFinal est fourni.
+        if (manualOverride) {
+          await this.auditService.writeLog(tx, {
+            userId,
+            action: AuditAction.UPDATE_PRICE,
+            targetEntity: AuditEntity.Reservation,
+            targetId: id,
+            oldValue: { prixTotalFinal: existing.prixTotalFinal.toString() },
+            newValue: { prixTotalFinal: dto.prixTotalFinal },
+            motif: dto.motifAjustement!,
+          });
+        }
+
         return tx.reservation.update({
           where: { id },
           data: {
@@ -258,8 +281,9 @@ export class ReservationsService {
   }
 
   // Annulation = statut ANNULEE + libération des nuits, pas de suppression
-  // physique (historique client conservé).
-  async remove(id: number) {
+  // physique (historique client conservé). Opération sensible auditée
+  // (ADR-005 §6.1, BR-AUD-002 — "Annulation... d'une réservation").
+  async remove(id: number, dto: CancelReservationDto, userId?: number) {
     const existing = await this.findOne(id);
     // Une réservation déjà transformée en séjour (module checkin) partage
     // ses lignes RoomNight avec ce séjour actif : les annuler ici casserait
@@ -270,9 +294,28 @@ export class ReservationsService {
         'Cette réservation a déjà été transformée en séjour — utilisez le check-out pour la clôturer.',
       );
     }
+    // Une réservation déjà ANNULEE ou NO_SHOW est dans un état terminal —
+    // la ré-annuler n'a pas de sens et produirait une entrée AuditLog
+    // trompeuse (ADR-005, retour utilisateur du 2026-07-19).
+    if (existing.statut !== StatutReservation.CONFIRMEE) {
+      throw new ConflictException(
+        `Cette réservation ne peut pas être annulée (statut actuel : ${existing.statut}).`,
+      );
+    }
 
     return this.prisma.$transaction(async (tx) => {
       await tx.roomNight.deleteMany({ where: { reservationId: id } });
+
+      await this.auditService.writeLog(tx, {
+        userId,
+        action: AuditAction.CANCEL_RESERVATION,
+        targetEntity: AuditEntity.Reservation,
+        targetId: id,
+        oldValue: { statut: existing.statut },
+        newValue: { statut: StatutReservation.ANNULEE },
+        motif: dto.motif,
+      });
+
       return tx.reservation.update({
         where: { id },
         data: { statut: StatutReservation.ANNULEE },

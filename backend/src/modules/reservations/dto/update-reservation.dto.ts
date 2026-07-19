@@ -2,10 +2,13 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
   Min,
+  MinLength,
+  ValidateIf,
 } from 'class-validator';
 import { CanalReservation, StatutReservation } from '@prisma/client';
 
@@ -43,7 +46,13 @@ export class UpdateReservationDto {
   @Min(0)
   prixTotalFinal?: number;
 
-  @IsOptional()
+  // Requis (≥10 caractères, ADR-005 INV-AUD-002) uniquement quand
+  // prixTotalFinal est fourni — l'ajustement manuel de tarif est une
+  // opération sensible auditée, les autres champs modifiables ici ne le
+  // sont pas.
+  @ValidateIf((o: UpdateReservationDto) => o.prixTotalFinal !== undefined)
   @IsString()
+  @IsNotEmpty()
+  @MinLength(10)
   motifAjustement?: string;
 }

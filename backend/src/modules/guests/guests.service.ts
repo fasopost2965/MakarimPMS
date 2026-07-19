@@ -3,8 +3,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { CategorieClient, Prisma } from '@prisma/client';
+import {
+  AuditAction,
+  AuditEntity,
+  CategorieClient,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateGuestDto } from './dto/create-guest.dto';
 import { UpdateGuestDto } from './dto/update-guest.dto';
 
@@ -12,7 +18,10 @@ const SEARCH_LIMIT = 20;
 
 @Injectable()
 export class GuestsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   // Recherche rapide multi-critères (cahier des charges §5.7) : nom,
   // prénom, téléphone, pièce d'identité. Sans `q`, renvoie les clients les
@@ -85,6 +94,24 @@ export class GuestsService {
           motif,
           userId,
         },
+      });
+
+      // Registre d'audit transverse (ADR-005/BR-AUD-002 — "Ajout d'un
+      // client en liste noire" est explicitement listé parmi les
+      // opérations sensibles). Coexiste avec GuestCategoryLog ci-dessus :
+      // ce dernier reste le détail métier riche (enum avant/après dédié),
+      // AuditLog est le registre universel inter-modules.
+      await this.auditService.writeLog(tx, {
+        userId,
+        action:
+          categorie === CategorieClient.BLACKLIST
+            ? AuditAction.BLACKLIST_CLIENT
+            : AuditAction.CHANGE_CATEGORY,
+        targetEntity: AuditEntity.Guest,
+        targetId: id,
+        oldValue: { categorie: guest.categorie },
+        newValue: { categorie },
+        motif,
       });
 
       return updated;

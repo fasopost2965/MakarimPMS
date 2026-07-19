@@ -207,7 +207,11 @@ async function main() {
   // donc invisible sur la landing page tant qu'aucune permission ne lui est
   // accordée, cf. AuthService.rolesActifs). Les rôles Maintenance (5.8),
   // guests (5.7, Réception/Comptable) et companies (5.7 City Ledger,
-  // Comptable uniquement) sont désormais actifs.
+  // Comptable uniquement) sont désormais actifs. audit:read est réservé à
+  // l'Administrateur (ADR-005/audit.md §7 — "aucun rôle d'exploitation n'a
+  // d'accès de lecture sur le journal de sécurité central"), obtenu
+  // automatiquement via Object.keys(permissions) ci-dessous, jamais accordé
+  // explicitement à un autre rôle.
   const ALL_MODULES = [
     'reservations',
     'checkin',
@@ -217,6 +221,7 @@ async function main() {
     'maintenance',
     'guests',
     'companies',
+    'audit',
   ] as const;
   const ALL_ACTIONS = ['read', 'write', 'delete', 'export'] as const;
 

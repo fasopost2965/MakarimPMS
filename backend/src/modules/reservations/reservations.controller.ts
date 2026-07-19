@@ -11,10 +11,13 @@ import {
 } from '@nestjs/common';
 import { StatutReservation } from '@prisma/client';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { ReservationsService } from './reservations.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationDto } from './dto/update-reservation.dto';
 import { CheckAvailabilityDto } from './dto/check-availability.dto';
+import { CancelReservationDto } from './dto/cancel-reservation.dto';
 
 @Controller('reservations')
 export class ReservationsController {
@@ -59,13 +62,18 @@ export class ReservationsController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateReservationDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.reservationsService.update(id, dto);
+    return this.reservationsService.update(id, dto, user.sub);
   }
 
   @RequirePermission('reservations', 'delete')
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.reservationsService.remove(id);
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CancelReservationDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.reservationsService.remove(id, dto, user.sub);
   }
 }

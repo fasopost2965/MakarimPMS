@@ -201,7 +201,9 @@ describe('Housekeeping — machine à états complète (e2e)', () => {
       );
       expect(reserved!.statut).toBe('RESERVEE');
 
-      const cancel = await client.delete(`/api/reservations/${reservationId}`);
+      const cancel = await client
+        .delete(`/api/reservations/${reservationId}`)
+        .send({ motif: 'Annulation test housekeeping e2e' });
       expect(cancel.status).toBe(200);
 
       const roomsAfterCancel = await client.get('/api/rooms');

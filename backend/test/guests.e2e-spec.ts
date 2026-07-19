@@ -206,7 +206,7 @@ describe('Guests / CRM (e2e)', () => {
     const guestId = (guest.body as GuestResponse).id;
     await receptionClient
       .patch(`/api/guests/${guestId}/categorie`)
-      .send({ categorie: 'BLACKLIST', motif: 'Test e2e' });
+      .send({ categorie: 'BLACKLIST', motif: 'Test e2e blacklist' });
 
     const roomId = await createRoom();
     const reservationsBefore = await prisma.reservation.count({
@@ -261,7 +261,7 @@ describe('Guests / CRM (e2e)', () => {
     const guestId = (guest.body as GuestResponse).id;
     await receptionClient
       .patch(`/api/guests/${guestId}/categorie`)
-      .send({ categorie: 'BLACKLIST', motif: 'Test e2e' });
+      .send({ categorie: 'BLACKLIST', motif: 'Test e2e blacklist' });
 
     const roomId = await createRoom();
     const res = await receptionClient.post('/api/checkin/walk-in').send({
