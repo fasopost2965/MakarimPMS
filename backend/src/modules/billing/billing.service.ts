@@ -194,4 +194,16 @@ export class BillingService {
       orderBy: { createdAt: 'asc' },
     });
   }
+
+  // Façade exposée aux autres modules (docs/modules/guests.md §11 :
+  // "guests ne doit jamais interroger directement billing/payments") — le
+  // module guests appelle cette méthode au lieu de lire prisma.invoice
+  // lui-même, préservant la propriété du domaine facturation sur ses
+  // propres tables.
+  async findInvoicesByGuestId(guestId: number) {
+    return this.prisma.invoice.findMany({
+      where: { folio: { stay: { guestId } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
 }

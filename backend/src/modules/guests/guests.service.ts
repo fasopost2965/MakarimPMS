@@ -12,6 +12,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { BillingService } from '../billing/billing.service';
 import { CreateGuestDto } from './dto/create-guest.dto';
 import { UpdateGuestDto } from './dto/update-guest.dto';
 
@@ -22,6 +23,7 @@ export class GuestsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly billingService: BillingService,
   ) {}
 
   // Recherche rapide multi-critères (cahier des charges §5.7) : nom,
@@ -174,11 +176,11 @@ export class GuestsService {
     });
   }
 
+  // Ne lit jamais prisma.invoice directement (docs/modules/guests.md §11 :
+  // dépendance interdite vers billing/payments) — passe par la façade
+  // exposée par BillingService, qui reste seul propriétaire de ses tables.
   async factures(id: number) {
     await this.findOne(id);
-    return this.prisma.invoice.findMany({
-      where: { folio: { stay: { guestId: id } } },
-      orderBy: { createdAt: 'desc' },
-    });
+    return this.billingService.findInvoicesByGuestId(id);
   }
 }
