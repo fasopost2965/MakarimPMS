@@ -17,6 +17,7 @@ import { getTodayRange } from '../../common/utils/date-range';
 import { getNightsBetween } from '../reservations/utils/nights';
 import { calculateNightlyTotal } from '../reservations/utils/pricing';
 import { HousekeepingService } from '../housekeeping/housekeeping.service';
+import { GuestsService } from '../guests/guests.service';
 import { WalkinCheckinDto } from './dto/walkin-checkin.dto';
 import { computeSoldeDu } from './utils/solde';
 import { CheckoutEffectueEvent } from './events/checkout-effectue.event';
@@ -33,6 +34,7 @@ export class CheckinService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly housekeepingService: HousekeepingService,
+    private readonly guestsService: GuestsService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -116,6 +118,11 @@ export class CheckinService {
   // n'a pas de réservation préexistante : les nuits n'existent pas encore,
   // on les crée directement rattachées au séjour.
   async checkinWalkIn(dto: WalkinCheckinDto, userId?: number) {
+    if (!dto.guestId && !dto.guest) {
+      throw new BadRequestException(
+        'guestId (client existant) ou guest (nouveau client) requis.',
+      );
+    }
     const dateCheckin = new Date();
     const { today: firstNight } = getTodayRange();
 
@@ -136,7 +143,9 @@ export class CheckinService {
           throw new NotFoundException(`Chambre ${dto.roomId} introuvable.`);
         }
 
-        const guest = await tx.guest.create({ data: dto.guest });
+        const guest = dto.guestId
+          ? await this.guestsService.assertNotBlacklisted(dto.guestId, tx)
+          : await tx.guest.create({ data: dto.guest! });
 
         const stay = await tx.stay.create({
           data: {

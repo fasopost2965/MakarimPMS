@@ -11,6 +11,7 @@ import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
+import { GuestsModule } from './modules/guests/guests.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
@@ -27,6 +28,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     BillingModule,
     DashboardModule,
     MaintenanceModule,
+    GuestsModule,
   ],
   controllers: [AppController],
   providers: [

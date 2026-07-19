@@ -16,6 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { GuestPicker } from '@/features/guests/components/GuestPicker';
+import type { GuestSelection } from '@/features/guests/components/GuestPicker';
 import type { Room } from '../../reservations/types';
 import type { WalkinCheckinInput } from '../types';
 
@@ -64,10 +66,9 @@ function WalkinForm({
 }: Omit<Props, 'open'>) {
   const [roomId, setRoomId] = useState('');
   const [dateCheckoutPrevue, setDateCheckoutPrevue] = useState('');
-  const [nom, setNom] = useState('');
-  const [prenom, setPrenom] = useState('');
-  const [telephone, setTelephone] = useState('');
-  const [email, setEmail] = useState('');
+  const [guestSelection, setGuestSelection] = useState<GuestSelection | null>(
+    null,
+  );
 
   return (
     <>
@@ -79,16 +80,11 @@ function WalkinForm({
         className="flex flex-col gap-3"
         onSubmit={(e) => {
           e.preventDefault();
-          if (!roomId || !dateCheckoutPrevue) return;
+          if (!roomId || !dateCheckoutPrevue || !guestSelection) return;
           onConfirm({
             roomId: Number(roomId),
             dateCheckoutPrevue,
-            guest: {
-              nom,
-              prenom,
-              telephone: telephone || undefined,
-              email: email || undefined,
-            },
+            ...guestSelection,
           });
         }}
       >
@@ -126,41 +122,7 @@ function WalkinForm({
           />
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="nom">Nom</Label>
-          <Input
-            id="nom"
-            value={nom}
-            onChange={(e) => setNom(e.target.value)}
-            required
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="prenom">Prénom</Label>
-          <Input
-            id="prenom"
-            value={prenom}
-            onChange={(e) => setPrenom(e.target.value)}
-            required
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="telephone">Téléphone</Label>
-          <Input
-            id="telephone"
-            value={telephone}
-            onChange={(e) => setTelephone(e.target.value)}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </div>
+        <GuestPicker onChange={setGuestSelection} />
 
         {error && <p className="text-destructive text-sm">{error}</p>}
 
@@ -175,7 +137,9 @@ function WalkinForm({
           </Button>
           <Button
             type="submit"
-            disabled={submitting || !roomId || !dateCheckoutPrevue}
+            disabled={
+              submitting || !roomId || !dateCheckoutPrevue || !guestSelection
+            }
           >
             {submitting ? 'Enregistrement…' : 'Enregistrer le check-in'}
           </Button>

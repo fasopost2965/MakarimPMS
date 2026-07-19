@@ -92,18 +92,75 @@ model RoomStatusLog {
   createdAt     DateTime      @default(now())
 }
 
-// Fiche client minimale, suffisante pour rattacher une réservation.
-// Le module CRM (5.7) enrichira ce modèle (catégorie, préférences, historique...).
+enum CategorieClient {
+  STANDARD
+  VIP
+  ENTREPRISE
+  AGENCE
+  BLACKLIST
+}
+
+// Fiche client (cahier des charges §5.7, CRM). pieceIdentite reste optionnel
+// (ne casse pas les flux réservations/checkin existants qui ne l'exigent
+// pas) ; nationalite/preferences sont nouveaux ("champs prêts pour
+// l'obligation de registre des personnes hébergées").
 model Guest {
-  id            Int           @id @default(autoincrement())
+  id            Int                @id @default(autoincrement())
   nom           String
   prenom        String
   pieceIdentite String?
+  nationalite   String?
   telephone     String?
   email         String?
+  categorie     CategorieClient    @default(STANDARD)
+  preferences   String?
   reservations  Reservation[]
   stays         Stay[]
-  createdAt     DateTime      @default(now())
+  categoryLogs  GuestCategoryLog[]
+  createdAt     DateTime           @default(now())
+}
+
+// Trace d'audit dédiée aux changements de catégorie (CLAUDE.md règle 4 :
+// blacklister un client est une opération sensible). Mirror du pattern déjà
+// établi par RoomStatusLog (housekeeping) — alimenté exclusivement par
+// GuestsService.updateCategorie, jamais d'écriture directe de Guest.categorie
+// ailleurs.
+model GuestCategoryLog {
+  id                Int             @id @default(autoincrement())
+  guestId           Int
+  guest             Guest           @relation(fields: [guestId], references: [id])
+  ancienneCategorie CategorieClient
+  nouvelleCategorie CategorieClient
+  motif             String
+  userId            Int?
+  createdAt         DateTime        @default(now())
+}
+
+// Annuaire des comptes entreprise (City Ledger, cahier des charges §5.7 /
+// §6.2 "Comptes entreprise"). Volontairement autonome pour cette itération :
+// aucune FK companyId sur Reservation/Stay/Folio/Invoice — le rattachement
+// réel d'un séjour/d'une facture à une société (et donc un vrai compte
+// courant avec mouvements) reste un module futur non spécifié dans le
+// cahier des charges. plafondCredit est affiché tel quel côté frontend,
+// jamais utilisé pour calculer une remise ou une commission (section 2.1).
+model Company {
+  id                 Int              @id @default(autoincrement())
+  raisonSociale      String
+  ice                String?
+  conditionsPaiement String?
+  plafondCredit      Decimal?         @db.Decimal(10, 2)
+  contacts           CompanyContact[]
+  createdAt          DateTime         @default(now())
+}
+
+model CompanyContact {
+  id        Int     @id @default(autoincrement())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+  nom       String
+  role      String?
+  telephone String?
+  email     String?
 }
 
 model Reservation {

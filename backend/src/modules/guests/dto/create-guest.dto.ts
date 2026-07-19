@@ -1,9 +1,6 @@
 import { IsEmail, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
-// Fiche client minimale saisie au moment de la réservation, pour un client
-// qui n'existe pas encore (voir CreateReservationDto/WalkinCheckinDto :
-// guestId réutilise un client existant à la place — module CRM 5.7).
-export class GuestInputDto {
+export class CreateGuestDto {
   @IsString()
   @IsNotEmpty()
   nom: string;
@@ -18,9 +15,17 @@ export class GuestInputDto {
 
   @IsOptional()
   @IsString()
+  nationalite?: string;
+
+  @IsOptional()
+  @IsString()
   telephone?: string;
 
   @IsOptional()
   @IsEmail()
   email?: string;
+
+  @IsOptional()
+  @IsString()
+  preferences?: string;
 }

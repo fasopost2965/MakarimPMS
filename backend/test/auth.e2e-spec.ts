@@ -208,11 +208,19 @@ describe('Auth — JWT, rôles et permissions (e2e)', () => {
       expect(reuse.status).toBe(400);
 
       // Remettre le mot de passe de seed pour ne pas perturber d'autres
-      // exécutions locales de la suite (le compte "maintenance" n'est
-      // utilisé par aucun autre test, mais on reste rigoureux).
-      await request(server()).post('/api/auth/forgot-password').send({
-        email: SEED_USERS.maintenance,
-      });
+      // suites qui s'authentifient avec ce compte (maintenance.e2e-spec.ts,
+      // module 5.8) — l'ordre d'exécution des fichiers par Jest n'est pas
+      // garanti alphabétique, donc laisser le mot de passe modifié ferait
+      // échouer maintenance.e2e-spec.ts de façon intermittente selon l'ordre.
+      const restore = await request(server())
+        .post('/api/auth/forgot-password')
+        .send({ email: SEED_USERS.maintenance });
+      const { resetToken: restoreToken } = restore.body as {
+        resetToken: string;
+      };
+      await request(server())
+        .post('/api/auth/reset-password')
+        .send({ token: restoreToken, nouveauMotDePasse: 'Password123!' });
     });
 
     it('rejette un jeton invalide', async () => {

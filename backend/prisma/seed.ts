@@ -30,7 +30,10 @@ async function main() {
   await prisma.roomNight.deleteMany();
   await prisma.stay.deleteMany();
   await prisma.reservation.deleteMany();
+  await prisma.guestCategoryLog.deleteMany();
   await prisma.guest.deleteMany();
+  await prisma.companyContact.deleteMany();
+  await prisma.company.deleteMany();
   await prisma.taxRateConfig.deleteMany();
   await prisma.seasonRate.deleteMany();
   await prisma.roomStatusLog.deleteMany();
@@ -197,13 +200,14 @@ async function main() {
   });
 
   // Rôles, permissions et comptes de développement (module core 5.2/5.2.1).
-  // Modules métier existants seulement — guests/stock/RH recevront leurs
+  // Modules métier existants seulement — stock/RH recevront leurs
   // permissions quand ces modules seront construits en Phase 2 (voir
   // CLAUDE.md règle 5 : le rôle RH existe déjà en base pour ne pas devoir
   // migrer le schéma à ce moment-là, mais reste sans permission active —
   // donc invisible sur la landing page tant qu'aucune permission ne lui est
-  // accordée, cf. AuthService.rolesActifs). Le rôle Maintenance, lui, devient
-  // actif avec ce module (5.8).
+  // accordée, cf. AuthService.rolesActifs). Les rôles Maintenance (5.8),
+  // guests (5.7, Réception/Comptable) et companies (5.7 City Ledger,
+  // Comptable uniquement) sont désormais actifs.
   const ALL_MODULES = [
     'reservations',
     'checkin',
@@ -211,6 +215,8 @@ async function main() {
     'billing',
     'dashboard',
     'maintenance',
+    'guests',
+    'companies',
   ] as const;
   const ALL_ACTIONS = ['read', 'write', 'delete', 'export'] as const;
 
@@ -242,6 +248,8 @@ async function main() {
         'housekeeping:read',
         'housekeeping:write',
         'dashboard:read',
+        'guests:read',
+        'guests:write',
       ],
     },
     {
@@ -257,7 +265,14 @@ async function main() {
     },
     {
       nom: 'Comptable',
-      permissionKeys: ['billing:read', 'billing:write', 'dashboard:read'],
+      permissionKeys: [
+        'billing:read',
+        'billing:write',
+        'dashboard:read',
+        'guests:read',
+        'companies:read',
+        'companies:write',
+      ],
     },
     {
       nom: 'Maintenance',

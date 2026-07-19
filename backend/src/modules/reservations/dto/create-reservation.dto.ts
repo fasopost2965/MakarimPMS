@@ -10,6 +10,11 @@ import {
 import { CanalReservation } from '@prisma/client';
 import { GuestInputDto } from './guest-input.dto';
 
+// L'un des deux champs client est requis (validé au niveau service, pas ici
+// — un message d'erreur clair y est plus facile à produire qu'avec des
+// décorateurs croisés) : `guestId` pour réutiliser un client existant
+// (recherche CRM, active le contrôle blacklist), `guest` pour en saisir un
+// nouveau à la volée comme avant le module 5.7.
 export class CreateReservationDto {
   @IsOptional()
   @IsEnum(CanalReservation)
@@ -28,7 +33,12 @@ export class CreateReservationDto {
   @IsString()
   sourceBrute?: string;
 
+  @IsOptional()
+  @IsInt()
+  guestId?: number;
+
+  @IsOptional()
   @ValidateNested()
   @Type(() => GuestInputDto)
-  guest: GuestInputDto;
+  guest?: GuestInputDto;
 }

@@ -1,7 +1,15 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsInt, ValidateNested } from 'class-validator';
+import {
+  IsDateString,
+  IsInt,
+  IsOptional,
+  ValidateNested,
+} from 'class-validator';
 import { GuestInputDto } from '../../reservations/dto/guest-input.dto';
 
+// L'un des deux champs client est requis (validé au niveau service) :
+// `guestId` pour réutiliser un client existant (contrôle blacklist actif),
+// `guest` pour en saisir un nouveau — module CRM 5.7.
 export class WalkinCheckinDto {
   @IsInt()
   roomId: number;
@@ -9,7 +17,12 @@ export class WalkinCheckinDto {
   @IsDateString()
   dateCheckoutPrevue: string;
 
+  @IsOptional()
+  @IsInt()
+  guestId?: number;
+
+  @IsOptional()
   @ValidateNested()
   @Type(() => GuestInputDto)
-  guest: GuestInputDto;
+  guest?: GuestInputDto;
 }

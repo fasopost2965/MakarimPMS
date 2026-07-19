@@ -7,6 +7,7 @@ import {
 import { Prisma, StatutReservation } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { getTodayRange } from '../../common/utils/date-range';
+import { GuestsService } from '../guests/guests.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationDto } from './dto/update-reservation.dto';
 import { CheckAvailabilityDto } from './dto/check-availability.dto';
@@ -20,7 +21,10 @@ const RESERVATION_INCLUDE = {
 
 @Injectable()
 export class ReservationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly guestsService: GuestsService,
+  ) {}
 
   private assertDateRangeValid(dateArrivee: string, dateDepart: string) {
     if (new Date(dateDepart) <= new Date(dateArrivee)) {
@@ -53,6 +57,11 @@ export class ReservationsService {
   // la transaction est annulée — aucune des deux requêtes concurrentes ne
   // peut obtenir partiellement la chambre.
   async create(dto: CreateReservationDto) {
+    if (!dto.guestId && !dto.guest) {
+      throw new BadRequestException(
+        'guestId (client existant) ou guest (nouveau client) requis.',
+      );
+    }
     this.assertDateRangeValid(dto.dateArrivee, dto.dateDepart);
     const nights = getNightsBetween(dto.dateArrivee, dto.dateDepart);
 
@@ -63,7 +72,9 @@ export class ReservationsService {
           throw new NotFoundException(`Chambre ${dto.roomId} introuvable.`);
         }
 
-        const guest = await tx.guest.create({ data: dto.guest });
+        const guest = dto.guestId
+          ? await this.guestsService.assertNotBlacklisted(dto.guestId, tx)
+          : await tx.guest.create({ data: dto.guest! });
 
         const prixTotalCalcule = await this.calculatePrixTotal(
           tx,

@@ -7,8 +7,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { GuestPicker } from '@/features/guests/components/GuestPicker';
+import type { GuestSelection } from '@/features/guests/components/GuestPicker';
 import type { Room } from '../types';
 
 export interface CreateReservationSelection {
@@ -20,12 +20,7 @@ export interface CreateReservationSelection {
 interface Props {
   selection: CreateReservationSelection | null;
   onClose: () => void;
-  onConfirm: (input: {
-    nom: string;
-    prenom: string;
-    telephone?: string;
-    email?: string;
-  }) => void;
+  onConfirm: (input: GuestSelection) => void;
   submitting: boolean;
   error: string | null;
 }
@@ -66,10 +61,9 @@ function ReservationForm({
   submitting,
   error,
 }: Props & { selection: CreateReservationSelection }) {
-  const [nom, setNom] = useState('');
-  const [prenom, setPrenom] = useState('');
-  const [telephone, setTelephone] = useState('');
-  const [email, setEmail] = useState('');
+  const [guestSelection, setGuestSelection] = useState<GuestSelection | null>(
+    null,
+  );
 
   return (
     <>
@@ -86,49 +80,11 @@ function ReservationForm({
         className="flex flex-col gap-3"
         onSubmit={(e) => {
           e.preventDefault();
-          onConfirm({
-            nom,
-            prenom,
-            telephone: telephone || undefined,
-            email: email || undefined,
-          });
+          if (!guestSelection) return;
+          onConfirm(guestSelection);
         }}
       >
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="nom">Nom</Label>
-          <Input
-            id="nom"
-            value={nom}
-            onChange={(e) => setNom(e.target.value)}
-            required
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="prenom">Prénom</Label>
-          <Input
-            id="prenom"
-            value={prenom}
-            onChange={(e) => setPrenom(e.target.value)}
-            required
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="telephone">Téléphone</Label>
-          <Input
-            id="telephone"
-            value={telephone}
-            onChange={(e) => setTelephone(e.target.value)}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </div>
+        <GuestPicker onChange={setGuestSelection} />
 
         {error && <p className="text-destructive text-sm">{error}</p>}
 
@@ -141,7 +97,7 @@ function ReservationForm({
           >
             Annuler
           </Button>
-          <Button type="submit" disabled={submitting}>
+          <Button type="submit" disabled={submitting || !guestSelection}>
             {submitting ? 'Création…' : 'Créer la réservation'}
           </Button>
         </DialogFooter>

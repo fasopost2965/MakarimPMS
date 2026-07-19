@@ -55,18 +55,26 @@ export interface Reservation {
   updatedAt: string;
 }
 
-export interface CreateReservationInput {
+// L'un des deux champs client est requis (module CRM 5.7) : guestId pour
+// réutiliser un client existant (déclenche le contrôle blacklist côté
+// serveur), guest pour en saisir un nouveau — voir GuestPicker.
+export type CreateReservationInput = {
   roomId: number;
   dateArrivee: string;
   dateDepart: string;
   canal?: CanalReservation;
-  guest: {
-    nom: string;
-    prenom: string;
-    telephone?: string;
-    email?: string;
-  };
-}
+} & (
+  | { guestId: number; guest?: undefined }
+  | {
+      guestId?: undefined;
+      guest: {
+        nom: string;
+        prenom: string;
+        telephone?: string;
+        email?: string;
+      };
+    }
+);
 
 export interface UpdateReservationInput {
   roomId?: number;

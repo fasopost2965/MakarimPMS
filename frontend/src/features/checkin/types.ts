@@ -44,13 +44,21 @@ export interface StayWithSolde extends Stay {
   soldeDu: string;
 }
 
-export interface WalkinCheckinInput {
+// L'un des deux champs client est requis (module CRM 5.7) : guestId pour
+// réutiliser un client existant (déclenche le contrôle blacklist côté
+// serveur), guest pour en saisir un nouveau — voir GuestPicker.
+export type WalkinCheckinInput = {
   roomId: number;
   dateCheckoutPrevue: string;
-  guest: {
-    nom: string;
-    prenom: string;
-    telephone?: string;
-    email?: string;
-  };
-}
+} & (
+  | { guestId: number; guest?: undefined }
+  | {
+      guestId?: undefined;
+      guest: {
+        nom: string;
+        prenom: string;
+        telephone?: string;
+        email?: string;
+      };
+    }
+);
