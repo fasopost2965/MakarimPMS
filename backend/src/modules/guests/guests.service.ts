@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -69,16 +70,42 @@ export class GuestsService {
   // en particulier). Journalise systématiquement dans GuestCategoryLog,
   // même quand la catégorie ne change pas réellement (motif tout de même
   // significatif, ex. "reconfirmé VIP").
+  //
+  // Toute transition vers ou depuis BLACKLIST exige en plus la permission
+  // dédiée guests:blacklist (docs/modules/guests.md §7, Administrateur
+  // uniquement) — @RequirePermission('guests', 'write') sur la route ne
+  // suffit pas ici, il faut un contrôle dynamique dépendant du contenu de
+  // la requête (categorie cible ET catégorie actuelle du client), donc ce
+  // n'est pas exprimable par le décorateur statique.
   async updateCategorie(
     id: number,
     categorie: CategorieClient,
     motif: string,
     userId?: number,
+    roleId?: number,
   ) {
     return this.prisma.$transaction(async (tx) => {
       const guest = await tx.guest.findUnique({ where: { id } });
       if (!guest) {
         throw new NotFoundException(`Client ${id} introuvable.`);
+      }
+
+      const touchesBlacklist =
+        categorie === CategorieClient.BLACKLIST ||
+        guest.categorie === CategorieClient.BLACKLIST;
+      if (touchesBlacklist) {
+        const grant = await tx.permission.findFirst({
+          where: {
+            module: 'guests',
+            action: 'blacklist',
+            roles: { some: { roleId } },
+          },
+        });
+        if (!grant) {
+          throw new ForbiddenException(
+            'Permission requise : guests:blacklist.',
+          );
+        }
       }
 
       const updated = await tx.guest.update({

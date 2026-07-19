@@ -56,6 +56,7 @@ export class GuestsController {
       dto.categorie,
       dto.motif,
       user.sub,
+      user.roleId,
     );
   }
 

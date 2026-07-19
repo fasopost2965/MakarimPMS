@@ -205,13 +205,24 @@ async function main() {
   // CLAUDE.md règle 5 : le rôle RH existe déjà en base pour ne pas devoir
   // migrer le schéma à ce moment-là, mais reste sans permission active —
   // donc invisible sur la landing page tant qu'aucune permission ne lui est
-  // accordée, cf. AuthService.rolesActifs). Les rôles Maintenance (5.8),
-  // guests (5.7, Réception/Comptable) et companies (5.7 City Ledger,
-  // Comptable uniquement) sont désormais actifs. audit:read est réservé à
-  // l'Administrateur (ADR-005/audit.md §7 — "aucun rôle d'exploitation n'a
-  // d'accès de lecture sur le journal de sécurité central"), obtenu
-  // automatiquement via Object.keys(permissions) ci-dessous, jamais accordé
-  // explicitement à un autre rôle.
+  // accordée, cf. AuthService.rolesActifs). Les rôles Maintenance (5.8) et
+  // guests (5.7, Réception en écriture/Comptable en lecture seule) sont
+  // désormais actifs. audit:read est réservé à l'Administrateur (ADR-005/
+  // audit.md §7 — "aucun rôle d'exploitation n'a d'accès de lecture sur le
+  // journal de sécurité central"), obtenu automatiquement via
+  // Object.keys(permissions) ci-dessous, jamais accordé explicitement à un
+  // autre rôle.
+  //
+  // Arbitrage d'architecture (2026-07-19, décision explicite validée) :
+  // Company reste une responsabilité du module guests (pas de module/clé de
+  // permission `companies` séparée — docs/modules/guests.md §2 : "gestion
+  // des fiches d'entreprises... ainsi que de leurs plafonds de crédit"),
+  // câblé via CompaniesController mais protégé par les mêmes clés
+  // guests:read/guests:write. Le changement de catégorie vers/depuis
+  // BLACKLIST exige en plus la permission dédiée `guests:blacklist`,
+  // réservée à l'Administrateur (docs/modules/guests.md §7) — Réception
+  // garde guests:write pour les autres catégories mais ne peut plus
+  // blacklister un client.
   const ALL_MODULES = [
     'reservations',
     'checkin',
@@ -220,7 +231,6 @@ async function main() {
     'dashboard',
     'maintenance',
     'guests',
-    'companies',
     'audit',
   ] as const;
   const ALL_ACTIONS = ['read', 'write', 'delete', 'export'] as const;
@@ -234,6 +244,11 @@ async function main() {
       });
     }
   }
+  // Action dédiée, hors de la grille read/write/delete/export générique —
+  // seul le module guests l'utilise (blacklister/débloquer un client).
+  permissions['guests:blacklist'] = await prisma.permission.create({
+    data: { module: 'guests', action: 'blacklist' },
+  });
 
   const rolesData: Array<{
     nom: string;
@@ -254,6 +269,9 @@ async function main() {
         'housekeeping:write',
         'dashboard:read',
         'guests:read',
+        // guests:write couvre la création/mise à jour de fiches client et
+        // entreprise et les catégories non sensibles (VIP/ENTREPRISE/
+        // AGENCE/STANDARD) — jamais guests:blacklist (Administrateur seul).
         'guests:write',
       ],
     },
@@ -270,13 +288,14 @@ async function main() {
     },
     {
       nom: 'Comptable',
+      // guests:read uniquement (jamais write) — le Comptable consulte les
+      // fiches client/entreprise (factures, plafond de crédit) mais ne les
+      // modifie pas ; c'est le rôle Réception qui gère le CRM au quotidien.
       permissionKeys: [
         'billing:read',
         'billing:write',
         'dashboard:read',
         'guests:read',
-        'companies:read',
-        'companies:write',
       ],
     },
     {

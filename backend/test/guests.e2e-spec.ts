@@ -43,6 +43,7 @@ describe('Guests / CRM (e2e)', () => {
   let prisma: PrismaService;
   let receptionClient: ReturnType<typeof authedRequest>;
   let comptableClient: ReturnType<typeof authedRequest>;
+  let adminClient: ReturnType<typeof authedRequest>;
   let roomTypeId: number;
 
   beforeAll(async () => {
@@ -62,6 +63,8 @@ describe('Guests / CRM (e2e)', () => {
     receptionClient = authedRequest(app.getHttpServer(), receptionToken);
     const comptableToken = await loginAs(app.getHttpServer(), 'comptable');
     comptableClient = authedRequest(app.getHttpServer(), comptableToken);
+    const adminToken = await loginAs(app.getHttpServer(), 'admin');
+    adminClient = authedRequest(app.getHttpServer(), adminToken);
 
     const roomType = await prisma.roomType.create({
       data: {
@@ -193,6 +196,60 @@ describe('Guests / CRM (e2e)', () => {
   });
 
   // Preuve de rigueur (validée manuellement) : en remplaçant temporairement
+  // `touchesBlacklist` par `false` dans `GuestsService.updateCategorie`
+  // (contournant le contrôle guests:blacklist), ce test échoue bien (200 au
+  // lieu de 403 attendu pour Réception) — confirmant que c'est bien ce
+  // contrôle, et non le décorateur @RequirePermission('guests','write')
+  // statique, qui bloque la transition. Restauré ensuite.
+  it('PATCH .../categorie vers BLACKLIST : 403 pour Réception (guests:write ne suffit pas), 200 pour Administrateur', async () => {
+    const created = await receptionClient.post('/api/guests').send({
+      nom: 'TEST-GUEST-Permission',
+      prenom: 'Blacklist',
+    });
+    const id = (created.body as GuestResponse).id;
+
+    const asReception = await receptionClient
+      .patch(`/api/guests/${id}/categorie`)
+      .send({ categorie: 'BLACKLIST', motif: 'Tentative non autorisée' });
+    expect(asReception.status).toBe(403);
+
+    const stillStandard = await prisma.guest.findUniqueOrThrow({
+      where: { id },
+    });
+    expect(stillStandard.categorie).toBe('STANDARD');
+
+    const asAdmin = await adminClient
+      .patch(`/api/guests/${id}/categorie`)
+      .send({ categorie: 'BLACKLIST', motif: 'Fraude confirmée au comptoir' });
+    expect(asAdmin.status).toBe(200);
+    expect((asAdmin.body as GuestResponse).categorie).toBe('BLACKLIST');
+  });
+
+  it('PATCH .../categorie pour sortir un client de BLACKLIST exige aussi guests:blacklist', async () => {
+    const created = await receptionClient.post('/api/guests').send({
+      nom: 'TEST-GUEST-Debloque',
+      prenom: 'Client',
+    });
+    const id = (created.body as GuestResponse).id;
+    await adminClient
+      .patch(`/api/guests/${id}/categorie`)
+      .send({ categorie: 'BLACKLIST', motif: 'Mise en liste noire initiale' });
+
+    const asReception = await receptionClient
+      .patch(`/api/guests/${id}/categorie`)
+      .send({ categorie: 'STANDARD', motif: 'Tentative de déblocage' });
+    expect(asReception.status).toBe(403);
+
+    const asAdmin = await adminClient
+      .patch(`/api/guests/${id}/categorie`)
+      .send({
+        categorie: 'STANDARD',
+        motif: 'Malentendu résolu avec le client',
+      });
+    expect(asAdmin.status).toBe(200);
+  });
+
+  // Preuve de rigueur (validée manuellement) : en remplaçant temporairement
   // l'appel à `guestsService.assertNotBlacklisted` dans
   // `ReservationsService.create` par une simple lecture du client
   // (`tx.guest.findUniqueOrThrow`), ce test échoue bien (201 au lieu de 409
@@ -204,7 +261,10 @@ describe('Guests / CRM (e2e)', () => {
       prenom: 'Reservation',
     });
     const guestId = (guest.body as GuestResponse).id;
-    await receptionClient
+    // Blacklister exige guests:blacklist (Administrateur uniquement, voir
+    // test dédié plus bas) — Réception n'a plus ce droit depuis l'arbitrage
+    // RBAC du 2026-07-19.
+    await adminClient
       .patch(`/api/guests/${guestId}/categorie`)
       .send({ categorie: 'BLACKLIST', motif: 'Test e2e blacklist' });
 
@@ -259,7 +319,10 @@ describe('Guests / CRM (e2e)', () => {
       prenom: 'Checkin',
     });
     const guestId = (guest.body as GuestResponse).id;
-    await receptionClient
+    // Blacklister exige guests:blacklist (Administrateur uniquement, voir
+    // test dédié plus bas) — Réception n'a plus ce droit depuis l'arbitrage
+    // RBAC du 2026-07-19.
+    await adminClient
       .patch(`/api/guests/${guestId}/categorie`)
       .send({ categorie: 'BLACKLIST', motif: 'Test e2e blacklist' });
 

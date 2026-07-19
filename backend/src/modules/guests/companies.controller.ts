@@ -17,35 +17,38 @@ import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { CreateCompanyContactDto } from './dto/create-company-contact.dto';
 
+// Company reste une responsabilité du module guests (docs/modules/guests.md
+// §2) — pas de clé de permission `companies` dédiée, protégé par
+// guests:read/guests:write comme le reste du CRM (arbitrage 2026-07-19).
 @Controller('companies')
 export class CompaniesController {
   constructor(private readonly companiesService: CompaniesService) {}
 
-  @RequirePermission('companies', 'read')
+  @RequirePermission('guests', 'read')
   @Get()
   search(@Query('q') q?: string) {
     return this.companiesService.search(q);
   }
 
-  @RequirePermission('companies', 'write')
+  @RequirePermission('guests', 'write')
   @Post()
   create(@Body() dto: CreateCompanyDto) {
     return this.companiesService.create(dto);
   }
 
-  @RequirePermission('companies', 'read')
+  @RequirePermission('guests', 'read')
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.companiesService.findOne(id);
   }
 
-  @RequirePermission('companies', 'write')
+  @RequirePermission('guests', 'write')
   @Patch(':id')
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateCompanyDto) {
     return this.companiesService.update(id, dto);
   }
 
-  @RequirePermission('companies', 'write')
+  @RequirePermission('guests', 'write')
   @Post(':id/contacts')
   addContact(
     @Param('id', ParseIntPipe) id: number,
@@ -54,7 +57,7 @@ export class CompaniesController {
     return this.companiesService.addContact(id, dto);
   }
 
-  @RequirePermission('companies', 'write')
+  @RequirePermission('guests', 'write')
   @Delete(':id/contacts/:contactId')
   @HttpCode(HttpStatus.NO_CONTENT)
   removeContact(
