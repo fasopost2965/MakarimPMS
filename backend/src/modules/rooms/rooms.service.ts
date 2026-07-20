@@ -15,7 +15,7 @@ interface TransitionOptions {
 
 // Propriétaire exclusif de Room/RoomType/RoomStatusLog (docs/modules/rooms.md
 // §2/§4). Seul point d'écriture de Room.statut dans toute l'application —
-// housekeeping, checkin et maintenance délèguent tous à transitionRoom()
+// housekeeping, stay et maintenance délèguent tous à transitionRoom()
 // plutôt que d'écrire Room.statut eux-mêmes (CLAUDE.md règle « un seul
 // chemin d'écriture par champ sensible »).
 @Injectable()
@@ -81,7 +81,7 @@ export class RoomsService {
   }
 
   // Variante avec tarification incluse (RoomType + SeasonRate), pour le
-  // calcul de prix walk-in (CheckinService.checkinWalkIn) — seul appelant à
+  // calcul de prix walk-in (StayService.checkinWalkIn) — seul appelant à
   // avoir besoin de ce niveau d'inclusion.
   async findByIdWithPricing(id: number, tx?: Prisma.TransactionClient) {
     const client = tx ?? this.prisma;

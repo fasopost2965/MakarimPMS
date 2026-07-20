@@ -279,7 +279,7 @@ export class ReservationsService {
   // (ADR-005 §6.1, BR-AUD-002 — "Annulation... d'une réservation").
   async remove(id: number, dto: CancelReservationDto, userId?: number) {
     const existing = await this.findOne(id);
-    // Une réservation déjà transformée en séjour (module checkin) partage
+    // Une réservation déjà transformée en séjour (module stay) partage
     // ses lignes RoomNight avec ce séjour actif : les annuler ici casserait
     // le verrou anti-double-occupation en place. L'annulation d'un séjour se
     // fait via le check-out, pas via cette route.

@@ -4,10 +4,10 @@ import { HousekeepingService } from './housekeeping.service';
 import { CheckoutEffectueListener } from './listeners/checkout-effectue.listener';
 import { RoomsModule } from '../rooms/rooms.module';
 import { ReservationsModule } from '../reservations/reservations.module';
-import { CheckinModule } from '../checkin/checkin.module';
+import { StayModule } from '../stay/stay.module';
 
 @Module({
-  imports: [RoomsModule, ReservationsModule, CheckinModule],
+  imports: [RoomsModule, ReservationsModule, StayModule],
   controllers: [HousekeepingController],
   providers: [HousekeepingService, CheckoutEffectueListener],
   exports: [HousekeepingService],

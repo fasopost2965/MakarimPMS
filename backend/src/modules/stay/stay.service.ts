@@ -18,7 +18,7 @@ import { getNightsBetween } from '../reservations/utils/nights';
 import { calculateNightlyTotal } from '../reservations/utils/pricing';
 import { RoomsService } from '../rooms/rooms.service';
 import { GuestsService } from '../guests/guests.service';
-import { WalkinCheckinDto } from './dto/walkin-checkin.dto';
+import { WalkinDto } from './dto/walkin.dto';
 import { computeSoldeDu } from './utils/solde';
 import { CheckoutEffectueEvent } from './events/checkout-effectue.event';
 
@@ -30,7 +30,7 @@ const STAY_INCLUDE = {
 } as const;
 
 @Injectable()
-export class CheckinService {
+export class StayService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly roomsService: RoomsService,
@@ -117,7 +117,7 @@ export class CheckinService {
   // par nuit, protégée par la contrainte unique (roomId, date). Un walk-in
   // n'a pas de réservation préexistante : les nuits n'existent pas encore,
   // on les crée directement rattachées au séjour.
-  async checkinWalkIn(dto: WalkinCheckinDto, userId?: number) {
+  async checkinWalkIn(dto: WalkinDto, userId?: number) {
     if (!dto.guestId && !dto.guest) {
       throw new BadRequestException(
         'guestId (client existant) ou guest (nouveau client) requis.',
@@ -244,7 +244,7 @@ export class CheckinService {
   // existantes (jamais un nouveau calcul indépendant, CLAUDE.md règle 3).
   // Le passage de la chambre en À nettoyer ne se fait plus ici directement :
   // il est déclenché par l'événement checkout.effectue (cahier des charges
-  // §5.6 Phase 2), écouté par le module housekeeping — checkin n'a pas
+  // §5.6 Phase 2), écouté par le module housekeeping — stay n'a pas
   // besoin de connaître sa machine à états. emitAsync (pas emit) : le
   // listener écrit en base de façon asynchrone, on l'attend pour que
   // Room.statut soit déjà à jour quand checkout() répond à l'appelant.

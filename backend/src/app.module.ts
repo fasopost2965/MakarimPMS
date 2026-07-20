@@ -7,7 +7,7 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { RoomsModule } from './modules/rooms/rooms.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
-import { CheckinModule } from './modules/checkin/checkin.module';
+import { StayModule } from './modules/stay/stay.module';
 import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { PaymentsModule } from './modules/payments/payments.module';
@@ -27,7 +27,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     AuthModule,
     RoomsModule,
     ReservationsModule,
-    CheckinModule,
+    StayModule,
     HousekeepingModule,
     BillingModule,
     PaymentsModule,

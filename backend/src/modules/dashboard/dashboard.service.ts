@@ -15,7 +15,7 @@ export class DashboardService {
   // Vue d'ensemble simple (cahier des charges §5.3, Phase 1) : une seule
   // requête agrégée par carte de synthèse. Réutilise getTodayRange() —
   // même logique de "journée" que reservations.arrivalsToday() et
-  // checkin.departsToday() — pour ne pas réintroduire le bug UTC/local déjà
+  // stay.departsToday() — pour ne pas réintroduire le bug UTC/local déjà
   // corrigé au module 5.4.
   async resume() {
     const { today, tomorrow } = getTodayRange();

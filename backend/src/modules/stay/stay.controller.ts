@@ -9,20 +9,23 @@ import {
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
-import { CheckinService } from './checkin.service';
-import { WalkinCheckinDto } from './dto/walkin-checkin.dto';
+import { StayService } from './stay.service';
+import { WalkinDto } from './dto/walkin.dto';
 
+// Routes HTTP et clé de permission ('checkin') volontairement inchangées
+// malgré le renommage du module (voir CLAUDE.md) — aucun consommateur
+// (frontend, tests) n'a besoin d'être touché pour ce renommage interne.
 @Controller()
-export class CheckinController {
-  constructor(private readonly checkinService: CheckinService) {}
+export class StayController {
+  constructor(private readonly stayService: StayService) {}
 
   @RequirePermission('checkin', 'write')
   @Post('checkin/walk-in')
   checkinWalkIn(
-    @Body() dto: WalkinCheckinDto,
+    @Body() dto: WalkinDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.checkinService.checkinWalkIn(dto, user.sub);
+    return this.stayService.checkinWalkIn(dto, user.sub);
   }
 
   @RequirePermission('checkin', 'write')
@@ -31,25 +34,25 @@ export class CheckinController {
     @Param('reservationId', ParseIntPipe) reservationId: number,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.checkinService.checkinFromReservation(reservationId, user.sub);
+    return this.stayService.checkinFromReservation(reservationId, user.sub);
   }
 
   @RequirePermission('checkin', 'read')
   @Get('stays/en-cours')
   findEnCours() {
-    return this.checkinService.findEnCours();
+    return this.stayService.findEnCours();
   }
 
   @RequirePermission('checkin', 'read')
   @Get('stays/departs-du-jour')
   departsToday() {
-    return this.checkinService.departsToday();
+    return this.stayService.departsToday();
   }
 
   @RequirePermission('checkin', 'read')
   @Get('stays/:id')
   findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.checkinService.findOne(id);
+    return this.stayService.findOne(id);
   }
 
   @RequirePermission('checkin', 'write')
@@ -58,6 +61,6 @@ export class CheckinController {
     @Param('stayId', ParseIntPipe) stayId: number,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.checkinService.checkout(stayId, user.sub);
+    return this.stayService.checkout(stayId, user.sub);
   }
 }

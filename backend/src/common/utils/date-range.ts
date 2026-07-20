@@ -3,7 +3,7 @@
 // (MySQL stocke ces colonnes sans fuseau horaire, donc comparer avec un
 // Date local introduirait un décalage selon le fuseau du serveur). Centralisé
 // ici car dupliqué historiquement dans reservations (arrivalsToday) et
-// checkin (departsToday) — le bug UTC/local a déjà été corrigé une fois
+// stay (departsToday) — le bug UTC/local a déjà été corrigé une fois
 // (module 5.4), donc toute nouvelle logique de "journée" doit réutiliser
 // cette fonction plutôt que recréer sa propre version.
 export function getTodayRange(): { today: Date; tomorrow: Date } {
