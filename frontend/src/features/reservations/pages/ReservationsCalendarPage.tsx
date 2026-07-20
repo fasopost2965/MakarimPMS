@@ -1,26 +1,26 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import {
   cancelReservation,
   createReservation,
   listReservations,
   listRooms,
   updateReservation,
-} from "../api";
+} from '../api';
 import {
   addDays,
   formatDayLabel,
   getDateRange,
   startOfDay,
   toISODate,
-} from "../date-utils";
-import type { Reservation, Room } from "../types";
+} from '../date-utils';
+import type { Reservation, Room } from '../types';
 import {
   CreateReservationDialog,
   type CreateReservationSelection,
-} from "../components/CreateReservationDialog";
-import { ReservationDetailsDialog } from "../components/ReservationDetailsDialog";
-import type { GuestSelection } from "@/features/guests/components/GuestPicker";
+} from '../components/CreateReservationDialog';
+import { ReservationDetailsDialog } from '../components/ReservationDetailsDialog';
+import type { GuestSelection } from '@/features/guests/components/GuestPicker';
 
 const VISIBLE_DAYS = 14;
 const ROW_HEIGHT = 44;
@@ -88,9 +88,9 @@ export function ReservationsCalendarPage() {
         }),
       ]);
       setRooms(roomsData);
-      setReservations(reservationsData.filter((r) => r.statut !== "ANNULEE"));
+      setReservations(reservationsData.filter((r) => r.statut !== 'ANNULEE'));
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Erreur de chargement");
+      setLoadError(err instanceof Error ? err.message : 'Erreur de chargement');
     } finally {
       setLoading(false);
     }
@@ -129,9 +129,9 @@ export function ReservationsCalendarPage() {
       }
       selectingRef.current = null;
       setSelecting(null);
-      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener('mouseup', onMouseUp);
     };
-    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener('mouseup', onMouseUp);
   }, []);
 
   async function handleConfirmCreate(guestSelection: GuestSelection) {
@@ -148,7 +148,7 @@ export function ReservationsCalendarPage() {
       setPendingSelection(null);
       await refetch();
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Erreur de création");
+      setSubmitError(err instanceof Error ? err.message : 'Erreur de création');
     } finally {
       setSubmitting(false);
     }
@@ -180,7 +180,7 @@ export function ReservationsCalendarPage() {
       await refetch();
     } catch (err) {
       setActionError(
-        err instanceof Error ? err.message : "Erreur de déplacement",
+        err instanceof Error ? err.message : 'Erreur de déplacement',
       );
     }
   }
@@ -214,7 +214,7 @@ export function ReservationsCalendarPage() {
       await refetch();
     } catch (err) {
       setDetailsError(
-        err instanceof Error ? err.message : "Erreur de mise à jour du prix",
+        err instanceof Error ? err.message : 'Erreur de mise à jour du prix',
       );
     } finally {
       setSavingDetails(false);
@@ -320,7 +320,7 @@ export function ReservationsCalendarPage() {
                         onDrop={(e) => {
                           e.preventDefault();
                           const id = Number(
-                            e.dataTransfer.getData("text/plain"),
+                            e.dataTransfer.getData('text/plain'),
                           );
                           if (id) void handleDrop(id, room.id, dayIndex);
                         }}
@@ -414,16 +414,16 @@ function ReservationBar({
     <div
       draggable
       onDragStart={(e) =>
-        e.dataTransfer.setData("text/plain", String(reservation.id))
+        e.dataTransfer.setData('text/plain', String(reservation.id))
       }
       onClick={onView}
-      className={`bg-primary text-primary-foreground absolute inset-y-0.5 left-0.5 z-10 flex cursor-grab items-center justify-between gap-1 truncate rounded px-2 text-xs active:cursor-grabbing ${disablePointerEvents ? "pointer-events-none" : ""}`}
+      className={`bg-primary text-primary-foreground absolute inset-y-0.5 left-0.5 z-10 flex cursor-grab items-center justify-between gap-1 truncate rounded px-2 text-xs active:cursor-grabbing ${disablePointerEvents ? 'pointer-events-none' : ''}`}
       style={{ width: `calc(${span * 100}% - 4px)` }}
-      title={`${reservation.guest.nom} ${reservation.guest.prenom} — ${reservation.dateArrivee.slice(0, 10)} → ${reservation.dateDepart.slice(0, 10)} — ${reservation.prixTotalFinal} DH${reservation.ajustementManuel ? " (ajusté)" : ""}`}
+      title={`${reservation.guest.nom} ${reservation.guest.prenom} — ${reservation.dateArrivee.slice(0, 10)} → ${reservation.dateDepart.slice(0, 10)} — ${reservation.prixTotalFinal} DH${reservation.ajustementManuel ? ' (ajusté)' : ''}`}
     >
       <span className="truncate">
         {reservation.guest.nom} {reservation.guest.prenom}
-        {reservation.ajustementManuel && " *"}
+        {reservation.ajustementManuel && ' *'}
       </span>
       <button
         type="button"

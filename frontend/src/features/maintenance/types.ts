@@ -1,6 +1,6 @@
-import type { Room } from "../reservations/types";
+import type { Room } from '../reservations/types';
 
-export type PrioriteTicket = "BASSE" | "MOYENNE" | "HAUTE" | "URGENTE";
+export type PrioriteTicket = 'BASSE' | 'MOYENNE' | 'HAUTE' | 'URGENTE';
 
 export interface MaintenanceTicket {
   id: number;

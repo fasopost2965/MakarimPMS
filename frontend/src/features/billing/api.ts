@@ -1,5 +1,5 @@
-import { apiRequest } from "@/lib/api-client";
-import type { Folio, Invoice } from "./types";
+import { apiRequest } from '@/lib/api-client';
+import type { Folio, Invoice } from './types';
 
 export function listFoliosByStay(stayId: number) {
   return apiRequest<Folio[]>(`/stays/${stayId}/folios`);
@@ -15,7 +15,7 @@ export function getInvoice(invoiceId: number) {
 
 export function generateInvoice(folioId: number) {
   return apiRequest<Invoice>(`/invoices/generer?folioId=${folioId}`, {
-    method: "POST",
+    method: 'POST',
     body: JSON.stringify({}),
   });
 }

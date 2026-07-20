@@ -1,5 +1,5 @@
-const ACCESS_TOKEN_KEY = "makarim_access_token";
-const REFRESH_TOKEN_KEY = "makarim_refresh_token";
+const ACCESS_TOKEN_KEY = 'makarim_access_token';
+const REFRESH_TOKEN_KEY = 'makarim_refresh_token';
 
 // Stockage simple (localStorage) pour cette itération — suffisant pour un
 // flux d'auth basique (module core 5.1/5.2). Une évolution vers des cookies

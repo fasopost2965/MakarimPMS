@@ -1,19 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { listFoliosByStay, generateInvoice } from "../api";
-import type { Folio } from "../types";
+import { useCallback, useEffect, useState } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { listFoliosByStay, generateInvoice } from '../api';
+import type { Folio } from '../types';
 
 const TYPE_LIGNE_LABEL: Record<string, string> = {
-  HEBERGEMENT: "Hébergement",
-  EXTRA: "Extra",
-  TAXE_SEJOUR: "Taxe de séjour",
-  PAIEMENT: "Paiement",
+  HEBERGEMENT: 'Hébergement',
+  EXTRA: 'Extra',
+  TAXE_SEJOUR: 'Taxe de séjour',
+  PAIEMENT: 'Paiement',
 };
 
 const STATUT_FACTURE_LABEL: Record<string, string> = {
-  EMISE: "Émise",
-  ANNULEE_PAR_AVOIR: "Annulée par avoir",
+  EMISE: 'Émise',
+  ANNULEE_PAR_AVOIR: 'Annulée par avoir',
 };
 
 export interface BillingTabContentProps {
@@ -34,7 +34,7 @@ export function BillingTabContent({ stayId }: BillingTabContentProps) {
     try {
       setFolios(await listFoliosByStay(stayId));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur de chargement");
+      setError(err instanceof Error ? err.message : 'Erreur de chargement');
     } finally {
       setLoading(false);
     }
@@ -52,7 +52,7 @@ export function BillingTabContent({ stayId }: BillingTabContentProps) {
       await refetch();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Erreur de génération de facture",
+        err instanceof Error ? err.message : 'Erreur de génération de facture',
       );
     } finally {
       setGeneratingInvoiceId(null);

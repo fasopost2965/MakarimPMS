@@ -2,15 +2,8 @@
   "name": "pms-makarim",
   "private": true,
   "version": "0.0.0",
-  "description": "Monorepo (backend NestJS + frontend React) du PMS Hôtel Makarim.",
-  "workspaces": [
-    "backend",
-    "frontend"
-  ],
+  "description": "Monorepo (backend NestJS + frontend React) du PMS Hôtel Makarim. Voir docs/plan-execution-claude-code.md.",
   "scripts": {
-    "dev": "npm run start:dev --workspace=backend",
-    "build": "npm run build --workspace=frontend && npm run build --workspace=backend",
-    "lint": "npm run lint --workspace=backend && npm run lint --workspace=frontend",
     "prepare": "husky"
   },
   "devDependencies": {

@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { login, rolesActifs } from "../api";
-import { setTokens } from "@/lib/token-storage";
-import type { RoleActif } from "../types";
+import { useCallback, useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { login, rolesActifs } from '../api';
+import { setTokens } from '@/lib/token-storage';
+import type { RoleActif } from '../types';
 
 interface Props {
   onLoginSuccess: () => void;
@@ -19,8 +19,8 @@ interface Props {
 // email + mot de passe, le rôle est déterminé côté serveur par le compte.
 export function LoginPage({ onLoginSuccess, onForgotPassword }: Props) {
   const [roles, setRoles] = useState<RoleActif[]>([]);
-  const [email, setEmail] = useState("");
-  const [motDePasse, setMotDePasse] = useState("");
+  const [email, setEmail] = useState('');
+  const [motDePasse, setMotDePasse] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,7 +46,7 @@ export function LoginPage({ onLoginSuccess, onForgotPassword }: Props) {
       setTokens(accessToken, refreshToken);
       onLoginSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur de connexion");
+      setError(err instanceof Error ? err.message : 'Erreur de connexion');
     } finally {
       setSubmitting(false);
     }
@@ -99,7 +99,7 @@ export function LoginPage({ onLoginSuccess, onForgotPassword }: Props) {
           {error && <p className="text-destructive text-sm">{error}</p>}
 
           <Button type="submit" disabled={submitting}>
-            {submitting ? "Connexion…" : "Se connecter"}
+            {submitting ? 'Connexion…' : 'Se connecter'}
           </Button>
 
           <Button
