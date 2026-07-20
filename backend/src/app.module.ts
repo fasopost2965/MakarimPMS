@@ -10,6 +10,7 @@ import { ReservationsModule } from './modules/reservations/reservations.module';
 import { CheckinModule } from './modules/checkin/checkin.module';
 import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { GuestsModule } from './modules/guests/guests.module';
@@ -29,6 +30,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     CheckinModule,
     HousekeepingModule,
     BillingModule,
+    PaymentsModule,
     DashboardModule,
     MaintenanceModule,
     GuestsModule,

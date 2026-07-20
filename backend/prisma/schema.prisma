@@ -283,6 +283,7 @@ model Folio {
   libelle   String
   lignes    FolioLine[]
   invoices  Invoice[]
+  payments  Payment[]
   createdAt DateTime    @default(now())
 }
 
@@ -348,6 +349,11 @@ enum MoyenPaiement {
 
 model Payment {
   id             Int           @id @default(autoincrement())
+  // Cible d'imputation créditrice (docs/modules/payments.md §4) — toujours
+  // renseigné : un règlement crédite un folio (avant même qu'une facture
+  // n'existe, ex. acompte avant-séjour), jamais directement une facture.
+  folioId        Int
+  folio          Folio         @relation(fields: [folioId], references: [id])
   invoiceId      Int?
   invoice        Invoice?      @relation(fields: [invoiceId], references: [id])
   moyen          MoyenPaiement

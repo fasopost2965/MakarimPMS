@@ -3,10 +3,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, TypeLigneFolio } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AddFolioLineDto } from './dto/add-folio-line.dto';
-import { CreatePaymentDto } from './dto/create-payment.dto';
 import {
   calculateInvoiceTotal,
   generateInvoiceNumber,
@@ -16,27 +15,37 @@ import {
 export class BillingService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Ajouter une charge (ligne) à un folio. Les frais annexes (extra,
-  // services, etc.) sont rattachés aux folios existants plutôt que créant
-  // un nouveau folio (CLAUDE.md règle 2 : un séjour peut avoir plusieurs
-  // folios, mais les lignes s'ajoutent au folio principal en Phase 1).
-  async addFolioLine(folioId: number, dto: AddFolioLineDto) {
-    const folio = await this.prisma.folio.findUnique({
+  // Vérifie qu'un folio existe et que son séjour est encore en cours
+  // (check-out verrouille les modifications de folio via la suppression des
+  // RoomNight et la clôture du séjour). Partagé entre addFolioLine et
+  // creditFolioLine (façade du module payments) : les deux créent des
+  // FolioLine et doivent respecter la même garde d'écriture.
+  private async assertFolioWritable(
+    folioId: number,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx ?? this.prisma;
+    const folio = await client.folio.findUnique({
       where: { id: folioId },
       include: { stay: true },
     });
     if (!folio) {
       throw new NotFoundException(`Folio ${folioId} introuvable.`);
     }
-
-    // Vérifier que le séjour est encore en cours (check-out verrouille les
-    // modifications de folio via la suppression des RoomNight et la
-    // clôture du séjour, donc c'est cohérent).
     if (folio.stay.statut !== 'EN_COURS') {
       throw new ConflictException(
-        "Impossible d'ajouter une ligne à un folio d'un séjour déjà clôturé.",
+        "Impossible de modifier un folio d'un séjour déjà clôturé.",
       );
     }
+    return folio;
+  }
+
+  // Ajouter une charge (ligne) à un folio. Les frais annexes (extra,
+  // services, etc.) sont rattachés aux folios existants plutôt que créant
+  // un nouveau folio (CLAUDE.md règle 2 : un séjour peut avoir plusieurs
+  // folios, mais les lignes s'ajoutent au folio principal en Phase 1).
+  async addFolioLine(folioId: number, dto: AddFolioLineDto) {
+    await this.assertFolioWritable(folioId);
 
     const montantDecimal = new Prisma.Decimal(dto.montant);
 
@@ -108,37 +117,22 @@ export class BillingService {
     return updatedInvoice;
   }
 
-  // Créer un paiement avec vérification idempotence via idempotencyKey.
-  // Règle non négociable : envoi deux fois la même requête avec la même
-  // clé → un seul paiement créé (pas de double-encaissement).
-  async createPayment(dto: CreatePaymentDto) {
-    const montantDecimal = new Prisma.Decimal(dto.montant);
-
-    try {
-      return await this.prisma.payment.create({
-        data: {
-          invoiceId: dto.invoiceId || null,
-          moyen: dto.moyen,
-          montant: montantDecimal,
-          idempotencyKey: dto.idempotencyKey,
-        },
-      });
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        // La clé idempotence existe déjà : retourner le paiement existant.
-        const existing = await this.prisma.payment.findUnique({
-          where: { idempotencyKey: dto.idempotencyKey },
-        });
-        if (!existing) {
-          throw error;
-        }
-        return existing;
-      }
-      throw error;
-    }
+  // Façade pour le module payments (docs/modules/payments.md §10 : payments
+  // ne dépend que de billing, jamais de Prisma direct sur Folio/FolioLine).
+  // Crée la ligne créditrice PAIEMENT correspondant à un règlement encaissé
+  // — jamais l'inverse, payments n'écrit jamais dans FolioLine lui-même.
+  // tx obligatoire : doit s'exécuter dans la même transaction que
+  // l'écriture du Payment (même logique qu'AuditService.writeLog).
+  async creditFolioLine(
+    folioId: number,
+    montant: Prisma.Decimal,
+    libelle: string,
+    tx: Prisma.TransactionClient,
+  ) {
+    await this.assertFolioWritable(folioId, tx);
+    return tx.folioLine.create({
+      data: { folioId, type: TypeLigneFolio.PAIEMENT, libelle, montant },
+    });
   }
 
   async findFolioById(id: number) {
@@ -147,6 +141,7 @@ export class BillingService {
       include: {
         stay: true,
         lignes: true,
+        payments: true,
         invoices: {
           include: {
             creditNotes: true,
@@ -184,6 +179,7 @@ export class BillingService {
       where: { stayId },
       include: {
         lignes: true,
+        payments: true,
         invoices: {
           include: {
             creditNotes: true,

@@ -10,7 +10,6 @@ import {
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { BillingService } from './billing.service';
 import { AddFolioLineDto } from './dto/add-folio-line.dto';
-import { CreatePaymentDto } from './dto/create-payment.dto';
 
 @Controller()
 export class BillingController {
@@ -41,12 +40,6 @@ export class BillingController {
   @Get('invoices/:id')
   findInvoiceById(@Param('id', ParseIntPipe) id: number) {
     return this.billingService.findInvoiceById(id);
-  }
-
-  @RequirePermission('billing', 'write')
-  @Post('payments')
-  createPayment(@Body() dto: CreatePaymentDto) {
-    return this.billingService.createPayment(dto);
   }
 
   @RequirePermission('billing', 'read')
