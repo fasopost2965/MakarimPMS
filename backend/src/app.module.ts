@@ -5,6 +5,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
+import { RoomsModule } from './modules/rooms/rooms.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
 import { CheckinModule } from './modules/checkin/checkin.module';
 import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
@@ -23,6 +24,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     EventEmitterModule.forRoot(),
     PrismaModule,
     AuthModule,
+    RoomsModule,
     ReservationsModule,
     CheckinModule,
     HousekeepingModule,

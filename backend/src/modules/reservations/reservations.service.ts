@@ -14,6 +14,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { getTodayRange } from '../../common/utils/date-range';
 import { GuestsService } from '../guests/guests.service';
 import { AuditService } from '../audit/audit.service';
+import { RoomsService } from '../rooms/rooms.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationDto } from './dto/update-reservation.dto';
 import { CheckAvailabilityDto } from './dto/check-availability.dto';
@@ -32,6 +33,7 @@ export class ReservationsService {
     private readonly prisma: PrismaService,
     private readonly guestsService: GuestsService,
     private readonly auditService: AuditService,
+    private readonly roomsService: RoomsService,
   ) {}
 
   private assertDateRangeValid(dateArrivee: string, dateDepart: string) {
@@ -75,10 +77,7 @@ export class ReservationsService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const room = await tx.room.findUnique({ where: { id: dto.roomId } });
-        if (!room) {
-          throw new NotFoundException(`Chambre ${dto.roomId} introuvable.`);
-        }
+        const room = await this.roomsService.findByIdOrThrow(dto.roomId, tx);
 
         const guest = dto.guestId
           ? await this.guestsService.assertNotBlacklisted(dto.guestId, tx)
@@ -163,16 +162,14 @@ export class ReservationsService {
       select: { roomId: true },
       distinct: ['roomId'],
     });
-    const occupiedIds = occupiedRoomIds.map((r) => r.roomId);
+    const occupiedIds = new Set(occupiedRoomIds.map((r) => r.roomId));
 
-    return this.prisma.room.findMany({
-      where: {
-        id: { notIn: occupiedIds },
-        ...(dto.roomTypeId ? { roomTypeId: dto.roomTypeId } : {}),
-      },
-      include: { roomType: true },
-      orderBy: { numero: 'asc' },
-    });
+    const allRooms = await this.roomsService.findAllWithType();
+    return allRooms.filter(
+      (room) =>
+        !occupiedIds.has(room.id) &&
+        (dto.roomTypeId === undefined || room.roomTypeId === dto.roomTypeId),
+    );
   }
 
   async findOne(id: number) {
@@ -213,10 +210,7 @@ export class ReservationsService {
         //    valeur fournie), on ne l'écrase pas silencieusement.
         let prixTotalCalcule: Prisma.Decimal | undefined;
         if (datesOrRoomChanged) {
-          const room = await tx.room.findUnique({ where: { id: roomId } });
-          if (!room) {
-            throw new NotFoundException(`Chambre ${roomId} introuvable.`);
-          }
+          const room = await this.roomsService.findByIdOrThrow(roomId, tx);
 
           // Libère les nuits actuelles puis retente l'occupation des
           // nouvelles — la contrainte unique protège toujours contre un
@@ -321,6 +315,23 @@ export class ReservationsService {
         data: { statut: StatutReservation.ANNULEE },
         include: RESERVATION_INCLUDE,
       });
+    });
+  }
+
+  // Façade en lecture seule pour housekeeping (rattrapage quotidien des
+  // statuts RESERVEE/DEPART_PREVU) — housekeeping ne doit jamais lire la
+  // table Reservation directement (docs/modules/housekeeping.md §11,
+  // dérogation documentée dans CLAUDE.md).
+  async findConfirmedArrivingToday(
+    roomId: number,
+    range: { today: Date; tomorrow: Date },
+  ) {
+    return this.prisma.reservation.findFirst({
+      where: {
+        roomId,
+        statut: StatutReservation.CONFIRMEE,
+        dateArrivee: { gte: range.today, lt: range.tomorrow },
+      },
     });
   }
 

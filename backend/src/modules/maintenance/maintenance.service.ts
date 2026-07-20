@@ -5,8 +5,8 @@ import {
 } from '@nestjs/common';
 import { Room, StatutChambre } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { HousekeepingService } from '../housekeeping/housekeeping.service';
-import { canTransition } from '../housekeeping/utils/room-transitions';
+import { RoomsService } from '../rooms/rooms.service';
+import { canTransition } from '../rooms/utils/room-transitions';
 import { CreateMaintenanceTicketDto } from './dto/create-maintenance-ticket.dto';
 
 const TICKET_INCLUDE = {
@@ -17,7 +17,7 @@ const TICKET_INCLUDE = {
 export class MaintenanceService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly housekeepingService: HousekeepingService,
+    private readonly roomsService: RoomsService,
   ) {}
 
   // Création de ticket (cahier des charges §5.8). Si roomId est renseigné,
@@ -31,10 +31,7 @@ export class MaintenanceService {
     return this.prisma.$transaction(async (tx) => {
       let room: Room | null = null;
       if (dto.roomId) {
-        room = await tx.room.findUnique({ where: { id: dto.roomId } });
-        if (!room) {
-          throw new NotFoundException(`Chambre ${dto.roomId} introuvable.`);
-        }
+        room = await this.roomsService.findByIdOrThrow(dto.roomId, tx);
       }
 
       const ticket = await tx.maintenanceTicket.create({
@@ -49,7 +46,7 @@ export class MaintenanceService {
       });
 
       if (room && canTransition(room.statut, StatutChambre.EN_MAINTENANCE)) {
-        await this.housekeepingService.transitionRoom(
+        await this.roomsService.transitionRoom(
           room.id,
           StatutChambre.EN_MAINTENANCE,
           { motif: dto.typePanne, userId, tx },
@@ -85,11 +82,9 @@ export class MaintenanceService {
         });
 
         if (otherOpenTickets === 0) {
-          const room = await tx.room.findUnique({
-            where: { id: ticket.roomId },
-          });
+          const room = await this.roomsService.findById(ticket.roomId, tx);
           if (room && room.statut === StatutChambre.EN_MAINTENANCE) {
-            await this.housekeepingService.transitionRoom(
+            await this.roomsService.transitionRoom(
               ticket.roomId,
               StatutChambre.A_NETTOYER,
               { motif: 'Ticket de maintenance résolu', userId, tx },
