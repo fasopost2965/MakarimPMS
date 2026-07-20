@@ -229,6 +229,7 @@ async function main() {
     'housekeeping',
     'billing',
     'payments',
+    'parameters',
     'dashboard',
     'maintenance',
     'guests',
@@ -279,6 +280,11 @@ async function main() {
         // jamais elle-même (contrôle interne de caisse, réservé au
         // Comptable/Admin).
         'payments:read',
+        // parameters:read seul (docs/modules/parameters.md §7) — la
+        // Réception consulte la grille tarifaire saisonnière pour conseiller
+        // un tarif, mais ne modifie jamais un taux/l'identité de l'hôtel
+        // (parameters:write réservé à l'Administrateur).
+        'parameters:read',
       ],
     },
     {
@@ -304,6 +310,13 @@ async function main() {
         'payments:write',
         'dashboard:read',
         'guests:read',
+        // parameters:read seul (docs/modules/parameters.md §7) — le
+        // Comptable consulte les taux de TVA/taxe de séjour pour son travail
+        // quotidien, mais ne les modifie pas (parameters:write réservé à
+        // l'Administrateur — modifier un taux est un acte de configuration
+        // exceptionnel, contrairement à billing:write pour les opérations
+        // financières courantes).
+        'parameters:read',
       ],
     },
     {

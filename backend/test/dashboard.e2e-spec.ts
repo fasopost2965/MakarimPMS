@@ -229,8 +229,33 @@ describe('Dashboard — résumé (e2e)', () => {
     // instable. On calcule plutôt une somme de référence indépendante
     // (Prisma) quasi simultanément à l'appel du dashboard, et on compare les
     // deux chiffres pris au même instant.
+    //
+    // Un règlement crédite toujours un folio (docs/modules/payments.md §4) —
+    // on crée une chambre + un séjour walk-in dédiés (les chambres partagées
+    // du describe sont déjà A_NETTOYER à ce stade, suite aux tests
+    // précédents) pour obtenir un folio valide plutôt que d'appeler
+    // /api/payments sans folioId (rejeté en 400 depuis la scission
+    // payments/billing).
+    const paymentRoom = await prisma.room.create({
+      data: { numero: `TEST-DASH-PAY-${Date.now()}`, roomTypeId },
+    });
+    const checkinRes = await client.post('/api/checkin/walk-in').send({
+      roomId: paymentRoom.id,
+      dateCheckoutPrevue: new Date(Date.now() + 86_400_000)
+        .toISOString()
+        .slice(0, 10),
+      guest: { nom: 'Dashboard', prenom: 'Encaisse' },
+    });
+    expect(checkinRes.status).toBe(201);
+    const paymentStayId = (
+      checkinRes.body as StayResponse & { folios: Array<{ id: number }> }
+    ).id;
+    const folioId = (checkinRes.body as { folios: Array<{ id: number }> })
+      .folios[0].id;
+
     const idempotencyKey = `test-dashboard-payment-${Date.now()}`;
     await client.post('/api/payments').send({
+      folioId,
       moyen: 'ESPECES',
       montant: '123.45',
       idempotencyKey,
@@ -266,5 +291,13 @@ describe('Dashboard — résumé (e2e)', () => {
     // Nettoyer : sans ça, le paiement de test resterait en base et fausserait
     // durablement l'encaissé du jour affiché dans le dashboard.
     await prisma.payment.deleteMany({ where: { idempotencyKey } });
+    await client.post(`/api/checkout/${paymentStayId}`).send();
+    await prisma.folioLine.deleteMany({ where: { folioId } });
+    await prisma.folio.deleteMany({ where: { id: folioId } });
+    await prisma.stay.deleteMany({ where: { id: paymentStayId } });
+    await prisma.roomStatusLog.deleteMany({
+      where: { roomId: paymentRoom.id },
+    });
+    await prisma.room.deleteMany({ where: { id: paymentRoom.id } });
   });
 });

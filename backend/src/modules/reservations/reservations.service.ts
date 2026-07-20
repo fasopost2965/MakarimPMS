@@ -15,6 +15,7 @@ import { getTodayRange } from '../../common/utils/date-range';
 import { GuestsService } from '../guests/guests.service';
 import { AuditService } from '../audit/audit.service';
 import { RoomsService } from '../rooms/rooms.service';
+import { ParametersService } from '../parameters/parameters.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationDto } from './dto/update-reservation.dto';
 import { CheckAvailabilityDto } from './dto/check-availability.dto';
@@ -34,6 +35,7 @@ export class ReservationsService {
     private readonly guestsService: GuestsService,
     private readonly auditService: AuditService,
     private readonly roomsService: RoomsService,
+    private readonly parametersService: ParametersService,
   ) {}
 
   private assertDateRangeValid(dateArrivee: string, dateDepart: string) {
@@ -57,7 +59,13 @@ export class ReservationsService {
     if (!roomType) {
       throw new NotFoundException(`Type de chambre ${roomTypeId} introuvable.`);
     }
-    const seasonRates = await tx.seasonRate.findMany({ where: { roomTypeId } });
+    // Grille tarifaire saisonnière chargée via le module parameters — jamais
+    // de lecture Prisma directe de SeasonRate (CLAUDE.md, frontières de
+    // module).
+    const seasonRates = await this.parametersService.getSeasonRatesForRoomType(
+      roomTypeId,
+      tx,
+    );
     return calculateNightlyTotal(nights, roomType.prixBase, seasonRates);
   }
 

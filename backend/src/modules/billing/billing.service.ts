@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, TypeLigneFolio } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ParametersService } from '../parameters/parameters.service';
 import { AddFolioLineDto } from './dto/add-folio-line.dto';
 import {
   calculateInvoiceTotal,
@@ -13,7 +14,10 @@ import {
 
 @Injectable()
 export class BillingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly parametersService: ParametersService,
+  ) {}
 
   // Vérifie qu'un folio existe et que son séjour est encore en cours
   // (check-out verrouille les modifications de folio via la suppression des
@@ -88,12 +92,10 @@ export class BillingService {
       );
     }
 
-    // Charger les taux TVA/taxe depuis TaxRateConfig (jamais en dur).
-    const taxRates = await this.prisma.taxRateConfig.findMany();
-    const taxRateMap = new Map<string, Prisma.Decimal>();
-    for (const config of taxRates) {
-      taxRateMap.set(config.type, config.taux);
-    }
+    // Taux TVA/taxe chargés via le module parameters (jamais en dur, jamais
+    // de lecture Prisma directe de TaxRateConfig — CLAUDE.md, frontières de
+    // module).
+    const taxRateMap = await this.parametersService.getTaxRateMap();
 
     // Calculer le montant total avec les taux actuels de TaxRateConfig.
     const montantTotal = calculateInvoiceTotal(folio.lignes, taxRateMap);

@@ -6,7 +6,7 @@ Ce document sert de table des matières officielle et de plan directeur d'archit
 
 ## 1. Cartographie des Modules du PMS
 
-Le PMS Makarim est structuré en **13 modules fonctionnels autonomes** rattachés par des événements lâches et respectant les principes d'autorité serveur et de ségrégation des privilèges.
+Le PMS Makarim est structuré en **14 modules fonctionnels autonomes** rattachés par des événements lâches et respectant les principes d'autorité serveur et de ségrégation des privilèges.
 
 | # | Fichier Spécification | Module Fonctionnel | Entités Clés Gouvernées | Rôle Pivot Responsable |
 |---|---|---|---|---|
@@ -23,6 +23,7 @@ Le PMS Makarim est structuré en **13 modules fonctionnels autonomes** rattaché
 | 11| [stock.md](/docs/modules/stock.md) | **Stocks & Consommables** | `StockItem`, `StockMovement` | Gouvernante, Maintenance |
 | 12| [reporting.md](/docs/modules/reporting.md) | **Reporting & Analyses** | *Lecture-Seule analytique* | Comptable, Admin |
 | 13| [audit.md](/docs/modules/audit.md) | **Audit & Sécurité** | `AuditLog` | Administrateur, Système |
+| 14| [parameters.md](/docs/modules/parameters.md) | **Paramètres** | `HotelConfig`, `TaxRateConfig`, `SeasonRate`, `CnssRateConfig` | Administrateur |
 
 ---
 
@@ -52,14 +53,14 @@ Chaque écart, ajustement rétroactif de tarif, correction d'heures de salariés
 Afin de préserver un couplage lâche, d'éviter les dépendances circulaires critiques et de parer aux risques d'effets de bord, veuillez vous conformer à la charte d'autorisations et d'interdictions de dépendances documentée au sein de chaque module.
 
 ### Synthèse des Couplages Inter-Modules :
-* **Modules Feuilles (Sans dépendances descendantes) :** `guests` (CRM de base), `audit` (Append-Only), `rooms` (Configuration physique).
+* **Modules Feuilles (Sans dépendances descendantes) :** `guests` (CRM de base), `audit` (Append-Only), `rooms` (Configuration physique), `parameters` (Configuration/taux — dépend uniquement de `audit` pour la traçabilité des modifications).
 * **Modules de Supervision Analytique :** `reporting` (Lecture seule sur tous les modules opérationnels, aucune dépendance d'écriture autorisée).
 * **Flux de Liaison Métier Inter-Modules :**
-  * `reservations` ➔ dépend de `guests` et `rooms`.
+  * `reservations` ➔ dépend de `guests`, `rooms` et `parameters` (grille tarifaire saisonnière).
   * `stay` ➔ dépend de `guests`, `rooms` et `billing` (vérification de solde).
   * `housekeeping` / `maintenance` ➔ dépendent uniquement de `rooms`.
-  * `billing` ➔ dépend de `stay` et `audit` (ajustements).
+  * `billing` ➔ dépend de `stay`, `audit` (ajustements) et `parameters` (taux de TVA/taxe de séjour).
   * `payments` ➔ dépend exclusivement de `billing` (injection créditrice).
   * `accounting` ➔ dépend de `billing` et `payments`.
-  * `hr` ➔ dépend de `auth` et `audit`.
+  * `hr` ➔ dépend de `auth`, `audit` et `parameters` (taux CNSS).
   * `stock` ➔ dépend de `rooms` (lieu de consommation).

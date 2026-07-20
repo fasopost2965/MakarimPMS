@@ -313,6 +313,21 @@ model TaxRateConfig {
   createdAt    DateTime @default(now())
 }
 
+// Table posée par le module parameters (docs/modules/parameters.md, BR-RH-001)
+// pour le futur chantier hr (Sprint 11) — readiness structurelle uniquement,
+// aucun endpoint ni écran construit dessus tant que hr n'a pas de
+// consommateur réel (même logique que les colonnes deletedAt posées sans
+// middleware lors du chantier ADR-005).
+model CnssRateConfig {
+  id                Int       @id @default(autoincrement())
+  branche           String    // ex. "AMO", "Allocations familiales", "Prestations sociales"
+  tauxSalarie       Decimal   @db.Decimal(5, 2)
+  tauxEmployeur     Decimal   @db.Decimal(5, 2)
+  plafondMensuel    Decimal?  @db.Decimal(10, 2)
+  applicableDepuis  DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+}
+
 enum StatutFacture {
   EMISE
   ANNULEE_PAR_AVOIR
@@ -501,6 +516,9 @@ enum AuditEntity {
   Room
   Payment
   Invoice
+  HotelConfig
+  TaxRateConfig
+  SeasonRate
 }
 
 enum AuditAction {
@@ -508,6 +526,11 @@ enum AuditAction {
   BLACKLIST_CLIENT
   UPDATE_PRICE
   CANCEL_RESERVATION
+  UPDATE_HOTEL_CONFIG
+  UPDATE_TAX_RATE
+  CREATE_SEASON_RATE
+  UPDATE_SEASON_RATE
+  DELETE_SEASON_RATE
 }
 
 // Registre d'audit transverse (ADR-005 §3.2). Append-only : aucune méthode

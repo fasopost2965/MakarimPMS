@@ -6,6 +6,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { RoomsModule } from './modules/rooms/rooms.module';
+import { ParametersModule } from './modules/parameters/parameters.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
 import { StayModule } from './modules/stay/stay.module';
 import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
@@ -26,6 +27,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     PrismaModule,
     AuthModule,
     RoomsModule,
+    ParametersModule,
     ReservationsModule,
     StayModule,
     HousekeepingModule,

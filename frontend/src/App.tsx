@@ -7,6 +7,7 @@ import { DashboardPage } from '@/features/dashboard/pages/DashboardPage';
 import { MaintenancePage } from '@/features/maintenance/pages/MaintenancePage';
 import { GuestsPage } from '@/features/guests/pages/GuestsPage';
 import { CompaniesPage } from '@/features/companies/pages/CompaniesPage';
+import { ParametersPage } from '@/features/parameters/pages/ParametersPage';
 import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { ForgotPasswordPage } from '@/features/auth/pages/ForgotPasswordPage';
 import { onAuthFailure } from '@/lib/api-client';
@@ -19,7 +20,8 @@ type Tab =
   | 'housekeeping'
   | 'maintenance'
   | 'guests'
-  | 'companies';
+  | 'companies'
+  | 'parameters';
 type AuthScreen = 'login' | 'forgot-password';
 
 // Pas de routeur pour l'instant — sera introduit avec le module core
@@ -116,6 +118,13 @@ function App() {
           Entreprises
         </Button>
         <Button
+          variant={tab === 'parameters' ? 'default' : 'ghost'}
+          size="sm"
+          onClick={() => setTab('parameters')}
+        >
+          Paramètres
+        </Button>
+        <Button
           variant="ghost"
           size="sm"
           className="ml-auto"
@@ -132,6 +141,7 @@ function App() {
         {tab === 'maintenance' && <MaintenancePage />}
         {tab === 'guests' && <GuestsPage />}
         {tab === 'companies' && <CompaniesPage />}
+        {tab === 'parameters' && <ParametersPage />}
       </div>
     </div>
   );
