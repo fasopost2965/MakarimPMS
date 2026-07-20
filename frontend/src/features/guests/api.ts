@@ -1,4 +1,4 @@
-import { apiRequest } from '@/lib/api-client';
+import { apiRequest } from "@/lib/api-client";
 import type {
   CreateGuestInput,
   Guest,
@@ -6,13 +6,13 @@ import type {
   GuestStayHistorique,
   UpdateGuestCategorieInput,
   UpdateGuestInput,
-} from './types';
+} from "./types";
 
 export function searchGuests(q?: string) {
   const query = new URLSearchParams();
-  if (q) query.set('q', q);
+  if (q) query.set("q", q);
   const qs = query.toString();
-  return apiRequest<Guest[]>(`/guests${qs ? `?${qs}` : ''}`);
+  return apiRequest<Guest[]>(`/guests${qs ? `?${qs}` : ""}`);
 }
 
 export function getGuest(id: number) {
@@ -20,15 +20,15 @@ export function getGuest(id: number) {
 }
 
 export function createGuest(input: CreateGuestInput) {
-  return apiRequest<Guest>('/guests', {
-    method: 'POST',
+  return apiRequest<Guest>("/guests", {
+    method: "POST",
     body: JSON.stringify(input),
   });
 }
 
 export function updateGuest(id: number, input: UpdateGuestInput) {
   return apiRequest<Guest>(`/guests/${id}`, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify(input),
   });
 }
@@ -38,7 +38,7 @@ export function updateGuestCategorie(
   input: UpdateGuestCategorieInput,
 ) {
   return apiRequest<Guest>(`/guests/${id}/categorie`, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify(input),
   });
 }

@@ -1,14 +1,14 @@
-export type CanalReservation = 'WALK_IN' | 'DIRECT' | 'BOOKING_COM';
+export type CanalReservation = "WALK_IN" | "DIRECT" | "BOOKING_COM";
 export type StatutReservation =
-  'CONFIRMEE' | 'ANNULEE' | 'NO_SHOW' | 'TRANSFORMEE_EN_SEJOUR';
+  "CONFIRMEE" | "ANNULEE" | "NO_SHOW" | "TRANSFORMEE_EN_SEJOUR";
 export type StatutChambre =
-  | 'LIBRE_PROPRE'
-  | 'RESERVEE'
-  | 'OCCUPEE'
-  | 'DEPART_PREVU'
-  | 'A_NETTOYER'
-  | 'EN_NETTOYAGE'
-  | 'EN_MAINTENANCE';
+  | "LIBRE_PROPRE"
+  | "RESERVEE"
+  | "OCCUPEE"
+  | "DEPART_PREVU"
+  | "A_NETTOYER"
+  | "EN_NETTOYAGE"
+  | "EN_MAINTENANCE";
 
 export interface RoomType {
   id: number;

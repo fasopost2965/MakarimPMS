@@ -23,6 +23,7 @@ Le PMS Makarim est structuré en **13 modules fonctionnels autonomes** rattaché
 | 11| [stock.md](/docs/modules/stock.md) | **Stocks & Consommables** | `StockItem`, `StockMovement` | Gouvernante, Maintenance |
 | 12| [reporting.md](/docs/modules/reporting.md) | **Reporting & Analyses** | *Lecture-Seule analytique* | Comptable, Admin |
 | 13| [audit.md](/docs/modules/audit.md) | **Audit & Sécurité** | `AuditLog` | Administrateur, Système |
+| 14| [parameters.md](/docs/modules/parameters.md) | **Paramètres & Config** | `HotelConfig`, `TaxRateConfig`, `SeasonRate` | Administrateur, Comptable |
 
 ---
 

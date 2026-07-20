@@ -5,17 +5,16 @@ import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
-import { RoomsModule } from './modules/rooms/rooms.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
 import { CheckinModule } from './modules/checkin/checkin.module';
 import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
 import { BillingModule } from './modules/billing/billing.module';
-import { PaymentsModule } from './modules/payments/payments.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { GuestsModule } from './modules/guests/guests.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { ParametersModule } from './modules/parameters/parameters.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 
@@ -25,16 +24,15 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     EventEmitterModule.forRoot(),
     PrismaModule,
     AuthModule,
-    RoomsModule,
     ReservationsModule,
     CheckinModule,
     HousekeepingModule,
     BillingModule,
-    PaymentsModule,
     DashboardModule,
     MaintenanceModule,
     GuestsModule,
     AuditModule,
+    ParametersModule,
   ],
   controllers: [AppController],
   providers: [

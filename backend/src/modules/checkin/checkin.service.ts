@@ -16,7 +16,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { getTodayRange } from '../../common/utils/date-range';
 import { getNightsBetween } from '../reservations/utils/nights';
 import { calculateNightlyTotal } from '../reservations/utils/pricing';
-import { RoomsService } from '../rooms/rooms.service';
+import { HousekeepingService } from '../housekeeping/housekeeping.service';
 import { GuestsService } from '../guests/guests.service';
 import { WalkinCheckinDto } from './dto/walkin-checkin.dto';
 import { computeSoldeDu } from './utils/solde';
@@ -33,7 +33,7 @@ const STAY_INCLUDE = {
 export class CheckinService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly roomsService: RoomsService,
+    private readonly housekeepingService: HousekeepingService,
     private readonly guestsService: GuestsService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -79,7 +79,7 @@ export class CheckinService {
           where: { id: reservation.id },
           data: { statut: StatutReservation.TRANSFORMEE_EN_SEJOUR },
         });
-        await this.roomsService.transitionRoom(
+        await this.housekeepingService.transitionRoom(
           reservation.roomId,
           StatutChambre.OCCUPEE,
           { motif: 'Check-in depuis réservation', userId, tx },
@@ -135,10 +135,13 @@ export class CheckinService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const room = await this.roomsService.findByIdWithPricing(
-          dto.roomId,
-          tx,
-        );
+        const room = await tx.room.findUnique({
+          where: { id: dto.roomId },
+          include: { roomType: { include: { seasonRates: true } } },
+        });
+        if (!room) {
+          throw new NotFoundException(`Chambre ${dto.roomId} introuvable.`);
+        }
 
         const guest = dto.guestId
           ? await this.guestsService.assertNotBlacklisted(dto.guestId, tx)
@@ -161,11 +164,11 @@ export class CheckinService {
           })),
         });
 
-        await this.roomsService.transitionRoom(room.id, StatutChambre.OCCUPEE, {
-          motif: 'Check-in walk-in',
-          userId,
-          tx,
-        });
+        await this.housekeepingService.transitionRoom(
+          room.id,
+          StatutChambre.OCCUPEE,
+          { motif: 'Check-in walk-in', userId, tx },
+        );
 
         const montant = calculateNightlyTotal(
           nights,
@@ -277,15 +280,6 @@ export class CheckinService {
     );
 
     return { ...updated, soldeDu: soldeDu.toFixed(2) };
-  }
-
-  // Façade en lecture seule pour housekeeping (rattrapage quotidien du
-  // statut DEPART_PREVU) — housekeeping ne lit jamais la table Stay
-  // directement.
-  async findActiveStayForRoom(roomId: number) {
-    return this.prisma.stay.findFirst({
-      where: { roomId, statut: StatutSejour.EN_COURS },
-    });
   }
 
   private translateConflict(error: unknown, message: string) {

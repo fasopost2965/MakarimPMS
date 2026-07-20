@@ -228,7 +228,6 @@ async function main() {
     'checkin',
     'housekeeping',
     'billing',
-    'payments',
     'dashboard',
     'maintenance',
     'guests',
@@ -274,11 +273,6 @@ async function main() {
         // entreprise et les catégories non sensibles (VIP/ENTREPRISE/
         // AGENCE/STANDARD) — jamais guests:blacklist (Administrateur seul).
         'guests:write',
-        // payments:read seul (docs/modules/payments.md §7) — la Réception
-        // consulte les règlements déjà encaissés mais n'en enregistre
-        // jamais elle-même (contrôle interne de caisse, réservé au
-        // Comptable/Admin).
-        'payments:read',
       ],
     },
     {
@@ -300,8 +294,6 @@ async function main() {
       permissionKeys: [
         'billing:read',
         'billing:write',
-        'payments:read',
-        'payments:write',
         'dashboard:read',
         'guests:read',
       ],

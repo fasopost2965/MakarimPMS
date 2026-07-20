@@ -1,15 +1,15 @@
-import { useState } from 'react';
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { BillingTabContent } from '@/features/billing/components/BillingTabContent';
-import type { Stay } from '../types';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { BillingTabContent } from "@/features/billing/components/BillingTabContent";
+import type { Stay } from "../types";
 
 interface Props {
   stay: Stay | null;
@@ -20,10 +20,10 @@ interface Props {
   soldeDu: string | null;
 }
 
-const STATUT_LABEL: Record<Stay['statut'], string> = {
-  EN_COURS: 'En cours',
-  CHECKOUT: 'Check-out effectué',
-  ANNULE: 'Annulé',
+const STATUT_LABEL: Record<Stay["statut"], string> = {
+  EN_COURS: "En cours",
+  CHECKOUT: "Check-out effectué",
+  ANNULE: "Annulé",
 };
 
 export function StayDetailsDialog({
@@ -34,7 +34,7 @@ export function StayDetailsDialog({
   error,
   soldeDu,
 }: Props) {
-  const [activeTab, setActiveTab] = useState('details');
+  const [activeTab, setActiveTab] = useState("details");
 
   return (
     <Dialog open={stay !== null} onOpenChange={(next) => !next && onClose()}>
@@ -48,14 +48,14 @@ export function StayDetailsDialog({
             </DialogHeader>
 
             <p className="text-muted-foreground text-sm">
-              Chambre {stay.room.numero} ({stay.room.roomType.nom}) — arrivée{' '}
-              {new Date(stay.dateCheckin).toLocaleString('fr-FR')}, départ prévu{' '}
+              Chambre {stay.room.numero} ({stay.room.roomType.nom}) — arrivée{" "}
+              {new Date(stay.dateCheckin).toLocaleString("fr-FR")}, départ prévu{" "}
               {stay.dateCheckoutPrevue.slice(0, 10)}
             </p>
 
             <div className="flex items-center gap-2">
               <Badge
-                variant={stay.statut === 'EN_COURS' ? 'default' : 'secondary'}
+                variant={stay.statut === "EN_COURS" ? "default" : "secondary"}
               >
                 {STATUT_LABEL[stay.statut]}
               </Badge>
@@ -66,22 +66,22 @@ export function StayDetailsDialog({
 
             <div className="flex gap-2 border-b">
               <Button
-                variant={activeTab === 'details' ? 'default' : 'ghost'}
+                variant={activeTab === "details" ? "default" : "ghost"}
                 size="sm"
-                onClick={() => setActiveTab('details')}
+                onClick={() => setActiveTab("details")}
               >
                 Détails
               </Button>
               <Button
-                variant={activeTab === 'facturation' ? 'default' : 'ghost'}
+                variant={activeTab === "facturation" ? "default" : "ghost"}
                 size="sm"
-                onClick={() => setActiveTab('facturation')}
+                onClick={() => setActiveTab("facturation")}
               >
                 Facturation
               </Button>
             </div>
 
-            {activeTab === 'details' && (
+            {activeTab === "details" && (
               <div className="flex flex-col gap-2">
                 <p className="text-sm font-medium">Folio principal</p>
                 {stay.folios.map((folio) => (
@@ -91,8 +91,8 @@ export function StayDetailsDialog({
                         <span
                           className={
                             ligne.annulee
-                              ? 'text-muted-foreground line-through'
-                              : ''
+                              ? "text-muted-foreground line-through"
+                              : ""
                           }
                         >
                           {ligne.libelle}
@@ -111,7 +111,7 @@ export function StayDetailsDialog({
               </div>
             )}
 
-            {activeTab === 'facturation' && (
+            {activeTab === "facturation" && (
               <BillingTabContent stayId={stay.id} />
             )}
 
@@ -121,13 +121,13 @@ export function StayDetailsDialog({
               <Button type="button" variant="outline" onClick={onClose}>
                 Fermer
               </Button>
-              {stay.statut === 'EN_COURS' && (
+              {stay.statut === "EN_COURS" && (
                 <Button
                   type="button"
                   onClick={onCheckout}
                   disabled={checkingOut}
                 >
-                  {checkingOut ? 'Check-out…' : 'Check-out'}
+                  {checkingOut ? "Check-out…" : "Check-out"}
                 </Button>
               )}
             </DialogFooter>

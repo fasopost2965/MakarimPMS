@@ -1,16 +1,16 @@
-import { useState } from 'react';
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import type { Reservation } from '../types';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import type { Reservation } from "../types";
 
 interface Props {
   reservation: Reservation | null;
@@ -62,7 +62,7 @@ function ReservationDetailsForm({
     reservation.prixTotalFinal,
   );
   const [motifAjustement, setMotifAjustement] = useState(
-    reservation.motifAjustement ?? '',
+    reservation.motifAjustement ?? "",
   );
 
   const priceChanged =
@@ -77,8 +77,8 @@ function ReservationDetailsForm({
       </DialogHeader>
 
       <p className="text-muted-foreground text-sm">
-        Chambre {reservation.room.numero} ({reservation.room.roomType.nom}) — du{' '}
-        {reservation.dateArrivee.slice(0, 10)} au{' '}
+        Chambre {reservation.room.numero} ({reservation.room.roomType.nom}) — du{" "}
+        {reservation.dateArrivee.slice(0, 10)} au{" "}
         {reservation.dateDepart.slice(0, 10)}
       </p>
 
@@ -151,7 +151,7 @@ function ReservationDetailsForm({
             Fermer
           </Button>
           <Button type="submit" disabled={saving || !priceChanged}>
-            {saving ? 'Enregistrement…' : 'Enregistrer le prix'}
+            {saving ? "Enregistrement…" : "Enregistrer le prix"}
           </Button>
         </DialogFooter>
       </form>

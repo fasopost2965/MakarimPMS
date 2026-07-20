@@ -30,10 +30,10 @@ export function isSameDay(a: Date, b: Date): boolean {
 }
 
 export function formatDayLabel(date: Date): string {
-  return date.toLocaleDateString('fr-FR', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-    timeZone: 'UTC',
+  return date.toLocaleDateString("fr-FR", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    timeZone: "UTC",
   });
 }

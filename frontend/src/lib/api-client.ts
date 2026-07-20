@@ -3,9 +3,9 @@ import {
   getAccessToken,
   getRefreshToken,
   setTokens,
-} from './token-storage';
+} from "./token-storage";
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
+const API_URL = "/api";
 
 // Déclenché quand le refresh échoue définitivement (refresh token absent,
 // expiré ou invalide) : l'App écoute cet événement pour renvoyer
@@ -25,8 +25,8 @@ async function refreshAccessToken(): Promise<string | null> {
   if (!refreshToken) return null;
 
   const res = await fetch(`${API_URL}/auth/refresh`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ refreshToken }),
   });
   if (!res.ok) return null;
@@ -48,13 +48,13 @@ export async function apiRequest<T>(
   // roles-actifs) sont publiques côté backend et ne doivent jamais
   // déclencher une tentative de refresh sur un 401 (ex. mauvais mot de
   // passe) — l'erreur réelle doit remonter telle quelle.
-  const isAuthEndpoint = path.startsWith('/auth/');
+  const isAuthEndpoint = path.startsWith("/auth/");
   const accessToken = getAccessToken();
 
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...init?.headers,
     },
@@ -70,7 +70,7 @@ export async function apiRequest<T>(
     }
     clearTokens();
     authFailureListener?.();
-    throw new Error('Session expirée, veuillez vous reconnecter.');
+    throw new Error("Session expirée, veuillez vous reconnecter.");
   }
 
   if (!res.ok) {

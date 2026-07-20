@@ -1,8 +1,8 @@
-import type { Room, RoomType } from '../reservations/types';
-import type { Invoice } from '../billing/types';
+import type { Room, RoomType } from "../reservations/types";
+import type { Invoice } from "../billing/types";
 
 export type CategorieClient =
-  'STANDARD' | 'VIP' | 'ENTREPRISE' | 'AGENCE' | 'BLACKLIST';
+  "STANDARD" | "VIP" | "ENTREPRISE" | "AGENCE" | "BLACKLIST";
 
 export interface Guest {
   id: number;
@@ -41,7 +41,7 @@ export interface GuestStayHistorique {
   dateCheckin: string;
   dateCheckoutPrevue: string;
   dateCheckoutReelle: string | null;
-  statut: 'EN_COURS' | 'CHECKOUT' | 'ANNULE';
+  statut: "EN_COURS" | "CHECKOUT" | "ANNULE";
 }
 
 export type GuestInvoice = Invoice;

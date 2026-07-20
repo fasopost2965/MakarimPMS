@@ -1,25 +1,25 @@
-import { useState } from 'react';
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { GuestPicker } from '@/features/guests/components/GuestPicker';
-import type { GuestSelection } from '@/features/guests/components/GuestPicker';
-import type { Room } from '../../reservations/types';
-import type { WalkinCheckinInput } from '../types';
+} from "@/components/ui/select";
+import { GuestPicker } from "@/features/guests/components/GuestPicker";
+import type { GuestSelection } from "@/features/guests/components/GuestPicker";
+import type { Room } from "../../reservations/types";
+import type { WalkinCheckinInput } from "../types";
 
 interface Props {
   open: boolean;
@@ -63,9 +63,9 @@ function WalkinForm({
   onConfirm,
   submitting,
   error,
-}: Omit<Props, 'open'>) {
-  const [roomId, setRoomId] = useState('');
-  const [dateCheckoutPrevue, setDateCheckoutPrevue] = useState('');
+}: Omit<Props, "open">) {
+  const [roomId, setRoomId] = useState("");
+  const [dateCheckoutPrevue, setDateCheckoutPrevue] = useState("");
   const [guestSelection, setGuestSelection] = useState<GuestSelection | null>(
     null,
   );
@@ -92,7 +92,7 @@ function WalkinForm({
           <Label htmlFor="room">Chambre</Label>
           <Select
             value={roomId}
-            onValueChange={(v) => setRoomId(v ?? '')}
+            onValueChange={(v) => setRoomId(v ?? "")}
             items={rooms.map((room) => ({
               value: String(room.id),
               label: `${room.numero} — ${room.roomType.nom}`,
@@ -141,7 +141,7 @@ function WalkinForm({
               submitting || !roomId || !dateCheckoutPrevue || !guestSelection
             }
           >
-            {submitting ? 'Enregistrement…' : 'Enregistrer le check-in'}
+            {submitting ? "Enregistrement…" : "Enregistrer le check-in"}
           </Button>
         </DialogFooter>
       </form>

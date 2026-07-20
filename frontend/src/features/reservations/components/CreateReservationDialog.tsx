@@ -1,15 +1,15 @@
-import { useState } from 'react';
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { GuestPicker } from '@/features/guests/components/GuestPicker';
-import type { GuestSelection } from '@/features/guests/components/GuestPicker';
-import type { Room } from '../types';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { GuestPicker } from "@/features/guests/components/GuestPicker";
+import type { GuestSelection } from "@/features/guests/components/GuestPicker";
+import type { Room } from "../types";
 
 export interface CreateReservationSelection {
   room: Room;
@@ -72,7 +72,7 @@ function ReservationForm({
       </DialogHeader>
 
       <p className="text-muted-foreground text-sm">
-        Chambre {selection.room.numero} ({selection.room.roomType.nom}) — du{' '}
+        Chambre {selection.room.numero} ({selection.room.roomType.nom}) — du{" "}
         {selection.dateArrivee} au {selection.dateDepart}
       </p>
 
@@ -98,7 +98,7 @@ function ReservationForm({
             Annuler
           </Button>
           <Button type="submit" disabled={submitting || !guestSelection}>
-            {submitting ? 'Création…' : 'Créer la réservation'}
+            {submitting ? "Création…" : "Créer la réservation"}
           </Button>
         </DialogFooter>
       </form>
