@@ -7,6 +7,7 @@ import {
 import {
   AuditAction,
   AuditEntity,
+  FormuleHebergement,
   Prisma,
   StatutReservation,
 } from '@prisma/client';
@@ -21,7 +22,7 @@ import { UpdateReservationDto } from './dto/update-reservation.dto';
 import { CheckAvailabilityDto } from './dto/check-availability.dto';
 import { CancelReservationDto } from './dto/cancel-reservation.dto';
 import { getNightsBetween } from './utils/nights';
-import { calculateNightlyTotal } from './utils/pricing';
+import { calculateFormuleTotal, calculateNightlyTotal } from './utils/pricing';
 
 const RESERVATION_INCLUDE = {
   guest: true,
@@ -48,10 +49,15 @@ export class ReservationsService {
 
   // Tarification saisonnière (cahier des charges §5.1/§5.4) : jamais de taux
   // codé en dur, toujours dérivé de RoomType.prixBase / SeasonRate en base.
+  // Priorité 3 : ajoute le supplément de formule (prixNuit × nbNuits +
+  // prixFormule × nbPersonnes × nbNuits) — nbPersonnes = RoomType.capacite,
+  // seule notion d'occupation du schéma (pas de champ "nombre d'adultes"
+  // sur Reservation).
   private async calculatePrixTotal(
     tx: Prisma.TransactionClient,
     roomTypeId: number,
     nights: Date[],
+    formule: FormuleHebergement,
   ) {
     const roomType = await tx.roomType.findUnique({
       where: { id: roomTypeId },
@@ -66,7 +72,18 @@ export class ReservationsService {
       roomTypeId,
       tx,
     );
-    return calculateNightlyTotal(nights, roomType.prixBase, seasonRates);
+    const hebergement = calculateNightlyTotal(
+      nights,
+      roomType.prixBase,
+      seasonRates,
+    );
+    const formuleTotal = calculateFormuleTotal(
+      formule,
+      roomType,
+      nights.length,
+      roomType.capacite,
+    );
+    return hebergement.add(formuleTotal);
   }
 
   // Verrouillage anti-double-réservation (docs/plan-execution-claude-code.md §8) :
@@ -91,10 +108,12 @@ export class ReservationsService {
           ? await this.guestsService.assertNotBlacklisted(dto.guestId, tx)
           : await tx.guest.create({ data: dto.guest! });
 
+        const formule = dto.formule ?? FormuleHebergement.BED_AND_BREAKFAST;
         const prixTotalCalcule = await this.calculatePrixTotal(
           tx,
           room.roomTypeId,
           nights,
+          formule,
         );
 
         const reservation = await tx.reservation.create({
@@ -105,6 +124,7 @@ export class ReservationsService {
             dateArrivee: new Date(dto.dateArrivee),
             dateDepart: new Date(dto.dateDepart),
             sourceBrute: dto.sourceBrute,
+            formule,
             // À la création, prixTotalFinal suit toujours prixTotalCalcule
             // (pas d'ajustement manuel possible avant que la réservation
             // existe — voir update()).
@@ -233,6 +253,7 @@ export class ReservationsService {
             tx,
             room.roomTypeId,
             nights,
+            existing.formule,
           );
         }
 

@@ -39,11 +39,28 @@ enum StatutChambre {
   EN_MAINTENANCE
 }
 
+enum FormuleHebergement {
+  ROOM_ONLY
+  BED_AND_BREAKFAST
+  HALF_BOARD
+  FULL_BOARD
+}
+
 model RoomType {
   id          Int          @id @default(autoincrement())
   nom         String
   prixBase    Decimal      @db.Decimal(10, 2)
   capacite    Int
+  // Priorité 3 (formules d'hébergement) : prix par personne et par nuit de
+  // chaque supplément repas, jamais codé en dur dans le calcul (même
+  // discipline que prixBase/SeasonRate). prixPensionComplete s'ajoute aux
+  // deux champs explicitement demandés — sans lui, FULL_BOARD n'aurait
+  // aucun tarif propre et se retrouverait facturé au prix de HALF_BOARD,
+  // un bug silencieux pire que l'ajout d'une colonne supplémentaire
+  // (nullable/valeur par défaut, non destructif).
+  prixPetitDejeuner   Decimal            @default(0) @db.Decimal(10, 2)
+  prixDemiPension     Decimal            @default(0) @db.Decimal(10, 2)
+  prixPensionComplete Decimal            @default(0) @db.Decimal(10, 2)
   rooms       Room[]
   seasonRates SeasonRate[]
 }
@@ -192,6 +209,9 @@ model Reservation {
   prixTotalFinal   Decimal           @default(0) @db.Decimal(10, 2)
   ajustementManuel Boolean           @default(false)
   motifAjustement  String?
+  // Priorité 3 — intégrée au calcul de prixTotalCalcule/prixTotalFinal
+  // (ReservationsService.calculatePrixTotal) dès la création.
+  formule          FormuleHebergement @default(BED_AND_BREAKFAST)
   nights           RoomNight[]
   stay             Stay?
   deposits         ReservationDeposit[]
@@ -287,6 +307,11 @@ model Stay {
   dateCheckoutPrevue DateTime      @db.Date
   dateCheckoutReelle DateTime?
   statut             StatutSejour  @default(EN_COURS)
+  // Priorité 3 — reprend Reservation.formule au check-in depuis réservation,
+  // ou saisie directement pour un walk-in (WalkinDto.formule). Détermine si
+  // une FolioLine EXTRA "repas" est créée au check-in
+  // (StayService.createFolioPrincipal).
+  formule            FormuleHebergement @default(BED_AND_BREAKFAST)
   nights             RoomNight[]
   folios             Folio[]
   policeRecord       PoliceRecord?

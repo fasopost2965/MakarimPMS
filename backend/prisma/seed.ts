@@ -43,12 +43,17 @@ async function main() {
   await prisma.room.deleteMany();
   await prisma.roomType.deleteMany();
 
+  // Priorité 3 (formules d'hébergement) : prixPetitDejeuner = 50 MAD/pers./
+  // nuit pour tous les types, comme demandé. prixDemiPension/
+  // prixPensionComplete (150/220 MAD) sont des valeurs de référence
+  // raisonnables pour le développement, pas des tarifs métier validés —
+  // ajustables via une future route de configuration (module parameters).
   const roomTypesData = [
-    { nom: 'Single', prixBase: 400, capacite: 1 },
-    { nom: 'Double', prixBase: 500, capacite: 2 },
-    { nom: 'Triple', prixBase: 750, capacite: 3 },
-    { nom: 'Suite', prixBase: 650, capacite: 2 },
-    { nom: 'Quadruple', prixBase: 900, capacite: 4 },
+    { nom: 'Single', prixBase: 400, capacite: 1, prixPetitDejeuner: 50, prixDemiPension: 150, prixPensionComplete: 220 },
+    { nom: 'Double', prixBase: 500, capacite: 2, prixPetitDejeuner: 50, prixDemiPension: 150, prixPensionComplete: 220 },
+    { nom: 'Triple', prixBase: 750, capacite: 3, prixPetitDejeuner: 50, prixDemiPension: 150, prixPensionComplete: 220 },
+    { nom: 'Suite', prixBase: 650, capacite: 2, prixPetitDejeuner: 50, prixDemiPension: 150, prixPensionComplete: 220 },
+    { nom: 'Quadruple', prixBase: 900, capacite: 4, prixPetitDejeuner: 50, prixDemiPension: 150, prixPensionComplete: 220 },
   ];
   const roomTypes: Record<string, { id: number }> = {};
   for (const data of roomTypesData) {

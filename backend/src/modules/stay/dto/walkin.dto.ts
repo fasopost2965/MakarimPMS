@@ -1,10 +1,12 @@
 import { Type } from 'class-transformer';
 import {
   IsDateString,
+  IsEnum,
   IsInt,
   IsOptional,
   ValidateNested,
 } from 'class-validator';
+import { FormuleHebergement } from '@prisma/client';
 import { GuestInputDto } from '../../reservations/dto/guest-input.dto';
 
 // L'un des deux champs client est requis (validé au niveau service) :
@@ -25,4 +27,9 @@ export class WalkinDto {
   @ValidateNested()
   @Type(() => GuestInputDto)
   guest?: GuestInputDto;
+
+  // Défaut BED_AND_BREAKFAST (même défaut que le schéma) si omis.
+  @IsOptional()
+  @IsEnum(FormuleHebergement)
+  formule?: FormuleHebergement;
 }
