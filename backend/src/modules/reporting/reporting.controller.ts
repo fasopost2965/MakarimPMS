@@ -13,8 +13,10 @@ import { RequirePermission } from '../../common/decorators/require-permission.de
 import { FinancialSummaryQueryDto } from './dto/financial-summary-query.dto';
 import { PoliceRegisterQueryDto } from './dto/police-register-query.dto';
 import { TaxesReportQueryDto } from './dto/taxes-report-query.dto';
+import { YieldForecastQueryDto } from './dto/yield-forecast-query.dto';
 import { FinancialReportingService } from './financial-reporting.service';
 import { PoliceReportService } from './police-report.service';
+import { YieldManagementService } from './yield-management.service';
 import { ReportingQueue } from './queues/reporting.queue';
 
 @ApiTags('reporting')
@@ -24,6 +26,7 @@ export class ReportingController {
   constructor(
     private readonly financialReportingService: FinancialReportingService,
     private readonly policeReportService: PoliceReportService,
+    private readonly yieldManagementService: YieldManagementService,
     private readonly reportingQueue: ReportingQueue,
   ) {}
 
@@ -157,5 +160,23 @@ export class ReportingController {
       throw new NotFoundException(`Job d'export ${jobId} introuvable.`);
     }
     return status;
+  }
+
+  // F3 — Revenue Manager / Yield Management (Phase 4, docs/modules/
+  // reporting.md §17) : taux d'occupation prévisionnel par type de chambre
+  // et par jour, avec recommandation tarifaire indicative — purement
+  // consultatif, n'écrit jamais sur SeasonRate.
+  @RequirePermission('reporting', 'read')
+  @ApiOperation({
+    summary:
+      "Prévision d'occupation par type de chambre avec recommandation tarifaire indicative (Yield Management)",
+  })
+  @Get('yield-forecast')
+  yieldForecast(@Query() query: YieldForecastQueryDto) {
+    return this.yieldManagementService.getForecast(
+      query.dateDebut,
+      query.dateFin,
+      query.roomTypeId,
+    );
   }
 }

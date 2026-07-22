@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { ReportingController } from './reporting.controller';
 import { FinancialReportingService } from './financial-reporting.service';
 import { PoliceReportService } from './police-report.service';
+import { YieldManagementService } from './yield-management.service';
 import { ParametersModule } from '../parameters/parameters.module';
 import { ReportingQueue } from './queues/reporting.queue';
 import { ReportingProcessor } from './queues/reporting.processor';
@@ -26,6 +27,7 @@ import { REPORTING_QUEUE } from './queues/reporting-job.types';
   providers: [
     FinancialReportingService,
     PoliceReportService,
+    YieldManagementService,
     ReportingQueue,
     ReportingProcessor,
   ],
