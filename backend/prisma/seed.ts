@@ -43,6 +43,7 @@ async function main() {
   await prisma.roomStatusLog.deleteMany();
   await prisma.maintenanceTicket.deleteMany();
   await prisma.room.deleteMany();
+  await prisma.rateRestriction.deleteMany();
   await prisma.roomType.deleteMany();
 
   // Priorité 3 (formules d'hébergement) : prixPetitDejeuner = 50 MAD/pers./

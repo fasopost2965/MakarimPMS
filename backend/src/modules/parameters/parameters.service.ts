@@ -12,6 +12,9 @@ import { UpdateTaxRateDto } from './dto/update-tax-rate.dto';
 import { CreateSeasonRateDto } from './dto/create-season-rate.dto';
 import { UpdateSeasonRateDto } from './dto/update-season-rate.dto';
 import { DeleteSeasonRateDto } from './dto/delete-season-rate.dto';
+import { CreateRateRestrictionDto } from './dto/create-rate-restriction.dto';
+import { UpdateRateRestrictionDto } from './dto/update-rate-restriction.dto';
+import { DeleteRateRestrictionDto } from './dto/delete-rate-restriction.dto';
 
 // Référentiel central de configuration (docs/modules/parameters.md) : taux
 // de TVA/taxe de séjour, identité de l'hôtel, grille tarifaire saisonnière,
@@ -380,6 +383,171 @@ export class ParametersService {
           dateDebut: existing.dateDebut.toISOString(),
           dateFin: existing.dateFin.toISOString(),
           prixNuit: existing.prixNuit.toString(),
+        },
+        motif: dto.motif,
+      });
+    });
+  }
+
+  // --- Restrictions tarifaires (min stay / stop sale) --------------------
+
+  async findRateRestrictions(roomTypeId?: number) {
+    return this.prisma.rateRestriction.findMany({
+      where: roomTypeId ? { roomTypeId } : undefined,
+      orderBy: { dateDebut: 'asc' },
+    });
+  }
+
+  // Façade pour reservations (ReservationsService.create/update) — jamais
+  // de lecture Prisma directe de RateRestriction hors de ce module. Ne
+  // renvoie que les restrictions actives (actif: true), chevauchements
+  // autorisés (voir commentaire schema.prisma) : reservations agrège
+  // lui-même la règle la plus restrictive.
+  async getRateRestrictionsForRoomType(
+    roomTypeId: number,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx ?? this.prisma;
+    return client.rateRestriction.findMany({
+      where: { roomTypeId, actif: true },
+    });
+  }
+
+  async createRateRestriction(dto: CreateRateRestrictionDto, userId?: number) {
+    const dateDebut = new Date(dto.dateDebut);
+    const dateFin = new Date(dto.dateFin);
+    if (dateFin <= dateDebut) {
+      throw new ConflictException('dateFin doit être postérieure à dateDebut.');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const created = await tx.rateRestriction.create({
+        data: {
+          roomTypeId: dto.roomTypeId,
+          dateDebut,
+          dateFin,
+          minStayNuits: dto.minStayNuits,
+          stopSale: dto.stopSale ?? false,
+          libelle: dto.libelle,
+        },
+      });
+
+      await this.auditService.writeLog(tx, {
+        userId,
+        action: AuditAction.CREATE_RATE_RESTRICTION,
+        targetEntity: AuditEntity.RateRestriction,
+        targetId: created.id,
+        newValue: {
+          roomTypeId: dto.roomTypeId,
+          dateDebut: dto.dateDebut,
+          dateFin: dto.dateFin,
+          minStayNuits: dto.minStayNuits ?? null,
+          stopSale: created.stopSale,
+        },
+        motif: dto.motif,
+      });
+
+      return created;
+    });
+  }
+
+  async updateRateRestriction(
+    id: number,
+    dto: UpdateRateRestrictionDto,
+    userId?: number,
+  ) {
+    const existing = await this.prisma.rateRestriction.findUnique({
+      where: { id },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Restriction tarifaire ${id} introuvable.`);
+    }
+
+    const dateDebut = dto.dateDebut
+      ? new Date(dto.dateDebut)
+      : existing.dateDebut;
+    const dateFin = dto.dateFin ? new Date(dto.dateFin) : existing.dateFin;
+    if (dateFin <= dateDebut) {
+      throw new ConflictException('dateFin doit être postérieure à dateDebut.');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.rateRestriction.update({
+        where: { id },
+        data: {
+          dateDebut,
+          dateFin,
+          minStayNuits:
+            dto.minStayNuits !== undefined ? dto.minStayNuits : undefined,
+          stopSale: dto.stopSale,
+          libelle: dto.libelle,
+          actif: dto.actif,
+        },
+      });
+
+      const oldValue: Record<string, string | number | boolean | null> = {};
+      const newValue: Record<string, string | number | boolean | null> = {};
+      if (dto.dateDebut !== undefined) {
+        oldValue.dateDebut = existing.dateDebut.toISOString();
+        newValue.dateDebut = dto.dateDebut;
+      }
+      if (dto.dateFin !== undefined) {
+        oldValue.dateFin = existing.dateFin.toISOString();
+        newValue.dateFin = dto.dateFin;
+      }
+      if (dto.minStayNuits !== undefined) {
+        oldValue.minStayNuits = existing.minStayNuits;
+        newValue.minStayNuits = dto.minStayNuits;
+      }
+      if (dto.stopSale !== undefined) {
+        oldValue.stopSale = existing.stopSale;
+        newValue.stopSale = dto.stopSale;
+      }
+      if (dto.actif !== undefined) {
+        oldValue.actif = existing.actif;
+        newValue.actif = dto.actif;
+      }
+
+      await this.auditService.writeLog(tx, {
+        userId,
+        action: AuditAction.UPDATE_RATE_RESTRICTION,
+        targetEntity: AuditEntity.RateRestriction,
+        targetId: id,
+        oldValue,
+        newValue,
+        motif: dto.motif,
+      });
+
+      return updated;
+    });
+  }
+
+  async removeRateRestriction(
+    id: number,
+    dto: DeleteRateRestrictionDto,
+    userId?: number,
+  ) {
+    const existing = await this.prisma.rateRestriction.findUnique({
+      where: { id },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Restriction tarifaire ${id} introuvable.`);
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.rateRestriction.delete({ where: { id } });
+
+      await this.auditService.writeLog(tx, {
+        userId,
+        action: AuditAction.DELETE_RATE_RESTRICTION,
+        targetEntity: AuditEntity.RateRestriction,
+        targetId: id,
+        oldValue: {
+          roomTypeId: existing.roomTypeId,
+          dateDebut: existing.dateDebut.toISOString(),
+          dateFin: existing.dateFin.toISOString(),
+          minStayNuits: existing.minStayNuits,
+          stopSale: existing.stopSale,
         },
         motif: dto.motif,
       });

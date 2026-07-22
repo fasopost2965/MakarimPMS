@@ -91,6 +91,7 @@ model RoomType {
   prixPensionComplete Decimal            @default(0) @db.Decimal(10, 2)
   rooms       Room[]
   seasonRates SeasonRate[]
+  rateRestrictions RateRestriction[]
 }
 
 // Grille tarifaire saisonnière (cahier des charges §5.1/§5.4) — configurable
@@ -107,6 +108,32 @@ model SeasonRate {
   prixNuit   Decimal  @db.Decimal(10, 2)
 
   @@unique([roomTypeId, libelle])
+}
+
+// Restrictions tarifaires (min stay / stop sale) par type de chambre et
+// plage de dates — même convention que SeasonRate (une ligne par type de
+// chambre, chevauchements autorisés contrairement à SeasonRate : plusieurs
+// restrictions peuvent légitimement se superposer, ex. un min-stay de
+// bassefond couvrant tout l'été et un stop-sale ponctuel pour un événement
+// privé de 3 jours — la règle la plus restrictive s'applique, voir
+// ReservationsService.create()/utils/rate-restrictions.ts).
+model RateRestriction {
+  id           Int      @id @default(autoincrement())
+  roomTypeId   Int
+  roomType     RoomType @relation(fields: [roomTypeId], references: [id])
+  dateDebut    DateTime @db.Date
+  dateFin      DateTime @db.Date
+  // null = aucune contrainte de durée minimale sur cette période.
+  minStayNuits Int?
+  // true = vente bloquée pour toute nuit de cette période, quelle que soit
+  // la durée du séjour demandé.
+  stopSale     Boolean  @default(false)
+  // Étiquette descriptive libre (ex. "Aïd al-Kabir"), jamais le motif
+  // d'audit — même distinction que SeasonRate.libelle vs le `motif` (≥10
+  // caractères) exigé par les DTO create/update/delete de ce service.
+  libelle      String?
+  actif        Boolean  @default(true)
+  createdAt    DateTime @default(now())
 }
 
 model Room {
@@ -897,6 +924,7 @@ enum AuditEntity {
   RESERVATION_DEPOSIT
   Folio
   CancellationPolicy
+  RateRestriction
 }
 
 enum AuditAction {
@@ -922,6 +950,9 @@ enum AuditAction {
   CREATE_CANCELLATION_POLICY
   UPDATE_CANCELLATION_POLICY
   MARK_NO_SHOW
+  CREATE_RATE_RESTRICTION
+  UPDATE_RATE_RESTRICTION
+  DELETE_RATE_RESTRICTION
 }
 
 // Registre d'audit transverse (ADR-005 §3.2). Append-only : aucune méthode

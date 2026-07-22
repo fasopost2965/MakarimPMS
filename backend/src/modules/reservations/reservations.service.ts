@@ -25,6 +25,11 @@ import { NoShowReservationDto } from './dto/no-show-reservation.dto';
 import { getNightsBetween } from './utils/nights';
 import { calculateFormuleTotal, calculateNightlyTotal } from './utils/pricing';
 import { computeCancellationPenalty } from './utils/cancellation-penalty';
+import {
+  assertNoStopSale,
+  findMinStayViolation,
+  StopSaleViolation,
+} from './utils/rate-restrictions';
 
 const RESERVATION_INCLUDE = {
   guest: true,
@@ -89,6 +94,44 @@ export class ReservationsService {
     return hebergement.add(formuleTotal);
   }
 
+  // B5 — restrictions tarifaires (min stay / stop sale). Chargées via le
+  // module parameters (jamais de lecture Prisma directe de RateRestriction
+  // — CLAUDE.md, frontières de module), traduites en HttpException ici
+  // (utils/rate-restrictions.ts reste un module pur sans dépendance à
+  // @nestjs/common, même convention que pricing.ts/nights.ts).
+  private async assertRateRestrictionsSatisfied(
+    tx: Prisma.TransactionClient,
+    roomTypeId: number,
+    dateArrivee: Date,
+    nights: Date[],
+  ) {
+    const restrictions =
+      await this.parametersService.getRateRestrictionsForRoomType(
+        roomTypeId,
+        tx,
+      );
+
+    try {
+      assertNoStopSale(restrictions, nights);
+    } catch (error) {
+      if (error instanceof StopSaleViolation) {
+        throw new ConflictException(error.message);
+      }
+      throw error;
+    }
+
+    const minStayRequis = findMinStayViolation(
+      restrictions,
+      dateArrivee,
+      nights.length,
+    );
+    if (minStayRequis !== null) {
+      throw new BadRequestException(
+        `Séjour minimum de ${minStayRequis} nuit${minStayRequis > 1 ? 's' : ''} requis pour une arrivée à cette date.`,
+      );
+    }
+  }
+
   // Verrouillage anti-double-réservation (docs/plan-execution-claude-code.md §8) :
   // une ligne RoomNight par nuit, protégée par la contrainte unique
   // (roomId, date). Si une des nuits est déjà prise, l'INSERT échoue et toute
@@ -106,6 +149,13 @@ export class ReservationsService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const room = await this.roomsService.findByIdOrThrow(dto.roomId, tx);
+
+        await this.assertRateRestrictionsSatisfied(
+          tx,
+          room.roomTypeId,
+          new Date(dto.dateArrivee),
+          nights,
+        );
 
         const guest = dto.guestId
           ? await this.guestsService.assertNotBlacklisted(dto.guestId, tx)
@@ -257,12 +307,23 @@ export class ReservationsService {
         let prixTotalCalcule: Prisma.Decimal | undefined;
         if (datesOrRoomChanged) {
           const room = await this.roomsService.findByIdOrThrow(roomId, tx);
+          const nights = getNightsBetween(dateArrivee, dateDepart);
+
+          // B5 — avant de toucher RoomNight : un déplacement (drag-and-drop
+          // via ce même PATCH) doit être bloqué par les mêmes restrictions
+          // qu'une création, sinon min stay/stop sale seraient contournables
+          // en déplaçant une réservation existante plutôt qu'en la créant.
+          await this.assertRateRestrictionsSatisfied(
+            tx,
+            room.roomTypeId,
+            new Date(dateArrivee),
+            nights,
+          );
 
           // Libère les nuits actuelles puis retente l'occupation des
           // nouvelles — la contrainte unique protège toujours contre un
           // conflit avec une autre réservation.
           await tx.roomNight.deleteMany({ where: { reservationId: id } });
-          const nights = getNightsBetween(dateArrivee, dateDepart);
           await tx.roomNight.createMany({
             data: nights.map((date) => ({ roomId, date, reservationId: id })),
           });
