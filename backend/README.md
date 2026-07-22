@@ -31,6 +31,58 @@
 $ npm install
 ```
 
+Copie `.env.example` en `.env` et ajuste au besoin (voir les commentaires du
+fichier pour le détail de chaque variable) :
+
+```bash
+$ cp .env.example .env
+```
+
+- `DATABASE_URL` — MySQL (via `docker compose up -d mysql`, port hôte 3307).
+- `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` — valeurs de dev fournies dans
+  `.env.example` en local uniquement. **En `NODE_ENV=production`, le
+  bootstrap refuse de démarrer si l'une des deux vaut encore sa valeur par
+  défaut** (`src/common/config/assert-strong-secrets.ts`) — génère un secret
+  aléatoire (`openssl rand -base64 48`) avant tout déploiement.
+- `FRONTEND_URL` — seule origine autorisée par CORS (`credentials: true`,
+  jamais de wildcard).
+- `REDIS_HOST` / `REDIS_PORT` — file BullMQ pour les exports lourds du
+  module `reporting` (via `docker compose up -d redis`, port hôte 6380).
+  Sans Redis disponible, l'application ne démarre pas (`BullModule.forRoot`
+  échoue à se connecter).
+- `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` /
+  `SMTP_FROM` — envoi des emails du module `notifications` (F7 :
+  confirmation de réservation, rappel J-1, post-séjour). Toutes optionnelles
+  — sans `SMTP_HOST`, `MailerService` journalise l'email au lieu de l'envoyer
+  (aucun serveur SMTP requis en dev/CI).
+- `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_SMS_FROM` /
+  `TWILIO_WHATSAPP_FROM` — canaux SMS/WhatsApp du module `notifications`
+  (F7 suite). Toutes optionnelles, même dégradation gracieuse que SMTP —
+  sans `TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN`, `TwilioService` journalise
+  le message au lieu de l'envoyer. Un canal (SMS ou WhatsApp) n'est
+  réellement tenté par `NotificationsService.notify()` que si un template
+  actif existe pour l'évènement — créer un `NotificationTemplate` avec
+  `canal: "SMS"` ou `"WHATSAPP"` via `POST /notifications/templates` pour
+  l'activer.
+- `MOBILE_JWT_EXPIRES_IN` — durée de validité du jeton mobile housekeeping
+  (F9, `POST /mobile/housekeeping/login`). Optionnelle, défaut `8h`. Même
+  secret `JWT_ACCESS_SECRET` que le login desktop — pas de secret parallèle
+  à générer.
+- `CHANNEL_WEBHOOK_SECRET` — secret partagé protégeant les webhooks entrants
+  du module `channel-manager` (F10, `POST /channel-manager/:canal/
+  reservations|cancellations`, routes publiques puisqu'un OTA n'a pas de
+  compte utilisateur PMS). Header attendu : `X-Channel-Webhook-Secret`.
+  **Obligatoire** — sans elle, `ChannelWebhookGuard` refuse tout appel
+  (fail closed, contrairement à SMTP/Twilio qui se dégradent en simple
+  journalisation).
+
+Puis applique les migrations et le seed de démonstration :
+
+```bash
+$ npx prisma migrate dev
+$ npx prisma db seed
+```
+
 ## Compile and run the project
 
 ```bash
@@ -43,6 +95,32 @@ $ npm run start:dev
 # production mode
 $ npm run start:prod
 ```
+
+Documentation OpenAPI/Swagger interactive disponible sur
+[`/api/docs`](http://localhost:3000/api/docs) tant que `NODE_ENV` n'est pas
+`production` (désactivée en production, voir `src/main.ts`).
+
+## Sécurité & robustesse (revue externe)
+
+- **CORS** restreint à `FRONTEND_URL` avec `credentials: true` (pas de
+  wildcard).
+- **Rate limiting** (`@nestjs/throttler`) : 100 req/min/IP par défaut,
+  5 req/min/IP sur `/auth/login` et `/auth/refresh` (`@Throttle` dans
+  `AuthController`) ; `@SkipThrottle()` sur la route de healthcheck Docker.
+- **Gestion d'erreurs** : `AllExceptionsFilter`
+  (`src/common/filters/all-exceptions.filter.ts`) traduit les erreurs Prisma
+  connues (`P2002`, `P2025`, `P2003`) en réponses HTTP propres (409/404) et
+  masque toute stack trace derrière un 500 générique — journalisée
+  côté serveur uniquement.
+- **Logs structurés** (`nestjs-pino`) : JSON en production, format lisible
+  (`pino-pretty`) en développement ; chaque requête HTTP entrante est
+  journalisée automatiquement (méthode, chemin, code, durée). Le mot de
+  passe, les tokens et l'en-tête `Authorization` sont toujours masqués.
+- **File d'attente** (`@nestjs/bullmq` + Redis) : `GET
+  /reporting/export/async` met en file un export du grand livre exécuté hors
+  du thread principal, `GET /reporting/export/async/:jobId` en récupère le
+  statut/résultat — additionnel au endpoint synchrone `GET /reporting/export`
+  existant, inchangé.
 
 ## Run tests
 

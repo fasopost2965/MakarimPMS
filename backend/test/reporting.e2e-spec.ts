@@ -187,7 +187,18 @@ describe('Reporting — ventilation fiscale et rapport de police (e2e)', () => {
 
       // Recoupement avec la facture immuable (SPRINT_13.md §4 : comparer les
       // totaux consolidés avec la somme brute des factures émises).
-      const ttcAttendu = montantHebergement * 1.1 + 100 * 1.2;
+      // generateInvoice() matérialise désormais aussi la taxe de séjour
+      // (fiscalité configurable, TaxRateConfig.applicableParDefaut) en
+      // FolioLine avant de calculer le total — on lit son montant réel
+      // plutôt que de le recalculer en dur ici, pour ne pas dupliquer la
+      // règle métier (montant fixe × nuits × capacité) dans le test.
+      const ligneTaxeSejour = await prisma.folioLine.findFirstOrThrow({
+        where: { folioId, type: 'TAXE_SEJOUR' },
+      });
+      const ttcAttendu =
+        montantHebergement * 1.1 +
+        100 * 1.2 +
+        ligneTaxeSejour.montant.toNumber();
       expect(Number(invoiceBody.montantTotal)).toBeCloseTo(ttcAttendu, 2);
     });
   });

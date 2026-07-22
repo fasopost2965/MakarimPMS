@@ -1,5 +1,5 @@
-import { FolioLine, TypeLigneFolio } from '@prisma/client';
-import { Prisma } from '@prisma/client';
+import { FolioLine, TaxRateConfig, TypeLigneFolio } from '@prisma/client';
+import { Prisma, TaxMode } from '@prisma/client';
 
 // Calcul du montant total d'une facture à partir des lignes de folio.
 // Règle non négociable (CLAUDE.md §8) : les taux TVA/taxe de séjour sont
@@ -35,6 +35,27 @@ export function calculateInvoiceTotal(
   }
 
   return total;
+}
+
+// Montant d'une ligne de taxe configurable à matérialiser en FolioLine à la
+// facturation (BillingService.generateInvoice) — appelé une fois par taxe
+// applicable, avant la création de la ligne (pas à l'intérieur de
+// calculateInvoiceTotal, qui ne fait que sommer des lignes déjà résolues,
+// comme le fait déjà TAXE_SEJOUR). BR-FAC-004 : la taxe de séjour (et toute
+// taxe MONTANT_FIXE assimilée) s'applique par nuit × personne, jamais sur
+// les extras. `nbPersonnes` est ici le proxy RoomType.capacite (aucun champ
+// nombre d'adultes dans le schéma — même convention que Priorité 3
+// Formules d'hébergement).
+export function computeTaxLineAmount(
+  tax: Pick<TaxRateConfig, 'mode' | 'taux'>,
+  nights: number,
+  nbPersonnes: number,
+  sousTotalHebergementHt: Prisma.Decimal,
+): Prisma.Decimal {
+  if (tax.mode === TaxMode.MONTANT_FIXE) {
+    return new Prisma.Decimal(tax.taux).mul(nights).mul(nbPersonnes);
+  }
+  return sousTotalHebergementHt.mul(tax.taux).div(100);
 }
 
 // Générer un numéro de facture (séquence basée sur l'ID de la facture).

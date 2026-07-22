@@ -22,10 +22,12 @@ export class AuthService {
     private readonly config: ConfigService,
   ) {}
 
-  // Connexion : vérifie le mot de passe (bcrypt, jamais en clair), journalise
-  // la tentative (succès ou échec — CLAUDE.md règle 4, trace d'audit) via
-  // LoginLog, puis émet une paire access/refresh token.
-  async login(dto: LoginDto, ip: string | undefined) {
+  // Vérifie le mot de passe (bcrypt, jamais en clair) et journalise la
+  // tentative (succès ou échec — CLAUDE.md règle 4, trace d'audit) via
+  // LoginLog — partagé par login() (jeton desktop complet) et
+  // loginMobile() (F9, jeton mobile à portée réduite) : un seul chemin de
+  // vérification des identifiants, jamais dupliqué.
+  private async authenticateCredentials(dto: LoginDto, ip: string | undefined) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
       include: { role: true },
@@ -48,12 +50,52 @@ export class AuthService {
       data: { userId: user.id, succes: true, ip },
     });
 
+    return user;
+  }
+
+  // Connexion desktop : émet une paire access/refresh token complète.
+  async login(dto: LoginDto, ip: string | undefined) {
+    const user = await this.authenticateCredentials(dto, ip);
+
     return this.issueTokens({
       sub: user.id,
       email: user.email,
       roleId: user.roleId,
       roleName: user.role.nom,
     });
+  }
+
+  // F9 — connexion mobile housekeeping : mêmes identifiants/mot de passe
+  // que le desktop (un seul compte User par employé, pas de second
+  // référentiel), mais un unique jeton à portée réduite (scope
+  // "mobile-housekeeping") et TTL bien plus court que l'access token
+  // desktop — jamais de refresh token mobile (ré-authentification
+  // périodique volontairement simple plutôt qu'un second flux de refresh à
+  // sécuriser). Même secret JWT_ACCESS_SECRET (déjà validé par
+  // assertStrongSecrets) — pas de secret parallèle à gérer.
+  async loginMobile(dto: LoginDto, ip: string | undefined) {
+    const user = await this.authenticateCredentials(dto, ip);
+
+    const expiresIn = this.config.get<string>(
+      'MOBILE_JWT_EXPIRES_IN',
+      '8h',
+    ) as unknown as number;
+
+    const accessToken = await this.jwt.signAsync(
+      {
+        sub: user.id,
+        email: user.email,
+        roleId: user.roleId,
+        roleName: user.role.nom,
+        scope: 'mobile-housekeeping',
+      } satisfies AuthenticatedUser,
+      {
+        secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET'),
+        expiresIn,
+      },
+    );
+
+    return { accessToken };
   }
 
   async refresh(refreshToken: string) {

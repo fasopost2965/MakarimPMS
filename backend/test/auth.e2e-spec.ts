@@ -2,11 +2,27 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ThrottlerStorage } from '@nestjs/throttler';
+import type { ThrottlerStorageRecord } from '@nestjs/throttler/dist/throttler-storage-record.interface';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/prisma/prisma.service';
 import { authedRequest, loginAs, SEED_USERS } from './helpers/auth';
+
+// Stockage de secours jamais bloquant, en remplacement du
+// ThrottlerStorageService en mémoire par défaut — voir commentaire dans
+// beforeAll ci-dessous pour la justification complète.
+class NeverBlockingThrottlerStorage implements ThrottlerStorage {
+  increment(): Promise<ThrottlerStorageRecord> {
+    return Promise.resolve({
+      totalHits: 1,
+      timeToExpire: 0,
+      isBlocked: false,
+      timeToBlockExpire: 0,
+    });
+  }
+}
 
 // Module core (5.1/5.2/5.2.1) : auth JWT + rôles/permissions. Vérifie les
 // deux garanties non négociables demandées explicitement — route protégée
@@ -20,7 +36,27 @@ describe('Auth — JWT, rôles et permissions (e2e)', () => {
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      // Ce fichier exerce /auth/login et /auth/refresh bien plus de 5 fois
+      // (limite réelle, AuthController @Throttle) en quelques secondes —
+      // légitime pour tester le cycle JWT complet, mais ça faisait échouer
+      // les tests suivants avec un 429 (voire un 400 en cascade, le corps
+      // {message:"Too Many Requests"} n'ayant pas de refreshToken/
+      // accessToken à renvoyer à /refresh). Ce fichier teste la sémantique
+      // JWT, pas le rate limiting — aucune autre suite e2e n'exerce le
+      // comportement 429 lui-même, donc neutraliser le stockage ici ne
+      // fait perdre aucune couverture. La limite de 5/min réelle reste
+      // inchangée en production (AuthController).
+      //
+      // Note : overrideGuard(ThrottlerGuard) ne suffit PAS ici — ThrottlerGuard
+      // n'est enregistré que via { provide: APP_GUARD, useClass: ThrottlerGuard }
+      // dans AppModule (vérifié en le sabotant : le override restait sans
+      // effet, x-ratelimit-limit continuait d'apparaître et le 429 persistait).
+      // ThrottlerStorage, en revanche, est son propre token de provider
+      // (fourni indépendamment par ThrottlerModule), donc bien overridable.
+      .overrideProvider(ThrottlerStorage)
+      .useClass(NeverBlockingThrottlerStorage)
+      .compile();
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api');

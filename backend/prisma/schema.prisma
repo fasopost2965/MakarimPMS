@@ -16,10 +16,15 @@ generator client {
 // 5.4 — Réservations
 // ------------------------------------------------------------------
 
+// BOOKING_COM posé dès une itération antérieure mais jamais câblé — F10
+// (module channel-manager) l'active pour la première fois et ajoute
+// EXPEDIA/AIRBNB, extension additive et non destructive.
 enum CanalReservation {
   WALK_IN
   DIRECT
   BOOKING_COM
+  EXPEDIA
+  AIRBNB
 }
 
 enum StatutReservation {
@@ -27,6 +32,34 @@ enum StatutReservation {
   ANNULEE
   NO_SHOW
   TRANSFORMEE_EN_SEJOUR
+}
+
+enum TypePolitiqueAnnulation {
+  FLEXIBLE
+  MODEREE
+  NON_REMBOURSABLE
+}
+
+// BR-RES-006 — barème de pénalité selon le délai entre l'annulation et la
+// date d'arrivée prévue. Propriété du module reservations (pas parameters :
+// à la différence de TaxRateConfig/SeasonRate, consommés par plusieurs
+// modules, une politique d'annulation ne concerne que le cycle de vie de la
+// réservation — même logique de propriété que Company dans guests).
+model CancellationPolicy {
+  id                            Int                      @id @default(autoincrement())
+  nom                           String                   @unique
+  type                          TypePolitiqueAnnulation
+  // Annulation gratuite si dateArrivee - maintenant >= delaiFrancHeures.
+  delaiFrancHeures              Int
+  // Pourcentage de Reservation.prixTotalFinal retenu si l'annulation
+  // intervient hors délai franc.
+  pourcentagePenaliteAnnulation Decimal                  @db.Decimal(5, 2)
+  // Pourcentage retenu en cas de non-présentation (généralement plus élevé,
+  // souvent 100 — aucun délai franc ne s'applique au no-show).
+  pourcentagePenaliteNoShow     Decimal                  @db.Decimal(5, 2)
+  actif                         Boolean                  @default(true)
+  createdAt                     DateTime                 @default(now())
+  reservations                  Reservation[]
 }
 
 enum StatutChambre {
@@ -39,13 +72,32 @@ enum StatutChambre {
   EN_MAINTENANCE
 }
 
+enum FormuleHebergement {
+  ROOM_ONLY
+  BED_AND_BREAKFAST
+  HALF_BOARD
+  FULL_BOARD
+}
+
 model RoomType {
   id          Int          @id @default(autoincrement())
   nom         String
   prixBase    Decimal      @db.Decimal(10, 2)
   capacite    Int
+  // Priorité 3 (formules d'hébergement) : prix par personne et par nuit de
+  // chaque supplément repas, jamais codé en dur dans le calcul (même
+  // discipline que prixBase/SeasonRate). prixPensionComplete s'ajoute aux
+  // deux champs explicitement demandés — sans lui, FULL_BOARD n'aurait
+  // aucun tarif propre et se retrouverait facturé au prix de HALF_BOARD,
+  // un bug silencieux pire que l'ajout d'une colonne supplémentaire
+  // (nullable/valeur par défaut, non destructif).
+  prixPetitDejeuner   Decimal            @default(0) @db.Decimal(10, 2)
+  prixDemiPension     Decimal            @default(0) @db.Decimal(10, 2)
+  prixPensionComplete Decimal            @default(0) @db.Decimal(10, 2)
   rooms       Room[]
   seasonRates SeasonRate[]
+  rateRestrictions RateRestriction[]
+  channelRoomTypeMappings ChannelRoomTypeMapping[]
 }
 
 // Grille tarifaire saisonnière (cahier des charges §5.1/§5.4) — configurable
@@ -62,6 +114,32 @@ model SeasonRate {
   prixNuit   Decimal  @db.Decimal(10, 2)
 
   @@unique([roomTypeId, libelle])
+}
+
+// Restrictions tarifaires (min stay / stop sale) par type de chambre et
+// plage de dates — même convention que SeasonRate (une ligne par type de
+// chambre, chevauchements autorisés contrairement à SeasonRate : plusieurs
+// restrictions peuvent légitimement se superposer, ex. un min-stay de
+// bassefond couvrant tout l'été et un stop-sale ponctuel pour un événement
+// privé de 3 jours — la règle la plus restrictive s'applique, voir
+// ReservationsService.create()/utils/rate-restrictions.ts).
+model RateRestriction {
+  id           Int      @id @default(autoincrement())
+  roomTypeId   Int
+  roomType     RoomType @relation(fields: [roomTypeId], references: [id])
+  dateDebut    DateTime @db.Date
+  dateFin      DateTime @db.Date
+  // null = aucune contrainte de durée minimale sur cette période.
+  minStayNuits Int?
+  // true = vente bloquée pour toute nuit de cette période, quelle que soit
+  // la durée du séjour demandé.
+  stopSale     Boolean  @default(false)
+  // Étiquette descriptive libre (ex. "Aïd al-Kabir"), jamais le motif
+  // d'audit — même distinction que SeasonRate.libelle vs le `motif` (≥10
+  // caractères) exigé par les DTO create/update/delete de ce service.
+  libelle      String?
+  actif        Boolean  @default(true)
+  createdAt    DateTime @default(now())
 }
 
 model Room {
@@ -119,9 +197,16 @@ model Guest {
   email         String?
   categorie     CategorieClient    @default(STANDARD)
   preferences   String?
+  // F7 — opt-out simple (pas de granularité par type d'évènement en v1) :
+  // false désactive tout envoi (confirmation, rappel J-1, post-séjour) pour
+  // ce client. Défaut true = comportement actuel inchangé pour les clients
+  // existants.
+  consentementNotifications Boolean @default(true)
   reservations  Reservation[]
   stays         Stay[]
   categoryLogs  GuestCategoryLog[]
+  policeRecords PoliceRecord[]
+  notificationLogs NotificationLog[]
   createdAt     DateTime           @default(now())
   // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
   deletedAt     DateTime?
@@ -191,8 +276,25 @@ model Reservation {
   prixTotalFinal   Decimal           @default(0) @db.Decimal(10, 2)
   ajustementManuel Boolean           @default(false)
   motifAjustement  String?
+  // Priorité 3 — intégrée au calcul de prixTotalCalcule/prixTotalFinal
+  // (ReservationsService.calculatePrixTotal) dès la création.
+  formule          FormuleHebergement @default(BED_AND_BREAKFAST)
+  // BR-RES-006 — politique d'annulation rattachée à la réservation
+  // (optionnelle : une réservation sans politique n'est jamais pénalisée).
+  cancellationPolicyId Int?
+  cancellationPolicy   CancellationPolicy? @relation(fields: [cancellationPolicyId], references: [id])
+  // Montant de pénalité réellement appliqué, figé au moment de
+  // l'annulation/no-show (ReservationsService.remove/markNoShow) — jamais
+  // recalculé après coup si le barème de la politique change ensuite (même
+  // principe que prixTotalCalcule/prixTotalFinal : on gèle ce qui a été
+  // décidé, pas une valeur dérivée à la volée).
+  montantPenalite      Decimal?            @db.Decimal(10, 2)
   nights           RoomNight[]
   stay             Stay?
+  deposits         ReservationDeposit[]
+  notificationLogs NotificationLog[]
+  selfCheckinToken SelfCheckinToken?
+  channelImport    ChannelReservationImport?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   // Soft delete (ADR-005 §3.1) — toujours null pour l'instant, aucun code
@@ -201,6 +303,37 @@ model Reservation {
   deletedAt        DateTime?
 
   @@index([deletedAt])
+}
+
+enum StatutAcompte {
+  EN_ATTENTE
+  ENCAISSE
+  IMPUTE
+  REMBOURSE
+}
+
+// Acompte versé à la réservation, avant même l'existence d'un séjour/folio
+// (client direct ou Booking.com). Imputé automatiquement au folio principal
+// lors du check-in (StayService.checkinFromReservation) via
+// BillingService.creditFolioLine — jamais d'écriture FolioLine directe ici,
+// même chemin canonique que PaymentsService.createPayment (docs/modules/payments.md §10).
+model ReservationDeposit {
+  id              Int           @id @default(autoincrement())
+  reservationId   Int
+  reservation     Reservation   @relation(fields: [reservationId], references: [id])
+  montant         Decimal       @db.Decimal(10, 2)
+  moyen           MoyenPaiement
+  statut          StatutAcompte @default(ENCAISSE)
+  idempotencyKey  String        @unique
+  // Renseigné au moment de l'imputation (check-in) — jamais avant.
+  imputeAuFolioId Int?
+  imputeAuFolio   Folio?        @relation(fields: [imputeAuFolioId], references: [id])
+  createdAt       DateTime      @default(now())
+  // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
+  deletedAt       DateTime?
+
+  @@index([deletedAt])
+  @@index([reservationId])
 }
 
 // Une ligne par nuit occupée (roomId, date). La contrainte unique ci-dessous
@@ -243,25 +376,66 @@ enum StatutSejour {
 // devenir un séjour (check-in), mais un séjour peut aussi exister sans
 // réservation préalable (walk-in) — reservationId est donc optionnel.
 model Stay {
-  id                 Int          @id @default(autoincrement())
-  reservationId      Int?         @unique
-  reservation        Reservation? @relation(fields: [reservationId], references: [id])
+  id                 Int           @id @default(autoincrement())
+  reservationId      Int?          @unique
+  reservation        Reservation?  @relation(fields: [reservationId], references: [id])
   roomId             Int
-  room               Room         @relation(fields: [roomId], references: [id])
+  room               Room          @relation(fields: [roomId], references: [id])
   guestId            Int
-  guest              Guest        @relation(fields: [guestId], references: [id])
-  dateCheckin        DateTime     @default(now())
-  dateCheckoutPrevue DateTime     @db.Date
+  guest              Guest         @relation(fields: [guestId], references: [id])
+  dateCheckin        DateTime      @default(now())
+  dateCheckoutPrevue DateTime      @db.Date
   dateCheckoutReelle DateTime?
-  statut             StatutSejour @default(EN_COURS)
+  statut             StatutSejour  @default(EN_COURS)
+  // Priorité 3 — reprend Reservation.formule au check-in depuis réservation,
+  // ou saisie directement pour un walk-in (WalkinDto.formule). Détermine si
+  // une FolioLine EXTRA "repas" est créée au check-in
+  // (StayService.createFolioPrincipal).
+  formule            FormuleHebergement @default(BED_AND_BREAKFAST)
   nights             RoomNight[]
   folios             Folio[]
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
+  policeRecord       PoliceRecord?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
   // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
   deletedAt          DateTime?
 
   @@index([deletedAt])
+}
+
+enum TypePiece {
+  CIN
+  PASSEPORT
+  SEJOUR
+  AUTRE
+}
+
+// Registre légal des personnes hébergées (obligation DGSN, cahier des
+// charges — registre exportable sur demande). Une fiche par séjour
+// (stayId unique), jamais fusionnée dans Guest : un même client peut
+// présenter une pièce différente d'un séjour à l'autre (renouvellement,
+// document différent au passage de frontière), et le registre doit rester
+// un instantané figé par séjour, pas une fiche client réécrite
+// rétroactivement. Alimentée par PoliceService.upsert — seul chemin
+// d'écriture (même discipline que RoomStatusLog/GuestCategoryLog).
+model PoliceRecord {
+  id               Int       @id @default(autoincrement())
+  stayId           Int       @unique
+  stay             Stay      @relation(fields: [stayId], references: [id])
+  guestId          Int
+  guest            Guest     @relation(fields: [guestId], references: [id])
+  numeroPiece      String
+  typePiece        TypePiece
+  nationalite      String
+  dateNaissance    DateTime  @db.Date
+  paysProvenance   String?
+  villeProvenance  String?
+  paysDestination  String?
+  villeDestination String?
+  dateArrivee      DateTime
+  dateDepart       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }
 
 enum TypeLigneFolio {
@@ -278,14 +452,21 @@ enum TypeLigneFolio {
 // transferts de lignes et génération de factures — jamais en contournement
 // de ce modèle (règle 5).
 model Folio {
-  id        Int         @id @default(autoincrement())
-  stayId    Int
-  stay      Stay        @relation(fields: [stayId], references: [id])
-  libelle   String
-  lignes    FolioLine[]
-  invoices  Invoice[]
-  payments  Payment[]
-  createdAt DateTime    @default(now())
+  id             Int                  @id @default(autoincrement())
+  stayId         Int
+  stay           Stay                 @relation(fields: [stayId], references: [id])
+  libelle        String
+  lignes         FolioLine[]
+  invoices       Invoice[]
+  payments       Payment[]
+  deposits       ReservationDeposit[]
+  // Taxes actives/applicables par défaut explicitement écartées de ce folio
+  // (client exonéré — entreprise, diplomate...), réglé via
+  // PATCH /folios/:id/taxes-exclues avant génération de facture. Table de
+  // jonction plutôt qu'un Int[] : MySQL/Prisma ne supporte pas les colonnes
+  // de type liste scalaire (réservé à PostgreSQL/CockroachDB).
+  taxExclusions  FolioTaxExclusion[]
+  createdAt      DateTime             @default(now())
 }
 
 model FolioLine {
@@ -299,19 +480,71 @@ model FolioLine {
   annulee         Boolean        @default(false)
   motifAnnulation String?
   createdAt       DateTime       @default(now())
+  // Traçabilité de la ligne de taxe générée automatiquement à la facturation
+  // (BillingService.generateInvoice) — null pour toute ligne non fiscale
+  // (HEBERGEMENT/EXTRA/PAIEMENT) ou pour la TVA (appliquée en marge dans
+  // calculateInvoiceTotal, jamais matérialisée en ligne propre). Permet le
+  // regroupement par taxe exact dans GET /reporting/taxes, plutôt que de se
+  // fier au seul TypeLigneFolio.TAXE_SEJOUR (trop grossier : plusieurs taxes
+  // configurables distinctes peuvent partager ce même type de ligne).
+  taxRateConfigId Int?
+  taxRateConfig   TaxRateConfig? @relation(fields: [taxRateConfigId], references: [id])
 }
 
 // ------------------------------------------------------------------
 // 5.13 — Billing (facturation, TVA, taxe de séjour, paiements)
 // ------------------------------------------------------------------
 
+enum TaxMode {
+  MONTANT_FIXE
+  POURCENTAGE
+}
+
 model TaxRateConfig {
-  id           Int      @id @default(autoincrement())
-  type         String   // "TVA_HEBERGEMENT" | "TVA_ANNEXE" | "TAXE_SEJOUR"
-  taux         Decimal  @db.Decimal(5, 2)
-  applicableA  String?  // catégorie hôtel / commune si pertinent
-  actifDepuis  DateTime @default(now())
-  createdAt    DateTime @default(now())
+  id      Int      @id @default(autoincrement())
+  type    String // "TVA_HEBERGEMENT" | "TVA_ANNEXE" | "TAXE_SEJOUR" | tout
+  // nouveau libellé créé depuis /parameters/tax-rates (ex. future taxe
+  // touristique régionale) — libre, jamais un enum : une nouvelle taxe doit
+  // pouvoir être créée depuis les paramètres sans migration de schéma.
+  // MONTANT_FIXE : `taux` est un montant MAD (ex. 3.00 DH/nuit/adulte).
+  // POURCENTAGE  : `taux` est un pourcentage (ex. 10 = 10%), comme avant.
+  mode                TaxMode  @default(POURCENTAGE)
+  taux                Decimal  @db.Decimal(5, 2)
+  applicableA         String? // catégorie hôtel / commune si pertinent
+  // false = taxe désactivée : ignorée par getTaxRateMap() (marge TVA) ET par
+  // getApplicableTaxes() (génération de ligne à la facturation) — permet de
+  // suspendre une taxe sans supprimer son historique/traçabilité.
+  actif               Boolean  @default(true)
+  // true = taxe collectée pour le compte du Trésor public (taxe de séjour,
+  // TVA...) — isolée dans sa propre section du rapport GET /reporting/taxes
+  // pour la déclaration mensuelle DGI, distincte du chiffre d'affaires propre
+  // de l'hôtel.
+  collectePourTresor  Boolean  @default(false)
+  // false = taxe optionnelle (ne génère jamais de ligne automatiquement à la
+  // facturation, doit être ajoutée manuellement via addFolioLine) — true =
+  // appliquée par défaut à chaque génération de facture, sous réserve des
+  // exclusions du folio (FolioTaxExclusion).
+  applicableParDefaut Boolean  @default(true)
+  actifDepuis         DateTime @default(now())
+  createdAt           DateTime @default(now())
+  folioLines          FolioLine[]
+  folioExclusions     FolioTaxExclusion[]
+}
+
+// Exclusion explicite d'une taxe pour un folio donné (client exonéré),
+// décidée avant génération de facture — jamais après (la facture EMISE est
+// immuable, INV-FAC-001). Une ligne = une taxe écartée pour un folio.
+model FolioTaxExclusion {
+  id              Int           @id @default(autoincrement())
+  folioId         Int
+  folio           Folio         @relation(fields: [folioId], references: [id])
+  taxRateConfigId Int
+  taxRateConfig   TaxRateConfig @relation(fields: [taxRateConfigId], references: [id])
+  motif           String
+  userId          Int?
+  createdAt       DateTime      @default(now())
+
+  @@unique([folioId, taxRateConfigId])
 }
 
 // Table posée par le module parameters (docs/modules/parameters.md, BR-RH-001)
@@ -687,6 +920,122 @@ model StockMovement {
 }
 
 // ------------------------------------------------------------------
+// F7 — Notifications (CRM & Marketing, canal email en v1)
+// ------------------------------------------------------------------
+
+enum EvenementNotification {
+  RESERVATION_CONFIRMEE
+  RAPPEL_J_MOINS_1
+  POST_SEJOUR
+  // F6 — envoi du lien de self check-in (réutilise le canal email de F7,
+  // voir SelfCheckinService.generateLink).
+  SELF_CHECKIN_LIEN
+}
+
+// v1 email-only, étendu ici (F7 suite) à SMS/WHATSAPP — enum plutôt que
+// chaîne libre (contrairement à TaxRateConfig.type) : un canal engage un
+// fournisseur/une intégration technique réelle (SMTP, Twilio), pas une
+// simple donnée de configuration créable depuis l'UI. Ajout additif et non
+// destructif (aucune donnée existante affectée).
+enum CanalNotification {
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+enum StatutNotification {
+  EN_ATTENTE
+  ENVOYE
+  ECHEC
+  // Consentement refusé ou destinataire manquant (ex. Guest.email vide) —
+  // distinct d'ECHEC (tentative réelle ratée côté fournisseur SMTP) pour ne
+  // jamais confondre un opt-out avec une panne technique dans les logs.
+  IGNORE
+}
+
+// Contenu éditable sans déploiement (motif ≥10 caractères, audité — même
+// discipline que ParametersService.createSeasonRate). Une ligne par
+// (évènement, canal).
+model NotificationTemplate {
+  id        Int                    @id @default(autoincrement())
+  evenement EvenementNotification
+  canal     CanalNotification
+  sujet     String?
+  corps     String                 @db.Text
+  actif     Boolean                @default(true)
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+
+  @@unique([evenement, canal])
+}
+
+// Trace d'envoi append-only (jamais d'update/delete exposé) — sert à la
+// fois de journal de livraison et de preuve de consentement respecté au
+// moment de l'envoi (destinataire figé, pas une relecture de Guest.email
+// qui peut changer après coup).
+model NotificationLog {
+  id            Int                    @id @default(autoincrement())
+  guestId       Int
+  // onDelete: Cascade — même précédent que RoomNight.reservation/stay : en
+  // production Guest/Reservation ne sont jamais supprimés physiquement
+  // (soft delete, ADR-005), donc cette cascade ne se déclenche jamais côté
+  // application réelle. Elle sert uniquement à ce que les tests e2e
+  // puissent continuer à faire un hard delete de leurs fixtures Guest/
+  // Reservation en cleanup sans devoir connaître ce log, généré comme
+  // effet de bord de reservation.confirmee/checkout.effectue.
+  guest         Guest                  @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  reservationId Int?
+  reservation   Reservation?           @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  evenement     EvenementNotification
+  canal         CanalNotification
+  destinataire  String
+  statut        StatutNotification     @default(EN_ATTENTE)
+  erreur        String?
+  envoyeAt      DateTime?
+  createdAt     DateTime               @default(now())
+
+  @@index([guestId])
+  @@index([reservationId])
+}
+
+// ------------------------------------------------------------------
+// F6 — Self check-in (lien mobile pré-arrivée)
+// ------------------------------------------------------------------
+
+// Un seul lien actif par réservation (reservationId @unique) — regénérer
+// (SelfCheckinService.generateLink) réécrit token/expiresAt/usedAt sur la
+// même ligne plutôt que d'en créer une seconde, pour qu'un ancien lien
+// envoyé par email cesse aussitôt de fonctionner. onDelete: Cascade — même
+// précédent que NotificationLog/RoomNight (ne se déclenche jamais en
+// production, Reservation n'étant jamais supprimée physiquement).
+//
+// Les champs numeroPiece..villeDestination sont volontairement "en
+// attente" : PoliceRecord exige un stayId (schema, @unique) qui n'existe
+// pas encore avant le check-in réel (StayService.checkinFromReservation).
+// Ce n'est donc jamais écrit directement dans PoliceRecord ici — la
+// réception les relit via SelfCheckinService.findPending() au moment du
+// check-in pour pré-remplir POST /police/:stayId, même logique d'écart
+// documenté que Reservation.montantPenalite (BR-RES-006, CLAUDE.md).
+// `nationalite` n'est pas dupliqué ici : c'est déjà un champ Guest, écrit
+// directement dessus par SelfCheckinService.submit().
+model SelfCheckinToken {
+  id                Int         @id @default(autoincrement())
+  reservationId     Int         @unique
+  reservation       Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  token             String      @unique
+  expiresAt         DateTime
+  usedAt            DateTime?
+  numeroPiece       String?
+  typePiece         TypePiece?
+  dateNaissance     DateTime?   @db.Date
+  paysProvenance    String?
+  villeProvenance   String?
+  paysDestination   String?
+  villeDestination  String?
+  createdAt         DateTime    @default(now())
+}
+
+// ------------------------------------------------------------------
 // Audit & Sécurité (ADR-005, audit de conformité architecture gelée)
 // ------------------------------------------------------------------
 
@@ -702,6 +1051,13 @@ enum AuditEntity {
   SeasonRate
   TimeShift
   PaySlip
+  POLICE_RECORD
+  RESERVATION_DEPOSIT
+  Folio
+  CancellationPolicy
+  RateRestriction
+  NotificationTemplate
+  ChannelRoomTypeMapping
 }
 
 enum AuditAction {
@@ -711,6 +1067,7 @@ enum AuditAction {
   CANCEL_RESERVATION
   UPDATE_HOTEL_CONFIG
   UPDATE_TAX_RATE
+  CREATE_TAX_RATE
   CREATE_SEASON_RATE
   UPDATE_SEASON_RATE
   DELETE_SEASON_RATE
@@ -718,6 +1075,59 @@ enum AuditAction {
   INVALIDATE_TIME_SHIFT
   AUTO_CLOSE_TIME_SHIFT
   VALIDATE_PAYSLIP
+  CREATE_POLICE_RECORD
+  CREATE_DEPOSIT
+  IMPUTE_DEPOSIT
+  REFUND_DEPOSIT
+  EXCLUDE_FOLIO_TAX
+  CREATE_CANCELLATION_POLICY
+  UPDATE_CANCELLATION_POLICY
+  MARK_NO_SHOW
+  CREATE_RATE_RESTRICTION
+  UPDATE_RATE_RESTRICTION
+  DELETE_RATE_RESTRICTION
+  CREATE_NOTIFICATION_TEMPLATE
+  UPDATE_NOTIFICATION_TEMPLATE
+  CREATE_CHANNEL_ROOM_TYPE_MAPPING
+  DELETE_CHANNEL_ROOM_TYPE_MAPPING
+}
+
+// ------------------------------------------------------------------
+// F10 — Channel Manager / OTA Sync
+// ------------------------------------------------------------------
+
+// Configuration admin (parameters:write, même famille que SeasonRate/
+// TaxRateConfig) : résout le code de type de chambre externe d'une OTA
+// (ex. "STD-1" côté Booking.com) vers notre RoomType interne, avant tout
+// import de réservation. Sans mapping configuré pour un (canal,
+// externalRoomTypeId), l'import est rejeté explicitement plutôt que de
+// deviner un type de chambre au hasard.
+model ChannelRoomTypeMapping {
+  id                 Int              @id @default(autoincrement())
+  canal              CanalReservation
+  externalRoomTypeId String
+  roomTypeId         Int
+  roomType           RoomType         @relation(fields: [roomTypeId], references: [id])
+  createdAt          DateTime         @default(now())
+
+  @@unique([canal, externalRoomTypeId])
+}
+
+// Idempotence d'import (même pattern que Payment.idempotencyKey,
+// docs/modules/payments.md) : un webhook OTA rejoué (retry après timeout,
+// livraison dupliquée) avec le même (canal, otaReservationId) ne doit
+// jamais créer une deuxième Reservation — voir
+// ChannelManagerService.importReservation. reservationId est unique (une
+// seule ligne d'import par réservation créée).
+model ChannelReservationImport {
+  id               Int              @id @default(autoincrement())
+  canal            CanalReservation
+  otaReservationId String
+  reservationId    Int              @unique
+  reservation      Reservation      @relation(fields: [reservationId], references: [id])
+  createdAt        DateTime         @default(now())
+
+  @@unique([canal, otaReservationId])
 }
 
 // Registre d'audit transverse (ADR-005 §3.2). Append-only : aucune méthode

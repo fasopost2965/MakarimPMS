@@ -14,6 +14,7 @@ Le module est seul responsable de :
 * La compilation statistique des nuitées hôtelières pour la déclaration de police et les enquêtes du ministère du Tourisme.
 * La génération de synthèses graphiques interactives de performance d'exploitation pour la direction de l'hôtel.
 * L'exportation de fichiers de statistiques d'activité aux formats PDF et Excel.
+* **(F3, implémenté)** La prévision du taux d'occupation par type de chambre et par jour, avec recommandation tarifaire indicative (Revenue Manager / Yield Management) — voir §17.
 
 ---
 
@@ -33,6 +34,7 @@ Ce module consulte et analyse en lecture exclusive les entités suivantes du `DA
 * `Invoice` (Consolidation du chiffre d'affaires déclaré)
 * `Guest` (Statistiques démographiques et nationalités pour la préfecture)
 * `Room` (Inventaire matériel d'exploitation de base)
+* `RoomType` (Grille de base et capacité, pour la prévision d'occupation/tarif F3)
 
 ---
 
@@ -111,12 +113,12 @@ Le module de reporting n'implémente pas de machine à états ; il compile et pr
 ---
 
 ## 16. Dette technique connue
-* *Aucune dette technique identifiée à ce stade.*
+* **Seuils de recommandation tarifaire (F3) fixes, non configurables :** `GET /reporting/yield-forecast` classe le taux d'occupation prévisionnel selon deux seuils codés en dur (`reporting/utils/yield-recommendation.util.ts` : ≥80% → HAUSSE +15%, <40% → BAISSE -10%, sinon MAINTIEN) plutôt que des valeurs administrables via `parameters`. Choix délibéré : le cahier des charges ne demande qu'une recommandation consultative (jamais une écriture sur `SeasonRate`, INV-REP-001 reste respecté), un module de configuration des seuils serait une extension distincte hors périmètre de cette itération.
 
 ---
 
 ## 17. Fonctionnalités prévues ultérieurement
-* **Phase 4 :** Moteur analytique prédictif de Yield Management pour recommander de manière automatique l'augmentation ou la baisse des grilles tarifaires de nuitées selon le taux d'occupation prévisionnel.
+* **Phase 4 (F3, implémenté) :** Moteur analytique prédictif de Yield Management pour recommander de manière automatique l'augmentation ou la baisse des grilles tarifaires de nuitées selon le taux d'occupation prévisionnel. `GET /reporting/yield-forecast` (`reporting:read`) renvoie, par type de chambre et par jour sur une plage de dates, le taux d'occupation prévisionnel (dénominateur excluant les chambres `EN_MAINTENANCE`, §12), le prix actuel (`ParametersService.getSeasonRatesForRoomType`, jamais de lecture directe de `SeasonRate`) et une recommandation (`HAUSSE`/`MAINTIEN`/`BAISSE`) avec un prix suggéré — purement indicatif, aucune écriture sur `SeasonRate` (la mise à jour reste un acte humain via `parameters:write`).
 
 ---
 

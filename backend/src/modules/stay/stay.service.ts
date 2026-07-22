@@ -6,7 +6,9 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
+  FormuleHebergement,
   Prisma,
+  StatutAcompte,
   StatutChambre,
   StatutReservation,
   StatutSejour,
@@ -15,9 +17,14 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { getTodayRange } from '../../common/utils/date-range';
 import { getNightsBetween } from '../reservations/utils/nights';
-import { calculateNightlyTotal } from '../reservations/utils/pricing';
+import {
+  calculateFormuleTotal,
+  calculateNightlyTotal,
+} from '../reservations/utils/pricing';
 import { RoomsService } from '../rooms/rooms.service';
 import { GuestsService } from '../guests/guests.service';
+import { BillingService } from '../billing/billing.service';
+import { AuditService } from '../audit/audit.service';
 import { WalkinDto } from './dto/walkin.dto';
 import { computeSoldeDu } from './utils/solde';
 import { CheckoutEffectueEvent } from './events/checkout-effectue.event';
@@ -27,7 +34,22 @@ const STAY_INCLUDE = {
   guest: true,
   room: { include: { roomType: true } },
   folios: { include: { lignes: true } },
+  policeRecord: true,
 } as const;
+
+// Message d'avertissement non bloquant (registre légal DGSN) — jamais une
+// exception : un walk-in doit pouvoir être enregistré rapidement, la fiche
+// de police peut être complétée juste après (voir PoliceController).
+const POLICE_RECORD_WARNING =
+  'Fiche de police (registre légal des personnes hébergées) non renseignée pour ce séjour.';
+
+// Priorité 3 (formules d'hébergement) — libellé de la FolioLine EXTRA créée
+// au check-in pour toute formule ≠ ROOM_ONLY.
+const FORMULE_LABEL: Partial<Record<FormuleHebergement, string>> = {
+  BED_AND_BREAKFAST: 'petit-déjeuner',
+  HALF_BOARD: 'demi-pension',
+  FULL_BOARD: 'pension complète',
+};
 
 @Injectable()
 export class StayService {
@@ -35,6 +57,8 @@ export class StayService {
     private readonly prisma: PrismaService,
     private readonly roomsService: RoomsService,
     private readonly guestsService: GuestsService,
+    private readonly billingService: BillingService,
+    private readonly auditService: AuditService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -67,6 +91,7 @@ export class StayService {
             guestId: reservation.guestId,
             dateCheckin: new Date(),
             dateCheckoutPrevue: reservation.dateDepart,
+            formule: reservation.formule,
           },
         });
 
@@ -91,18 +116,58 @@ export class StayService {
         );
         // La ligne HEBERGEMENT reprend toujours prixTotalFinal tel quel —
         // jamais un recalcul indépendant (CLAUDE.md règle 3, voir aussi
-        // reservations.service.ts).
-        await this.createFolioPrincipal(
+        // reservations.service.ts). Priorité 3 : si une formule ≠ ROOM_ONLY
+        // s'applique, prixTotalFinal (déjà calculé formule incluse, voir
+        // ReservationsService.calculatePrixTotal) est éclaté en deux lignes
+        // (HEBERGEMENT + EXTRA repas) pour la ventilation TVA — la SOMME
+        // reste rigoureusement égale à prixTotalFinal, jamais un recalcul
+        // indépendant du montant facturé. Si un ajustement manuel a ramené
+        // prixTotalFinal sous le coût de la formule seule, on renonce à
+        // l'éclatement (une ligne HEBERGEMENT unique, comportement
+        // identique à avant Priorité 3) plutôt que produire un montant
+        // négatif.
+        const room = await this.roomsService.findByIdWithPricing(
+          reservation.roomId,
+          tx,
+        );
+        const formuleTotalBrut = calculateFormuleTotal(
+          reservation.formule,
+          room.roomType,
+          nights.length,
+          room.roomType.capacite,
+        );
+        const peutEclater =
+          reservation.formule !== FormuleHebergement.ROOM_ONLY &&
+          formuleTotalBrut.gt(0) &&
+          formuleTotalBrut.lte(reservation.prixTotalFinal);
+        const montantFormule = peutEclater
+          ? formuleTotalBrut
+          : new Prisma.Decimal(0);
+        const montantHebergement = peutEclater
+          ? reservation.prixTotalFinal.sub(montantFormule)
+          : reservation.prixTotalFinal;
+
+        const folio = await this.createFolioPrincipal(
           tx,
           stay.id,
-          reservation.prixTotalFinal,
+          montantHebergement,
           nights.length,
+          reservation.formule,
+          montantFormule,
         );
+        // Priorité 2 (acomptes) : un walk-in n'a jamais de réservation
+        // préalable donc jamais d'acompte à imputer — cet appel n'existe
+        // que sur ce chemin-ci, jamais dans checkinWalkIn.
+        await this.imputerAcomptes(tx, reservation.id, folio.id, userId);
 
-        return tx.stay.findUniqueOrThrow({
+        const created = await tx.stay.findUniqueOrThrow({
           where: { id: stay.id },
           include: STAY_INCLUDE,
         });
+        return {
+          ...created,
+          avertissements: created.policeRecord ? [] : [POLICE_RECORD_WARNING],
+        };
       });
     } catch (error) {
       throw this.translateConflict(
@@ -144,12 +209,15 @@ export class StayService {
           ? await this.guestsService.assertNotBlacklisted(dto.guestId, tx)
           : await tx.guest.create({ data: dto.guest! });
 
+        const formule = dto.formule ?? FormuleHebergement.BED_AND_BREAKFAST;
+
         const stay = await tx.stay.create({
           data: {
             roomId: room.id,
             guestId: guest.id,
             dateCheckin,
             dateCheckoutPrevue: new Date(dto.dateCheckoutPrevue),
+            formule,
           },
         });
 
@@ -172,12 +240,29 @@ export class StayService {
           room.roomType.prixBase,
           room.roomType.seasonRates,
         );
-        await this.createFolioPrincipal(tx, stay.id, montant, nights.length);
+        const montantFormule = calculateFormuleTotal(
+          formule,
+          room.roomType,
+          nights.length,
+          room.roomType.capacite,
+        );
+        await this.createFolioPrincipal(
+          tx,
+          stay.id,
+          montant,
+          nights.length,
+          formule,
+          montantFormule,
+        );
 
-        return tx.stay.findUniqueOrThrow({
+        const created = await tx.stay.findUniqueOrThrow({
           where: { id: stay.id },
           include: STAY_INCLUDE,
         });
+        return {
+          ...created,
+          avertissements: created.policeRecord ? [] : [POLICE_RECORD_WARNING],
+        };
       });
     } catch (error) {
       throw this.translateConflict(
@@ -187,11 +272,18 @@ export class StayService {
     }
   }
 
+  // Priorité 3 (formules d'hébergement) : formule/montantFormule créent une
+  // seconde FolioLine EXTRA distincte de HEBERGEMENT — nécessaire pour la
+  // bonne ventilation TVA (hébergement et restauration ont des taux
+  // différents, docs/modules/parameters.md — TVA_HEBERGEMENT vs
+  // TVA_ANNEXE), jamais ajoutée pour ROOM_ONLY ni un montant à 0.
   private async createFolioPrincipal(
     tx: Prisma.TransactionClient,
     stayId: number,
     montantHebergement: Prisma.Decimal,
     nights: number,
+    formule: FormuleHebergement,
+    montantFormule: Prisma.Decimal,
   ) {
     const folio = await tx.folio.create({
       data: { stayId, libelle: 'Folio principal' },
@@ -204,6 +296,61 @@ export class StayService {
         montant: montantHebergement,
       },
     });
+    if (formule !== FormuleHebergement.ROOM_ONLY && montantFormule.gt(0)) {
+      await tx.folioLine.create({
+        data: {
+          folioId: folio.id,
+          type: TypeLigneFolio.EXTRA,
+          libelle: `Formule ${FORMULE_LABEL[formule]} — ${nights} nuit${nights > 1 ? 's' : ''}`,
+          montant: montantFormule,
+        },
+      });
+    }
+    return folio;
+  }
+
+  // Priorité 2 (acomptes réservation) : impute au folio principal tout
+  // ReservationDeposit ENCAISSE de cette réservation, jamais EN_ATTENTE
+  // (argent pas encore réellement perçu) ni déjà IMPUTE/REMBOURSE. Toujours
+  // via BillingService.creditFolioLine — jamais d'écriture FolioLine directe
+  // ici (chemin d'écriture canonique unique, même règle que PaymentsService).
+  private async imputerAcomptes(
+    tx: Prisma.TransactionClient,
+    reservationId: number,
+    folioId: number,
+    userId?: number,
+  ) {
+    const deposits = await tx.reservationDeposit.findMany({
+      where: {
+        reservationId,
+        statut: StatutAcompte.ENCAISSE,
+        deletedAt: null,
+      },
+    });
+
+    for (const deposit of deposits) {
+      await this.billingService.creditFolioLine(
+        folioId,
+        deposit.montant,
+        `Acompte réservation — ${deposit.moyen}`,
+        tx,
+      );
+
+      const updated = await tx.reservationDeposit.update({
+        where: { id: deposit.id },
+        data: { statut: StatutAcompte.IMPUTE, imputeAuFolioId: folioId },
+      });
+
+      await this.auditService.writeLog(tx, {
+        userId,
+        action: 'IMPUTE_DEPOSIT',
+        targetEntity: 'RESERVATION_DEPOSIT',
+        targetId: deposit.id,
+        oldValue: { statut: deposit.statut },
+        newValue: { statut: updated.statut, imputeAuFolioId: folioId },
+        motif: `Imputation automatique de l'acompte au folio principal lors du check-in (réservation ${reservationId}).`,
+      });
+    }
   }
 
   async findEnCours() {

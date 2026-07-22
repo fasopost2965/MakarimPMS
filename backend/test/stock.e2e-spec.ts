@@ -78,11 +78,33 @@ describe('Stock — inventaire et déstockage automatique (e2e)', () => {
   // HousekeepingService.updateStatus() émet nettoyage.valide via emit() —
   // volontairement NON attendu (isolation, voir le commentaire du service),
   // donc la réponse HTTP revient avant que le listener stock ait fini son
-  // travail asynchrone. Ce délai fait le pont côté test uniquement ; en
-  // production, rien ne dépend de ce timing (c'est précisément le but de
-  // l'isolation).
-  function laisserLesListenersAsynchronesSeTerminer() {
-    return new Promise((resolve) => setTimeout(resolve, 100));
+  // travail asynchrone. Sabotage/restore ayant révélé la fragilité d'un
+  // délai fixe ici (flake CI ponctuel : le listener peut mettre plus de
+  // 100ms sous charge) : on attend la condition réelle par polling plutôt
+  // qu'un délai arbitraire — robuste quelle que soit la charge de la
+  // machine, sans jamais dépasser un timeout généreux en cas d'échec
+  // véritable. En production, rien ne dépend de ce timing (c'est
+  // précisément le but de l'isolation par emit()).
+  async function attendreCondition(
+    condition: () => boolean | Promise<boolean>,
+    timeoutMs = 2000,
+    intervalMs = 20,
+  ): Promise<void> {
+    const debut = Date.now();
+    while (Date.now() - debut < timeoutMs) {
+      if (await condition()) return;
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+    throw new Error(
+      `Condition non remplie après ${timeoutMs}ms (listener asynchrone trop lent ou jamais déclenché).`,
+    );
+  }
+
+  function mouvementSortieExiste(stockItemId: number, roomId: number) {
+    return async () =>
+      (await prisma.stockMovement.findFirst({
+        where: { stockItemId, typeMouvement: 'SORTIE', roomId },
+      })) !== null;
   }
 
   async function createRoomANettoyer() {
@@ -163,7 +185,7 @@ describe('Stock — inventaire et déstockage automatique (e2e)', () => {
         .patch(`/api/rooms/${roomId}/statut`)
         .send({ statut: 'LIBRE_PROPRE' });
       expect(libre.status).toBe(200);
-      await laisserLesListenersAsynchronesSeTerminer();
+      await attendreCondition(mouvementSortieExiste(savonAvant.id, roomId));
 
       const savonApres = await getItem(SOAP_CODE);
       const shampoingApres = await getItem(SHAMPOO_CODE);
@@ -205,7 +227,9 @@ describe('Stock — inventaire et déstockage automatique (e2e)', () => {
           .send({ statut: 'LIBRE_PROPRE' });
         // Le flux de ménage principal réussit malgré l'échec du décompte savon.
         expect(libre.status).toBe(200);
-        await laisserLesListenersAsynchronesSeTerminer();
+        await attendreCondition(
+          mouvementSortieExiste(shampoingAvant.id, roomId),
+        );
 
         const savonApres = await getItem(SOAP_CODE);
         const shampoingApres = await getItem(SHAMPOO_CODE);
@@ -245,7 +269,9 @@ describe('Stock — inventaire et déstockage automatique (e2e)', () => {
           .patch(`/api/rooms/${roomId}/statut`)
           .send({ statut: 'LIBRE_PROPRE' });
         expect(libre.status).toBe(200);
-        await laisserLesListenersAsynchronesSeTerminer();
+        await attendreCondition(() =>
+          emitSpy.mock.calls.some((call) => call[0] === 'stock.seuil_critique'),
+        );
 
         expect(emitSpy).toHaveBeenCalledWith(
           'stock.seuil_critique',

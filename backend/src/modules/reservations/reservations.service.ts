@@ -1,12 +1,15 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   AuditAction,
   AuditEntity,
+  FormuleHebergement,
   Prisma,
   StatutReservation,
 } from '@prisma/client';
@@ -19,14 +22,28 @@ import { ParametersService } from '../parameters/parameters.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationDto } from './dto/update-reservation.dto';
 import { CheckAvailabilityDto } from './dto/check-availability.dto';
+import { CheckRoomAvailabilityDto } from './dto/check-room-availability.dto';
 import { CancelReservationDto } from './dto/cancel-reservation.dto';
+import { NoShowReservationDto } from './dto/no-show-reservation.dto';
 import { getNightsBetween } from './utils/nights';
-import { calculateNightlyTotal } from './utils/pricing';
+import { calculateFormuleTotal, calculateNightlyTotal } from './utils/pricing';
+import { computeCancellationPenalty } from './utils/cancellation-penalty';
+import {
+  assertNoStopSale,
+  findMinStayViolation,
+  StopSaleViolation,
+} from './utils/rate-restrictions';
+import { ReservationConfirmeeEvent } from './events/reservation-confirmee.event';
 
 const RESERVATION_INCLUDE = {
   guest: true,
   room: { include: { roomType: true } },
+  cancellationPolicy: true,
 } as const;
+
+type ReservationWithIncludes = Prisma.ReservationGetPayload<{
+  include: typeof RESERVATION_INCLUDE;
+}>;
 
 @Injectable()
 export class ReservationsService {
@@ -36,6 +53,7 @@ export class ReservationsService {
     private readonly auditService: AuditService,
     private readonly roomsService: RoomsService,
     private readonly parametersService: ParametersService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   private assertDateRangeValid(dateArrivee: string, dateDepart: string) {
@@ -48,10 +66,15 @@ export class ReservationsService {
 
   // Tarification saisonnière (cahier des charges §5.1/§5.4) : jamais de taux
   // codé en dur, toujours dérivé de RoomType.prixBase / SeasonRate en base.
+  // Priorité 3 : ajoute le supplément de formule (prixNuit × nbNuits +
+  // prixFormule × nbPersonnes × nbNuits) — nbPersonnes = RoomType.capacite,
+  // seule notion d'occupation du schéma (pas de champ "nombre d'adultes"
+  // sur Reservation).
   private async calculatePrixTotal(
     tx: Prisma.TransactionClient,
     roomTypeId: number,
     nights: Date[],
+    formule: FormuleHebergement,
   ) {
     const roomType = await tx.roomType.findUnique({
       where: { id: roomTypeId },
@@ -66,7 +89,73 @@ export class ReservationsService {
       roomTypeId,
       tx,
     );
-    return calculateNightlyTotal(nights, roomType.prixBase, seasonRates);
+    const hebergement = calculateNightlyTotal(
+      nights,
+      roomType.prixBase,
+      seasonRates,
+    );
+    const formuleTotal = calculateFormuleTotal(
+      formule,
+      roomType,
+      nights.length,
+      roomType.capacite,
+    );
+    return hebergement.add(formuleTotal);
+  }
+
+  // F4 — façade publique de calculatePrixTotal pour le Booking Engine
+  // (estimation de prix avant réservation, sans en créer une). `this.prisma`
+  // passe où `tx: Prisma.TransactionClient` est attendu : PrismaService
+  // étend PrismaClient, compatible structurellement (sur-ensemble des
+  // méthodes d'un TransactionClient) — même lecture seule que le reste de
+  // calculatePrixTotal, jamais besoin d'une vraie transaction ici.
+  async estimatePrixTotal(
+    roomTypeId: number,
+    dateArrivee: string,
+    dateDepart: string,
+    formule: FormuleHebergement = FormuleHebergement.BED_AND_BREAKFAST,
+  ) {
+    this.assertDateRangeValid(dateArrivee, dateDepart);
+    const nights = getNightsBetween(dateArrivee, dateDepart);
+    return this.calculatePrixTotal(this.prisma, roomTypeId, nights, formule);
+  }
+
+  // B5 — restrictions tarifaires (min stay / stop sale). Chargées via le
+  // module parameters (jamais de lecture Prisma directe de RateRestriction
+  // — CLAUDE.md, frontières de module), traduites en HttpException ici
+  // (utils/rate-restrictions.ts reste un module pur sans dépendance à
+  // @nestjs/common, même convention que pricing.ts/nights.ts).
+  private async assertRateRestrictionsSatisfied(
+    tx: Prisma.TransactionClient,
+    roomTypeId: number,
+    dateArrivee: Date,
+    nights: Date[],
+  ) {
+    const restrictions =
+      await this.parametersService.getRateRestrictionsForRoomType(
+        roomTypeId,
+        tx,
+      );
+
+    try {
+      assertNoStopSale(restrictions, nights);
+    } catch (error) {
+      if (error instanceof StopSaleViolation) {
+        throw new ConflictException(error.message);
+      }
+      throw error;
+    }
+
+    const minStayRequis = findMinStayViolation(
+      restrictions,
+      dateArrivee,
+      nights.length,
+    );
+    if (minStayRequis !== null) {
+      throw new BadRequestException(
+        `Séjour minimum de ${minStayRequis} nuit${minStayRequis > 1 ? 's' : ''} requis pour une arrivée à cette date.`,
+      );
+    }
   }
 
   // Verrouillage anti-double-réservation (docs/plan-execution-claude-code.md §8) :
@@ -83,21 +172,31 @@ export class ReservationsService {
     this.assertDateRangeValid(dto.dateArrivee, dto.dateDepart);
     const nights = getNightsBetween(dto.dateArrivee, dto.dateDepart);
 
+    let reservation: ReservationWithIncludes;
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      reservation = await this.prisma.$transaction(async (tx) => {
         const room = await this.roomsService.findByIdOrThrow(dto.roomId, tx);
+
+        await this.assertRateRestrictionsSatisfied(
+          tx,
+          room.roomTypeId,
+          new Date(dto.dateArrivee),
+          nights,
+        );
 
         const guest = dto.guestId
           ? await this.guestsService.assertNotBlacklisted(dto.guestId, tx)
           : await tx.guest.create({ data: dto.guest! });
 
+        const formule = dto.formule ?? FormuleHebergement.BED_AND_BREAKFAST;
         const prixTotalCalcule = await this.calculatePrixTotal(
           tx,
           room.roomTypeId,
           nights,
+          formule,
         );
 
-        const reservation = await tx.reservation.create({
+        const created = await tx.reservation.create({
           data: {
             canal: dto.canal,
             guestId: guest.id,
@@ -105,6 +204,8 @@ export class ReservationsService {
             dateArrivee: new Date(dto.dateArrivee),
             dateDepart: new Date(dto.dateDepart),
             sourceBrute: dto.sourceBrute,
+            formule,
+            cancellationPolicyId: dto.cancellationPolicyId,
             // À la création, prixTotalFinal suit toujours prixTotalCalcule
             // (pas d'ajustement manuel possible avant que la réservation
             // existe — voir update()).
@@ -118,15 +219,33 @@ export class ReservationsService {
           data: nights.map((date) => ({
             roomId: dto.roomId,
             date,
-            reservationId: reservation.id,
+            reservationId: created.id,
           })),
         });
 
-        return reservation;
+        return created;
       });
     } catch (error) {
       throw this.translateConflict(error);
     }
+
+    // F7 — émis après commit (jamais depuis l'intérieur de la transaction :
+    // un rollback ne doit jamais avoir déjà déclenché un email de
+    // confirmation). `emitAsync` (pas `emit`) : un `emit` fire-and-forget
+    // laisse le listener notifications (écriture NotificationLog) continuer
+    // à s'exécuter après le retour de cette méthode, ce qui peut le faire
+    // courir après la suppression de la réservation par un appelant rapide
+    // (constaté en e2e : violation de contrainte FK reservationId quand le
+    // test nettoie la réservation avant que le listener asynchrone n'ait
+    // fini) — même règle que StayService.checkout() au final, pas
+    // seulement pour la cohérence de la réponse mais pour éviter cette
+    // classe de race condition.
+    await this.eventEmitter.emitAsync(
+      'reservation.confirmee',
+      new ReservationConfirmeeEvent(reservation.id),
+    );
+
+    return reservation;
   }
 
   async findAll(params?: {
@@ -180,6 +299,58 @@ export class ReservationsService {
     );
   }
 
+  // F8 — pré-vérification pour le drag-and-drop du planning : indique si
+  // UNE chambre précise est libre sur une période donnée, sans effectuer le
+  // déplacement (update() reste le seul point d'écriture réel — même
+  // contrainte unique RoomNight(roomId, date) en dernier recours si une
+  // course s'est glissée entre ce précheck et le PATCH effectif, comme pour
+  // toute vérification de disponibilité de ce module). excludeReservationId
+  // exclut les propres nuits de la réservation déplacée (sinon un
+  // redimensionnement ou un déplacement vers les mêmes dates serait à tort
+  // signalé en conflit avec lui-même) — jamais les nuits liées à un Stay
+  // (client déjà en place, ne peut jamais être délogé par un glisser-
+  // déposer). motifIndisponibilite reste informatif seulement : mêmes
+  // restrictions tarifaires (B5) que create()/update(), mais un échec ici
+  // ne bloque rien côté serveur, c'est update() qui reste autoritaire.
+  async checkRoomAvailability(dto: CheckRoomAvailabilityDto) {
+    this.assertDateRangeValid(dto.dateArrivee, dto.dateDepart);
+    const nights = getNightsBetween(dto.dateArrivee, dto.dateDepart);
+
+    const room = await this.roomsService.findByIdOrThrow(dto.roomId);
+
+    const conflits = await this.prisma.roomNight.findMany({
+      where: {
+        roomId: dto.roomId,
+        date: { in: nights },
+        ...(dto.excludeReservationId !== undefined
+          ? { reservationId: { not: dto.excludeReservationId } }
+          : {}),
+      },
+      select: { date: true },
+    });
+
+    let motifIndisponibilite: string | undefined;
+    if (conflits.length === 0) {
+      try {
+        await this.assertRateRestrictionsSatisfied(
+          this.prisma,
+          room.roomTypeId,
+          new Date(dto.dateArrivee),
+          nights,
+        );
+      } catch (error) {
+        motifIndisponibilite =
+          error instanceof HttpException ? error.message : undefined;
+      }
+    }
+
+    return {
+      disponible: conflits.length === 0 && !motifIndisponibilite,
+      datesConflit: conflits.map((n) => n.date.toISOString().slice(0, 10)),
+      motifIndisponibilite,
+    };
+  }
+
   async findOne(id: number) {
     const reservation = await this.prisma.reservation.findUnique({
       where: { id },
@@ -193,6 +364,20 @@ export class ReservationsService {
 
   async update(id: number, dto: UpdateReservationDto, userId?: number) {
     const existing = await this.findOne(id);
+
+    // Chemin d'écriture unique pour ANNULEE/NO_SHOW (BR-RES-006) : seuls
+    // remove() et markNoShow() calculent la pénalité et journalisent
+    // l'action correcte — un PATCH générique ne doit jamais pouvoir les
+    // court-circuiter (CLAUDE.md, "un seul chemin d'écriture par champ
+    // sensible").
+    if (
+      dto.statut === StatutReservation.ANNULEE ||
+      dto.statut === StatutReservation.NO_SHOW
+    ) {
+      throw new BadRequestException(
+        `Utilisez DELETE /reservations/${id} (annulation) ou POST /reservations/${id}/no-show pour ce changement de statut — jamais ce PATCH générique.`,
+      );
+    }
 
     const dateArrivee = dto.dateArrivee ?? existing.dateArrivee.toISOString();
     const dateDepart = dto.dateDepart ?? existing.dateDepart.toISOString();
@@ -219,12 +404,23 @@ export class ReservationsService {
         let prixTotalCalcule: Prisma.Decimal | undefined;
         if (datesOrRoomChanged) {
           const room = await this.roomsService.findByIdOrThrow(roomId, tx);
+          const nights = getNightsBetween(dateArrivee, dateDepart);
+
+          // B5 — avant de toucher RoomNight : un déplacement (drag-and-drop
+          // via ce même PATCH) doit être bloqué par les mêmes restrictions
+          // qu'une création, sinon min stay/stop sale seraient contournables
+          // en déplaçant une réservation existante plutôt qu'en la créant.
+          await this.assertRateRestrictionsSatisfied(
+            tx,
+            room.roomTypeId,
+            new Date(dateArrivee),
+            nights,
+          );
 
           // Libère les nuits actuelles puis retente l'occupation des
           // nouvelles — la contrainte unique protège toujours contre un
           // conflit avec une autre réservation.
           await tx.roomNight.deleteMany({ where: { reservationId: id } });
-          const nights = getNightsBetween(dateArrivee, dateDepart);
           await tx.roomNight.createMany({
             data: nights.map((date) => ({ roomId, date, reservationId: id })),
           });
@@ -233,6 +429,7 @@ export class ReservationsService {
             tx,
             room.roomTypeId,
             nights,
+            existing.formule,
           );
         }
 
@@ -269,6 +466,7 @@ export class ReservationsService {
             dateDepart: dto.dateDepart ? new Date(dto.dateDepart) : undefined,
             statut: dto.statut,
             sourceBrute: dto.sourceBrute,
+            cancellationPolicyId: dto.cancellationPolicyId,
             prixTotalCalcule,
             prixTotalFinal,
             ajustementManuel: manualOverride ? true : undefined,
@@ -305,6 +503,24 @@ export class ReservationsService {
       );
     }
 
+    // BR-RES-006 : pénalité calculée et figée ici (jamais recalculée après
+    // coup) — voir schema.prisma, commentaire Reservation.montantPenalite.
+    // Écart documenté (CLAUDE.md) : la règle mentionne une "ligne de folio
+    // de pénalité", mais une réservation annulée n'a jamais de Stay/Folio
+    // (ADR-002 : un Folio appartient toujours à un Stay, et une réservation
+    // déjà TRANSFORMEE_EN_SEJOUR ne peut plus être annulée ici, voir
+    // ci-dessus). Le montant est donc enregistré sur Reservation.montantPenalite
+    // — son recouvrement (retenue sur acompte via /rembourser, ou
+    // facturation manuelle) reste une décision humaine de la réception/
+    // comptabilité, hors périmètre de cette écriture.
+    const montantPenalite = computeCancellationPenalty(
+      existing.cancellationPolicy,
+      existing.prixTotalFinal,
+      existing.dateArrivee,
+      new Date(),
+      false,
+    );
+
     return this.prisma.$transaction(async (tx) => {
       await tx.roomNight.deleteMany({ where: { reservationId: id } });
 
@@ -314,13 +530,73 @@ export class ReservationsService {
         targetEntity: AuditEntity.Reservation,
         targetId: id,
         oldValue: { statut: existing.statut },
-        newValue: { statut: StatutReservation.ANNULEE },
+        newValue: {
+          statut: StatutReservation.ANNULEE,
+          montantPenalite: montantPenalite.toString(),
+        },
         motif: dto.motif,
       });
 
       return tx.reservation.update({
         where: { id },
-        data: { statut: StatutReservation.ANNULEE },
+        data: {
+          statut: StatutReservation.ANNULEE,
+          montantPenalite,
+        },
+        include: RESERVATION_INCLUDE,
+      });
+    });
+  }
+
+  // Non-présentation (BR-RES-002/BR-RES-006) : statut CONFIRMEE uniquement
+  // (une réservation déjà transformée en séjour a un client bien présent, et
+  // ANNULEE/NO_SHOW sont des états terminaux — même garde que remove()).
+  // Toujours déclenché manuellement par la réception ici (aucune
+  // infrastructure de cron dans ce projet, CLAUDE.md — pas de bascule
+  // automatique à l'heure limite).
+  async markNoShow(id: number, dto: NoShowReservationDto, userId?: number) {
+    const existing = await this.findOne(id);
+    if (existing.statut === StatutReservation.TRANSFORMEE_EN_SEJOUR) {
+      throw new ConflictException(
+        'Cette réservation a déjà été transformée en séjour — un client présent ne peut pas être marqué non-présentation.',
+      );
+    }
+    if (existing.statut !== StatutReservation.CONFIRMEE) {
+      throw new ConflictException(
+        `Cette réservation ne peut pas être marquée non-présentation (statut actuel : ${existing.statut}).`,
+      );
+    }
+
+    const montantPenalite = computeCancellationPenalty(
+      existing.cancellationPolicy,
+      existing.prixTotalFinal,
+      existing.dateArrivee,
+      new Date(),
+      true,
+    );
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.roomNight.deleteMany({ where: { reservationId: id } });
+
+      await this.auditService.writeLog(tx, {
+        userId,
+        action: AuditAction.MARK_NO_SHOW,
+        targetEntity: AuditEntity.Reservation,
+        targetId: id,
+        oldValue: { statut: existing.statut },
+        newValue: {
+          statut: StatutReservation.NO_SHOW,
+          montantPenalite: montantPenalite.toString(),
+        },
+        motif: dto.motif,
+      });
+
+      return tx.reservation.update({
+        where: { id },
+        data: {
+          statut: StatutReservation.NO_SHOW,
+          montantPenalite,
+        },
         include: RESERVATION_INCLUDE,
       });
     });
@@ -340,6 +616,28 @@ export class ReservationsService {
         statut: StatutReservation.CONFIRMEE,
         dateArrivee: { gte: range.today, lt: range.tomorrow },
       },
+    });
+  }
+
+  // F7 — façade en lecture seule pour le cron de rappel J-1 (notifications) :
+  // toutes les réservations confirmées dont l'arrivée tombe dans la journée
+  // de `date` (bornes [00:00, 00:00 du lendemain[, même convention que
+  // getTodayRange). Contrairement à findConfirmedArrivingToday ci-dessus
+  // (une chambre précise, usage housekeeping), celle-ci renvoie toutes les
+  // arrivées du jour avec le client inclus — nécessaire pour construire
+  // l'email de rappel (nom, email).
+  async findConfirmedArrivingOn(date: Date) {
+    const debut = new Date(
+      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+    );
+    const finExclusive = new Date(debut.getTime() + 24 * 60 * 60 * 1000);
+
+    return this.prisma.reservation.findMany({
+      where: {
+        statut: StatutReservation.CONFIRMEE,
+        dateArrivee: { gte: debut, lt: finExclusive },
+      },
+      include: RESERVATION_INCLUDE,
     });
   }
 

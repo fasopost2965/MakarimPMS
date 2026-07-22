@@ -2,6 +2,9 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { BullModule } from '@nestjs/bullmq';
+import { LoggerModule } from 'nestjs-pino';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -20,6 +23,12 @@ import { AuthModule } from './modules/auth/auth.module';
 import { HrModule } from './modules/hr/hr.module';
 import { StockModule } from './modules/stock/stock.module';
 import { ReportingModule } from './modules/reporting/reporting.module';
+import { PoliceModule } from './modules/police/police.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { SelfCheckinModule } from './modules/self-checkin/self-checkin.module';
+import { BookingEngineModule } from './modules/booking-engine/booking-engine.module';
+import { DocumentOcrModule } from './modules/document-ocr/document-ocr.module';
+import { ChannelManagerModule } from './modules/channel-manager/channel-manager.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 
@@ -27,6 +36,45 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     EventEmitterModule.forRoot(),
+    // Logs structurés (remplace le logger console par défaut de Nest) :
+    // JSON brut en production (ingestion par un collecteur de logs), format
+    // lisible (pino-pretty) en développement. pino-http journalise chaque
+    // requête HTTP entrante (method, path, statusCode, durée) automatiquement.
+    LoggerModule.forRoot({
+      pinoHttp: {
+        level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+        transport:
+          process.env.NODE_ENV === 'production'
+            ? undefined
+            : { target: 'pino-pretty', options: { singleLine: true } },
+        // Le mot de passe et les tokens ne doivent jamais atterrir dans les
+        // logs, même en clair dans le corps d'une requête /auth/login.
+        redact: {
+          paths: [
+            'req.headers.authorization',
+            'req.body.motDePasse',
+            'req.body.nouveauMotDePasse',
+            'req.body.refreshToken',
+          ],
+          censor: '[REDACTED]',
+        },
+      },
+    }),
+    // Limite globale par défaut (100 req/min/IP). AuthController surcharge
+    // ce même throttler 'default' avec une limite bien plus stricte sur
+    // /login et /refresh via @Throttle — la force brute sur ces deux routes
+    // reste le principal vecteur d'attaque non couvert par le RBAC.
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 100 }]),
+    // File d'attente (Redis) pour les traitements lourds hors thread
+    // principal — voir modules/reporting/queues/reporting.queue.ts. Connexion
+    // partagée par toute future queue (billing y compris) sans dupliquer la
+    // configuration Redis module par module.
+    BullModule.forRoot({
+      connection: {
+        host: process.env.REDIS_HOST ?? 'localhost',
+        port: Number(process.env.REDIS_PORT ?? 6379),
+      },
+    }),
     PrismaModule,
     AuthModule,
     RoomsModule,
@@ -43,14 +91,23 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     HrModule,
     StockModule,
     ReportingModule,
+    PoliceModule,
+    NotificationsModule,
+    SelfCheckinModule,
+    BookingEngineModule,
+    DocumentOcrModule,
+    ChannelManagerModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
-    // Ordre significatif : JwtAuthGuard authentifie (peuple req.user ou
-    // laisse passer les routes @Public()) avant que PermissionsGuard ne
-    // vérifie l'autorisation — Nest exécute les APP_GUARD dans l'ordre
-    // d'enregistrement.
+    // Ordre significatif — Nest exécute les APP_GUARD dans l'ordre
+    // d'enregistrement : ThrottlerGuard limite le débit avant même de savoir
+    // si la requête est authentifiée (protège aussi les routes @Public()
+    // comme /auth/login), puis JwtAuthGuard authentifie (peuple req.user ou
+    // laisse passer les routes @Public()), puis PermissionsGuard vérifie
+    // l'autorisation.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
   ],

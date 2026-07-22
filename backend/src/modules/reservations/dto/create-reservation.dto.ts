@@ -7,7 +7,7 @@ import {
   IsString,
   ValidateNested,
 } from 'class-validator';
-import { CanalReservation } from '@prisma/client';
+import { CanalReservation, FormuleHebergement } from '@prisma/client';
 import { GuestInputDto } from './guest-input.dto';
 
 // L'un des deux champs client est requis (validé au niveau service, pas ici
@@ -32,6 +32,18 @@ export class CreateReservationDto {
   @IsOptional()
   @IsString()
   sourceBrute?: string;
+
+  // Défaut BED_AND_BREAKFAST (même défaut que le schéma) si omis — l'hôtel
+  // vend systématiquement en B&B minimum (docs métier Priorité 3).
+  @IsOptional()
+  @IsEnum(FormuleHebergement)
+  formule?: FormuleHebergement;
+
+  // BR-RES-006 — optionnelle : une réservation sans politique rattachée
+  // n'est jamais pénalisée en cas d'annulation/no-show.
+  @IsOptional()
+  @IsInt()
+  cancellationPolicyId?: number;
 
   @IsOptional()
   @IsInt()

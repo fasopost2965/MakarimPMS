@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient, Prisma, TaxMode } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -23,13 +23,19 @@ async function main() {
   await prisma.role.deleteMany();
   await prisma.hotelConfig.deleteMany();
   await prisma.payment.deleteMany();
+  await prisma.reservationDeposit.deleteMany();
   await prisma.creditNote.deleteMany();
   await prisma.invoice.deleteMany();
+  await prisma.folioTaxExclusion.deleteMany();
   await prisma.folioLine.deleteMany();
   await prisma.folio.deleteMany();
   await prisma.roomNight.deleteMany();
+  await prisma.policeRecord.deleteMany();
   await prisma.stay.deleteMany();
+  await prisma.notificationLog.deleteMany();
+  await prisma.notificationTemplate.deleteMany();
   await prisma.reservation.deleteMany();
+  await prisma.cancellationPolicy.deleteMany();
   await prisma.guestCategoryLog.deleteMany();
   await prisma.guest.deleteMany();
   await prisma.companyContact.deleteMany();
@@ -39,14 +45,20 @@ async function main() {
   await prisma.roomStatusLog.deleteMany();
   await prisma.maintenanceTicket.deleteMany();
   await prisma.room.deleteMany();
+  await prisma.rateRestriction.deleteMany();
   await prisma.roomType.deleteMany();
 
+  // Priorité 3 (formules d'hébergement) : prixPetitDejeuner = 50 MAD/pers./
+  // nuit pour tous les types, comme demandé. prixDemiPension/
+  // prixPensionComplete (150/220 MAD) sont des valeurs de référence
+  // raisonnables pour le développement, pas des tarifs métier validés —
+  // ajustables via une future route de configuration (module parameters).
   const roomTypesData = [
-    { nom: 'Single', prixBase: 400, capacite: 1 },
-    { nom: 'Double', prixBase: 500, capacite: 2 },
-    { nom: 'Triple', prixBase: 750, capacite: 3 },
-    { nom: 'Suite', prixBase: 650, capacite: 2 },
-    { nom: 'Quadruple', prixBase: 900, capacite: 4 },
+    { nom: 'Single', prixBase: 400, capacite: 1, prixPetitDejeuner: 50, prixDemiPension: 150, prixPensionComplete: 220 },
+    { nom: 'Double', prixBase: 500, capacite: 2, prixPetitDejeuner: 50, prixDemiPension: 150, prixPensionComplete: 220 },
+    { nom: 'Triple', prixBase: 750, capacite: 3, prixPetitDejeuner: 50, prixDemiPension: 150, prixPensionComplete: 220 },
+    { nom: 'Suite', prixBase: 650, capacite: 2, prixPetitDejeuner: 50, prixDemiPension: 150, prixPensionComplete: 220 },
+    { nom: 'Quadruple', prixBase: 900, capacite: 4, prixPetitDejeuner: 50, prixDemiPension: 150, prixPensionComplete: 220 },
   ];
   const roomTypes: Record<string, { id: number }> = {};
   for (const data of roomTypesData) {
@@ -169,20 +181,128 @@ async function main() {
     }
   }
 
-  // Configuration des taux TVA et taxe de séjour (module billing 5.13).
-  // Jamais de taux codé en dur — toujours lus depuis cette table.
+  // Configuration des taux TVA et taxe de séjour (module billing 5.13,
+  // fiscalité configurable). Jamais de taux codé en dur — toujours lus
+  // depuis cette table. Valeurs réelles Hôtel Makarim (Tétouan) : TVA
+  // hébergement 10%, taxe de séjour 3 DH/nuit/adulte (montant fixe,
+  // reversé au Trésor public — collectePourTresor: true).
   const taxRates = [
-    { type: 'TVA_HEBERGEMENT', taux: 10 },
-    { type: 'TVA_ANNEXE', taux: 20 },
-    { type: 'TAXE_SEJOUR', taux: 2 },
+    {
+      type: 'TVA_HEBERGEMENT',
+      mode: TaxMode.POURCENTAGE,
+      taux: 10,
+      actif: true,
+      collectePourTresor: true,
+      applicableParDefaut: true,
+    },
+    {
+      type: 'TVA_ANNEXE',
+      mode: TaxMode.POURCENTAGE,
+      taux: 20,
+      actif: true,
+      collectePourTresor: true,
+      applicableParDefaut: true,
+    },
+    {
+      type: 'TAXE_SEJOUR',
+      mode: TaxMode.MONTANT_FIXE,
+      taux: 3,
+      actif: true,
+      collectePourTresor: true,
+      applicableParDefaut: true,
+    },
   ];
   for (const rate of taxRates) {
     await prisma.taxRateConfig.create({
       data: {
         type: rate.type,
+        mode: rate.mode,
         taux: new Prisma.Decimal(rate.taux),
+        actif: rate.actif,
+        collectePourTresor: rate.collectePourTresor,
+        applicableParDefaut: rate.applicableParDefaut,
       },
     });
+  }
+
+  // Politiques d'annulation (BR-RES-006). Barèmes standards de l'industrie
+  // hôtelière — délai franc croissant avec la souplesse de la politique,
+  // no-show toujours pénalisé à 100% quelle que soit la politique.
+  const cancellationPolicies = [
+    {
+      nom: 'Flexible',
+      type: 'FLEXIBLE' as const,
+      delaiFrancHeures: 24,
+      pourcentagePenaliteAnnulation: 50,
+      pourcentagePenaliteNoShow: 100,
+    },
+    {
+      nom: 'Modérée',
+      type: 'MODEREE' as const,
+      delaiFrancHeures: 72,
+      pourcentagePenaliteAnnulation: 50,
+      pourcentagePenaliteNoShow: 100,
+    },
+    {
+      nom: 'Non remboursable',
+      type: 'NON_REMBOURSABLE' as const,
+      delaiFrancHeures: 0,
+      pourcentagePenaliteAnnulation: 100,
+      pourcentagePenaliteNoShow: 100,
+    },
+  ];
+  for (const policy of cancellationPolicies) {
+    await prisma.cancellationPolicy.create({
+      data: {
+        nom: policy.nom,
+        type: policy.type,
+        delaiFrancHeures: policy.delaiFrancHeures,
+        pourcentagePenaliteAnnulation: new Prisma.Decimal(
+          policy.pourcentagePenaliteAnnulation,
+        ),
+        pourcentagePenaliteNoShow: new Prisma.Decimal(
+          policy.pourcentagePenaliteNoShow,
+        ),
+      },
+    });
+  }
+
+  // Templates de notification par défaut (F7, canal email). Placeholders
+  // {{cle}} substitués par NotificationsService.notify() — voir
+  // notifications/notifications.module.ts pour la liste des clés
+  // disponibles par évènement.
+  const notificationTemplates = [
+    {
+      evenement: 'RESERVATION_CONFIRMEE' as const,
+      canal: 'EMAIL' as const,
+      sujet: 'Confirmation de votre réservation — Hôtel Makarim',
+      corps:
+        'Bonjour {{prenom}} {{nom}},\n\nVotre réservation est confirmée pour la chambre {{chambre}}, du {{dateArrivee}} au {{dateDepart}}.\n\nNous avons hâte de vous accueillir.\n\nHôtel Makarim',
+    },
+    {
+      evenement: 'RAPPEL_J_MOINS_1' as const,
+      canal: 'EMAIL' as const,
+      sujet: 'Votre arrivée demain — Hôtel Makarim',
+      corps:
+        'Bonjour {{prenom}} {{nom}},\n\nPetit rappel : votre arrivée à l\'Hôtel Makarim est prévue demain {{dateArrivee}}, chambre {{chambre}}.\n\nÀ très bientôt.\n\nHôtel Makarim',
+    },
+    {
+      evenement: 'POST_SEJOUR' as const,
+      canal: 'EMAIL' as const,
+      sujet: 'Merci de votre séjour — Hôtel Makarim',
+      corps:
+        'Bonjour {{prenom}} {{nom}},\n\nMerci d\'avoir séjourné avec nous jusqu\'au {{dateDepart}} (chambre {{chambre}}). Nous espérons vous revoir bientôt.\n\nHôtel Makarim',
+    },
+    {
+      evenement: 'SELF_CHECKIN_LIEN' as const,
+      canal: 'EMAIL' as const,
+      sujet: 'Préparez votre arrivée — Hôtel Makarim',
+      corps:
+        'Bonjour {{prenom}} {{nom}},\n\nVotre arrivée est prévue le {{dateArrivee}}, chambre {{chambre}}. Gagnez du temps à votre arrivée en complétant vos informations dès maintenant :\n{{lien}}\n\nÀ très bientôt.\n\nHôtel Makarim',
+    },
+  ];
+  for (const template of notificationTemplates) {
+    await prisma.notificationTemplate.create({ data: template });
   }
 
   // Barème CNSS/AMO marocain (BR-RH-001, module hr 5.11). Table posée par le
@@ -272,6 +392,7 @@ async function main() {
     'rh',
     'stock',
     'reporting',
+    'notifications',
   ] as const;
   const ALL_ACTIONS = ['read', 'write', 'delete', 'export'] as const;
 
@@ -288,6 +409,12 @@ async function main() {
   // seul le module guests l'utilise (blacklister/débloquer un client).
   permissions['guests:blacklist'] = await prisma.permission.create({
     data: { module: 'guests', action: 'blacklist' },
+  });
+  // Idem pour le remboursement d'acompte (Priorité 2, "admin seulement") :
+  // payments:write couvre l'encaissement quotidien (Réception/Comptable),
+  // payments:refund est une action distincte réservée à l'Administrateur.
+  permissions['payments:refund'] = await prisma.permission.create({
+    data: { module: 'payments', action: 'refund' },
   });
 
   const rolesData: Array<{
@@ -323,6 +450,11 @@ async function main() {
         // un tarif, mais ne modifie jamais un taux/l'identité de l'hôtel
         // (parameters:write réservé à l'Administrateur).
         'parameters:read',
+        // notifications:read seul (F7) — la Réception consulte le journal
+        // d'envoi (email de confirmation bien parti ?) mais ne modifie
+        // jamais le contenu des templates (notifications:write réservé à
+        // l'Administrateur, même logique que parameters:write).
+        'notifications:read',
       ],
     },
     {
@@ -468,7 +600,7 @@ async function main() {
   }
 
   console.log(
-    `Seed OK : ${roomTypesData.length} types de chambre, ${seasonRatesData.length} tarifs saisonniers, ${totalRooms} chambres, ${taxRates.length} taux de taxe, ${cnssRates.length} barèmes CNSS/AMO, ${stockItems.length} articles de stock, ${rolesData.length} rôles, ${usersData.length} utilisateurs de dev (mot de passe commun : ${DEV_PASSWORD}).`,
+    `Seed OK : ${roomTypesData.length} types de chambre, ${seasonRatesData.length} tarifs saisonniers, ${totalRooms} chambres, ${taxRates.length} taux de taxe, ${cancellationPolicies.length} politiques d'annulation, ${notificationTemplates.length} templates de notification, ${cnssRates.length} barèmes CNSS/AMO, ${stockItems.length} articles de stock, ${rolesData.length} rôles, ${usersData.length} utilisateurs de dev (mot de passe commun : ${DEV_PASSWORD}).`,
   );
 }
 

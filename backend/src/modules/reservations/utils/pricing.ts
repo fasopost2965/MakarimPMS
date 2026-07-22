@@ -1,9 +1,15 @@
-import { Prisma } from '@prisma/client';
+import { FormuleHebergement, Prisma } from '@prisma/client';
 
 interface SeasonRateLike {
   dateDebut: Date;
   dateFin: Date;
   prixNuit: Prisma.Decimal;
+}
+
+interface RoomTypeFormulePricing {
+  prixPetitDejeuner: Prisma.Decimal;
+  prixDemiPension: Prisma.Decimal;
+  prixPensionComplete: Prisma.Decimal;
 }
 
 // Calcule le prix total nuit par nuit (cahier des charges §5.1/§5.4) :
@@ -27,4 +33,36 @@ export function calculateNightlyTotal(
     );
     return total.add(rate ? rate.prixNuit : prixBase);
   }, new Prisma.Decimal(0));
+}
+
+// Priorité 3 (formules d'hébergement) : ROOM_ONLY n'ajoute rien.
+// nbPersonnes n'est capturé nulle part ailleurs dans le schéma pour une
+// réservation/un séjour (pas de champ "nombre d'adultes") — RoomType.capacite
+// sert de proxy, seule notion d'occupation existante (voir appelants).
+export function formulePrixParPersonneParNuit(
+  formule: FormuleHebergement,
+  roomType: RoomTypeFormulePricing,
+): Prisma.Decimal {
+  switch (formule) {
+    case FormuleHebergement.BED_AND_BREAKFAST:
+      return roomType.prixPetitDejeuner;
+    case FormuleHebergement.HALF_BOARD:
+      return roomType.prixDemiPension;
+    case FormuleHebergement.FULL_BOARD:
+      return roomType.prixPensionComplete;
+    case FormuleHebergement.ROOM_ONLY:
+    default:
+      return new Prisma.Decimal(0);
+  }
+}
+
+export function calculateFormuleTotal(
+  formule: FormuleHebergement,
+  roomType: RoomTypeFormulePricing,
+  nbNuits: number,
+  nbPersonnes: number,
+): Prisma.Decimal {
+  return formulePrixParPersonneParNuit(formule, roomType)
+    .mul(nbPersonnes)
+    .mul(nbNuits);
 }
