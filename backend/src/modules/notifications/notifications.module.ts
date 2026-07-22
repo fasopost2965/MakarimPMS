@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
 import { MailerService } from './mailer.service';
+import { TwilioService } from './twilio.service';
 import { NotificationsQueue } from './queues/notifications.queue';
 import { NotificationsProcessor } from './queues/notifications.processor';
 import { NOTIFICATIONS_QUEUE } from './queues/notifications-job.types';
@@ -36,6 +37,7 @@ import { RappelJMoins1Cron } from './cron/rappel-j-moins-1.cron';
   providers: [
     NotificationsService,
     MailerService,
+    TwilioService,
     NotificationsQueue,
     NotificationsProcessor,
     ReservationConfirmeeListener,

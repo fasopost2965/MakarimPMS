@@ -55,6 +55,15 @@ $ cp .env.example .env
   confirmation de réservation, rappel J-1, post-séjour). Toutes optionnelles
   — sans `SMTP_HOST`, `MailerService` journalise l'email au lieu de l'envoyer
   (aucun serveur SMTP requis en dev/CI).
+- `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_SMS_FROM` /
+  `TWILIO_WHATSAPP_FROM` — canaux SMS/WhatsApp du module `notifications`
+  (F7 suite). Toutes optionnelles, même dégradation gracieuse que SMTP —
+  sans `TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN`, `TwilioService` journalise
+  le message au lieu de l'envoyer. Un canal (SMS ou WhatsApp) n'est
+  réellement tenté par `NotificationsService.notify()` que si un template
+  actif existe pour l'évènement — créer un `NotificationTemplate` avec
+  `canal: "SMS"` ou `"WHATSAPP"` via `POST /notifications/templates` pour
+  l'activer.
 
 Puis applique les migrations et le seed de démonstration :
 

@@ -925,14 +925,15 @@ enum EvenementNotification {
   SELF_CHECKIN_LIEN
 }
 
-// Un seul canal aujourd'hui (v1 email-only, recommandation feuille de
-// route) — enum plutôt que chaîne libre (contrairement à
-// TaxRateConfig.type) : un canal engage un fournisseur/une intégration
-// technique réelle (SMTP ici), pas une simple donnée de configuration
-// créable depuis l'UI. Additif et non destructif d'ajouter SMS/WHATSAPP
-// plus tard.
+// v1 email-only, étendu ici (F7 suite) à SMS/WHATSAPP — enum plutôt que
+// chaîne libre (contrairement à TaxRateConfig.type) : un canal engage un
+// fournisseur/une intégration technique réelle (SMTP, Twilio), pas une
+// simple donnée de configuration créable depuis l'UI. Ajout additif et non
+// destructif (aucune donnée existante affectée).
 enum CanalNotification {
   EMAIL
+  SMS
+  WHATSAPP
 }
 
 enum StatutNotification {
