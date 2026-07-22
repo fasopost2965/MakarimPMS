@@ -52,6 +52,13 @@ Ce document constitue le référentiel unique et officiel des règles métier (B
 * **Impact sur les autres modules :** Tout le système.
 * **Niveau de criticité :** Critique.
 
+### BR-TR-005 : Clôture Journalière et Date d'Exploitation (Night Audit)
+* **Module concerné :** Réservations, Séjours, Facturation, Comptabilité, Reporting (transverse)
+* **Description :** Le système doit distinguer la **date d'exploitation hôtelière** (`operationalDate`) de l'horloge système. La bascule vers le jour suivant ne doit intervenir qu'à l'issue d'une routine de clôture journalière (Night Audit) validant : le traitement des no-show, l'imputation automatique de la nuitée du jour sur les folios des séjours en cours, et la réconciliation des départs non enregistrés. Ce périmètre est structurant et actuellement absent du système ; il nécessite une Design Review dédiée avant toute implémentation.
+* **Source :** Bureau d'études externe — retenu 2026-07-22
+* **Impact sur les autres modules :** Réservations, Séjours, Facturation, Comptabilité, Reporting.
+* **Niveau de criticité :** Critique.
+
 ---
 
 ## 2. Réservations
@@ -85,6 +92,20 @@ Ce document constitue le référentiel unique et officiel des règles métier (B
 * **Description :** Le widget de réservation directe externe (Phase 5) doit communiquer via un ensemble d'endpoints découplés et soumis à un **Rate Limiting** strict pour prévenir le scraping ou les attaques par déni de service (DDoS).
 * **Source :** Décision technique
 * **Impact sur les autres modules :** Aucun.
+* **Niveau de criticité :** Moyenne.
+
+### BR-RES-005 : Statut "Option" et Expiration Automatique
+* **Module concerné :** Réservations
+* **Description :** Une réservation non garantie par acompte ou empreinte bancaire peut être créée au statut `OPTION` plutôt que `CONFIRMEE`. Si elle n'est ni garantie ni confirmée avant une échéance paramétrable (ex. 48h), le système doit automatiquement la faire basculer vers `ANNULEE` et libérer l'inventaire correspondant.
+* **Source :** Bureau d'études externe — retenu 2026-07-22
+* **Impact sur les autres modules :** Chambres (disponibilité), Reporting.
+* **Niveau de criticité :** Moyenne.
+
+### BR-RES-006 : Politique d'Annulation et Barème de Pénalités
+* **Module concerné :** Réservations, Facturation
+* **Description :** Chaque réservation doit être rattachée à une politique d'annulation (`PolitiqueAnnulation` : flexible, modérée, non-remboursable) définissant un barème de pénalité selon le délai entre la date d'annulation et la date d'arrivée prévue. Une annulation hors délai franc doit générer une ligne de folio de pénalité conforme à la politique applicable.
+* **Source :** Bureau d'études externe — retenu 2026-07-22
+* **Impact sur les autres modules :** Facturation.
 * **Niveau de criticité :** Moyenne.
 
 ---
@@ -161,6 +182,27 @@ Ce document constitue le référentiel unique et officiel des règles métier (B
 * **Impact sur les autres modules :** Facturation.
 * **Niveau de criticité :** Haute.
 
+### BR-CLI-005 : Validité de la Pièce d'Identité au Check-in
+* **Module concerné :** Clients, Séjours
+* **Description :** Lorsqu'une date d'expiration est renseignée sur la pièce d'identité (CNIE ou Passeport) d'un client, le check-in doit être bloqué si cette date est antérieure ou égale à la date d'exploitation du jour. Le blocage peut être outrepassé par un rôle habilité (Directeur), avec motif obligatoire consigné en audit.
+* **Source :** Bureau d'études externe — retenu 2026-07-22
+* **Impact sur les autres modules :** Séjours, Audit.
+* **Niveau de criticité :** Moyenne.
+
+### BR-CLI-006 : Mentions Légales Obligatoires pour Facturation Entreprise
+* **Module concerné :** Clients (Sociétés), Facturation
+* **Description :** Toute facture émise au nom d'une société partenaire (`Company`) doit obligatoirement afficher ses identifiants légaux marocains : ICE, Registre de Commerce (RC), Identifiant Fiscal (IF), et le cas échéant la Patente. La création ou modification d'une fiche `Company` destinée à la facturation doit exiger ces champs.
+* **Source :** Bureau d'études externe — retenu 2026-07-22
+* **Impact sur les autres modules :** Facturation.
+* **Niveau de criticité :** Haute.
+
+### BR-CLI-007 : Anonymisation après Péremption Légale
+* **Module concerné :** Clients, Audit
+* **Description :** Conformément à la loi marocaine 09-08 relative à la protection des données à caractère personnel, une fiche client (`Guest`) sans activité (aucun séjour, réservation ni facture) depuis une durée réglementaire (référence indicative : 3 ans, à confirmer juridiquement) doit faire l'objet d'une anonymisation programmée des données nominatives (nom, pièce d'identité, coordonnées), en conservant uniquement les agrégats nécessaires à la comptabilité déjà clôturée.
+* **Source :** Bureau d'études externe — retenu 2026-07-22 (durée à confirmer)
+* **Impact sur les autres modules :** Audit, Comptabilité.
+* **Niveau de criticité :** Haute.
+
 ---
 
 ## 5. Chambres (Rooms)
@@ -200,6 +242,13 @@ Ce document constitue le référentiel unique et officiel des règles métier (B
 * **Impact sur les autres modules :** Audit.
 * **Niveau de criticité :** Haute.
 
+### BR-CHA-005 : Distinction Statistique Hors-Service (OOO) vs Hors-Stock (OOS)
+* **Module concerné :** Chambres, Maintenance, Reporting
+* **Description :** Le statut `EN_MAINTENANCE` doit être qualifié par une sous-catégorie distinguant une indisponibilité mineure et temporaire (Out-of-Order, incluse dans le dénominateur du taux d'occupation) d'une indisponibilité lourde et prolongée (Out-of-Service, exclue du dénominateur). Cette distinction conditionne l'exactitude des indicateurs de taux d'occupation et de RevPAR (BR-REP-002).
+* **Source :** Bureau d'études externe — retenu 2026-07-22
+* **Impact sur les autres modules :** Reporting.
+* **Niveau de criticité :** Moyenne.
+
 ---
 
 ## 6. Housekeeping (Ménage)
@@ -233,6 +282,13 @@ Ce document constitue le référentiel unique et officiel des règles métier (B
 * **Description :** L'interface de l'équipier de ménage doit être simplifiée, responsive (mobile/tablette) et afficher uniquement la liste des chambres affectées avec la possibilité exclusive de lancer (`EN_COURS`) ou déclarer fini (`TERMINEE`) le nettoyage. Aucun accès aux données de facturation, clients, réservations ou finances n'est toléré pour ce rôle.
 * **Source :** Cahier des charges
 * **Impact sur les autres modules :** Sécurité.
+* **Niveau de criticité :** Haute.
+
+### BR-HK-005 : Détection d'Écart Chambre (Room Discrepancy)
+* **Module concerné :** Housekeeping, Séjours
+* **Description :** Le système doit permettre à un équipier ou à la Gouvernante de signaler un écart entre le statut théorique d'une chambre (tel qu'enregistré par la réception) et son constat physique (ex. chambre déclarée `LIBRE_PROPRE` mais trouvée occupée, ou l'inverse). Ce signalement doit générer une alerte immédiate et une entrée d'audit, sans modifier automatiquement le statut officiel de la chambre.
+* **Source :** Bureau d'études externe — retenu 2026-07-22
+* **Impact sur les autres modules :** Séjours, Audit.
 * **Niveau de criticité :** Haute.
 
 ---
@@ -270,6 +326,20 @@ Ce document constitue le référentiel unique et officiel des règles métier (B
 * **Source :** Cahier des charges
 * **Impact sur les autres modules :** Audit.
 * **Niveau de criticité :** Haute.
+
+### BR-FAC-005 : Acomptes et Registre de Dépôts (Deposit Ledger)
+* **Module concerné :** Facturation, Paiements
+* **Description :** Un acompte encaissé avant l'arrivée d'un client doit être enregistré dans un registre de dépôts (`Deposit`) distinct du folio de séjour, qui n'existe pas encore à ce stade. Au check-in, le dépôt doit être automatiquement transféré et imputé comme ligne créditrice (`PAIEMENT`) sur le Folio principal nouvellement créé.
+* **Source :** Bureau d'études externe — retenu 2026-07-22
+* **Impact sur les autres modules :** Paiements, Séjours.
+* **Niveau de criticité :** Moyenne.
+
+### BR-FAC-006 : Caution Physique de Séjour
+* **Module concerné :** Facturation, Séjours
+* **Description :** Une caution (espèces ou chèque) perçue à l'arrivée peut être enregistrée sur le séjour indépendamment du folio d'hébergement. Sa restitution doit être conditionnée à l'absence de dégradation constatée, et sa retenue partielle ou totale doit générer une ligne de folio `EXTRA` motivée avant le check-out.
+* **Source :** Bureau d'études externe — retenu 2026-07-22
+* **Impact sur les autres modules :** Paiements, Housekeeping.
+* **Niveau de criticité :** Moyenne.
 
 ---
 
