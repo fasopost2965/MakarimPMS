@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -21,6 +22,7 @@ import { ParametersService } from '../parameters/parameters.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationDto } from './dto/update-reservation.dto';
 import { CheckAvailabilityDto } from './dto/check-availability.dto';
+import { CheckRoomAvailabilityDto } from './dto/check-room-availability.dto';
 import { CancelReservationDto } from './dto/cancel-reservation.dto';
 import { NoShowReservationDto } from './dto/no-show-reservation.dto';
 import { getNightsBetween } from './utils/nights';
@@ -295,6 +297,58 @@ export class ReservationsService {
         !occupiedIds.has(room.id) &&
         (dto.roomTypeId === undefined || room.roomTypeId === dto.roomTypeId),
     );
+  }
+
+  // F8 — pré-vérification pour le drag-and-drop du planning : indique si
+  // UNE chambre précise est libre sur une période donnée, sans effectuer le
+  // déplacement (update() reste le seul point d'écriture réel — même
+  // contrainte unique RoomNight(roomId, date) en dernier recours si une
+  // course s'est glissée entre ce précheck et le PATCH effectif, comme pour
+  // toute vérification de disponibilité de ce module). excludeReservationId
+  // exclut les propres nuits de la réservation déplacée (sinon un
+  // redimensionnement ou un déplacement vers les mêmes dates serait à tort
+  // signalé en conflit avec lui-même) — jamais les nuits liées à un Stay
+  // (client déjà en place, ne peut jamais être délogé par un glisser-
+  // déposer). motifIndisponibilite reste informatif seulement : mêmes
+  // restrictions tarifaires (B5) que create()/update(), mais un échec ici
+  // ne bloque rien côté serveur, c'est update() qui reste autoritaire.
+  async checkRoomAvailability(dto: CheckRoomAvailabilityDto) {
+    this.assertDateRangeValid(dto.dateArrivee, dto.dateDepart);
+    const nights = getNightsBetween(dto.dateArrivee, dto.dateDepart);
+
+    const room = await this.roomsService.findByIdOrThrow(dto.roomId);
+
+    const conflits = await this.prisma.roomNight.findMany({
+      where: {
+        roomId: dto.roomId,
+        date: { in: nights },
+        ...(dto.excludeReservationId !== undefined
+          ? { reservationId: { not: dto.excludeReservationId } }
+          : {}),
+      },
+      select: { date: true },
+    });
+
+    let motifIndisponibilite: string | undefined;
+    if (conflits.length === 0) {
+      try {
+        await this.assertRateRestrictionsSatisfied(
+          this.prisma,
+          room.roomTypeId,
+          new Date(dto.dateArrivee),
+          nights,
+        );
+      } catch (error) {
+        motifIndisponibilite =
+          error instanceof HttpException ? error.message : undefined;
+      }
+    }
+
+    return {
+      disponible: conflits.length === 0 && !motifIndisponibilite,
+      datesConflit: conflits.map((n) => n.date.toISOString().slice(0, 10)),
+      motifIndisponibilite,
+    };
   }
 
   async findOne(id: number) {

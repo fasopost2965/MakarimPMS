@@ -18,6 +18,7 @@ import { ReservationsService } from './reservations.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationDto } from './dto/update-reservation.dto';
 import { CheckAvailabilityDto } from './dto/check-availability.dto';
+import { CheckRoomAvailabilityDto } from './dto/check-room-availability.dto';
 import { CancelReservationDto } from './dto/cancel-reservation.dto';
 import { NoShowReservationDto } from './dto/no-show-reservation.dto';
 
@@ -41,6 +42,20 @@ export class ReservationsController {
   @Get('disponibilites')
   checkAvailability(@Query() dto: CheckAvailabilityDto) {
     return this.reservationsService.checkAvailability(dto);
+  }
+
+  // F8 — pré-vérification par chambre précise pour le drag-and-drop du
+  // planning (griser une case cible invalide avant le drop) — purement
+  // consultatif, update() (PATCH ci-dessous) reste le seul point d'écriture
+  // et l'arbitre final en cas de course résiduelle.
+  @RequirePermission('reservations', 'read')
+  @ApiOperation({
+    summary:
+      "Pré-vérifie la disponibilité d'une chambre précise sur une période (drag-and-drop planning), sans effectuer de déplacement",
+  })
+  @Get('availability')
+  checkRoomAvailability(@Query() dto: CheckRoomAvailabilityDto) {
+    return this.reservationsService.checkRoomAvailability(dto);
   }
 
   @RequirePermission('reservations', 'write')
