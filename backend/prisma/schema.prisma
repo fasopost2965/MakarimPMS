@@ -191,10 +191,16 @@ model Guest {
   email         String?
   categorie     CategorieClient    @default(STANDARD)
   preferences   String?
+  // F7 — opt-out simple (pas de granularité par type d'évènement en v1) :
+  // false désactive tout envoi (confirmation, rappel J-1, post-séjour) pour
+  // ce client. Défaut true = comportement actuel inchangé pour les clients
+  // existants.
+  consentementNotifications Boolean @default(true)
   reservations  Reservation[]
   stays         Stay[]
   categoryLogs  GuestCategoryLog[]
   policeRecords PoliceRecord[]
+  notificationLogs NotificationLog[]
   createdAt     DateTime           @default(now())
   // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
   deletedAt     DateTime?
@@ -280,6 +286,7 @@ model Reservation {
   nights           RoomNight[]
   stay             Stay?
   deposits         ReservationDeposit[]
+  notificationLogs NotificationLog[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   // Soft delete (ADR-005 §3.1) — toujours null pour l'instant, aucun code
@@ -905,6 +912,81 @@ model StockMovement {
 }
 
 // ------------------------------------------------------------------
+// F7 — Notifications (CRM & Marketing, canal email en v1)
+// ------------------------------------------------------------------
+
+enum EvenementNotification {
+  RESERVATION_CONFIRMEE
+  RAPPEL_J_MOINS_1
+  POST_SEJOUR
+}
+
+// Un seul canal aujourd'hui (v1 email-only, recommandation feuille de
+// route) — enum plutôt que chaîne libre (contrairement à
+// TaxRateConfig.type) : un canal engage un fournisseur/une intégration
+// technique réelle (SMTP ici), pas une simple donnée de configuration
+// créable depuis l'UI. Additif et non destructif d'ajouter SMS/WHATSAPP
+// plus tard.
+enum CanalNotification {
+  EMAIL
+}
+
+enum StatutNotification {
+  EN_ATTENTE
+  ENVOYE
+  ECHEC
+  // Consentement refusé ou destinataire manquant (ex. Guest.email vide) —
+  // distinct d'ECHEC (tentative réelle ratée côté fournisseur SMTP) pour ne
+  // jamais confondre un opt-out avec une panne technique dans les logs.
+  IGNORE
+}
+
+// Contenu éditable sans déploiement (motif ≥10 caractères, audité — même
+// discipline que ParametersService.createSeasonRate). Une ligne par
+// (évènement, canal).
+model NotificationTemplate {
+  id        Int                    @id @default(autoincrement())
+  evenement EvenementNotification
+  canal     CanalNotification
+  sujet     String?
+  corps     String                 @db.Text
+  actif     Boolean                @default(true)
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+
+  @@unique([evenement, canal])
+}
+
+// Trace d'envoi append-only (jamais d'update/delete exposé) — sert à la
+// fois de journal de livraison et de preuve de consentement respecté au
+// moment de l'envoi (destinataire figé, pas une relecture de Guest.email
+// qui peut changer après coup).
+model NotificationLog {
+  id            Int                    @id @default(autoincrement())
+  guestId       Int
+  // onDelete: Cascade — même précédent que RoomNight.reservation/stay : en
+  // production Guest/Reservation ne sont jamais supprimés physiquement
+  // (soft delete, ADR-005), donc cette cascade ne se déclenche jamais côté
+  // application réelle. Elle sert uniquement à ce que les tests e2e
+  // puissent continuer à faire un hard delete de leurs fixtures Guest/
+  // Reservation en cleanup sans devoir connaître ce log, généré comme
+  // effet de bord de reservation.confirmee/checkout.effectue.
+  guest         Guest                  @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  reservationId Int?
+  reservation   Reservation?           @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  evenement     EvenementNotification
+  canal         CanalNotification
+  destinataire  String
+  statut        StatutNotification     @default(EN_ATTENTE)
+  erreur        String?
+  envoyeAt      DateTime?
+  createdAt     DateTime               @default(now())
+
+  @@index([guestId])
+  @@index([reservationId])
+}
+
+// ------------------------------------------------------------------
 // Audit & Sécurité (ADR-005, audit de conformité architecture gelée)
 // ------------------------------------------------------------------
 
@@ -925,6 +1007,7 @@ enum AuditEntity {
   Folio
   CancellationPolicy
   RateRestriction
+  NotificationTemplate
 }
 
 enum AuditAction {
@@ -953,6 +1036,8 @@ enum AuditAction {
   CREATE_RATE_RESTRICTION
   UPDATE_RATE_RESTRICTION
   DELETE_RATE_RESTRICTION
+  CREATE_NOTIFICATION_TEMPLATE
+  UPDATE_NOTIFICATION_TEMPLATE
 }
 
 // Registre d'audit transverse (ADR-005 §3.2). Append-only : aucune méthode

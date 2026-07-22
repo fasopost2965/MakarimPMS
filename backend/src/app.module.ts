@@ -24,6 +24,7 @@ import { HrModule } from './modules/hr/hr.module';
 import { StockModule } from './modules/stock/stock.module';
 import { ReportingModule } from './modules/reporting/reporting.module';
 import { PoliceModule } from './modules/police/police.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 
@@ -87,6 +88,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     StockModule,
     ReportingModule,
     PoliceModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [

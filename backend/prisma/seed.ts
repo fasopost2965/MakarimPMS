@@ -32,6 +32,8 @@ async function main() {
   await prisma.roomNight.deleteMany();
   await prisma.policeRecord.deleteMany();
   await prisma.stay.deleteMany();
+  await prisma.notificationLog.deleteMany();
+  await prisma.notificationTemplate.deleteMany();
   await prisma.reservation.deleteMany();
   await prisma.cancellationPolicy.deleteMany();
   await prisma.guestCategoryLog.deleteMany();
@@ -265,6 +267,37 @@ async function main() {
     });
   }
 
+  // Templates de notification par défaut (F7, canal email). Placeholders
+  // {{cle}} substitués par NotificationsService.notify() — voir
+  // notifications/notifications.module.ts pour la liste des clés
+  // disponibles par évènement.
+  const notificationTemplates = [
+    {
+      evenement: 'RESERVATION_CONFIRMEE' as const,
+      canal: 'EMAIL' as const,
+      sujet: 'Confirmation de votre réservation — Hôtel Makarim',
+      corps:
+        'Bonjour {{prenom}} {{nom}},\n\nVotre réservation est confirmée pour la chambre {{chambre}}, du {{dateArrivee}} au {{dateDepart}}.\n\nNous avons hâte de vous accueillir.\n\nHôtel Makarim',
+    },
+    {
+      evenement: 'RAPPEL_J_MOINS_1' as const,
+      canal: 'EMAIL' as const,
+      sujet: 'Votre arrivée demain — Hôtel Makarim',
+      corps:
+        'Bonjour {{prenom}} {{nom}},\n\nPetit rappel : votre arrivée à l\'Hôtel Makarim est prévue demain {{dateArrivee}}, chambre {{chambre}}.\n\nÀ très bientôt.\n\nHôtel Makarim',
+    },
+    {
+      evenement: 'POST_SEJOUR' as const,
+      canal: 'EMAIL' as const,
+      sujet: 'Merci de votre séjour — Hôtel Makarim',
+      corps:
+        'Bonjour {{prenom}} {{nom}},\n\nMerci d\'avoir séjourné avec nous jusqu\'au {{dateDepart}} (chambre {{chambre}}). Nous espérons vous revoir bientôt.\n\nHôtel Makarim',
+    },
+  ];
+  for (const template of notificationTemplates) {
+    await prisma.notificationTemplate.create({ data: template });
+  }
+
   // Barème CNSS/AMO marocain (BR-RH-001, module hr 5.11). Table posée par le
   // module parameters, activée au Sprint 11. Taux salariaux exacts du cahier
   // des charges (SPRINT_11.md §4 : brut 8500 MAD ➔ retenue CNSS 268.80 MAD,
@@ -352,6 +385,7 @@ async function main() {
     'rh',
     'stock',
     'reporting',
+    'notifications',
   ] as const;
   const ALL_ACTIONS = ['read', 'write', 'delete', 'export'] as const;
 
@@ -409,6 +443,11 @@ async function main() {
         // un tarif, mais ne modifie jamais un taux/l'identité de l'hôtel
         // (parameters:write réservé à l'Administrateur).
         'parameters:read',
+        // notifications:read seul (F7) — la Réception consulte le journal
+        // d'envoi (email de confirmation bien parti ?) mais ne modifie
+        // jamais le contenu des templates (notifications:write réservé à
+        // l'Administrateur, même logique que parameters:write).
+        'notifications:read',
       ],
     },
     {
@@ -554,7 +593,7 @@ async function main() {
   }
 
   console.log(
-    `Seed OK : ${roomTypesData.length} types de chambre, ${seasonRatesData.length} tarifs saisonniers, ${totalRooms} chambres, ${taxRates.length} taux de taxe, ${cancellationPolicies.length} politiques d'annulation, ${cnssRates.length} barèmes CNSS/AMO, ${stockItems.length} articles de stock, ${rolesData.length} rôles, ${usersData.length} utilisateurs de dev (mot de passe commun : ${DEV_PASSWORD}).`,
+    `Seed OK : ${roomTypesData.length} types de chambre, ${seasonRatesData.length} tarifs saisonniers, ${totalRooms} chambres, ${taxRates.length} taux de taxe, ${cancellationPolicies.length} politiques d'annulation, ${notificationTemplates.length} templates de notification, ${cnssRates.length} barèmes CNSS/AMO, ${stockItems.length} articles de stock, ${rolesData.length} rôles, ${usersData.length} utilisateurs de dev (mot de passe commun : ${DEV_PASSWORD}).`,
   );
 }
 

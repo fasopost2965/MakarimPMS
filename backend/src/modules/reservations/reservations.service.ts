@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   AuditAction,
   AuditEntity,
@@ -30,12 +31,17 @@ import {
   findMinStayViolation,
   StopSaleViolation,
 } from './utils/rate-restrictions';
+import { ReservationConfirmeeEvent } from './events/reservation-confirmee.event';
 
 const RESERVATION_INCLUDE = {
   guest: true,
   room: { include: { roomType: true } },
   cancellationPolicy: true,
 } as const;
+
+type ReservationWithIncludes = Prisma.ReservationGetPayload<{
+  include: typeof RESERVATION_INCLUDE;
+}>;
 
 @Injectable()
 export class ReservationsService {
@@ -45,6 +51,7 @@ export class ReservationsService {
     private readonly auditService: AuditService,
     private readonly roomsService: RoomsService,
     private readonly parametersService: ParametersService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   private assertDateRangeValid(dateArrivee: string, dateDepart: string) {
@@ -146,8 +153,9 @@ export class ReservationsService {
     this.assertDateRangeValid(dto.dateArrivee, dto.dateDepart);
     const nights = getNightsBetween(dto.dateArrivee, dto.dateDepart);
 
+    let reservation: ReservationWithIncludes;
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      reservation = await this.prisma.$transaction(async (tx) => {
         const room = await this.roomsService.findByIdOrThrow(dto.roomId, tx);
 
         await this.assertRateRestrictionsSatisfied(
@@ -169,7 +177,7 @@ export class ReservationsService {
           formule,
         );
 
-        const reservation = await tx.reservation.create({
+        const created = await tx.reservation.create({
           data: {
             canal: dto.canal,
             guestId: guest.id,
@@ -192,15 +200,33 @@ export class ReservationsService {
           data: nights.map((date) => ({
             roomId: dto.roomId,
             date,
-            reservationId: reservation.id,
+            reservationId: created.id,
           })),
         });
 
-        return reservation;
+        return created;
       });
     } catch (error) {
       throw this.translateConflict(error);
     }
+
+    // F7 — émis après commit (jamais depuis l'intérieur de la transaction :
+    // un rollback ne doit jamais avoir déjà déclenché un email de
+    // confirmation). `emitAsync` (pas `emit`) : un `emit` fire-and-forget
+    // laisse le listener notifications (écriture NotificationLog) continuer
+    // à s'exécuter après le retour de cette méthode, ce qui peut le faire
+    // courir après la suppression de la réservation par un appelant rapide
+    // (constaté en e2e : violation de contrainte FK reservationId quand le
+    // test nettoie la réservation avant que le listener asynchrone n'ait
+    // fini) — même règle que StayService.checkout() au final, pas
+    // seulement pour la cohérence de la réponse mais pour éviter cette
+    // classe de race condition.
+    await this.eventEmitter.emitAsync(
+      'reservation.confirmee',
+      new ReservationConfirmeeEvent(reservation.id),
+    );
+
+    return reservation;
   }
 
   async findAll(params?: {
@@ -519,6 +545,28 @@ export class ReservationsService {
         statut: StatutReservation.CONFIRMEE,
         dateArrivee: { gte: range.today, lt: range.tomorrow },
       },
+    });
+  }
+
+  // F7 — façade en lecture seule pour le cron de rappel J-1 (notifications) :
+  // toutes les réservations confirmées dont l'arrivée tombe dans la journée
+  // de `date` (bornes [00:00, 00:00 du lendemain[, même convention que
+  // getTodayRange). Contrairement à findConfirmedArrivingToday ci-dessus
+  // (une chambre précise, usage housekeeping), celle-ci renvoie toutes les
+  // arrivées du jour avec le client inclus — nécessaire pour construire
+  // l'email de rappel (nom, email).
+  async findConfirmedArrivingOn(date: Date) {
+    const debut = new Date(
+      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+    );
+    const finExclusive = new Date(debut.getTime() + 24 * 60 * 60 * 1000);
+
+    return this.prisma.reservation.findMany({
+      where: {
+        statut: StatutReservation.CONFIRMEE,
+        dateArrivee: { gte: debut, lt: finExclusive },
+      },
+      include: RESERVATION_INCLUDE,
     });
   }
 

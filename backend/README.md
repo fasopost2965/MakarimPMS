@@ -50,6 +50,11 @@ $ cp .env.example .env
   module `reporting` (via `docker compose up -d redis`, port hôte 6380).
   Sans Redis disponible, l'application ne démarre pas (`BullModule.forRoot`
   échoue à se connecter).
+- `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` /
+  `SMTP_FROM` — envoi des emails du module `notifications` (F7 :
+  confirmation de réservation, rappel J-1, post-séjour). Toutes optionnelles
+  — sans `SMTP_HOST`, `MailerService` journalise l'email au lieu de l'envoyer
+  (aucun serveur SMTP requis en dev/CI).
 
 Puis applique les migrations et le seed de démonstration :
 
