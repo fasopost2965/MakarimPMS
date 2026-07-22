@@ -18,6 +18,20 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      # Port hôte 6380 : un service Redis natif peut déjà occuper 6379.
+      - '6380:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   backend:
     build:
       context: ./backend
@@ -29,10 +43,15 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-me}
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     ports:
       - '3000:3000'
     depends_on:
       mysql:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   frontend:
@@ -47,3 +66,4 @@ services:
 
 volumes:
   mysql_data:
+  redis_data:
