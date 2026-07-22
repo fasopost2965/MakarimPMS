@@ -68,6 +68,13 @@ $ cp .env.example .env
   (F9, `POST /mobile/housekeeping/login`). Optionnelle, défaut `8h`. Même
   secret `JWT_ACCESS_SECRET` que le login desktop — pas de secret parallèle
   à générer.
+- `CHANNEL_WEBHOOK_SECRET` — secret partagé protégeant les webhooks entrants
+  du module `channel-manager` (F10, `POST /channel-manager/:canal/
+  reservations|cancellations`, routes publiques puisqu'un OTA n'a pas de
+  compte utilisateur PMS). Header attendu : `X-Channel-Webhook-Secret`.
+  **Obligatoire** — sans elle, `ChannelWebhookGuard` refuse tout appel
+  (fail closed, contrairement à SMTP/Twilio qui se dégradent en simple
+  journalisation).
 
 Puis applique les migrations et le seed de démonstration :
 

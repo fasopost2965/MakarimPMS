@@ -16,10 +16,15 @@ generator client {
 // 5.4 — Réservations
 // ------------------------------------------------------------------
 
+// BOOKING_COM posé dès une itération antérieure mais jamais câblé — F10
+// (module channel-manager) l'active pour la première fois et ajoute
+// EXPEDIA/AIRBNB, extension additive et non destructive.
 enum CanalReservation {
   WALK_IN
   DIRECT
   BOOKING_COM
+  EXPEDIA
+  AIRBNB
 }
 
 enum StatutReservation {
@@ -92,6 +97,7 @@ model RoomType {
   rooms       Room[]
   seasonRates SeasonRate[]
   rateRestrictions RateRestriction[]
+  channelRoomTypeMappings ChannelRoomTypeMapping[]
 }
 
 // Grille tarifaire saisonnière (cahier des charges §5.1/§5.4) — configurable
@@ -288,6 +294,7 @@ model Reservation {
   deposits         ReservationDeposit[]
   notificationLogs NotificationLog[]
   selfCheckinToken SelfCheckinToken?
+  channelImport    ChannelReservationImport?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   // Soft delete (ADR-005 §3.1) — toujours null pour l'instant, aucun code
@@ -1050,6 +1057,7 @@ enum AuditEntity {
   CancellationPolicy
   RateRestriction
   NotificationTemplate
+  ChannelRoomTypeMapping
 }
 
 enum AuditAction {
@@ -1080,6 +1088,46 @@ enum AuditAction {
   DELETE_RATE_RESTRICTION
   CREATE_NOTIFICATION_TEMPLATE
   UPDATE_NOTIFICATION_TEMPLATE
+  CREATE_CHANNEL_ROOM_TYPE_MAPPING
+  DELETE_CHANNEL_ROOM_TYPE_MAPPING
+}
+
+// ------------------------------------------------------------------
+// F10 — Channel Manager / OTA Sync
+// ------------------------------------------------------------------
+
+// Configuration admin (parameters:write, même famille que SeasonRate/
+// TaxRateConfig) : résout le code de type de chambre externe d'une OTA
+// (ex. "STD-1" côté Booking.com) vers notre RoomType interne, avant tout
+// import de réservation. Sans mapping configuré pour un (canal,
+// externalRoomTypeId), l'import est rejeté explicitement plutôt que de
+// deviner un type de chambre au hasard.
+model ChannelRoomTypeMapping {
+  id                 Int              @id @default(autoincrement())
+  canal              CanalReservation
+  externalRoomTypeId String
+  roomTypeId         Int
+  roomType           RoomType         @relation(fields: [roomTypeId], references: [id])
+  createdAt          DateTime         @default(now())
+
+  @@unique([canal, externalRoomTypeId])
+}
+
+// Idempotence d'import (même pattern que Payment.idempotencyKey,
+// docs/modules/payments.md) : un webhook OTA rejoué (retry après timeout,
+// livraison dupliquée) avec le même (canal, otaReservationId) ne doit
+// jamais créer une deuxième Reservation — voir
+// ChannelManagerService.importReservation. reservationId est unique (une
+// seule ligne d'import par réservation créée).
+model ChannelReservationImport {
+  id               Int              @id @default(autoincrement())
+  canal            CanalReservation
+  otaReservationId String
+  reservationId    Int              @unique
+  reservation      Reservation      @relation(fields: [reservationId], references: [id])
+  createdAt        DateTime         @default(now())
+
+  @@unique([canal, otaReservationId])
 }
 
 // Registre d'audit transverse (ADR-005 §3.2). Append-only : aucune méthode

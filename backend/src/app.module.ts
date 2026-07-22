@@ -28,6 +28,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { SelfCheckinModule } from './modules/self-checkin/self-checkin.module';
 import { BookingEngineModule } from './modules/booking-engine/booking-engine.module';
 import { DocumentOcrModule } from './modules/document-ocr/document-ocr.module';
+import { ChannelManagerModule } from './modules/channel-manager/channel-manager.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 
@@ -95,6 +96,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     SelfCheckinModule,
     BookingEngineModule,
     DocumentOcrModule,
+    ChannelManagerModule,
   ],
   controllers: [AppController],
   providers: [
