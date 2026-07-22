@@ -30,9 +30,7 @@ COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
 
 EXPOSE 3000
 
-# TODO: pointer sur /api/health une fois le module core (5.1/5.2) livré
-# (voir docs/plan-execution-claude-code.md §7.2 et skill deploiement-vps).
 HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=5 \
-  CMD wget -qO- http://127.0.0.1:3000/api || exit 1
+  CMD wget -qO- http://127.0.0.1:3000/api/health || exit 1
 
 CMD ["node", "dist/main"]
