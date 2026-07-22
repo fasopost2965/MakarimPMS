@@ -39,6 +39,12 @@ export class CreateReservationDto {
   @IsEnum(FormuleHebergement)
   formule?: FormuleHebergement;
 
+  // BR-RES-006 — optionnelle : une réservation sans politique rattachée
+  // n'est jamais pénalisée en cas d'annulation/no-show.
+  @IsOptional()
+  @IsInt()
+  cancellationPolicyId?: number;
+
   @IsOptional()
   @IsInt()
   guestId?: number;

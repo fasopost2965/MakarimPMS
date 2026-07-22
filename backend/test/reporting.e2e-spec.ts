@@ -196,7 +196,9 @@ describe('Reporting — ventilation fiscale et rapport de police (e2e)', () => {
         where: { folioId, type: 'TAXE_SEJOUR' },
       });
       const ttcAttendu =
-        montantHebergement * 1.1 + 100 * 1.2 + ligneTaxeSejour.montant.toNumber();
+        montantHebergement * 1.1 +
+        100 * 1.2 +
+        ligneTaxeSejour.montant.toNumber();
       expect(Number(invoiceBody.montantTotal)).toBeCloseTo(ttcAttendu, 2);
     });
   });

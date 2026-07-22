@@ -29,6 +29,34 @@ enum StatutReservation {
   TRANSFORMEE_EN_SEJOUR
 }
 
+enum TypePolitiqueAnnulation {
+  FLEXIBLE
+  MODEREE
+  NON_REMBOURSABLE
+}
+
+// BR-RES-006 — barème de pénalité selon le délai entre l'annulation et la
+// date d'arrivée prévue. Propriété du module reservations (pas parameters :
+// à la différence de TaxRateConfig/SeasonRate, consommés par plusieurs
+// modules, une politique d'annulation ne concerne que le cycle de vie de la
+// réservation — même logique de propriété que Company dans guests).
+model CancellationPolicy {
+  id                            Int                      @id @default(autoincrement())
+  nom                           String                   @unique
+  type                          TypePolitiqueAnnulation
+  // Annulation gratuite si dateArrivee - maintenant >= delaiFrancHeures.
+  delaiFrancHeures              Int
+  // Pourcentage de Reservation.prixTotalFinal retenu si l'annulation
+  // intervient hors délai franc.
+  pourcentagePenaliteAnnulation Decimal                  @db.Decimal(5, 2)
+  // Pourcentage retenu en cas de non-présentation (généralement plus élevé,
+  // souvent 100 — aucun délai franc ne s'applique au no-show).
+  pourcentagePenaliteNoShow     Decimal                  @db.Decimal(5, 2)
+  actif                         Boolean                  @default(true)
+  createdAt                     DateTime                 @default(now())
+  reservations                  Reservation[]
+}
+
 enum StatutChambre {
   LIBRE_PROPRE
   RESERVEE
@@ -212,6 +240,16 @@ model Reservation {
   // Priorité 3 — intégrée au calcul de prixTotalCalcule/prixTotalFinal
   // (ReservationsService.calculatePrixTotal) dès la création.
   formule          FormuleHebergement @default(BED_AND_BREAKFAST)
+  // BR-RES-006 — politique d'annulation rattachée à la réservation
+  // (optionnelle : une réservation sans politique n'est jamais pénalisée).
+  cancellationPolicyId Int?
+  cancellationPolicy   CancellationPolicy? @relation(fields: [cancellationPolicyId], references: [id])
+  // Montant de pénalité réellement appliqué, figé au moment de
+  // l'annulation/no-show (ReservationsService.remove/markNoShow) — jamais
+  // recalculé après coup si le barème de la politique change ensuite (même
+  // principe que prixTotalCalcule/prixTotalFinal : on gèle ce qui a été
+  // décidé, pas une valeur dérivée à la volée).
+  montantPenalite      Decimal?            @db.Decimal(10, 2)
   nights           RoomNight[]
   stay             Stay?
   deposits         ReservationDeposit[]
@@ -858,6 +896,7 @@ enum AuditEntity {
   POLICE_RECORD
   RESERVATION_DEPOSIT
   Folio
+  CancellationPolicy
 }
 
 enum AuditAction {
@@ -880,6 +919,9 @@ enum AuditAction {
   IMPUTE_DEPOSIT
   REFUND_DEPOSIT
   EXCLUDE_FOLIO_TAX
+  CREATE_CANCELLATION_POLICY
+  UPDATE_CANCELLATION_POLICY
+  MARK_NO_SHOW
 }
 
 // Registre d'audit transverse (ADR-005 §3.2). Append-only : aucune méthode

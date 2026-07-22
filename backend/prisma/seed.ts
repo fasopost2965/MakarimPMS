@@ -33,6 +33,7 @@ async function main() {
   await prisma.policeRecord.deleteMany();
   await prisma.stay.deleteMany();
   await prisma.reservation.deleteMany();
+  await prisma.cancellationPolicy.deleteMany();
   await prisma.guestCategoryLog.deleteMany();
   await prisma.guest.deleteMany();
   await prisma.companyContact.deleteMany();
@@ -217,6 +218,48 @@ async function main() {
         actif: rate.actif,
         collectePourTresor: rate.collectePourTresor,
         applicableParDefaut: rate.applicableParDefaut,
+      },
+    });
+  }
+
+  // Politiques d'annulation (BR-RES-006). Barèmes standards de l'industrie
+  // hôtelière — délai franc croissant avec la souplesse de la politique,
+  // no-show toujours pénalisé à 100% quelle que soit la politique.
+  const cancellationPolicies = [
+    {
+      nom: 'Flexible',
+      type: 'FLEXIBLE' as const,
+      delaiFrancHeures: 24,
+      pourcentagePenaliteAnnulation: 50,
+      pourcentagePenaliteNoShow: 100,
+    },
+    {
+      nom: 'Modérée',
+      type: 'MODEREE' as const,
+      delaiFrancHeures: 72,
+      pourcentagePenaliteAnnulation: 50,
+      pourcentagePenaliteNoShow: 100,
+    },
+    {
+      nom: 'Non remboursable',
+      type: 'NON_REMBOURSABLE' as const,
+      delaiFrancHeures: 0,
+      pourcentagePenaliteAnnulation: 100,
+      pourcentagePenaliteNoShow: 100,
+    },
+  ];
+  for (const policy of cancellationPolicies) {
+    await prisma.cancellationPolicy.create({
+      data: {
+        nom: policy.nom,
+        type: policy.type,
+        delaiFrancHeures: policy.delaiFrancHeures,
+        pourcentagePenaliteAnnulation: new Prisma.Decimal(
+          policy.pourcentagePenaliteAnnulation,
+        ),
+        pourcentagePenaliteNoShow: new Prisma.Decimal(
+          policy.pourcentagePenaliteNoShow,
+        ),
       },
     });
   }
@@ -510,7 +553,7 @@ async function main() {
   }
 
   console.log(
-    `Seed OK : ${roomTypesData.length} types de chambre, ${seasonRatesData.length} tarifs saisonniers, ${totalRooms} chambres, ${taxRates.length} taux de taxe, ${cnssRates.length} barèmes CNSS/AMO, ${stockItems.length} articles de stock, ${rolesData.length} rôles, ${usersData.length} utilisateurs de dev (mot de passe commun : ${DEV_PASSWORD}).`,
+    `Seed OK : ${roomTypesData.length} types de chambre, ${seasonRatesData.length} tarifs saisonniers, ${totalRooms} chambres, ${taxRates.length} taux de taxe, ${cancellationPolicies.length} politiques d'annulation, ${cnssRates.length} barèmes CNSS/AMO, ${stockItems.length} articles de stock, ${rolesData.length} rôles, ${usersData.length} utilisateurs de dev (mot de passe commun : ${DEV_PASSWORD}).`,
   );
 }
 

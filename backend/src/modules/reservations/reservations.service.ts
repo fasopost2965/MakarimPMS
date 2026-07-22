@@ -21,12 +21,15 @@ import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationDto } from './dto/update-reservation.dto';
 import { CheckAvailabilityDto } from './dto/check-availability.dto';
 import { CancelReservationDto } from './dto/cancel-reservation.dto';
+import { NoShowReservationDto } from './dto/no-show-reservation.dto';
 import { getNightsBetween } from './utils/nights';
 import { calculateFormuleTotal, calculateNightlyTotal } from './utils/pricing';
+import { computeCancellationPenalty } from './utils/cancellation-penalty';
 
 const RESERVATION_INCLUDE = {
   guest: true,
   room: { include: { roomType: true } },
+  cancellationPolicy: true,
 } as const;
 
 @Injectable()
@@ -125,6 +128,7 @@ export class ReservationsService {
             dateDepart: new Date(dto.dateDepart),
             sourceBrute: dto.sourceBrute,
             formule,
+            cancellationPolicyId: dto.cancellationPolicyId,
             // À la création, prixTotalFinal suit toujours prixTotalCalcule
             // (pas d'ajustement manuel possible avant que la réservation
             // existe — voir update()).
@@ -214,6 +218,20 @@ export class ReservationsService {
   async update(id: number, dto: UpdateReservationDto, userId?: number) {
     const existing = await this.findOne(id);
 
+    // Chemin d'écriture unique pour ANNULEE/NO_SHOW (BR-RES-006) : seuls
+    // remove() et markNoShow() calculent la pénalité et journalisent
+    // l'action correcte — un PATCH générique ne doit jamais pouvoir les
+    // court-circuiter (CLAUDE.md, "un seul chemin d'écriture par champ
+    // sensible").
+    if (
+      dto.statut === StatutReservation.ANNULEE ||
+      dto.statut === StatutReservation.NO_SHOW
+    ) {
+      throw new BadRequestException(
+        `Utilisez DELETE /reservations/${id} (annulation) ou POST /reservations/${id}/no-show pour ce changement de statut — jamais ce PATCH générique.`,
+      );
+    }
+
     const dateArrivee = dto.dateArrivee ?? existing.dateArrivee.toISOString();
     const dateDepart = dto.dateDepart ?? existing.dateDepart.toISOString();
     const roomId = dto.roomId ?? existing.roomId;
@@ -290,6 +308,7 @@ export class ReservationsService {
             dateDepart: dto.dateDepart ? new Date(dto.dateDepart) : undefined,
             statut: dto.statut,
             sourceBrute: dto.sourceBrute,
+            cancellationPolicyId: dto.cancellationPolicyId,
             prixTotalCalcule,
             prixTotalFinal,
             ajustementManuel: manualOverride ? true : undefined,
@@ -326,6 +345,24 @@ export class ReservationsService {
       );
     }
 
+    // BR-RES-006 : pénalité calculée et figée ici (jamais recalculée après
+    // coup) — voir schema.prisma, commentaire Reservation.montantPenalite.
+    // Écart documenté (CLAUDE.md) : la règle mentionne une "ligne de folio
+    // de pénalité", mais une réservation annulée n'a jamais de Stay/Folio
+    // (ADR-002 : un Folio appartient toujours à un Stay, et une réservation
+    // déjà TRANSFORMEE_EN_SEJOUR ne peut plus être annulée ici, voir
+    // ci-dessus). Le montant est donc enregistré sur Reservation.montantPenalite
+    // — son recouvrement (retenue sur acompte via /rembourser, ou
+    // facturation manuelle) reste une décision humaine de la réception/
+    // comptabilité, hors périmètre de cette écriture.
+    const montantPenalite = computeCancellationPenalty(
+      existing.cancellationPolicy,
+      existing.prixTotalFinal,
+      existing.dateArrivee,
+      new Date(),
+      false,
+    );
+
     return this.prisma.$transaction(async (tx) => {
       await tx.roomNight.deleteMany({ where: { reservationId: id } });
 
@@ -335,13 +372,73 @@ export class ReservationsService {
         targetEntity: AuditEntity.Reservation,
         targetId: id,
         oldValue: { statut: existing.statut },
-        newValue: { statut: StatutReservation.ANNULEE },
+        newValue: {
+          statut: StatutReservation.ANNULEE,
+          montantPenalite: montantPenalite.toString(),
+        },
         motif: dto.motif,
       });
 
       return tx.reservation.update({
         where: { id },
-        data: { statut: StatutReservation.ANNULEE },
+        data: {
+          statut: StatutReservation.ANNULEE,
+          montantPenalite,
+        },
+        include: RESERVATION_INCLUDE,
+      });
+    });
+  }
+
+  // Non-présentation (BR-RES-002/BR-RES-006) : statut CONFIRMEE uniquement
+  // (une réservation déjà transformée en séjour a un client bien présent, et
+  // ANNULEE/NO_SHOW sont des états terminaux — même garde que remove()).
+  // Toujours déclenché manuellement par la réception ici (aucune
+  // infrastructure de cron dans ce projet, CLAUDE.md — pas de bascule
+  // automatique à l'heure limite).
+  async markNoShow(id: number, dto: NoShowReservationDto, userId?: number) {
+    const existing = await this.findOne(id);
+    if (existing.statut === StatutReservation.TRANSFORMEE_EN_SEJOUR) {
+      throw new ConflictException(
+        'Cette réservation a déjà été transformée en séjour — un client présent ne peut pas être marqué non-présentation.',
+      );
+    }
+    if (existing.statut !== StatutReservation.CONFIRMEE) {
+      throw new ConflictException(
+        `Cette réservation ne peut pas être marquée non-présentation (statut actuel : ${existing.statut}).`,
+      );
+    }
+
+    const montantPenalite = computeCancellationPenalty(
+      existing.cancellationPolicy,
+      existing.prixTotalFinal,
+      existing.dateArrivee,
+      new Date(),
+      true,
+    );
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.roomNight.deleteMany({ where: { reservationId: id } });
+
+      await this.auditService.writeLog(tx, {
+        userId,
+        action: AuditAction.MARK_NO_SHOW,
+        targetEntity: AuditEntity.Reservation,
+        targetId: id,
+        oldValue: { statut: existing.statut },
+        newValue: {
+          statut: StatutReservation.NO_SHOW,
+          montantPenalite: montantPenalite.toString(),
+        },
+        motif: dto.motif,
+      });
+
+      return tx.reservation.update({
+        where: { id },
+        data: {
+          statut: StatutReservation.NO_SHOW,
+          montantPenalite,
+        },
         include: RESERVATION_INCLUDE,
       });
     });

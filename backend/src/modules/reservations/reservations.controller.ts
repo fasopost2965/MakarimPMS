@@ -19,6 +19,7 @@ import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationDto } from './dto/update-reservation.dto';
 import { CheckAvailabilityDto } from './dto/check-availability.dto';
 import { CancelReservationDto } from './dto/cancel-reservation.dto';
+import { NoShowReservationDto } from './dto/no-show-reservation.dto';
 
 @ApiTags('reservations')
 @ApiBearerAuth()
@@ -91,5 +92,19 @@ export class ReservationsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.reservationsService.remove(id, dto, user.sub);
+  }
+
+  @RequirePermission('reservations', 'delete')
+  @ApiOperation({
+    summary:
+      'Marque une réservation non-présentation / no-show (motif obligatoire, calcule la pénalité BR-RES-006)',
+  })
+  @Post(':id/no-show')
+  markNoShow(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: NoShowReservationDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.reservationsService.markNoShow(id, dto, user.sub);
   }
 }
