@@ -194,6 +194,7 @@ model Reservation {
   motifAjustement  String?
   nights           RoomNight[]
   stay             Stay?
+  deposits         ReservationDeposit[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   // Soft delete (ADR-005 §3.1) — toujours null pour l'instant, aucun code
@@ -202,6 +203,37 @@ model Reservation {
   deletedAt        DateTime?
 
   @@index([deletedAt])
+}
+
+enum StatutAcompte {
+  EN_ATTENTE
+  ENCAISSE
+  IMPUTE
+  REMBOURSE
+}
+
+// Acompte versé à la réservation, avant même l'existence d'un séjour/folio
+// (client direct ou Booking.com). Imputé automatiquement au folio principal
+// lors du check-in (StayService.checkinFromReservation) via
+// BillingService.creditFolioLine — jamais d'écriture FolioLine directe ici,
+// même chemin canonique que PaymentsService.createPayment (docs/modules/payments.md §10).
+model ReservationDeposit {
+  id              Int           @id @default(autoincrement())
+  reservationId   Int
+  reservation     Reservation   @relation(fields: [reservationId], references: [id])
+  montant         Decimal       @db.Decimal(10, 2)
+  moyen           MoyenPaiement
+  statut          StatutAcompte @default(ENCAISSE)
+  idempotencyKey  String        @unique
+  // Renseigné au moment de l'imputation (check-in) — jamais avant.
+  imputeAuFolioId Int?
+  imputeAuFolio   Folio?        @relation(fields: [imputeAuFolioId], references: [id])
+  createdAt       DateTime      @default(now())
+  // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
+  deletedAt       DateTime?
+
+  @@index([deletedAt])
+  @@index([reservationId])
 }
 
 // Une ligne par nuit occupée (roomId, date). La contrainte unique ci-dessous
@@ -315,14 +347,15 @@ enum TypeLigneFolio {
 // transferts de lignes et génération de factures — jamais en contournement
 // de ce modèle (règle 5).
 model Folio {
-  id        Int         @id @default(autoincrement())
+  id        Int                  @id @default(autoincrement())
   stayId    Int
-  stay      Stay        @relation(fields: [stayId], references: [id])
+  stay      Stay                 @relation(fields: [stayId], references: [id])
   libelle   String
   lignes    FolioLine[]
   invoices  Invoice[]
   payments  Payment[]
-  createdAt DateTime    @default(now())
+  deposits  ReservationDeposit[]
+  createdAt DateTime             @default(now())
 }
 
 model FolioLine {
@@ -740,6 +773,7 @@ enum AuditEntity {
   TimeShift
   PaySlip
   POLICE_RECORD
+  RESERVATION_DEPOSIT
 }
 
 enum AuditAction {
@@ -757,6 +791,9 @@ enum AuditAction {
   AUTO_CLOSE_TIME_SHIFT
   VALIDATE_PAYSLIP
   CREATE_POLICE_RECORD
+  CREATE_DEPOSIT
+  IMPUTE_DEPOSIT
+  REFUND_DEPOSIT
 }
 
 // Registre d'audit transverse (ADR-005 §3.2). Append-only : aucune méthode

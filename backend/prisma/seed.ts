@@ -23,11 +23,13 @@ async function main() {
   await prisma.role.deleteMany();
   await prisma.hotelConfig.deleteMany();
   await prisma.payment.deleteMany();
+  await prisma.reservationDeposit.deleteMany();
   await prisma.creditNote.deleteMany();
   await prisma.invoice.deleteMany();
   await prisma.folioLine.deleteMany();
   await prisma.folio.deleteMany();
   await prisma.roomNight.deleteMany();
+  await prisma.policeRecord.deleteMany();
   await prisma.stay.deleteMany();
   await prisma.reservation.deleteMany();
   await prisma.guestCategoryLog.deleteMany();
@@ -288,6 +290,12 @@ async function main() {
   // seul le module guests l'utilise (blacklister/débloquer un client).
   permissions['guests:blacklist'] = await prisma.permission.create({
     data: { module: 'guests', action: 'blacklist' },
+  });
+  // Idem pour le remboursement d'acompte (Priorité 2, "admin seulement") :
+  // payments:write couvre l'encaissement quotidien (Réception/Comptable),
+  // payments:refund est une action distincte réservée à l'Administrateur.
+  permissions['payments:refund'] = await prisma.permission.create({
+    data: { module: 'payments', action: 'refund' },
   });
 
   const rolesData: Array<{

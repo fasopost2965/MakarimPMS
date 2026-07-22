@@ -7,6 +7,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   Prisma,
+  StatutAcompte,
   StatutChambre,
   StatutReservation,
   StatutSejour,
@@ -18,6 +19,8 @@ import { getNightsBetween } from '../reservations/utils/nights';
 import { calculateNightlyTotal } from '../reservations/utils/pricing';
 import { RoomsService } from '../rooms/rooms.service';
 import { GuestsService } from '../guests/guests.service';
+import { BillingService } from '../billing/billing.service';
+import { AuditService } from '../audit/audit.service';
 import { WalkinDto } from './dto/walkin.dto';
 import { computeSoldeDu } from './utils/solde';
 import { CheckoutEffectueEvent } from './events/checkout-effectue.event';
@@ -42,6 +45,8 @@ export class StayService {
     private readonly prisma: PrismaService,
     private readonly roomsService: RoomsService,
     private readonly guestsService: GuestsService,
+    private readonly billingService: BillingService,
+    private readonly auditService: AuditService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -99,12 +104,16 @@ export class StayService {
         // La ligne HEBERGEMENT reprend toujours prixTotalFinal tel quel —
         // jamais un recalcul indépendant (CLAUDE.md règle 3, voir aussi
         // reservations.service.ts).
-        await this.createFolioPrincipal(
+        const folio = await this.createFolioPrincipal(
           tx,
           stay.id,
           reservation.prixTotalFinal,
           nights.length,
         );
+        // Priorité 2 (acomptes) : un walk-in n'a jamais de réservation
+        // préalable donc jamais d'acompte à imputer — cet appel n'existe
+        // que sur ce chemin-ci, jamais dans checkinWalkIn.
+        await this.imputerAcomptes(tx, reservation.id, folio.id, userId);
 
         const created = await tx.stay.findUniqueOrThrow({
           where: { id: stay.id },
@@ -219,6 +228,51 @@ export class StayService {
         montant: montantHebergement,
       },
     });
+    return folio;
+  }
+
+  // Priorité 2 (acomptes réservation) : impute au folio principal tout
+  // ReservationDeposit ENCAISSE de cette réservation, jamais EN_ATTENTE
+  // (argent pas encore réellement perçu) ni déjà IMPUTE/REMBOURSE. Toujours
+  // via BillingService.creditFolioLine — jamais d'écriture FolioLine directe
+  // ici (chemin d'écriture canonique unique, même règle que PaymentsService).
+  private async imputerAcomptes(
+    tx: Prisma.TransactionClient,
+    reservationId: number,
+    folioId: number,
+    userId?: number,
+  ) {
+    const deposits = await tx.reservationDeposit.findMany({
+      where: {
+        reservationId,
+        statut: StatutAcompte.ENCAISSE,
+        deletedAt: null,
+      },
+    });
+
+    for (const deposit of deposits) {
+      await this.billingService.creditFolioLine(
+        folioId,
+        deposit.montant,
+        `Acompte réservation — ${deposit.moyen}`,
+        tx,
+      );
+
+      const updated = await tx.reservationDeposit.update({
+        where: { id: deposit.id },
+        data: { statut: StatutAcompte.IMPUTE, imputeAuFolioId: folioId },
+      });
+
+      await this.auditService.writeLog(tx, {
+        userId,
+        action: 'IMPUTE_DEPOSIT',
+        targetEntity: 'RESERVATION_DEPOSIT',
+        targetId: deposit.id,
+        oldValue: { statut: deposit.statut },
+        newValue: { statut: updated.statut, imputeAuFolioId: folioId },
+        motif: `Imputation automatique de l'acompte au folio principal lors du check-in (réservation ${reservationId}).`,
+      });
+    }
   }
 
   async findEnCours() {
