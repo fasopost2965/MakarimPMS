@@ -21,6 +21,7 @@ Voici la structure complète du répertoire `/docs/` :
 ├── ARCHITECTURE_AUDIT.md               # Audit de cohérence globale de l'architecture
 ├── SPRINT_BACKLOG.md                   # Plan de sprints & jalons de livraison
 ├── DEPENDENCY_GRAPH.md                 # Graphe de dépendances & opportunités de parallélisation
+├── HAIP_BENCHMARK.md                   # [Non normatif] Notes d'inspiration issues de HAIP
 │
 ├── ADR_INDEX.md                        # Registre et index des décisions d'architecture
 ├── ADR-001-Stay-Centric-Architecture.md# Centralité opérationnelle sur le Séjour (Stay)
@@ -97,3 +98,17 @@ Pour assimiler parfaitement l'architecture du système, il est vivement conseill
 *   **Idempotence :** Toutes les écritures de caisse ou d'encaissement de règlements financiers exigent un en-tête `Idempotency-Key` unique pour neutraliser le risque de double facturation.
 *   **Sécurité Systématique :** Toutes les routes d'API d'écriture ou d'accès à des données sensibles doivent être protégées côté serveur par le garde de sécurité RBAC (`PermissionsGuard`) basé sur les permissions fines de la matrice `RBAC_MATRIX.md`.
 *   **Attributs HTML Unique :** Tous les éléments d'interface utilisateur (boutons, formulaires, cartes) doivent posséder un attribut `id` unique écrit au format kebab-case pour garantir la testabilité E2E.
+
+---
+
+## 📚 4. Annexes & Notes de Recherche (Non Normatif)
+
+Contrairement aux sections 1 à 3, les documents listés ici **n'engagent pas la conformité du
+code**. Ce sont des notes de veille/benchmark à consulter pour inspiration au moment de
+spécifier un module — toute idée retenue doit ensuite être formalisée dans un ADR ou un
+`modules/*.md` avant d'être implémentée.
+
+*   **`HAIP_BENCHMARK.md`** — Idées de conception (paiements, comptabilité, housekeeping,
+    RBAC, UI, sécurité) tirées de l'analyse du code source de HAIP, un PMS open source
+    concurrent évalué puis écarté comme socle (voir section "Décision" du document). À
+    consulter avant les Sprints 11-13 et lors des passes de polish UI.
