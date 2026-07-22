@@ -287,6 +287,7 @@ model Reservation {
   stay             Stay?
   deposits         ReservationDeposit[]
   notificationLogs NotificationLog[]
+  selfCheckinToken SelfCheckinToken?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   // Soft delete (ADR-005 §3.1) — toujours null pour l'instant, aucun code
@@ -919,6 +920,9 @@ enum EvenementNotification {
   RESERVATION_CONFIRMEE
   RAPPEL_J_MOINS_1
   POST_SEJOUR
+  // F6 — envoi du lien de self check-in (réutilise le canal email de F7,
+  // voir SelfCheckinService.generateLink).
+  SELF_CHECKIN_LIEN
 }
 
 // Un seul canal aujourd'hui (v1 email-only, recommandation feuille de
@@ -984,6 +988,43 @@ model NotificationLog {
 
   @@index([guestId])
   @@index([reservationId])
+}
+
+// ------------------------------------------------------------------
+// F6 — Self check-in (lien mobile pré-arrivée)
+// ------------------------------------------------------------------
+
+// Un seul lien actif par réservation (reservationId @unique) — regénérer
+// (SelfCheckinService.generateLink) réécrit token/expiresAt/usedAt sur la
+// même ligne plutôt que d'en créer une seconde, pour qu'un ancien lien
+// envoyé par email cesse aussitôt de fonctionner. onDelete: Cascade — même
+// précédent que NotificationLog/RoomNight (ne se déclenche jamais en
+// production, Reservation n'étant jamais supprimée physiquement).
+//
+// Les champs numeroPiece..villeDestination sont volontairement "en
+// attente" : PoliceRecord exige un stayId (schema, @unique) qui n'existe
+// pas encore avant le check-in réel (StayService.checkinFromReservation).
+// Ce n'est donc jamais écrit directement dans PoliceRecord ici — la
+// réception les relit via SelfCheckinService.findPending() au moment du
+// check-in pour pré-remplir POST /police/:stayId, même logique d'écart
+// documenté que Reservation.montantPenalite (BR-RES-006, CLAUDE.md).
+// `nationalite` n'est pas dupliqué ici : c'est déjà un champ Guest, écrit
+// directement dessus par SelfCheckinService.submit().
+model SelfCheckinToken {
+  id                Int         @id @default(autoincrement())
+  reservationId     Int         @unique
+  reservation       Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  token             String      @unique
+  expiresAt         DateTime
+  usedAt            DateTime?
+  numeroPiece       String?
+  typePiece         TypePiece?
+  dateNaissance     DateTime?   @db.Date
+  paysProvenance    String?
+  villeProvenance   String?
+  paysDestination   String?
+  villeDestination  String?
+  createdAt         DateTime    @default(now())
 }
 
 // ------------------------------------------------------------------

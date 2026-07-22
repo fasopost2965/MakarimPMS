@@ -293,6 +293,13 @@ async function main() {
       corps:
         'Bonjour {{prenom}} {{nom}},\n\nMerci d\'avoir séjourné avec nous jusqu\'au {{dateDepart}} (chambre {{chambre}}). Nous espérons vous revoir bientôt.\n\nHôtel Makarim',
     },
+    {
+      evenement: 'SELF_CHECKIN_LIEN' as const,
+      canal: 'EMAIL' as const,
+      sujet: 'Préparez votre arrivée — Hôtel Makarim',
+      corps:
+        'Bonjour {{prenom}} {{nom}},\n\nVotre arrivée est prévue le {{dateArrivee}}, chambre {{chambre}}. Gagnez du temps à votre arrivée en complétant vos informations dès maintenant :\n{{lien}}\n\nÀ très bientôt.\n\nHôtel Makarim',
+    },
   ];
   for (const template of notificationTemplates) {
     await prisma.notificationTemplate.create({ data: template });

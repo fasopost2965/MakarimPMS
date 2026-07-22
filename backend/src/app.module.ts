@@ -25,6 +25,7 @@ import { StockModule } from './modules/stock/stock.module';
 import { ReportingModule } from './modules/reporting/reporting.module';
 import { PoliceModule } from './modules/police/police.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { SelfCheckinModule } from './modules/self-checkin/self-checkin.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 
@@ -89,6 +90,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     ReportingModule,
     PoliceModule,
     NotificationsModule,
+    SelfCheckinModule,
   ],
   controllers: [AppController],
   providers: [
