@@ -75,6 +75,7 @@ model Room {
   stays              Stay[]
   statusLogs         RoomStatusLog[]
   maintenanceTickets MaintenanceTicket[]
+  stockMovements     StockMovement[]
   // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
   deletedAt          DateTime?
 
@@ -446,6 +447,11 @@ model User {
   loginLogs      LoginLog[]
   passwordResets PasswordResetToken[]
   auditLogs      AuditLog[]
+  // Profil RH (module 5.11) : au plus un Employee par compte de connexion.
+  employee       Employee?
+  // Bulletins de paie validés par cet utilisateur en tant que responsable RH.
+  paySlipsValidated PaySlip[]
+  stockMovements    StockMovement[]
   // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
   deletedAt      DateTime?
 
@@ -506,6 +512,181 @@ model MaintenanceTicket {
 }
 
 // ------------------------------------------------------------------
+// 5.11 — Ressources Humaines (Pointage inviolable & Paie CNSS/AMO)
+// Voir ADR-007 (machine à états TimeShift/TimeShiftSegment, INV-TSH-001 à
+// 005) et BUSINESS_RULES.md (BR-RH-001, BR-RH-003 à BR-RH-005). BR-RH-002
+// (échange de shifts entre employés) est hors périmètre de ce sprint —
+// reporté (voir docs/execution/SPRINT_11.md, section "Reporté").
+// ------------------------------------------------------------------
+
+// Employee est distinct de User (docs/DATA_DICTIONARY.md Gap #1,
+// docs/RBAC_MATRIX.md "fiches individuelles de contrat") : User porte
+// uniquement l'identité de connexion/rôle, Employee porte les données RH
+// (salaire, matricule CNSS, date d'embauche) — jamais mélangées sur le même
+// modèle.
+model Employee {
+  id             Int         @id @default(autoincrement())
+  userId         Int         @unique
+  user           User        @relation(fields: [userId], references: [id])
+  matriculeCnss  String?
+  salaireBase    Decimal     @db.Decimal(10, 2)
+  dateEmbauche   DateTime
+  actif          Boolean     @default(true)
+  timeShifts     TimeShift[]
+  paySlips       PaySlip[]
+  createdAt      DateTime    @default(now())
+  // Soft delete (ADR-005 §3.1) — RBAC_MATRIX.md interdit la suppression
+  // physique d'un dossier employé ("Interdit de supprimer définitivement un
+  // dossier de paie ou d'employé").
+  deletedAt      DateTime?
+
+  @@index([deletedAt])
+}
+
+// NON_DEMARRE (ADR-007 §3.2) n'est jamais persisté comme valeur de colonne
+// TimeShift.statut : c'est l'ABSENCE de TimeShift ACTIF/EN_PAUSE pour un
+// employé qui représente cet état. Conservé dans l'enum pour rester fidèle
+// au vocabulaire de l'ADR (utilisé côté API de statut courant).
+enum StatutTimeShift {
+  NON_DEMARRE
+  ACTIF
+  EN_PAUSE
+  TERMINE
+}
+
+enum TypeSegment {
+  TRAVAIL
+  PAUSE
+}
+
+// Conteneur global de la journée/session de travail d'un employé (ADR-007
+// §3.3). Un shift de nuit à cheval sur minuit (§6.2) reste une seule entité
+// TimeShift, jamais coupé automatiquement à minuit.
+model TimeShift {
+  id         Int                @id @default(autoincrement())
+  employeeId Int
+  employee   Employee           @relation(fields: [employeeId], references: [id])
+  statut     StatutTimeShift    @default(ACTIF)
+  // INV-TSH-001 : générés exclusivement par le serveur (new Date()), jamais
+  // par une valeur transmise dans le body de la requête.
+  startedAt  DateTime           @default(now())
+  endedAt    DateTime?
+  segments   TimeShiftSegment[]
+  createdAt  DateTime           @default(now())
+  // Non-suppression physique (INV-TSH-005) — invalidation logique uniquement,
+  // avec motif obligatoire porté par la ligne AuditLog associée.
+  deletedAt  DateTime?
+
+  // INV-TSH-002 : au plus un TimeShift ACTIF/EN_PAUSE par employé. Un index
+  // partiel serait idéal mais MySQL/Prisma ne le permettent pas nativement
+  // ici — l'unicité est donc garantie applicativement par AttendanceService
+  // (vérification en transaction avant insertion), voir aussi le test
+  // d'intégration dédié.
+  @@index([employeeId, statut])
+  @@index([deletedAt])
+}
+
+// Isolation par segments temporels (ADR-007 §3.3) : le cumul des heures
+// travaillées est strictement la somme des segments TRAVAIL, jamais un
+// simple delta startedAt/endedAt du TimeShift parent (qui inclurait les
+// pauses).
+model TimeShiftSegment {
+  id          Int         @id @default(autoincrement())
+  timeShiftId Int
+  timeShift   TimeShift   @relation(fields: [timeShiftId], references: [id])
+  type        TypeSegment
+  debut       DateTime    @default(now())
+  fin         DateTime?
+  deletedAt   DateTime?
+
+  @@index([timeShiftId])
+  @@index([deletedAt])
+}
+
+// Bulletin de paie mensuel (SPRINT_11.md §3.1). estValide=false tant que le
+// rôle RH n'a pas explicitement validé (PayrollController.validate) — un
+// bulletin non validé reste une simulation, jamais une pièce comptable
+// opposable (BR-AUD-001 : la validation est auditée, voir AuditAction).
+model PaySlip {
+  id            Int       @id @default(autoincrement())
+  employeeId    Int
+  employee      Employee  @relation(fields: [employeeId], references: [id])
+  mois          Int
+  annee         Int
+  salaireBase   Decimal   @db.Decimal(10, 2)
+  indemnites    Decimal   @db.Decimal(10, 2) @default(0)
+  retenueCnss   Decimal   @db.Decimal(10, 2)
+  retenueAmo    Decimal   @db.Decimal(10, 2)
+  salaireNet    Decimal   @db.Decimal(10, 2)
+  estValide     Boolean   @default(false)
+  issuedAt      DateTime  @default(now())
+  validatedById Int?
+  validatedBy   User?     @relation(fields: [validatedById], references: [id])
+  deletedAt     DateTime?
+
+  // Un seul bulletin par employé et par mois calendaire.
+  @@unique([employeeId, mois, annee])
+  @@index([deletedAt])
+}
+
+// ------------------------------------------------------------------
+// 5.12 — Stocks & Consommables (docs/modules/stock.md, SPRINT_12.md)
+// BR-STK-001 (sortie automatique à la validation de nettoyage) et
+// BR-STK-002 (alerte de seuil critique) uniquement — la valorisation CUMP
+// et l'ajustement manuel de perte/casse évoqués par stock.md ne sont
+// adossés à aucune règle numérotée de BUSINESS_RULES.md et sont hors
+// périmètre de ce sprint (voir SPRINT_12.md §6).
+// ------------------------------------------------------------------
+
+enum TypeMouvementStock {
+  ENTREE
+  SORTIE
+}
+
+model StockItem {
+  id                 Int               @id @default(autoincrement())
+  code               String            @unique
+  libelle            String
+  quantiteDisponible Int               @default(0)
+  seuilAlerte        Int
+  uniteMesure        String
+  // Marque les articles du kit d'accueil standard (savons, shampoings...)
+  // soumis au décompte automatique de BR-STK-001. Les autres articles
+  // (linge, fournitures) ne sont mouvementés que manuellement (réassort).
+  kitAccueil         Boolean           @default(false)
+  movements          StockMovement[]
+  createdAt          DateTime          @default(now())
+  deletedAt          DateTime?
+
+  @@index([deletedAt])
+}
+
+// Journal transactionnel append-only (docs/modules/stock.md §18, même
+// discipline que AuditLog) : aucune méthode de service n'expose de
+// update/delete sur cette table. userId nullable : une sortie automatique
+// déclenchée par le nettoyage n'a pas d'auteur humain direct (voir
+// StockService.decompterKitAccueil).
+model StockMovement {
+  id             Int                @id @default(autoincrement())
+  stockItemId    Int
+  stockItem      StockItem          @relation(fields: [stockItemId], references: [id])
+  typeMouvement  TypeMouvementStock
+  quantite       Int
+  motif          String
+  // Renseigné uniquement pour une ENTREE de réassort (bon de livraison /
+  // n° de commande fournisseur) — toujours null pour une SORTIE.
+  referenceFournisseur String?
+  userId         Int?
+  user           User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  roomId         Int?
+  room           Room?              @relation(fields: [roomId], references: [id])
+  createdAt      DateTime           @default(now())
+
+  @@index([stockItemId])
+  @@index([createdAt])
+}
+
+// ------------------------------------------------------------------
 // Audit & Sécurité (ADR-005, audit de conformité architecture gelée)
 // ------------------------------------------------------------------
 
@@ -519,6 +700,8 @@ enum AuditEntity {
   HotelConfig
   TaxRateConfig
   SeasonRate
+  TimeShift
+  PaySlip
 }
 
 enum AuditAction {
@@ -531,6 +714,10 @@ enum AuditAction {
   CREATE_SEASON_RATE
   UPDATE_SEASON_RATE
   DELETE_SEASON_RATE
+  ADJUST_TIME_SHIFT
+  INVALIDATE_TIME_SHIFT
+  AUTO_CLOSE_TIME_SHIFT
+  VALIDATE_PAYSLIP
 }
 
 // Registre d'audit transverse (ADR-005 §3.2). Append-only : aucune méthode

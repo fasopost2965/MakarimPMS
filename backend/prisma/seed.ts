@@ -185,6 +185,46 @@ async function main() {
     });
   }
 
+  // Barème CNSS/AMO marocain (BR-RH-001, module hr 5.11). Table posée par le
+  // module parameters, activée au Sprint 11. Taux salariaux exacts du cahier
+  // des charges (SPRINT_11.md §4 : brut 8500 MAD ➔ retenue CNSS 268.80 MAD,
+  // retenue AMO 192.10 MAD) ; taux employeur = barème CNSS national publié,
+  // exposés en lecture seule dans PayrollService pour le suivi des charges
+  // patronales, jamais soustraits du salaire net de l'employé.
+  const cnssRates = [
+    {
+      branche: 'Prestations sociales (CNSS)',
+      tauxSalarie: 4.48,
+      tauxEmployeur: 8.98,
+      plafondMensuel: 6000,
+    },
+    {
+      branche: 'AMO',
+      tauxSalarie: 2.26,
+      tauxEmployeur: 4.11,
+      plafondMensuel: null,
+    },
+  ];
+  for (const rate of cnssRates) {
+    await prisma.cnssRateConfig.create({
+      data: {
+        branche: rate.branche,
+        tauxSalarie: new Prisma.Decimal(rate.tauxSalarie),
+        tauxEmployeur: new Prisma.Decimal(rate.tauxEmployeur),
+        // Barème en vigueur "depuis toujours" du point de vue applicatif —
+        // pas la date d'exécution du seed (PayrollService.tauxActif
+        // sélectionne le taux applicable via applicableDepuis <= date de
+        // référence du bulletin ; un défaut à now() rendrait injustement
+        // introuvable tout calcul pour un mois passé).
+        applicableDepuis: new Date('2020-01-01'),
+        plafondMensuel:
+          rate.plafondMensuel != null
+            ? new Prisma.Decimal(rate.plafondMensuel)
+            : null,
+      },
+    });
+  }
+
   // Configuration légale/fiscale de l'hôtel (module core 5.1) — singleton,
   // une seule ligne, réutilisée par la facturation (en-tête de facture) et
   // l'UI (devise, format de date).
@@ -200,18 +240,13 @@ async function main() {
   });
 
   // Rôles, permissions et comptes de développement (module core 5.2/5.2.1).
-  // Modules métier existants seulement — stock/RH recevront leurs
-  // permissions quand ces modules seront construits en Phase 2 (voir
-  // CLAUDE.md règle 5 : le rôle RH existe déjà en base pour ne pas devoir
-  // migrer le schéma à ce moment-là, mais reste sans permission active —
-  // donc invisible sur la landing page tant qu'aucune permission ne lui est
-  // accordée, cf. AuthService.rolesActifs). Les rôles Maintenance (5.8) et
-  // guests (5.7, Réception en écriture/Comptable en lecture seule) sont
-  // désormais actifs. audit:read est réservé à l'Administrateur (ADR-005/
-  // audit.md §7 — "aucun rôle d'exploitation n'a d'accès de lecture sur le
-  // journal de sécurité central"), obtenu automatiquement via
-  // Object.keys(permissions) ci-dessous, jamais accordé explicitement à un
-  // autre rôle.
+  // Stock recevra ses permissions quand ce module sera construit (Sprint 12).
+  // Les rôles Maintenance (5.8), guests (5.7, Réception en écriture/Comptable
+  // en lecture seule) et RH (5.11, Sprint 11) sont désormais actifs.
+  // audit:read est réservé à l'Administrateur (ADR-005/audit.md §7 — "aucun
+  // rôle d'exploitation n'a d'accès de lecture sur le journal de sécurité
+  // central"), obtenu automatiquement via Object.keys(permissions)
+  // ci-dessous, jamais accordé explicitement à un autre rôle.
   //
   // Arbitrage d'architecture (2026-07-19, décision explicite validée) :
   // Company reste une responsabilité du module guests (pas de module/clé de
@@ -234,6 +269,9 @@ async function main() {
     'maintenance',
     'guests',
     'audit',
+    'rh',
+    'stock',
+    'reporting',
   ] as const;
   const ALL_ACTIONS = ['read', 'write', 'delete', 'export'] as const;
 
@@ -296,6 +334,13 @@ async function main() {
         'housekeeping:read',
         'housekeeping:write',
         'maintenance:read',
+        // stock:read/write (RBAC_MATRIX.md §3, Sprint 12) — seule la
+        // Gouvernante gère les consommables ménagers en plus de
+        // l'Administrateur ; ni delete ni export (RBAC_MATRIX.md l'exclut
+        // explicitement, y compris pour Maintenance malgré une mention
+        // contraire dans docs/modules/stock.md — RBAC_MATRIX.md fait foi).
+        'stock:read',
+        'stock:write',
       ],
     },
     {
@@ -317,13 +362,29 @@ async function main() {
         // exceptionnel, contrairement à billing:write pour les opérations
         // financières courantes).
         'parameters:read',
+        // reporting:read/export (Sprint 13) — RBAC_MATRIX.md n'a pas de
+        // ligne dédiée reporting/accounting ; arbitrage aligné sur billing
+        // (déjà Comptable-only) et le consensus d'accounting.md/reporting.md
+        // malgré leurs divergences par ailleurs (accès strictement réservé
+        // Administrateur + Comptable, jamais aux rôles opérationnels —
+        // rapport de police et données financières consolidées).
+        'reporting:read',
+        'reporting:export',
       ],
     },
     {
       nom: 'Maintenance',
       permissionKeys: ['maintenance:read', 'maintenance:write'],
     },
-    { nom: 'RH', permissionKeys: [] },
+    {
+      nom: 'RH',
+      // Activé au Sprint 11 (docs/RBAC_MATRIX.md §6) : lecture/écriture des
+      // fiches employé, plannings, pointages et bulletins de paie, export des
+      // relevés de cotisations CNSS/AMO. Jamais de suppression physique
+      // (rh:delete non accordé — RBAC_MATRIX.md "Interdit de supprimer
+      // définitivement un dossier de paie ou d'employé").
+      permissionKeys: ['rh:read', 'rh:write', 'rh:export'],
+    },
   ];
 
   const roles: Record<string, { id: number }> = {};
@@ -371,8 +432,43 @@ async function main() {
     });
   }
 
+  // Inventaire de départ (module stock 5.12, Sprint 12). kitAccueil=true
+  // pour les deux articles décomptés automatiquement à chaque validation de
+  // nettoyage (BR-STK-001, docs/events/EVENT_CATALOG.md §3.3 — 1 unité par
+  // occupant théorique de la chambre nettoyée). Draps : article de stock
+  // ordinaire, réassort manuel uniquement, jamais décompté automatiquement.
+  const stockItems = [
+    {
+      code: 'AMEN-SOAP-01',
+      libelle: 'Mini Savon Makarim 15g',
+      quantiteDisponible: 200,
+      seuilAlerte: 40,
+      uniteMesure: 'unité',
+      kitAccueil: true,
+    },
+    {
+      code: 'AMEN-SHMP-01',
+      libelle: 'Mini Shampoing Makarim 30ml',
+      quantiteDisponible: 200,
+      seuilAlerte: 40,
+      uniteMesure: 'unité',
+      kitAccueil: true,
+    },
+    {
+      code: 'LINGE-DRAP-01',
+      libelle: 'Drap housse 140x190',
+      quantiteDisponible: 80,
+      seuilAlerte: 15,
+      uniteMesure: 'unité',
+      kitAccueil: false,
+    },
+  ];
+  for (const item of stockItems) {
+    await prisma.stockItem.create({ data: item });
+  }
+
   console.log(
-    `Seed OK : ${roomTypesData.length} types de chambre, ${seasonRatesData.length} tarifs saisonniers, ${totalRooms} chambres, ${taxRates.length} taux de taxe, ${rolesData.length} rôles, ${usersData.length} utilisateurs de dev (mot de passe commun : ${DEV_PASSWORD}).`,
+    `Seed OK : ${roomTypesData.length} types de chambre, ${seasonRatesData.length} tarifs saisonniers, ${totalRooms} chambres, ${taxRates.length} taux de taxe, ${cnssRates.length} barèmes CNSS/AMO, ${stockItems.length} articles de stock, ${rolesData.length} rôles, ${usersData.length} utilisateurs de dev (mot de passe commun : ${DEV_PASSWORD}).`,
   );
 }
 

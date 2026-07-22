@@ -243,12 +243,10 @@ describe('Auth — JWT, rôles et permissions (e2e)', () => {
           'Gouvernante',
           'Comptable',
           'Maintenance',
+          // RH actif depuis le module 5.11 (Sprint 11) — voir seed.ts.
+          'RH',
         ]),
       );
-      // RH existe en base (seed) mais sans permission accordée tant que le
-      // module RH n'est pas construit : ne doit pas apparaître sur la
-      // landing page. Maintenance, lui, est actif depuis le module 5.8.
-      expect(noms).not.toContain('RH');
     });
   });
 });

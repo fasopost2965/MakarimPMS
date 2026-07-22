@@ -1,9 +1,16 @@
 import { ConflictException, Injectable } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { StatutChambre } from '@prisma/client';
 import { getTodayRange } from '../../common/utils/date-range';
 import { RoomsService } from '../rooms/rooms.service';
 import { ReservationsService } from '../reservations/reservations.service';
 import { StayService } from '../stay/stay.service';
+import { NettoyageValideEvent } from './events/nettoyage-valide.event';
+
+const STATUTS_A_NETTOYER: StatutChambre[] = [
+  StatutChambre.A_NETTOYER,
+  StatutChambre.EN_NETTOYAGE,
+];
 
 @Injectable()
 export class HousekeepingService {
@@ -11,6 +18,7 @@ export class HousekeepingService {
     private readonly roomsService: RoomsService,
     private readonly reservationsService: ReservationsService,
     private readonly stayService: StayService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async findAllRooms() {
@@ -35,10 +43,27 @@ export class HousekeepingService {
       );
     }
 
-    return this.roomsService.transitionRoom(id, statut, {
+    const updated = await this.roomsService.transitionRoom(id, statut, {
       motif: 'Changement manuel',
       userId,
     });
+
+    // BR-STK-001 : équivalent de la validation "CONTROLEE" côté stock (voir
+    // NettoyageValideEvent). emit() volontairement non attendu (pas
+    // emitAsync) : SPRINT_12.md §5 exige que le décompte de consommables
+    // reste isolé et ne bloque/ralentisse jamais la réponse de l'API de
+    // ménage principale, y compris en cas d'indisponibilité du module stock.
+    if (
+      statut === StatutChambre.LIBRE_PROPRE &&
+      STATUTS_A_NETTOYER.includes(room.statut)
+    ) {
+      this.eventEmitter.emit(
+        'nettoyage.valide',
+        new NettoyageValideEvent(id, updated.roomType.capacite, userId),
+      );
+    }
+
+    return updated;
   }
 
   // Rattrapage à la lecture des statuts "relatifs à aujourd'hui" (RESERVEE,
