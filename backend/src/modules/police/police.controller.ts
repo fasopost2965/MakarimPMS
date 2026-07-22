@@ -5,7 +5,9 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -42,5 +44,30 @@ export class PoliceController {
   @Get(':stayId')
   findByStay(@Param('stayId', ParseIntPipe) stayId: number) {
     return this.policeService.findByStay(stayId);
+  }
+
+  // F1 — export PDF (registre légal DGSN). Route distincte plutôt qu'un
+  // renommage de :stayId : CLAUDE.md interdit de toucher aux routes
+  // stay/checkin hors PR dédiée, ceci reste un ajout, pas un renommage.
+  @RequirePermission('checkin', 'read')
+  @ApiOperation({
+    summary: 'Génère la fiche de police au format PDF pour un séjour',
+  })
+  @Get(':stayId/pdf')
+  async generatePdf(
+    @Param('stayId', ParseIntPipe) stayId: number,
+    @Res() res: Response,
+  ) {
+    const pdf = await this.policeService.generatePdf(stayId);
+    // res.send() géré directement (pas @Res({passthrough:true})) : un Buffer
+    // retourné en passthrough est sérialisé en JSON ({"type":"Buffer",...})
+    // par le pipeline de réponse standard de Nest au lieu d'être envoyé en
+    // binaire — seul res.send() natif d'Express respecte le Content-Type.
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="fiche-police-sejour-${stayId}.pdf"`,
+    );
+    res.send(pdf);
   }
 }

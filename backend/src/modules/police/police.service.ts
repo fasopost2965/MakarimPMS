@@ -2,7 +2,9 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { StayService } from '../stay/stay.service';
+import { ParametersService } from '../parameters/parameters.service';
 import { UpsertPoliceRecordDto } from './dto/upsert-police-record.dto';
+import { buildPoliceRecordPdf } from './utils/police-record.pdf';
 
 // PoliceRecord est une table propre à ce module (pas de frontière à
 // respecter pour son écriture), mais la lecture de Stay passe exclusivement
@@ -15,6 +17,7 @@ export class PoliceService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly stayService: StayService,
+    private readonly parametersService: ParametersService,
   ) {}
 
   // Créer/mettre à jour la fiche (une seule route pour les deux, la
@@ -83,5 +86,53 @@ export class PoliceService {
       );
     }
     return record;
+  }
+
+  // F1 — export PDF du registre légal (obligation DGSN). Lecture seule,
+  // jamais d'écriture ni d'AuditLog ici (même convention que
+  // reporting/police-report.service.ts : un export n'est pas une mutation).
+  // stay/guest via StayService.findOne (façade, jamais Prisma direct sur
+  // Stay) ; hotelConfig via ParametersService.getHotelConfig (façade,
+  // jamais Prisma direct sur HotelConfig).
+  async generatePdf(stayId: number): Promise<Buffer> {
+    const [record, stay, hotelConfig] = await Promise.all([
+      this.findByStay(stayId),
+      this.stayService.findOne(stayId),
+      this.parametersService.getHotelConfig(),
+    ]);
+
+    return buildPoliceRecordPdf({
+      hotel: {
+        raisonSociale: hotelConfig.raisonSociale,
+        adresse: hotelConfig.adresse,
+        ice: hotelConfig.ice,
+        identifiantFiscal: hotelConfig.identifiantFiscal,
+        rc: hotelConfig.rc,
+        categorieEtoiles: hotelConfig.categorieEtoiles,
+      },
+      guest: {
+        nom: stay.guest.nom,
+        prenom: stay.guest.prenom,
+        telephone: stay.guest.telephone,
+        email: stay.guest.email,
+      },
+      stay: {
+        id: stay.id,
+        roomNumero: stay.room.numero,
+        roomTypeNom: stay.room.roomType.nom,
+      },
+      record: {
+        numeroPiece: record.numeroPiece,
+        typePiece: record.typePiece,
+        nationalite: record.nationalite,
+        dateNaissance: record.dateNaissance,
+        paysProvenance: record.paysProvenance,
+        villeProvenance: record.villeProvenance,
+        paysDestination: record.paysDestination,
+        villeDestination: record.villeDestination,
+        dateArrivee: record.dateArrivee,
+        dateDepart: record.dateDepart,
+      },
+    });
   }
 }
