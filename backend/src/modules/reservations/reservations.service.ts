@@ -101,6 +101,23 @@ export class ReservationsService {
     return hebergement.add(formuleTotal);
   }
 
+  // F4 — façade publique de calculatePrixTotal pour le Booking Engine
+  // (estimation de prix avant réservation, sans en créer une). `this.prisma`
+  // passe où `tx: Prisma.TransactionClient` est attendu : PrismaService
+  // étend PrismaClient, compatible structurellement (sur-ensemble des
+  // méthodes d'un TransactionClient) — même lecture seule que le reste de
+  // calculatePrixTotal, jamais besoin d'une vraie transaction ici.
+  async estimatePrixTotal(
+    roomTypeId: number,
+    dateArrivee: string,
+    dateDepart: string,
+    formule: FormuleHebergement = FormuleHebergement.BED_AND_BREAKFAST,
+  ) {
+    this.assertDateRangeValid(dateArrivee, dateDepart);
+    const nights = getNightsBetween(dateArrivee, dateDepart);
+    return this.calculatePrixTotal(this.prisma, roomTypeId, nights, formule);
+  }
+
   // B5 — restrictions tarifaires (min stay / stop sale). Chargées via le
   // module parameters (jamais de lecture Prisma directe de RateRestriction
   // — CLAUDE.md, frontières de module), traduites en HttpException ici

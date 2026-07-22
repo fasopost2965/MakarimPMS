@@ -26,6 +26,7 @@ import { ReportingModule } from './modules/reporting/reporting.module';
 import { PoliceModule } from './modules/police/police.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { SelfCheckinModule } from './modules/self-checkin/self-checkin.module';
+import { BookingEngineModule } from './modules/booking-engine/booking-engine.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 
@@ -91,6 +92,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     PoliceModule,
     NotificationsModule,
     SelfCheckinModule,
+    BookingEngineModule,
   ],
   controllers: [AppController],
   providers: [

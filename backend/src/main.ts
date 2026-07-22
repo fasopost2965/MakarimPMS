@@ -1,6 +1,8 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import type { CorsOptionsDelegate } from '@nestjs/common/interfaces/external/cors-options.interface';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import type { IncomingMessage } from 'http';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { assertStrongSecrets } from './common/config/assert-strong-secrets';
@@ -19,10 +21,28 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   app.useLogger(app.get(Logger));
   app.setGlobalPrefix('api');
-  app.enableCors({
-    origin: process.env.FRONTEND_URL,
-    credentials: true,
-  });
+  // Carve-out CORS pour les surfaces publiques (F4 Booking Engine,
+  // F6 self check-in, BR-RES-004) : elles n'utilisent ni cookies ni
+  // Authorization Bearer (jeton dans l'URL pour self-checkin, aucune
+  // authentification pour booking), donc origin réfléchie + credentials
+  // false leur est ouvert à toute origine — le reste de l'API (interne,
+  // JWT + credentials) reste strictement limité à FRONTEND_URL comme
+  // avant. Delegate (pas un objet statique) : seul moyen d'accéder au
+  // chemin de la requête pour distinguer les deux cas.
+  const PUBLIC_CORS_PREFIXES = ['/api/booking', '/api/self-checkin'];
+  const corsDelegate: CorsOptionsDelegate<IncomingMessage> = (
+    req,
+    callback,
+  ) => {
+    const isPublicRoute = PUBLIC_CORS_PREFIXES.some((prefix) =>
+      req.url?.startsWith(prefix),
+    );
+    callback(null, {
+      origin: isPublicRoute ? true : process.env.FRONTEND_URL,
+      credentials: !isPublicRoute,
+    });
+  };
+  app.enableCors(corsDelegate);
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
