@@ -7,6 +7,7 @@ import { AuditAction, AuditEntity, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { UpdateHotelConfigDto } from './dto/update-hotel-config.dto';
+import { CreateTaxRateDto } from './dto/create-tax-rate.dto';
 import { UpdateTaxRateDto } from './dto/update-tax-rate.dto';
 import { CreateSeasonRateDto } from './dto/create-season-rate.dto';
 import { UpdateSeasonRateDto } from './dto/update-season-rate.dto';
@@ -82,10 +83,58 @@ export class ParametersService {
 
   // Façade pour billing (docs/modules/billing.md — generateInvoice) :
   // jamais de lecture Prisma directe de TaxRateConfig hors de ce module.
+  // `actif: false` exclut une taxe suspendue de la marge TVA appliquée par
+  // calculateInvoiceTotal, sans effacer son historique/traçabilité.
   async getTaxRateMap(tx?: Prisma.TransactionClient) {
     const client = tx ?? this.prisma;
-    const rates = await client.taxRateConfig.findMany();
+    const rates = await client.taxRateConfig.findMany({
+      where: { actif: true },
+    });
     return new Map(rates.map((rate) => [rate.type, rate.taux]));
+  }
+
+  // Façade pour billing (generateInvoice) : les taxes à matérialiser en
+  // FolioLine à la facturation (taxe de séjour et toute taxe créée depuis
+  // /parameters/tax-rates) — distinct de getTaxRateMap ci-dessus, qui ne
+  // sert qu'à la marge TVA appliquée en pourcentage sur HEBERGEMENT/EXTRA.
+  async getApplicableTaxes(tx?: Prisma.TransactionClient) {
+    const client = tx ?? this.prisma;
+    return client.taxRateConfig.findMany({
+      where: { actif: true, applicableParDefaut: true },
+    });
+  }
+
+  async createTaxRate(dto: CreateTaxRateDto, userId?: number) {
+    return this.prisma.$transaction(async (tx) => {
+      const created = await tx.taxRateConfig.create({
+        data: {
+          type: dto.type,
+          mode: dto.mode,
+          taux: new Prisma.Decimal(dto.taux),
+          actif: dto.actif ?? true,
+          collectePourTresor: dto.collectePourTresor ?? false,
+          applicableParDefaut: dto.applicableParDefaut ?? true,
+        },
+      });
+
+      await this.auditService.writeLog(tx, {
+        userId,
+        action: AuditAction.CREATE_TAX_RATE,
+        targetEntity: AuditEntity.TaxRateConfig,
+        targetId: created.id,
+        newValue: {
+          type: dto.type,
+          mode: dto.mode,
+          taux: dto.taux,
+          actif: created.actif,
+          collectePourTresor: created.collectePourTresor,
+          applicableParDefaut: created.applicableParDefaut,
+        },
+        motif: dto.motif,
+      });
+
+      return created;
+    });
   }
 
   async updateTaxRate(id: number, dto: UpdateTaxRateDto, userId?: number) {
@@ -99,16 +148,45 @@ export class ParametersService {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.taxRateConfig.update({
         where: { id },
-        data: { taux: new Prisma.Decimal(dto.taux) },
+        data: {
+          taux: new Prisma.Decimal(dto.taux),
+          mode: dto.mode,
+          actif: dto.actif,
+          collectePourTresor: dto.collectePourTresor,
+          applicableParDefaut: dto.applicableParDefaut,
+        },
       });
+
+      const oldValue: Record<string, string | number | boolean> = {
+        taux: existing.taux.toString(),
+      };
+      const newValue: Record<string, string | number | boolean> = {
+        taux: dto.taux,
+      };
+      if (dto.mode !== undefined) {
+        oldValue.mode = existing.mode;
+        newValue.mode = dto.mode;
+      }
+      if (dto.actif !== undefined) {
+        oldValue.actif = existing.actif;
+        newValue.actif = dto.actif;
+      }
+      if (dto.collectePourTresor !== undefined) {
+        oldValue.collectePourTresor = existing.collectePourTresor;
+        newValue.collectePourTresor = dto.collectePourTresor;
+      }
+      if (dto.applicableParDefaut !== undefined) {
+        oldValue.applicableParDefaut = existing.applicableParDefaut;
+        newValue.applicableParDefaut = dto.applicableParDefaut;
+      }
 
       await this.auditService.writeLog(tx, {
         userId,
         action: AuditAction.UPDATE_TAX_RATE,
         targetEntity: AuditEntity.TaxRateConfig,
         targetId: id,
-        oldValue: { taux: existing.taux.toString() },
-        newValue: { taux: dto.taux },
+        oldValue,
+        newValue,
         motif: dto.motif,
       });
 

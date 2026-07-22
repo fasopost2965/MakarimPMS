@@ -15,6 +15,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { ParametersService } from './parameters.service';
 import { UpdateHotelConfigDto } from './dto/update-hotel-config.dto';
+import { CreateTaxRateDto } from './dto/create-tax-rate.dto';
 import { UpdateTaxRateDto } from './dto/update-tax-rate.dto';
 import { CreateSeasonRateDto } from './dto/create-season-rate.dto';
 import { UpdateSeasonRateDto } from './dto/update-season-rate.dto';
@@ -52,6 +53,19 @@ export class ParametersController {
   @Get('tax-rates')
   findTaxRates() {
     return this.parametersService.findTaxRates();
+  }
+
+  @RequirePermission('parameters', 'write')
+  @ApiOperation({
+    summary:
+      'Crée une nouvelle taxe configurable (motif obligatoire) — ex. taxe touristique régionale',
+  })
+  @Post('tax-rates')
+  createTaxRate(
+    @Body() dto: CreateTaxRateDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.parametersService.createTaxRate(dto, user.sub);
   }
 
   @RequirePermission('parameters', 'write')

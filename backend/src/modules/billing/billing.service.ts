@@ -3,12 +3,23 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, TypeLigneFolio } from '@prisma/client';
+import {
+  AuditAction,
+  AuditEntity,
+  Prisma,
+  TypeLigneFolio,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ParametersService } from '../parameters/parameters.service';
+import { AuditService } from '../audit/audit.service';
+// Utilitaire pur (aucun Prisma/DI), même précédent que
+// StayService.createFolioPrincipal — pas une façade de module à contourner.
+import { getNightsBetween } from '../reservations/utils/nights';
 import { AddFolioLineDto } from './dto/add-folio-line.dto';
+import { ExcludeFolioTaxesDto } from './dto/exclude-folio-taxes.dto';
 import {
   calculateInvoiceTotal,
+  computeTaxLineAmount,
   generateInvoiceNumber,
 } from './utils/invoice-calc';
 
@@ -17,6 +28,7 @@ export class BillingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly parametersService: ParametersService,
+    private readonly auditService: AuditService,
   ) {}
 
   // Vérifie qu'un folio existe et que son séjour est encore en cours
@@ -72,51 +84,177 @@ export class BillingService {
   // Générer une facture depuis un folio. Règle non négociable : une fois
   // émise, une facture est immuable — elle est toujours EMISE, et ne peut
   // être modifiée que par un avoir (CreditNote, module 5.13 Phase 2).
+  //
+  // Avant de calculer le total, matérialise en FolioLine chaque taxe
+  // configurable applicable (TAXE_SEJOUR et toute taxe créée depuis
+  // /parameters/tax-rates) — c'était le trou identifié dans le référentiel :
+  // TypeLigneFolio.TAXE_SEJOUR était géré partout en aval (invoice-calc,
+  // solde, ventilation fiscale) mais jamais généré en amont. La TVA
+  // (TVA_HEBERGEMENT/TVA_ANNEXE) reste appliquée en marge par
+  // calculateInvoiceTotal comme avant — elle est explicitement exclue de
+  // cette injection pour ne jamais être comptée deux fois.
   async generateInvoice(folioId: number) {
+    return this.prisma.$transaction(async (tx) => {
+      const folio = await tx.folio.findUnique({
+        where: { id: folioId },
+        include: {
+          lignes: true,
+          invoices: true,
+          taxExclusions: true,
+          // Lecture de Stay/Room/RoomType via la relation du Folio, jamais
+          // via StayModule/RoomsModule (docs/modules/billing.md §"stay" —
+          // dépendance déjà établie et documentée par assertFolioWritable
+          // ci-dessus, étendue ici aux champs nécessaires au calcul de la
+          // taxe de séjour). billing→stay n'est PAS une arête sanctionnée
+          // par docs/DEPENDENCY_GRAPH.md pour un import de module — ceci
+          // reste une lecture de relation Prisma locale à Folio, pas un
+          // import de StayModule.
+          stay: { include: { room: { include: { roomType: true } } } },
+        },
+      });
+      if (!folio) {
+        throw new NotFoundException(`Folio ${folioId} introuvable.`);
+      }
+
+      // Vérifier qu'une facture n'existe pas déjà pour ce folio (en Phase 1,
+      // un folio = une facture maximum).
+      if (folio.invoices.length > 0) {
+        throw new ConflictException(
+          `Une facture existe déjà pour le folio ${folioId}.`,
+        );
+      }
+
+      // Taxes applicables chargées via le module parameters (jamais en dur,
+      // jamais de lecture Prisma directe de TaxRateConfig hors de ce
+      // module).
+      const applicableTaxes =
+        await this.parametersService.getApplicableTaxes(tx);
+      const excludedIds = new Set(
+        folio.taxExclusions.map((e) => e.taxRateConfigId),
+      );
+      // TVA_HEBERGEMENT/TVA_ANNEXE restent une marge appliquée par
+      // calculateInvoiceTotal, jamais une FolioLine propre — voir
+      // commentaire ci-dessus.
+      const taxesToApply = applicableTaxes.filter(
+        (t) =>
+          t.type !== 'TVA_HEBERGEMENT' &&
+          t.type !== 'TVA_ANNEXE' &&
+          !excludedIds.has(t.id),
+      );
+
+      const nouvellesLignes: Prisma.FolioLineCreateManyInput[] = [];
+      if (taxesToApply.length > 0) {
+        const nights = getNightsBetween(
+          folio.stay.dateCheckin,
+          folio.stay.dateCheckoutReelle ?? folio.stay.dateCheckoutPrevue,
+        ).length;
+        // Proxy nombre d'adultes : RoomType.capacite (aucun champ dédié dans
+        // le schéma — même convention que Priorité 3 Formules
+        // d'hébergement, cf. reservations/utils/pricing.ts).
+        const nbPersonnes = folio.stay.room.roomType.capacite;
+        const sousTotalHebergementHt = folio.lignes
+          .filter((l) => l.type === TypeLigneFolio.HEBERGEMENT && !l.annulee)
+          .reduce((acc, l) => acc.add(l.montant), new Prisma.Decimal(0));
+
+        for (const tax of taxesToApply) {
+          const montant = computeTaxLineAmount(
+            tax,
+            nights,
+            nbPersonnes,
+            sousTotalHebergementHt,
+          );
+          nouvellesLignes.push({
+            folioId,
+            type: TypeLigneFolio.TAXE_SEJOUR,
+            libelle: tax.type,
+            montant,
+            tauxTva: new Prisma.Decimal(0),
+            taxRateConfigId: tax.id,
+          });
+        }
+        await tx.folioLine.createMany({ data: nouvellesLignes });
+      }
+
+      // Re-lit les lignes complètes (avec id/createdAt) si de nouvelles
+      // lignes de taxe viennent d'être créées, pour donner à
+      // calculateInvoiceTotal des FolioLine réelles plutôt que les objets
+      // d'insertion — évite aussi de dupliquer la logique de filtrage.
+      const toutesLesLignes = nouvellesLignes.length
+        ? await tx.folioLine.findMany({ where: { folioId } })
+        : folio.lignes;
+
+      // Marge TVA (HEBERGEMENT/EXTRA) chargée via le module parameters.
+      const taxRateMap = await this.parametersService.getTaxRateMap(tx);
+      const montantTotal = calculateInvoiceTotal(toutesLesLignes, taxRateMap);
+
+      // Créer la facture avec un numéro unique et immutable.
+      const invoice = await tx.invoice.create({
+        data: {
+          folioId,
+          montantTotal,
+          statut: 'EMISE',
+          numero: generateInvoiceNumber(0), // sera remplacé après la création avec l'ID réel
+        },
+      });
+
+      // Mettre à jour le numéro avec l'ID de la facture pour la séquence.
+      return tx.invoice.update({
+        where: { id: invoice.id },
+        data: { numero: generateInvoiceNumber(invoice.id) },
+      });
+    });
+  }
+
+  // Exclut (ou réintègre) des taxes applicables par défaut pour un folio
+  // donné (client exonéré) — sémantique PATCH idempotente : remplace
+  // l'ensemble complet des exclusions à chaque appel. Interdit une fois la
+  // facture émise (INV-FAC-001 : la facture ne doit jamais pouvoir changer
+  // rétroactivement suite à une exclusion tardive).
+  async excludeTaxes(
+    folioId: number,
+    dto: ExcludeFolioTaxesDto,
+    userId?: number,
+  ) {
     const folio = await this.prisma.folio.findUnique({
       where: { id: folioId },
-      include: {
-        lignes: true,
-        invoices: true,
-      },
+      include: { invoices: true, taxExclusions: true },
     });
     if (!folio) {
       throw new NotFoundException(`Folio ${folioId} introuvable.`);
     }
-
-    // Vérifier qu'une facture n'existe pas déjà pour ce folio (en Phase 1,
-    // un folio = une facture maximum).
     if (folio.invoices.length > 0) {
       throw new ConflictException(
-        `Une facture existe déjà pour le folio ${folioId}.`,
+        `Une facture existe déjà pour le folio ${folioId} — les exclusions de taxe ne sont plus modifiables.`,
       );
     }
 
-    // Taux TVA/taxe chargés via le module parameters (jamais en dur, jamais
-    // de lecture Prisma directe de TaxRateConfig — CLAUDE.md, frontières de
-    // module).
-    const taxRateMap = await this.parametersService.getTaxRateMap();
+    return this.prisma.$transaction(async (tx) => {
+      await tx.folioTaxExclusion.deleteMany({ where: { folioId } });
+      if (dto.taxeIds.length > 0) {
+        await tx.folioTaxExclusion.createMany({
+          data: dto.taxeIds.map((taxRateConfigId) => ({
+            folioId,
+            taxRateConfigId,
+            motif: dto.motif,
+            userId,
+          })),
+        });
+      }
 
-    // Calculer le montant total avec les taux actuels de TaxRateConfig.
-    const montantTotal = calculateInvoiceTotal(folio.lignes, taxRateMap);
+      await this.auditService.writeLog(tx, {
+        userId,
+        action: AuditAction.EXCLUDE_FOLIO_TAX,
+        targetEntity: AuditEntity.Folio,
+        targetId: folioId,
+        oldValue: {
+          taxeIds: folio.taxExclusions.map((e) => e.taxRateConfigId),
+        },
+        newValue: { taxeIds: dto.taxeIds },
+        motif: dto.motif,
+      });
 
-    // Créer la facture avec un numéro unique et immutable.
-    const invoice = await this.prisma.invoice.create({
-      data: {
-        folioId,
-        montantTotal,
-        statut: 'EMISE',
-        numero: generateInvoiceNumber(0), // sera remplacé après la création avec l'ID réel
-      },
+      return tx.folioTaxExclusion.findMany({ where: { folioId } });
     });
-
-    // Mettre à jour le numéro avec l'ID de la facture pour la séquence.
-    const updatedInvoice = await this.prisma.invoice.update({
-      where: { id: invoice.id },
-      data: { numero: generateInvoiceNumber(invoice.id) },
-    });
-
-    return updatedInvoice;
   }
 
   // Façade pour le module payments (docs/modules/payments.md §10 : payments

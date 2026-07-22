@@ -4,13 +4,17 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { BillingService } from './billing.service';
 import { AddFolioLineDto } from './dto/add-folio-line.dto';
+import { ExcludeFolioTaxesDto } from './dto/exclude-folio-taxes.dto';
 
 @ApiTags('billing')
 @ApiBearerAuth()
@@ -33,6 +37,20 @@ export class BillingController {
   @Post('invoices/generer')
   generateInvoice(@Query('folioId', ParseIntPipe) folioId: number) {
     return this.billingService.generateInvoice(folioId);
+  }
+
+  @RequirePermission('billing', 'write')
+  @ApiOperation({
+    summary:
+      'Exclut (ou réintègre) des taxes applicables par défaut pour un folio (motif obligatoire) — interdit une fois la facture émise',
+  })
+  @Patch('folios/:id/taxes-exclues')
+  excludeTaxes(
+    @Param('id', ParseIntPipe) folioId: number,
+    @Body() dto: ExcludeFolioTaxesDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.billingService.excludeTaxes(folioId, dto, user.sub);
   }
 
   @RequirePermission('billing', 'read')

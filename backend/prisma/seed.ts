@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient, Prisma, TaxMode } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -26,6 +26,7 @@ async function main() {
   await prisma.reservationDeposit.deleteMany();
   await prisma.creditNote.deleteMany();
   await prisma.invoice.deleteMany();
+  await prisma.folioTaxExclusion.deleteMany();
   await prisma.folioLine.deleteMany();
   await prisma.folio.deleteMany();
   await prisma.roomNight.deleteMany();
@@ -176,18 +177,46 @@ async function main() {
     }
   }
 
-  // Configuration des taux TVA et taxe de séjour (module billing 5.13).
-  // Jamais de taux codé en dur — toujours lus depuis cette table.
+  // Configuration des taux TVA et taxe de séjour (module billing 5.13,
+  // fiscalité configurable). Jamais de taux codé en dur — toujours lus
+  // depuis cette table. Valeurs réelles Hôtel Makarim (Tétouan) : TVA
+  // hébergement 10%, taxe de séjour 3 DH/nuit/adulte (montant fixe,
+  // reversé au Trésor public — collectePourTresor: true).
   const taxRates = [
-    { type: 'TVA_HEBERGEMENT', taux: 10 },
-    { type: 'TVA_ANNEXE', taux: 20 },
-    { type: 'TAXE_SEJOUR', taux: 2 },
+    {
+      type: 'TVA_HEBERGEMENT',
+      mode: TaxMode.POURCENTAGE,
+      taux: 10,
+      actif: true,
+      collectePourTresor: true,
+      applicableParDefaut: true,
+    },
+    {
+      type: 'TVA_ANNEXE',
+      mode: TaxMode.POURCENTAGE,
+      taux: 20,
+      actif: true,
+      collectePourTresor: true,
+      applicableParDefaut: true,
+    },
+    {
+      type: 'TAXE_SEJOUR',
+      mode: TaxMode.MONTANT_FIXE,
+      taux: 3,
+      actif: true,
+      collectePourTresor: true,
+      applicableParDefaut: true,
+    },
   ];
   for (const rate of taxRates) {
     await prisma.taxRateConfig.create({
       data: {
         type: rate.type,
+        mode: rate.mode,
         taux: new Prisma.Decimal(rate.taux),
+        actif: rate.actif,
+        collectePourTresor: rate.collectePourTresor,
+        applicableParDefaut: rate.applicableParDefaut,
       },
     });
   }

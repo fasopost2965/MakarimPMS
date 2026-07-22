@@ -12,6 +12,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { FinancialSummaryQueryDto } from './dto/financial-summary-query.dto';
 import { PoliceRegisterQueryDto } from './dto/police-register-query.dto';
+import { TaxesReportQueryDto } from './dto/taxes-report-query.dto';
 import { FinancialReportingService } from './financial-reporting.service';
 import { PoliceReportService } from './police-report.service';
 import { ReportingQueue } from './queues/reporting.queue';
@@ -36,6 +37,21 @@ export class ReportingController {
     return this.financialReportingService.getFinancialSummary(
       query.dateDebut,
       query.dateFin,
+    );
+  }
+
+  @RequirePermission('reporting', 'read')
+  @ApiOperation({
+    summary:
+      'Détail des taxes configurables collectées sur une plage de dates, groupé par taxe (section Trésor isolée pour la déclaration DGI)',
+  })
+  @Get('taxes')
+  taxesReport(@Query() query: TaxesReportQueryDto) {
+    return this.financialReportingService.getTaxesReport(
+      query.dateDebut,
+      query.dateFin,
+      query.taxeId,
+      query.tresorOnly,
     );
   }
 

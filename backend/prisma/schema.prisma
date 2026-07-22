@@ -372,15 +372,21 @@ enum TypeLigneFolio {
 // transferts de lignes et génération de factures — jamais en contournement
 // de ce modèle (règle 5).
 model Folio {
-  id        Int                  @id @default(autoincrement())
-  stayId    Int
-  stay      Stay                 @relation(fields: [stayId], references: [id])
-  libelle   String
-  lignes    FolioLine[]
-  invoices  Invoice[]
-  payments  Payment[]
-  deposits  ReservationDeposit[]
-  createdAt DateTime             @default(now())
+  id             Int                  @id @default(autoincrement())
+  stayId         Int
+  stay           Stay                 @relation(fields: [stayId], references: [id])
+  libelle        String
+  lignes         FolioLine[]
+  invoices       Invoice[]
+  payments       Payment[]
+  deposits       ReservationDeposit[]
+  // Taxes actives/applicables par défaut explicitement écartées de ce folio
+  // (client exonéré — entreprise, diplomate...), réglé via
+  // PATCH /folios/:id/taxes-exclues avant génération de facture. Table de
+  // jonction plutôt qu'un Int[] : MySQL/Prisma ne supporte pas les colonnes
+  // de type liste scalaire (réservé à PostgreSQL/CockroachDB).
+  taxExclusions  FolioTaxExclusion[]
+  createdAt      DateTime             @default(now())
 }
 
 model FolioLine {
@@ -394,19 +400,71 @@ model FolioLine {
   annulee         Boolean        @default(false)
   motifAnnulation String?
   createdAt       DateTime       @default(now())
+  // Traçabilité de la ligne de taxe générée automatiquement à la facturation
+  // (BillingService.generateInvoice) — null pour toute ligne non fiscale
+  // (HEBERGEMENT/EXTRA/PAIEMENT) ou pour la TVA (appliquée en marge dans
+  // calculateInvoiceTotal, jamais matérialisée en ligne propre). Permet le
+  // regroupement par taxe exact dans GET /reporting/taxes, plutôt que de se
+  // fier au seul TypeLigneFolio.TAXE_SEJOUR (trop grossier : plusieurs taxes
+  // configurables distinctes peuvent partager ce même type de ligne).
+  taxRateConfigId Int?
+  taxRateConfig   TaxRateConfig? @relation(fields: [taxRateConfigId], references: [id])
 }
 
 // ------------------------------------------------------------------
 // 5.13 — Billing (facturation, TVA, taxe de séjour, paiements)
 // ------------------------------------------------------------------
 
+enum TaxMode {
+  MONTANT_FIXE
+  POURCENTAGE
+}
+
 model TaxRateConfig {
-  id           Int      @id @default(autoincrement())
-  type         String   // "TVA_HEBERGEMENT" | "TVA_ANNEXE" | "TAXE_SEJOUR"
-  taux         Decimal  @db.Decimal(5, 2)
-  applicableA  String?  // catégorie hôtel / commune si pertinent
-  actifDepuis  DateTime @default(now())
-  createdAt    DateTime @default(now())
+  id      Int      @id @default(autoincrement())
+  type    String // "TVA_HEBERGEMENT" | "TVA_ANNEXE" | "TAXE_SEJOUR" | tout
+  // nouveau libellé créé depuis /parameters/tax-rates (ex. future taxe
+  // touristique régionale) — libre, jamais un enum : une nouvelle taxe doit
+  // pouvoir être créée depuis les paramètres sans migration de schéma.
+  // MONTANT_FIXE : `taux` est un montant MAD (ex. 3.00 DH/nuit/adulte).
+  // POURCENTAGE  : `taux` est un pourcentage (ex. 10 = 10%), comme avant.
+  mode                TaxMode  @default(POURCENTAGE)
+  taux                Decimal  @db.Decimal(5, 2)
+  applicableA         String? // catégorie hôtel / commune si pertinent
+  // false = taxe désactivée : ignorée par getTaxRateMap() (marge TVA) ET par
+  // getApplicableTaxes() (génération de ligne à la facturation) — permet de
+  // suspendre une taxe sans supprimer son historique/traçabilité.
+  actif               Boolean  @default(true)
+  // true = taxe collectée pour le compte du Trésor public (taxe de séjour,
+  // TVA...) — isolée dans sa propre section du rapport GET /reporting/taxes
+  // pour la déclaration mensuelle DGI, distincte du chiffre d'affaires propre
+  // de l'hôtel.
+  collectePourTresor  Boolean  @default(false)
+  // false = taxe optionnelle (ne génère jamais de ligne automatiquement à la
+  // facturation, doit être ajoutée manuellement via addFolioLine) — true =
+  // appliquée par défaut à chaque génération de facture, sous réserve des
+  // exclusions du folio (FolioTaxExclusion).
+  applicableParDefaut Boolean  @default(true)
+  actifDepuis         DateTime @default(now())
+  createdAt           DateTime @default(now())
+  folioLines          FolioLine[]
+  folioExclusions     FolioTaxExclusion[]
+}
+
+// Exclusion explicite d'une taxe pour un folio donné (client exonéré),
+// décidée avant génération de facture — jamais après (la facture EMISE est
+// immuable, INV-FAC-001). Une ligne = une taxe écartée pour un folio.
+model FolioTaxExclusion {
+  id              Int           @id @default(autoincrement())
+  folioId         Int
+  folio           Folio         @relation(fields: [folioId], references: [id])
+  taxRateConfigId Int
+  taxRateConfig   TaxRateConfig @relation(fields: [taxRateConfigId], references: [id])
+  motif           String
+  userId          Int?
+  createdAt       DateTime      @default(now())
+
+  @@unique([folioId, taxRateConfigId])
 }
 
 // Table posée par le module parameters (docs/modules/parameters.md, BR-RH-001)
@@ -799,6 +857,7 @@ enum AuditEntity {
   PaySlip
   POLICE_RECORD
   RESERVATION_DEPOSIT
+  Folio
 }
 
 enum AuditAction {
@@ -808,6 +867,7 @@ enum AuditAction {
   CANCEL_RESERVATION
   UPDATE_HOTEL_CONFIG
   UPDATE_TAX_RATE
+  CREATE_TAX_RATE
   CREATE_SEASON_RATE
   UPDATE_SEASON_RATE
   DELETE_SEASON_RATE
@@ -819,6 +879,7 @@ enum AuditAction {
   CREATE_DEPOSIT
   IMPUTE_DEPOSIT
   REFUND_DEPOSIT
+  EXCLUDE_FOLIO_TAX
 }
 
 // Registre d'audit transverse (ADR-005 §3.2). Append-only : aucune méthode
