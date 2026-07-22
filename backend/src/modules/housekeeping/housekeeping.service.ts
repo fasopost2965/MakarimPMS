@@ -31,7 +31,18 @@ export class HousekeepingService {
   // pouvoir être modifiée par un changement manuel — seul le check-out
   // (événement checkout.effectue, voir StayService) en sort, car c'est lui
   // qui libère aussi le verrou RoomNight sous-jacent.
-  async updateStatus(id: number, statut: StatutChambre, userId?: number) {
+  //
+  // commentaire (F9, app mobile housekeeping) : remplace le motif générique
+  // "Changement manuel" quand fourni — MobileHousekeepingController est le
+  // seul appelant à le passer aujourd'hui, mais c'est le même chemin
+  // d'écriture unique que le PATCH desktop (HousekeepingController), jamais
+  // un second point d'écriture pour Room.statut (CLAUDE.md).
+  async updateStatus(
+    id: number,
+    statut: StatutChambre,
+    userId?: number,
+    commentaire?: string,
+  ) {
     const room = await this.roomsService.findByIdOrThrow(id);
 
     if (
@@ -44,7 +55,7 @@ export class HousekeepingService {
     }
 
     const updated = await this.roomsService.transitionRoom(id, statut, {
-      motif: 'Changement manuel',
+      motif: commentaire ?? 'Changement manuel',
       userId,
     });
 

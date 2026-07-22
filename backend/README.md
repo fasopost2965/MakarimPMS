@@ -64,6 +64,10 @@ $ cp .env.example .env
   actif existe pour l'évènement — créer un `NotificationTemplate` avec
   `canal: "SMS"` ou `"WHATSAPP"` via `POST /notifications/templates` pour
   l'activer.
+- `MOBILE_JWT_EXPIRES_IN` — durée de validité du jeton mobile housekeeping
+  (F9, `POST /mobile/housekeeping/login`). Optionnelle, défaut `8h`. Même
+  secret `JWT_ACCESS_SECRET` que le login desktop — pas de secret parallèle
+  à générer.
 
 Puis applique les migrations et le seed de démonstration :
 
