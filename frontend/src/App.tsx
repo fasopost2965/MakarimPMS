@@ -8,6 +8,12 @@ import { MaintenancePage } from '@/features/maintenance/pages/MaintenancePage';
 import { GuestsPage } from '@/features/guests/pages/GuestsPage';
 import { CompaniesPage } from '@/features/companies/pages/CompaniesPage';
 import { ParametersPage } from '@/features/parameters/pages/ParametersPage';
+import { HrPage } from '@/features/hr/pages/HrPage';
+import { AttendanceWidget } from '@/features/hr/components/AttendanceWidget';
+import { LogoutGuardDialog } from '@/features/hr/components/LogoutGuardDialog';
+import { statutCourant } from '@/features/hr/api';
+import { StockPage } from '@/features/stock/pages/StockPage';
+import { ReportingPage } from '@/features/reporting/pages/ReportingPage';
 import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { ForgotPasswordPage } from '@/features/auth/pages/ForgotPasswordPage';
 import { onAuthFailure } from '@/lib/api-client';
@@ -21,7 +27,10 @@ type Tab =
   | 'maintenance'
   | 'guests'
   | 'companies'
-  | 'parameters';
+  | 'parameters'
+  | 'hr'
+  | 'stock'
+  | 'reporting';
 type AuthScreen = 'login' | 'forgot-password';
 
 // Pas de routeur pour l'instant — sera introduit avec le module core
@@ -37,6 +46,7 @@ function App() {
     () => getAccessToken() !== null,
   );
   const [authScreen, setAuthScreen] = useState<AuthScreen>('login');
+  const [logoutGuardOpen, setLogoutGuardOpen] = useState(false);
 
   useEffect(() => {
     onAuthFailure(() => {
@@ -45,10 +55,28 @@ function App() {
     });
   }, []);
 
-  function handleLogout() {
+  function doLogout() {
     clearTokens();
     setIsAuthenticated(false);
     setAuthScreen('login');
+    setLogoutGuardOpen(false);
+  }
+
+  // BR-RH-004 (ADR-007) : une déconnexion pendant un service de pointage
+  // actif est bloquée tant que l'employé n'a pas explicitement clôturé ou
+  // mis en pause son service.
+  async function handleLogout() {
+    try {
+      const statut = await statutCourant();
+      if (statut.bloqueDeconnexion) {
+        setLogoutGuardOpen(true);
+        return;
+      }
+    } catch {
+      // Pas de fiche employé associée à ce compte (ex. Administrateur) —
+      // rien ne bloque la déconnexion.
+    }
+    doLogout();
   }
 
   if (!isAuthenticated) {
@@ -125,13 +153,32 @@ function App() {
           Paramètres
         </Button>
         <Button
-          variant="ghost"
+          variant={tab === 'hr' ? 'default' : 'ghost'}
           size="sm"
-          className="ml-auto"
-          onClick={handleLogout}
+          onClick={() => setTab('hr')}
         >
-          Déconnexion
+          RH
         </Button>
+        <Button
+          variant={tab === 'stock' ? 'default' : 'ghost'}
+          size="sm"
+          onClick={() => setTab('stock')}
+        >
+          Stock
+        </Button>
+        <Button
+          variant={tab === 'reporting' ? 'default' : 'ghost'}
+          size="sm"
+          onClick={() => setTab('reporting')}
+        >
+          Reporting
+        </Button>
+        <div className="ml-auto flex items-center gap-3">
+          <AttendanceWidget />
+          <Button variant="ghost" size="sm" onClick={handleLogout}>
+            Déconnexion
+          </Button>
+        </div>
       </nav>
       <div className="flex-1 overflow-auto">
         {tab === 'dashboard' && <DashboardPage onNavigate={setTab} />}
@@ -142,7 +189,15 @@ function App() {
         {tab === 'guests' && <GuestsPage />}
         {tab === 'companies' && <CompaniesPage />}
         {tab === 'parameters' && <ParametersPage />}
+        {tab === 'hr' && <HrPage />}
+        {tab === 'stock' && <StockPage />}
+        {tab === 'reporting' && <ReportingPage />}
       </div>
+      <LogoutGuardDialog
+        open={logoutGuardOpen}
+        onCancel={() => setLogoutGuardOpen(false)}
+        onResolved={doLogout}
+      />
     </div>
   );
 }

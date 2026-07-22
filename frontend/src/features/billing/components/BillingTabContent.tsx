@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { listFoliosByStay, generateInvoice } from '../api';
+import { RecordPaymentDialog } from '@/features/payments/components/RecordPaymentDialog';
 import type { Folio } from '../types';
 
 const TYPE_LIGNE_LABEL: Record<string, string> = {
@@ -27,6 +28,7 @@ export function BillingTabContent({ stayId }: BillingTabContentProps) {
   const [generatingInvoiceId, setGeneratingInvoiceId] = useState<number | null>(
     null,
   );
+  const [payingFolioId, setPayingFolioId] = useState<number | null>(null);
 
   const refetch = useCallback(async () => {
     setLoading(true);
@@ -81,6 +83,13 @@ export function BillingTabContent({ stayId }: BillingTabContentProps) {
         <div key={folio.id} className="rounded-lg border p-4">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="font-medium">{folio.libelle}</h3>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setPayingFolioId(folio.id)}
+            >
+              Encaisser un paiement
+            </Button>
           </div>
 
           {/* Lignes du folio */}
@@ -148,6 +157,18 @@ export function BillingTabContent({ stayId }: BillingTabContentProps) {
           </div>
         </div>
       ))}
+
+      {payingFolioId !== null && (
+        <RecordPaymentDialog
+          open
+          folioId={payingFolioId}
+          onClose={() => setPayingFolioId(null)}
+          onRecorded={() => {
+            setPayingFolioId(null);
+            void refetch();
+          }}
+        />
+      )}
     </div>
   );
 }

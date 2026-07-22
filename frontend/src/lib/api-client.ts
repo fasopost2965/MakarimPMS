@@ -82,3 +82,32 @@ export async function apiRequest<T>(
 
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
 }
+
+// Téléchargement de fichiers non-JSON (ex. exports CSV du module reporting)
+// nécessitant l'en-tête d'authentification — un simple <a href> ne peut pas
+// porter l'Authorization Bearer, donc on fetch en blob et on déclenche le
+// téléchargement navigateur nous-mêmes.
+export async function apiRequestBlob(
+  path: string,
+  filename: string,
+): Promise<void> {
+  const accessToken = getAccessToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+  });
+
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as {
+      message?: string;
+    } | null;
+    throw new Error(body?.message ?? `Erreur ${res.status}`);
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
