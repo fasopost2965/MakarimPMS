@@ -27,7 +27,14 @@ const STAY_INCLUDE = {
   guest: true,
   room: { include: { roomType: true } },
   folios: { include: { lignes: true } },
+  policeRecord: true,
 } as const;
+
+// Message d'avertissement non bloquant (registre légal DGSN) — jamais une
+// exception : un walk-in doit pouvoir être enregistré rapidement, la fiche
+// de police peut être complétée juste après (voir PoliceController).
+const POLICE_RECORD_WARNING =
+  'Fiche de police (registre légal des personnes hébergées) non renseignée pour ce séjour.';
 
 @Injectable()
 export class StayService {
@@ -99,10 +106,14 @@ export class StayService {
           nights.length,
         );
 
-        return tx.stay.findUniqueOrThrow({
+        const created = await tx.stay.findUniqueOrThrow({
           where: { id: stay.id },
           include: STAY_INCLUDE,
         });
+        return {
+          ...created,
+          avertissements: created.policeRecord ? [] : [POLICE_RECORD_WARNING],
+        };
       });
     } catch (error) {
       throw this.translateConflict(
@@ -174,10 +185,14 @@ export class StayService {
         );
         await this.createFolioPrincipal(tx, stay.id, montant, nights.length);
 
-        return tx.stay.findUniqueOrThrow({
+        const created = await tx.stay.findUniqueOrThrow({
           where: { id: stay.id },
           include: STAY_INCLUDE,
         });
+        return {
+          ...created,
+          avertissements: created.policeRecord ? [] : [POLICE_RECORD_WARNING],
+        };
       });
     } catch (error) {
       throw this.translateConflict(

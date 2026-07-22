@@ -122,6 +122,7 @@ model Guest {
   reservations  Reservation[]
   stays         Stay[]
   categoryLogs  GuestCategoryLog[]
+  policeRecords PoliceRecord[]
   createdAt     DateTime           @default(now())
   // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
   deletedAt     DateTime?
@@ -243,25 +244,61 @@ enum StatutSejour {
 // devenir un séjour (check-in), mais un séjour peut aussi exister sans
 // réservation préalable (walk-in) — reservationId est donc optionnel.
 model Stay {
-  id                 Int          @id @default(autoincrement())
-  reservationId      Int?         @unique
-  reservation        Reservation? @relation(fields: [reservationId], references: [id])
+  id                 Int           @id @default(autoincrement())
+  reservationId      Int?          @unique
+  reservation        Reservation?  @relation(fields: [reservationId], references: [id])
   roomId             Int
-  room               Room         @relation(fields: [roomId], references: [id])
+  room               Room          @relation(fields: [roomId], references: [id])
   guestId            Int
-  guest              Guest        @relation(fields: [guestId], references: [id])
-  dateCheckin        DateTime     @default(now())
-  dateCheckoutPrevue DateTime     @db.Date
+  guest              Guest         @relation(fields: [guestId], references: [id])
+  dateCheckin        DateTime      @default(now())
+  dateCheckoutPrevue DateTime      @db.Date
   dateCheckoutReelle DateTime?
-  statut             StatutSejour @default(EN_COURS)
+  statut             StatutSejour  @default(EN_COURS)
   nights             RoomNight[]
   folios             Folio[]
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
+  policeRecord       PoliceRecord?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
   // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
   deletedAt          DateTime?
 
   @@index([deletedAt])
+}
+
+enum TypePiece {
+  CIN
+  PASSEPORT
+  SEJOUR
+  AUTRE
+}
+
+// Registre légal des personnes hébergées (obligation DGSN, cahier des
+// charges — registre exportable sur demande). Une fiche par séjour
+// (stayId unique), jamais fusionnée dans Guest : un même client peut
+// présenter une pièce différente d'un séjour à l'autre (renouvellement,
+// document différent au passage de frontière), et le registre doit rester
+// un instantané figé par séjour, pas une fiche client réécrite
+// rétroactivement. Alimentée par PoliceService.upsert — seul chemin
+// d'écriture (même discipline que RoomStatusLog/GuestCategoryLog).
+model PoliceRecord {
+  id               Int       @id @default(autoincrement())
+  stayId           Int       @unique
+  stay             Stay      @relation(fields: [stayId], references: [id])
+  guestId          Int
+  guest            Guest     @relation(fields: [guestId], references: [id])
+  numeroPiece      String
+  typePiece        TypePiece
+  nationalite      String
+  dateNaissance    DateTime  @db.Date
+  paysProvenance   String?
+  villeProvenance  String?
+  paysDestination  String?
+  villeDestination String?
+  dateArrivee      DateTime
+  dateDepart       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }
 
 enum TypeLigneFolio {
@@ -702,6 +739,7 @@ enum AuditEntity {
   SeasonRate
   TimeShift
   PaySlip
+  POLICE_RECORD
 }
 
 enum AuditAction {
@@ -718,6 +756,7 @@ enum AuditAction {
   INVALIDATE_TIME_SHIFT
   AUTO_CLOSE_TIME_SHIFT
   VALIDATE_PAYSLIP
+  CREATE_POLICE_RECORD
 }
 
 // Registre d'audit transverse (ADR-005 §3.2). Append-only : aucune méthode

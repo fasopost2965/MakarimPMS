@@ -11,6 +11,7 @@ import type { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { FinancialSummaryQueryDto } from './dto/financial-summary-query.dto';
+import { PoliceRegisterQueryDto } from './dto/police-register-query.dto';
 import { FinancialReportingService } from './financial-reporting.service';
 import { PoliceReportService } from './police-report.service';
 import { ReportingQueue } from './queues/reporting.queue';
@@ -79,6 +80,37 @@ export class ReportingController {
       `attachment; filename="rapport-police-${date}.csv"`,
     );
     return this.policeReportService.exportDailyReportCsv(date);
+  }
+
+  // Registre légal complet (PoliceRecord, obligation DGSN) sur une plage de
+  // dates — distinct de /police-report ci-dessus (arrivées d'une seule
+  // journée dérivées de Stay/Guest). format=json renvoie les fiches
+  // structurées (ex. intégration système tiers) au lieu du CSV par défaut.
+  @RequirePermission('reporting', 'export')
+  @ApiOperation({
+    summary:
+      'Exporte le registre légal des personnes hébergées (PoliceRecord) sur une plage de dates, CSV ou JSON',
+  })
+  @Get('police-register')
+  async policeRegister(
+    @Query() query: PoliceRegisterQueryDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    if (query.format === 'json') {
+      return this.policeReportService.findRegister(
+        query.dateDebut,
+        query.dateFin,
+      );
+    }
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="registre-police-${query.dateDebut}_${query.dateFin}.csv"`,
+    );
+    return this.policeReportService.exportRegisterCsv(
+      query.dateDebut,
+      query.dateFin,
+    );
   }
 
   // Capacité additionnelle (file BullMQ/Redis) pour ne pas bloquer le thread
