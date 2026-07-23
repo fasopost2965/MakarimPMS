@@ -1,4 +1,12 @@
-import { Body, Controller, Ip, Post, Get } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Ip,
+  Post,
+  Get,
+} from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator';
@@ -40,6 +48,22 @@ export class AuthController {
   @Post('refresh')
   refresh(@Body() dto: RefreshDto) {
     return this.authService.refresh(dto.refreshToken);
+  }
+
+  // CH-026(f) — révoque le refresh token présenté (rotation/révocation) ;
+  // idempotent et volontairement tolérant à un jeton déjà invalide/expiré
+  // (voir AuthService.logout), pas de Bearer requis : symétrique avec
+  // /refresh, qui authentifie déjà par la possession du refresh token lui-
+  // même, jamais par un access token en parallèle.
+  @Public()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Révoque le refresh token présenté (déconnexion)',
+  })
+  @Post('logout')
+  async logout(@Body() dto: RefreshDto): Promise<void> {
+    await this.authService.logout(dto.refreshToken);
   }
 
   @Public()

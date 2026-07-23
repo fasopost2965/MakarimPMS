@@ -690,6 +690,7 @@ model User {
   createdAt         DateTime             @default(now())
   loginLogs         LoginLog[]
   passwordResets    PasswordResetToken[]
+  refreshTokens     RefreshToken[]
   auditLogs         AuditLog[]
   // Profil RH (module 5.11) : au plus un Employee par compte de connexion.
   employee          Employee?
@@ -724,6 +725,28 @@ model PasswordResetToken {
   expiresAt DateTime
   utiliseAt DateTime?
   createdAt DateTime  @default(now())
+}
+
+// CH-026(f) — suivi des refresh tokens émis, pour permettre rotation et
+// révocation (l'access token, lui, reste entièrement stateless — aucune
+// requête base sur son chemin de vérification, seul son homologue refresh,
+// déjà bien moins fréquent, paie le coût d'une lecture). `jti` (identifiant
+// unique embarqué dans le payload JWT du refresh token, pas dans l'access
+// token) est la seule donnée nécessaire pour retrouver la ligne — le JWT
+// reste la source de vérité pour l'expiration/la signature, cette table
+// n'ajoute qu'un état de révocation binaire. AuthService.refresh() révoque
+// systématiquement l'ancien jeton en émettant le nouveau (rotation à usage
+// unique : la réutilisation d'un refresh token déjà consommé échoue).
+model RefreshToken {
+  id        Int       @id @default(autoincrement())
+  jti       String    @unique
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id])
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 // ------------------------------------------------------------------

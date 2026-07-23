@@ -7,7 +7,7 @@ Statut par module backend, croisé avec la présence d'une interface frontend et
 
 | Module | Backend | Frontend | Chantiers ouverts | Remarque |
 |---|---|---|---|---|
-| `auth` | ⚠️ | ✅ | CH-026 | CH-002 (reset password non sécurisé) **terminé**, **CH-011 terminé** (`GET /auth/me` alimente désormais le gating RBAC frontend transverse, voir `AppSidebar`) — reste CH-026 (durcissement sécurité secondaire : helmet, verrouillage compte, complexité mot de passe, cookie httpOnly, révocation refresh token) |
+| `auth` | ✅ | ✅ | CH-026(e) | CH-002 (reset password non sécurisé) **terminé**, **CH-011 terminé** (`GET /auth/me` alimente désormais le gating RBAC frontend transverse, voir `AppSidebar`), **CH-026(a)(b)(c)(d)(f) terminés** (helmet, comparaison à temps constant du secret webhook, verrouillage de compte, complexité mot de passe, rotation/révocation refresh token) — seul CH-026(e) (cookie httpOnly) reste explicitement différé, RD-016 |
 | `rooms` | ✅ | ⚠️ (via housekeeping) | CH-014 | Historique de statut jamais consultable |
 | `parameters` | ✅ | ✅ | — | — |
 | `reservations` | ⚠️ | ✅ | CH-016 | Service le plus volumineux, dette de découpage |

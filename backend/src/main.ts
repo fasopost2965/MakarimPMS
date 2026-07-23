@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import type { CorsOptionsDelegate } from '@nestjs/common/interfaces/external/cors-options.interface';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import type { IncomingMessage } from 'http';
+import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import {
@@ -28,6 +29,18 @@ async function bootstrap() {
   // les logs de démarrage passent aussi par le format structuré.
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   app.useLogger(app.get(Logger));
+  // CH-026(a) — en-têtes de sécurité HTTP standards (X-Content-Type-Options,
+  // X-Frame-Options, etc.). CSP par défaut désactivée hors production
+  // uniquement : Swagger UI (/api/docs, jamais monté en production, voir
+  // plus bas) charge des styles/scripts inline que la CSP par défaut de
+  // helmet bloquerait — pas de compromis en production, où cette route
+  // n'existe pas.
+  app.use(
+    helmet({
+      contentSecurityPolicy:
+        process.env.NODE_ENV === 'production' ? undefined : false,
+    }),
+  );
   app.setGlobalPrefix('api');
   // Carve-out CORS pour les surfaces publiques (F4 Booking Engine,
   // F6 self check-in, BR-RES-004) : elles n'utilisent ni cookies ni

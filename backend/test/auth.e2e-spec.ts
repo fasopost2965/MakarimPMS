@@ -4,6 +4,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ThrottlerStorage } from '@nestjs/throttler';
 import type { ThrottlerStorageRecord } from '@nestjs/throttler/dist/throttler-storage-record.interface';
+import * as bcrypt from 'bcrypt';
+import helmet from 'helmet';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
@@ -62,6 +64,12 @@ describe('Auth — JWT, rôles et permissions (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api');
+    // CH-026(a) — helmet() n'est monté que dans main.ts (bootstrap manuel),
+    // jamais via un provider Nest — même gap de fidélité déjà rencontré
+    // pour AllExceptionsFilter (CH-010) : aucun des fichiers e2e existants
+    // ne reproduit le bootstrap de main.ts à l'identique. Corrigé ici
+    // seulement, où le test l'exige, pas généralisé aux 20 autres fichiers.
+    app.use(helmet());
     app.useGlobalPipes(
       new ValidationPipe({ whitelist: true, transform: true }),
     );
@@ -109,6 +117,14 @@ describe('Auth — JWT, rôles et permissions (e2e)', () => {
     it('les routes publiques du module auth restent accessibles sans token', async () => {
       const res = await request(server()).get('/api/auth/roles-actifs');
       expect(res.status).toBe(200);
+    });
+
+    // CH-026(a) — en-têtes de sécurité HTTP (helmet). Un seul en-tête
+    // suffit à prouver que le middleware est bien monté (pas une revue
+    // exhaustive de la CSP, hors périmètre de ce test).
+    it('pose les en-têtes de sécurité HTTP standards (helmet)', async () => {
+      const res = await request(server()).get('/api/auth/roles-actifs');
+      expect(res.headers['x-content-type-options']).toBe('nosniff');
     });
   });
 
@@ -422,6 +438,211 @@ describe('Auth — JWT, rôles et permissions (e2e)', () => {
           data: { roleId: role.id, permissionId: permission.id },
         });
       }
+    });
+  });
+
+  // CH-026(f) — rotation à usage unique + révocation explicite. Utilise
+  // reception (compte partagé par plusieurs describe ci-dessus, mais aucun
+  // n'enchaîne login puis relit un refresh token précis — pas de risque de
+  // collision d'état).
+  describe('Rotation et révocation du refresh token (CH-026(f))', () => {
+    it('révoque le refresh token précédent à chaque rafraîchissement — la réutilisation du même jeton échoue ensuite', async () => {
+      const login = await request(server()).post('/api/auth/login').send({
+        email: SEED_USERS.reception,
+        motDePasse: 'Password123!',
+      });
+      const { refreshToken: original } = login.body as {
+        refreshToken: string;
+      };
+
+      const first = await request(server())
+        .post('/api/auth/refresh')
+        .send({ refreshToken: original });
+      expect(first.status).toBe(201);
+
+      // Le jeton d'origine, désormais révoqué, ne peut plus être rejoué —
+      // preuve directe de la rotation à usage unique (avant CH-026(f), un
+      // JWT stateless restait valable jusqu'à expiration naturelle, quel
+      // que soit le nombre de réutilisations).
+      const replay = await request(server())
+        .post('/api/auth/refresh')
+        .send({ refreshToken: original });
+      expect(replay.status).toBe(401);
+
+      // Le nouveau jeton émis par le premier refresh, lui, reste valide.
+      const { refreshToken: rotated } = first.body as {
+        refreshToken: string;
+      };
+      const second = await request(server())
+        .post('/api/auth/refresh')
+        .send({ refreshToken: rotated });
+      expect(second.status).toBe(201);
+    });
+
+    it('POST /auth/logout révoque le refresh token — un refresh ultérieur avec ce jeton échoue', async () => {
+      const login = await request(server()).post('/api/auth/login').send({
+        email: SEED_USERS.comptable,
+        motDePasse: 'Password123!',
+      });
+      const { refreshToken } = login.body as { refreshToken: string };
+
+      const logout = await request(server())
+        .post('/api/auth/logout')
+        .send({ refreshToken });
+      expect(logout.status).toBe(204);
+
+      const refreshed = await request(server())
+        .post('/api/auth/refresh')
+        .send({ refreshToken });
+      expect(refreshed.status).toBe(401);
+    });
+
+    it('POST /auth/logout est idempotent et tolérant à un jeton déjà révoqué, invalide ou absent', async () => {
+      const login = await request(server()).post('/api/auth/login').send({
+        email: SEED_USERS.comptable,
+        motDePasse: 'Password123!',
+      });
+      const { refreshToken } = login.body as { refreshToken: string };
+
+      const first = await request(server())
+        .post('/api/auth/logout')
+        .send({ refreshToken });
+      expect(first.status).toBe(204);
+
+      // Rejouer le logout sur un jeton déjà révoqué ne doit jamais planter
+      // (updateMany, pas update — voir AuthService.logout).
+      const second = await request(server())
+        .post('/api/auth/logout')
+        .send({ refreshToken });
+      expect(second.status).toBe(204);
+
+      const invalid = await request(server())
+        .post('/api/auth/logout')
+        .send({ refreshToken: 'jeton-completement-invalide' });
+      expect(invalid.status).toBe(204);
+    });
+  });
+
+  // CH-026(c) — verrouillage de compte après échecs répétés. Utilisateur
+  // jetable dédié (jamais SEED_USERS) pour ne polluer ni les autres blocs de
+  // ce fichier ni les autres suites e2e qui s'authentifient sur les mêmes
+  // comptes partagés.
+  describe('Verrouillage de compte après échecs répétés (CH-026(c))', () => {
+    const LOCKOUT_THRESHOLD = 5;
+
+    async function createLockoutTestUser() {
+      const role = await prisma.role.findFirstOrThrow();
+      const email = `lockout-test-${Date.now()}@makarim.test`;
+      const motDePasseHash = await bcrypt.hash('Password123!', 10);
+      return prisma.user.create({
+        data: { nom: 'Lockout Test', email, motDePasseHash, roleId: role.id },
+      });
+    }
+
+    it('verrouille après 5 échecs consécutifs — un mot de passe correct est alors lui aussi refusé', async () => {
+      const user = await createLockoutTestUser();
+
+      for (let i = 0; i < LOCKOUT_THRESHOLD; i++) {
+        const res = await request(server()).post('/api/auth/login').send({
+          email: user.email,
+          motDePasse: 'mauvais-mot-de-passe',
+        });
+        expect(res.status).toBe(401);
+        expect((res.body as { message: string }).message).not.toMatch(
+          /verrouillé/i,
+        );
+      }
+
+      // Sabotage/restore direct sur le seuil : au 6e essai, même avec le
+      // BON mot de passe, le compte reste bloqué — preuve que le
+      // verrouillage precède la vérification bcrypt plutôt que de ne
+      // s'appliquer qu'aux échecs.
+      const lockedOut = await request(server()).post('/api/auth/login').send({
+        email: user.email,
+        motDePasse: 'Password123!',
+      });
+      expect(lockedOut.status).toBe(401);
+      expect((lockedOut.body as { message: string }).message).toMatch(
+        /verrouillé/i,
+      );
+    });
+
+    it('un succès de connexion ne verrouille jamais, quel que soit le nombre de tentatives précédentes en dessous du seuil', async () => {
+      const user = await createLockoutTestUser();
+
+      for (let i = 0; i < LOCKOUT_THRESHOLD - 1; i++) {
+        await request(server()).post('/api/auth/login').send({
+          email: user.email,
+          motDePasse: 'mauvais-mot-de-passe',
+        });
+      }
+
+      const res = await request(server()).post('/api/auth/login').send({
+        email: user.email,
+        motDePasse: 'Password123!',
+      });
+      expect(res.status).toBe(201);
+    });
+
+    it('le verrouillage se lève automatiquement une fois la fenêtre glissante expirée, sans intervention manuelle', async () => {
+      const user = await createLockoutTestUser();
+
+      for (let i = 0; i < LOCKOUT_THRESHOLD; i++) {
+        await request(server()).post('/api/auth/login').send({
+          email: user.email,
+          motDePasse: 'mauvais-mot-de-passe',
+        });
+      }
+
+      const stillLocked = await request(server())
+        .post('/api/auth/login')
+        .send({ email: user.email, motDePasse: 'Password123!' });
+      expect(stillLocked.status).toBe(401);
+
+      // Recule artificiellement les échecs hors de la fenêtre glissante
+      // (LOCKOUT_WINDOW_MINUTES=15) plutôt que d'attendre en temps réel —
+      // vérifie le comportement d'expiration sans dépendre de l'horloge du
+      // test runner.
+      await prisma.loginLog.updateMany({
+        where: { userId: user.id, succes: false },
+        data: { createdAt: new Date(Date.now() - 20 * 60 * 1000) },
+      });
+
+      const unlockedNow = await request(server())
+        .post('/api/auth/login')
+        .send({ email: user.email, motDePasse: 'Password123!' });
+      expect(unlockedNow.status).toBe(201);
+    });
+  });
+
+  // CH-026(d) — complexité minimale du nouveau mot de passe.
+  describe('Complexité du mot de passe (CH-026(d))', () => {
+    async function latestTokenFor(email: string): Promise<string> {
+      const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+      const record = await prisma.passwordResetToken.findFirstOrThrow({
+        where: { userId: user.id },
+        orderBy: { createdAt: 'desc' },
+      });
+      return record.token;
+    }
+
+    it('rejette un nouveau mot de passe sans majuscule/minuscule/chiffre, sans consommer le jeton', async () => {
+      await request(server())
+        .post('/api/auth/forgot-password')
+        .send({ email: SEED_USERS.maintenance });
+      const resetToken = await latestTokenFor(SEED_USERS.maintenance);
+
+      const weak = await request(server())
+        .post('/api/auth/reset-password')
+        .send({ token: resetToken, nouveauMotDePasse: 'toutminuscule' });
+      expect(weak.status).toBe(400);
+
+      // Le jeton reste utilisable : rejeté par la validation du DTO, en
+      // amont du service, jamais marqué consommé.
+      const strong = await request(server())
+        .post('/api/auth/reset-password')
+        .send({ token: resetToken, nouveauMotDePasse: 'Password123!' });
+      expect(strong.status).toBe(201);
     });
   });
 });
