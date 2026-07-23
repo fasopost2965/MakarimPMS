@@ -49,19 +49,19 @@ Déduite du backend réel (21 modules, `docs/audits/PHASE_04_BACKEND.md`), crois
 - **Parcours utilisateur** : check-in (réservation ou walk-in) → détail du séjour → onglet/section "Police" → saisie ou relecture du pré-rempli → validation.
 - **Critère de validation fonctionnelle** : un check-in complet permet une saisie de `PoliceRecord` sans quitter l'écran de détail de séjour ; les données apparaissent dans l'export CSV existant (`ReportingPage.tsx`) sans modification de ce dernier.
 
-### É-02 — Self check-in (staff) 🔴 — **Priorité : Importante (CH-007)**
+### É-02 — Self check-in (staff) ✅ — **Priorité : Importante (CH-007 — terminé, session courante)**
 
 - **Doit exister pour** : la Réception, avant l'arrivée d'un client.
 - **Rôles** : Réception, Administrateur (`reservations:write` pour générer, `reservations:read` pour consulter le statut).
 - **Actions** : générer/régénérer un lien de self-check-in pour une réservation ; consulter si le client l'a déjà rempli (`self-checkin-pending`).
 - **Règles métier** : un seul lien actif par réservation (régénérer réécrit la même ligne, l'ancien lien cesse de fonctionner — confirmé schéma `SelfCheckinToken.reservationId @unique`).
 - **Dépendances API** : `POST /reservations/:id/self-checkin-link`, `GET /reservations/:id/self-checkin-pending`.
-- **États** : *vide* — aucun lien généré ; *généré, non utilisé* ; *généré, soumis* (données en attente de relecture, alimente É-01) ; *erreur* — échec d'envoi email (dégradation gracieuse déjà gérée côté backend par `MailerService`, l'UI doit refléter un échec sans bloquer la génération du lien lui-même).
-- **Cas limites** : régénération d'un lien déjà soumis (écrase les données en attente ? — **à confirmer côté comportement backend exact avant de figer l'UX**) ; réservation sans email client (le lien ne peut pas être envoyé — l'UI doit le signaler clairement).
-- **Critères UX** : bouton visible depuis le détail de réservation, statut du lien affiché sans nécessiter un appel séparé.
-- **Composants transverses requis** : indicateur de statut (badge), déjà disponible (`components/ui/badge.tsx`).
-- **Parcours utilisateur** : détail de réservation → « Générer le lien self check-in » → (client remplit hors application) → retour à l'écran → badge « Données en attente » → ouverture du check-in → pré-remplissage (lien avec É-01).
-- **Critère de validation** : un lien généré est fonctionnel (le résumé public existant, déjà backend-only, doit être accessible via le token) et son statut de soumission est visible sans rafraîchissement manuel de page.
+- **États livrés** : *en attente* (badge, aucune soumission côté backend — recouvre à la fois « aucun lien généré » et « lien généré mais pas encore soumis », la route ne permettant pas de distinguer les deux, limite assumée) ; *informations soumises* (badge + résumé des champs). **État non livré** : pas de distinction « erreur d'envoi email » visible dans l'UI — le backend se dégrade silencieusement (`MailerService` sans SMTP configuré), l'UI n'affiche qu'un avertissement préventif si le client n'a pas d'email enregistré (voir cas limites), pas un retour d'échec après coup.
+- **Cas limites résolus** : régénération d'un lien déjà soumis confirmée comme effaçant les données en attente (code `self-checkin.service.ts::generateLink`, branche `update`) — le bouton l'indique explicitement (« Régénérer le lien (efface les données soumises) ») plutôt qu'une confirmation modale (aucun précédent `confirm()` dans ce codebase) ; réservation sans email client signalée par un avertissement dédié invitant à copier/transmettre le lien manuellement.
+- **Critères UX** : bouton visible depuis le détail de réservation (`ReservationDetailsDialog.tsx`, pas un écran séparé), statut affiché sans appel manuel — **livré tel quel**.
+- **Composants transverses requis** : indicateur de statut (badge), déjà disponible (`components/ui/badge.tsx`) — utilisé tel quel, aucun nouveau composant transverse nécessaire.
+- **Parcours utilisateur livré** : détail de réservation → panneau « Self check-in » → « Générer le lien » (URL affichée + copie presse-papiers, envoi email automatique si adresse connue) → (client remplit hors application) → réouverture du détail → badge « Informations soumises » + résumé → pré-remplissage de la fiche police au check-in réel (lien avec É-01, inchangé).
+- **Critère de validation** : vérifié en navigateur réel (Playwright) — génération, copie, soumission simulée via l'endpoint public, badge mis à jour à la réouverture du dialogue, sans rafraîchissement de page.
 
 ### É-03 — Gestion des notifications (templates + journal) 🔴 — **Priorité : Importante (CH-008)**
 

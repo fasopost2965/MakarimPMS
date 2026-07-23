@@ -94,7 +94,16 @@ export async function apiRequest<T>(
     throw new Error(body?.message ?? `Erreur ${res.status}`);
   }
 
-  return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
+  // NestJS envoie un corps vide (pas le littéral "null") aussi bien pour un
+  // 204 explicite que pour un handler qui renvoie `null`/`undefined` sur un
+  // autre statut (ex. GET .../self-checkin-pending) — res.json() sur un
+  // corps vide lève "Unexpected end of JSON input" dans ce dernier cas.
+  // Détecté en implémentant CH-007 (docs/governance/REGISTRE_CHANTIERS.md) :
+  // bug latent déjà présent (jamais déclenché) dans le pré-remplissage
+  // self-checkin de PoliceRecordForm, corrigé ici une seule fois pour tous
+  // les appelants plutôt que contourné localement.
+  const text = await res.text();
+  return text.length === 0 ? (undefined as T) : (JSON.parse(text) as T);
 }
 
 // Téléchargement de fichiers non-JSON (ex. exports CSV du module reporting)

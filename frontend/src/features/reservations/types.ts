@@ -85,3 +85,24 @@ export interface UpdateReservationInput {
   prixTotalFinal?: number;
   motifAjustement?: string;
 }
+
+// CH-007 (F6, self-checkin) — réponse de POST /reservations/:id/self-checkin-link.
+export interface SelfCheckinLink {
+  token: string;
+  url: string;
+  expiresAt: string;
+}
+
+// Sous-ensemble de SelfCheckinToken exposé par
+// GET /reservations/:id/self-checkin-pending — null tant que le client n'a
+// rien soumis (qu'un lien ait été généré ou non, cette route ne permet pas
+// de distinguer les deux cas).
+export interface SelfCheckinPending {
+  numeroPiece: string | null;
+  typePiece: 'CIN' | 'PASSEPORT' | 'SEJOUR' | 'AUTRE' | null;
+  dateNaissance: string | null;
+  paysProvenance: string | null;
+  villeProvenance: string | null;
+  paysDestination: string | null;
+  villeDestination: string | null;
+}

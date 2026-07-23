@@ -3,6 +3,8 @@ import type {
   CreateReservationInput,
   Reservation,
   Room,
+  SelfCheckinLink,
+  SelfCheckinPending,
   UpdateReservationInput,
 } from './types';
 
@@ -40,4 +42,21 @@ export function updateReservation(id: number, input: UpdateReservationInput) {
 
 export function cancelReservation(id: number) {
   return apiRequest<Reservation>(`/reservations/${id}`, { method: 'DELETE' });
+}
+
+// CH-007 (F6, self-checkin) — génère (ou régénère) le lien pré-arrivée,
+// envoyé par email au client (self-checkin.service.ts, réutilise le canal
+// F7). L'URL n'est pas persistée nulle part côté lecture : ce retour est la
+// seule occasion de l'afficher pour un copier/coller manuel (ex. WhatsApp).
+export function generateSelfCheckinLink(reservationId: number) {
+  return apiRequest<SelfCheckinLink>(
+    `/reservations/${reservationId}/self-checkin-link`,
+    { method: 'POST' },
+  );
+}
+
+export function getSelfCheckinPending(reservationId: number) {
+  return apiRequest<SelfCheckinPending | null>(
+    `/reservations/${reservationId}/self-checkin-pending`,
+  );
 }

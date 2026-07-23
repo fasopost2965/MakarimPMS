@@ -22,6 +22,14 @@ async function main() {
   await prisma.permission.deleteMany();
   await prisma.role.deleteMany();
   await prisma.hotelConfig.deleteMany();
+  // Dette technique #6 (docs/governance/DETTE_TECHNIQUE.md) : ces deux
+  // tables (F10, F6) référencent Reservation par FK non-cascade
+  // (ChannelReservationImport) ou cascade (SelfCheckinToken, explicite ici
+  // par symétrie) — doivent être vidées avant reservation.deleteMany()
+  // plus bas, sous peine d'échec P2002/FK opaque au reseed après usage
+  // local de ces fonctionnalités.
+  await prisma.channelReservationImport.deleteMany();
+  await prisma.selfCheckinToken.deleteMany();
   await prisma.payment.deleteMany();
   await prisma.reservationDeposit.deleteMany();
   await prisma.creditNote.deleteMany();
@@ -44,6 +52,13 @@ async function main() {
   await prisma.seasonRate.deleteMany();
   await prisma.roomStatusLog.deleteMany();
   await prisma.maintenanceTicket.deleteMany();
+  // Dette technique #6 : StockMovement référence Room et StockItem par FK
+  // non-cascade — doit être vidée avant room.deleteMany() (juste en
+  // dessous) et avant stockItem.deleteMany() (module stock, ajouté ici par
+  // cohérence bien qu'aucune donnée de référence ne le recrée avant la
+  // ligne 606).
+  await prisma.stockMovement.deleteMany();
+  await prisma.stockItem.deleteMany();
   await prisma.room.deleteMany();
   await prisma.rateRestriction.deleteMany();
   await prisma.roomType.deleteMany();

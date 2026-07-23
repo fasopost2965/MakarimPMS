@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { SelfCheckinPanel } from './SelfCheckinPanel';
 import type { Reservation } from '../types';
 
 interface Props {
@@ -81,6 +82,13 @@ function ReservationDetailsForm({
         {reservation.dateArrivee.slice(0, 10)} au{' '}
         {reservation.dateDepart.slice(0, 10)}
       </p>
+
+      {reservation.statut === 'CONFIRMEE' && (
+        <SelfCheckinPanel
+          reservationId={reservation.id}
+          guestEmail={reservation.guest.email}
+        />
+      )}
 
       <form
         className="flex flex-col gap-3"
