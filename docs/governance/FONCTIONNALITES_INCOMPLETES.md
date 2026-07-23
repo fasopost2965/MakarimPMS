@@ -16,6 +16,7 @@ C'est le motif transversal le plus significatif identifié par l'audit (Phase 9 
 | Historique consultable des transitions de chambre | `RoomStatusLog` alimenté à chaque transition | Jamais lu par aucune route | CH-014 |
 | Journal d'audit transverse consultable côté interface | Module `audit` fonctionnel côté backend | Aucune UI de consultation | CH-015 |
 | ~~Remboursement d'un acompte déjà imputé à un folio~~ | Le code de `DepositsService.rembourser` référence explicitement « une note de crédit sur la facture » comme voie de recours | **Résolu (CH-012, session courante)** — `rembourser()` autorise désormais un acompte `IMPUTE` dès que le folio d'imputation ne porte plus de facture `EMISE` active (avoir préalable via CH-001 si nécessaire). Retiré des fonctionnalités incomplètes. | CH-012 (terminé) |
+| ~~Blocage du check-out sur solde impayé~~ | `CLAUDE.md` citait `BR-SEJ-004`/`INV-SEJ-002` comme non appliqués ; `checkout()` calculait `soldeDu` sans jamais bloquer dessus | **Résolu (CH-005, session courante)** — `checkout()` lève désormais `ConflictException` si le solde est positif, sauf check-out forcé (`checkin:force-checkout`, Administrateur, motif obligatoire, journalisé en audit — voir RD-008). Retiré des fonctionnalités incomplètes. | CH-005 (terminé) |
 | Recouvrement tracé de la pénalité d'annulation/no-show | `Reservation.montantPenalite` calculé et figé | Jamais matérialisé en écriture financière, recouvrement entièrement hors système | CH-023 |
 
 ## Ce que ce registre implique pour la suite du développement

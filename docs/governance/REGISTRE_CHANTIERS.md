@@ -137,10 +137,11 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 - **Dépendances** : aucune technique. **Prérequis** : décision produit — blocage dur (le check-out échoue) vs avertissement (le check-out réussit avec un flag explicite nécessitant une confirmation) ; le cahier des charges/BUSINESS_RULES.md (`BR-SEJ-004`/`INV-SEJ-002`, déjà cités dans `CLAUDE.md` comme non appliqués) doit trancher.
 - **Livrable attendu** : selon la décision — soit `ConflictException` sur `checkout()` si `soldeDu > 0` (avec une route de « check-out forcé » réservée à une permission élevée si l'hôtel veut garder une échappatoire), soit un champ de réponse structuré exigeant une confirmation côté frontend.
 - **Critères de validation** : un séjour avec solde positif ne peut plus être clôturé silencieusement sans action explicite reconnue.
-- **Statut** : à faire · **Estimation** : Faible-Moyenne (1–2 jours) · **Confiance** : élevée
+- **Statut** : ✅ **Terminé** (session courante) · **Estimation** : Faible-Moyenne (1–2 jours) · **Confiance** : élevée
 - **Lien audit** : Phase 6 §5, §7 ; Phase 10.
 - **Éléments à tester** : e2e check-out avec solde positif/négatif/nul.
-- **Documents liés** : `CLAUDE.md` (règle déjà citée comme non appliquée), `BUSINESS_RULES.md` (`BR-SEJ-004`).
+- **Documents liés** : `CLAUDE.md` (règle désormais appliquée, voir §Paiements et solde de folio), `BUSINESS_RULES.md` (`BR-SEJ-004`).
+- **Résolution** : arbitrage produit tranché (blocage dur + échappatoire de check-out forcé — voir `REGISTRE_DECISIONS.md` RD-008). `StayService.checkout()` lève désormais `ConflictException` si `soldeDu > 0`, sauf `force: true` (`ForceCheckoutDto`, motif ≥ 10 caractères) soumis à la permission dédiée `checkin:force-checkout` (Administrateur uniquement, vérification dynamique dans le service, même pattern que `guests:blacklist`/`payments:refund`) et journalisé dans `AuditLog` (`FORCE_CHECKOUT`) dans la même transaction. Tests : `checkin-flow.e2e-spec.ts` (blocage 409, refus RBAC 403, refus motif manquant 400, forçage réussi + audit, preuve sabotage/restore documentée en commentaire) ; 5 autres suites e2e (`dashboard`, `housekeeping`, `housekeeping-state-machine`, `maintenance`) adaptées pour utiliser le check-out forcé sur leurs fixtures de test au solde jamais réglé (hors périmètre métier de ces suites).
 
 ---
 
@@ -328,7 +329,7 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 | Priorité | Nombre de chantiers | Charge cumulée estimée (ordre de grandeur) | Terminés |
 |---|---|---|---|
 | Bloquant | 4 (CH-001 à CH-004) | ~7–11 jours développeur | 4 (CH-001, CH-002, CH-003, CH-004) — tous terminés |
-| Important | 8 (CH-005 à CH-012) | ~11–16 jours développeur | 0 |
+| Important | 8 (CH-005 à CH-012) | ~11–16 jours développeur | 2 (CH-005, CH-012) |
 | Secondaire | 14 (CH-013 à CH-026) | ~18–28 jours développeur (plusieurs sous conditions d'arbitrage) | 0 (1 partiel : CH-013) |
 
 *Ces charges sont des ordres de grandeur de développement pur (hors tests e2e étendus, hors stabilisation, hors documentation) — voir `docs/planning/ESTIMATION_CHARGE.md` pour l'estimation consolidée par scénario.*
@@ -341,3 +342,5 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 | CH-001 | ✅ Terminé | Session courante | Avoir total sur facture émise — voir fiche ci-dessus (garde de régénération + correctif double-taxe) |
 | CH-004 | ✅ Terminé | Session courante | Chiffrement AES-256-GCM de Guest.pieceIdentite — voir fiche ci-dessus (extension Prisma au niveau du client, pas du service, pour couvrir les lectures imbriquées) |
 | CH-003 | ✅ Terminé | Session courante | UI de saisie du registre de police (nouvel onglet « Police » dans StayDetailsDialog) — voir fiche ci-dessus. Les 4 chantiers bloquants du registre sont désormais tous terminés. |
+| CH-012 | ✅ Terminé | Session courante | Remboursement d'un acompte imputé — voir fiche ci-dessus (l'avoir est un préalable vérifié par lecture seule, pas une action déclenchée par la route, RD-007). |
+| CH-005 | ✅ Terminé | Session courante | Blocage dur du check-out sur solde impayé, avec échappatoire de check-out forcé réservée à checkin:force-checkout — voir fiche ci-dessus (RD-008). |

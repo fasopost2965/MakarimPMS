@@ -17,6 +17,7 @@ interface FolioLineResponse {
 }
 
 interface FolioResponse {
+  id: number;
   libelle: string;
   lignes: FolioLineResponse[];
 }
@@ -40,6 +41,7 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
   let prisma: PrismaService;
   let roomTypeId: number;
   let client: ReturnType<typeof authedRequest>;
+  let adminClient: ReturnType<typeof authedRequest>;
 
   const PRIX_BASE = 400;
   const PRIX_SAISON = 550;
@@ -59,6 +61,8 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
     prisma = app.get(PrismaService);
     const token = await loginAs(app.getHttpServer(), 'reception');
     client = authedRequest(app.getHttpServer(), token);
+    const adminToken = await loginAs(app.getHttpServer(), 'admin');
+    adminClient = authedRequest(app.getHttpServer(), adminToken);
 
     const roomType = await prisma.roomType.create({
       data: { nom: 'TEST-CHECKIN-FLOW-TYPE', prixBase: PRIX_BASE, capacite: 2 },
@@ -78,6 +82,9 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
 
   afterAll(async () => {
     await prisma.roomNight.deleteMany({ where: { room: { roomTypeId } } });
+    await prisma.payment.deleteMany({
+      where: { folio: { stay: { room: { roomTypeId } } } },
+    });
     await prisma.folioLine.deleteMany({
       where: { folio: { stay: { room: { roomTypeId } } } },
     });
@@ -145,13 +152,27 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
     });
     expect(blockedBooking.status).toBe(409);
 
+    // CH-005 : solde impayé (900 MAD, aucun paiement encore enregistré) —
+    // le check-out doit être bloqué tant que le solde n'est pas ramené à 0.
+    const blockedCheckout = await client
+      .post(`/api/checkout/${stay.id}`)
+      .send();
+    expect(blockedCheckout.status).toBe(409);
+
+    const paymentRes = await adminClient.post('/api/payments').send({
+      folioId: principal!.id,
+      moyen: 'ESPECES',
+      montant: '900.00',
+      idempotencyKey: `test-checkin-flow-payment-${stay.id}`,
+    });
+    expect(paymentRes.status).toBe(201);
+
     const checkout = await client.post(`/api/checkout/${stay.id}`).send();
     expect(checkout.status).toBe(201);
     const checkedOut = checkout.body as StayResponse;
     expect(checkedOut.statut).toBe('CHECKOUT');
-    // Aucun paiement encore enregistré (module billing pas encore livré) :
-    // le solde dû est intégralement la ligne HEBERGEMENT ajustée.
-    expect(Number(checkedOut.soldeDu)).toBe(900);
+    // Le paiement enregistré ci-dessus ramène le solde à 0.
+    expect(Number(checkedOut.soldeDu)).toBe(0);
 
     // La chambre redevient réservable après le check-out.
     const rebooking = await client.post('/api/reservations').send({
@@ -204,6 +225,87 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
       where: { folio: { stayId: stay.id } },
     });
     await prisma.folio.deleteMany({ where: { stayId: stay.id } });
+    await prisma.stay.delete({ where: { id: stay.id } });
+  });
+
+  // CH-005 : un solde positif bloque désormais le check-out (arbitrage
+  // produit confirmé — blocage dur, avec échappatoire de check-out forcé
+  // réservée à checkin:force-checkout/Administrateur, motif obligatoire).
+  //
+  // Preuve sabotage/restore (CLAUDE.md, garde non négociable-adjacente à
+  // ADR-004) : le blocage `if (soldePositif && !force) throw
+  // ConflictException(...)` dans StayService.checkout a été temporairement
+  // commenté, ce test relancé seul (`npx jest --config
+  // ./test/jest-e2e.json checkin-flow.e2e-spec.ts -t "CH-005"`) — l'
+  // assertion `expect(blocked.status).toBe(409)` a bien échoué (statut 201
+  // reçu à la place), confirmant que le test est discriminant. Le fichier a
+  // ensuite été restauré et le test revérifié vert.
+  it('bloque le check-out sur solde impayé et débloque via un check-out forcé réservé à checkin:force-checkout (CH-005)', async () => {
+    const room = await prisma.room.create({
+      data: { numero: `TEST-CH005-${Date.now()}`, roomTypeId },
+    });
+
+    const dateCheckoutPrevue = new Date();
+    dateCheckoutPrevue.setUTCDate(dateCheckoutPrevue.getUTCDate() + 2);
+
+    const res = await client.post('/api/checkin/walk-in').send({
+      roomId: room.id,
+      dateCheckoutPrevue: dateCheckoutPrevue.toISOString().slice(0, 10),
+      guest: { nom: 'Solde', prenom: 'Impaye' },
+    });
+    expect(res.status).toBe(201);
+    const stay = res.body as StayResponse;
+
+    // Sans force : solde positif (aucun paiement enregistré) → bloqué.
+    const blocked = await client.post(`/api/checkout/${stay.id}`).send();
+    expect(blocked.status).toBe(409);
+
+    // Réception a checkin:write mais pas checkin:force-checkout
+    // (Administrateur seul) : un essai de forçage doit être rejeté (403),
+    // pas silencieusement ignoré ni dégradé en check-out normal.
+    const forbidden = await client.post(`/api/checkout/${stay.id}`).send({
+      force: true,
+      motif: 'Geste commercial exceptionnel',
+    });
+    expect(forbidden.status).toBe(403);
+
+    // Même en Administrateur : sans motif (ou motif < 10 caractères), rejeté
+    // par la validation du DTO avant même d'atteindre le service.
+    const noMotif = await adminClient
+      .post(`/api/checkout/${stay.id}`)
+      .send({ force: true });
+    expect(noMotif.status).toBe(400);
+
+    // Le séjour n'a subi aucun effet de bord depuis les tentatives
+    // précédentes (toutes rejetées avant écriture) : il est toujours
+    // EN_COURS, le forçage légitime doit donc réussir.
+    const forced = await adminClient.post(`/api/checkout/${stay.id}`).send({
+      force: true,
+      motif: 'Geste commercial exceptionnel, client VIP fidèle',
+    });
+    expect(forced.status).toBe(201);
+    const forcedBody = forced.body as StayResponse;
+    expect(forcedBody.statut).toBe('CHECKOUT');
+    expect(Number(forcedBody.soldeDu)).toBeGreaterThan(0);
+
+    const auditLog = await prisma.auditLog.findFirst({
+      where: {
+        targetEntity: 'Stay',
+        targetId: stay.id,
+        action: 'FORCE_CHECKOUT',
+      },
+    });
+    expect(auditLog).not.toBeNull();
+    expect(auditLog!.motif).toContain('Geste commercial');
+
+    await prisma.roomNight.deleteMany({ where: { stayId: stay.id } });
+    await prisma.folioLine.deleteMany({
+      where: { folio: { stayId: stay.id } },
+    });
+    await prisma.folio.deleteMany({ where: { stayId: stay.id } });
+    await prisma.auditLog.deleteMany({
+      where: { targetEntity: 'Stay', targetId: stay.id },
+    });
     await prisma.stay.delete({ where: { id: stay.id } });
   });
 });

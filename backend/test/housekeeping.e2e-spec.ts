@@ -32,6 +32,7 @@ describe('Housekeeping — statuts de chambre (e2e)', () => {
   let roomTypeId: number;
   let roomId: number;
   let client: ReturnType<typeof authedRequest>;
+  let adminClient: ReturnType<typeof authedRequest>;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -48,6 +49,10 @@ describe('Housekeeping — statuts de chambre (e2e)', () => {
     prisma = app.get(PrismaService);
     const token = await loginAs(app.getHttpServer(), 'reception');
     client = authedRequest(app.getHttpServer(), token);
+    // CH-005 : la Réception n'a pas checkin:force-checkout — nécessaire pour
+    // le check-out forcé de fixtures de test au solde jamais réglé.
+    const adminToken = await loginAs(app.getHttpServer(), 'admin');
+    adminClient = authedRequest(app.getHttpServer(), adminToken);
 
     const roomType = await prisma.roomType.create({
       data: { nom: 'TEST-HOUSEKEEPING-TYPE', prixBase: 300, capacite: 2 },
@@ -135,7 +140,13 @@ describe('Housekeeping — statuts de chambre (e2e)', () => {
         .send({ statut: 'LIBRE_PROPRE' });
       expect(blocked.status).toBe(409);
 
-      const checkout = await client.post(`/api/checkout/${stayId}`).send();
+      // Solde jamais réglé dans ce test (hors périmètre — statuts de
+      // chambre) : check-out forcé par un Administrateur (CH-005) — la
+      // Réception (client) n'a pas checkin:force-checkout.
+      const checkout = await adminClient.post(`/api/checkout/${stayId}`).send({
+        force: true,
+        motif: 'Nettoyage de fixture de test (housekeeping e2e)',
+      });
       expect(checkout.status).toBe(201);
 
       const roomAfterCheckout = await client.get('/api/rooms');

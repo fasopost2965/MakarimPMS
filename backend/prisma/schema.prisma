@@ -1093,6 +1093,9 @@ enum AuditAction {
   // CH-001 (docs/governance/REGISTRE_CHANTIERS.md) — avoir total sur une
   // facture émise (BillingService.createCreditNote).
   CREATE_CREDIT_NOTE
+  // CH-005 — check-out forcé malgré un solde impayé (StayService.checkout),
+  // réservé à la permission dédiée checkin:force-checkout.
+  FORCE_CHECKOUT
 }
 
 // ------------------------------------------------------------------

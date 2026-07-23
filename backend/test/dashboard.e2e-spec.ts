@@ -194,8 +194,12 @@ describe('Dashboard — résumé (e2e)', () => {
       expect(departs.length).toBeGreaterThan(0);
 
       // Nettoyer ce séjour tout de suite pour ne pas fausser les tests
-      // suivants du fichier (chambresOccupees, etc.).
-      await client.post(`/api/checkout/${stayId}`).send();
+      // suivants du fichier (chambresOccupees, etc.). Solde jamais réglé
+      // dans ce test : check-out forcé (CH-005, client = Administrateur ici).
+      await client.post(`/api/checkout/${stayId}`).send({
+        force: true,
+        motif: 'Nettoyage de fixture de test (dashboard e2e)',
+      });
     },
   );
 
@@ -289,9 +293,14 @@ describe('Dashboard — résumé (e2e)', () => {
     expect(Number(resume.encaisseAujourdhui)).toBeGreaterThanOrEqual(123.45);
 
     // Nettoyer : sans ça, le paiement de test resterait en base et fausserait
-    // durablement l'encaissé du jour affiché dans le dashboard.
+    // durablement l'encaissé du jour affiché dans le dashboard. Le paiement
+    // est supprimé avant le check-out : le solde redevient positif, d'où le
+    // check-out forcé (CH-005, client = Administrateur ici).
     await prisma.payment.deleteMany({ where: { idempotencyKey } });
-    await client.post(`/api/checkout/${paymentStayId}`).send();
+    await client.post(`/api/checkout/${paymentStayId}`).send({
+      force: true,
+      motif: 'Nettoyage de fixture de test (dashboard e2e)',
+    });
     await prisma.folioLine.deleteMany({ where: { folioId } });
     await prisma.folio.deleteMany({ where: { id: folioId } });
     await prisma.stay.deleteMany({ where: { id: paymentStayId } });

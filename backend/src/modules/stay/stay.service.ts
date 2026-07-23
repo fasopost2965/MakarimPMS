@@ -1,11 +1,14 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
+  AuditAction,
+  AuditEntity,
   FormuleHebergement,
   Prisma,
   StatutAcompte,
@@ -26,6 +29,7 @@ import { GuestsService } from '../guests/guests.service';
 import { BillingService } from '../billing/billing.service';
 import { AuditService } from '../audit/audit.service';
 import { WalkinDto } from './dto/walkin.dto';
+import { ForceCheckoutDto } from './dto/force-checkout.dto';
 import { computeSoldeDu } from './utils/solde';
 import { CheckoutEffectueEvent } from './events/checkout-effectue.event';
 
@@ -395,7 +399,22 @@ export class StayService {
   // besoin de connaître sa machine à états. emitAsync (pas emit) : le
   // listener écrit en base de façon asynchrone, on l'attend pour que
   // Room.statut soit déjà à jour quand checkout() répond à l'appelant.
-  async checkout(id: number, userId?: number) {
+  //
+  // CH-005 : un solde positif bloque désormais le check-out (BR-SEJ-004/
+  // INV-SEJ-002, jusqu'ici non appliqués — voir CLAUDE.md). Échappatoire
+  // volontaire (arbitrage produit) : force=true, motif écrit obligatoire
+  // (validé par ForceCheckoutDto), soumis à la permission dédiée
+  // checkin:force-checkout (Administrateur uniquement, vérification
+  // dynamique — le contenu de la requête, pas seulement la route, détermine
+  // la permission requise, donc pas exprimable par @RequirePermission,
+  // même pattern que GuestsService.updateCategorie/guests:blacklist).
+  // Solde négatif ou nul : jamais bloqué, comportement inchangé.
+  async checkout(
+    id: number,
+    dto?: ForceCheckoutDto,
+    userId?: number,
+    roleId?: number,
+  ) {
     const stay = await this.findOne(id);
     if (stay.statut !== StatutSejour.EN_COURS) {
       throw new ConflictException(
@@ -404,8 +423,41 @@ export class StayService {
     }
 
     const soldeDu = computeSoldeDu(stay.folios);
+    const soldePositif = soldeDu.gt(0);
+    const force = dto?.force === true;
+
+    if (soldePositif && !force) {
+      throw new ConflictException(
+        `Solde impayé (${soldeDu.toFixed(2)} MAD) : le check-out est bloqué tant que le solde n'est pas ramené à 0 (paiement ou avoir). Un check-out forcé est possible (force: true, motif ≥ 10 caractères), réservé à la permission checkin:force-checkout.`,
+      );
+    }
 
     const updated = await this.prisma.$transaction(async (tx) => {
+      if (soldePositif && force) {
+        const grant = await tx.permission.findFirst({
+          where: {
+            module: 'checkin',
+            action: 'force-checkout',
+            roles: { some: { roleId } },
+          },
+        });
+        if (!grant) {
+          throw new ForbiddenException(
+            'Permission requise : checkin:force-checkout.',
+          );
+        }
+
+        await this.auditService.writeLog(tx, {
+          userId,
+          action: AuditAction.FORCE_CHECKOUT,
+          targetEntity: AuditEntity.Stay,
+          targetId: id,
+          oldValue: { soldeDu: soldeDu.toFixed(2) },
+          newValue: { statut: StatutSejour.CHECKOUT },
+          motif: dto.motif!,
+        });
+      }
+
       await tx.roomNight.deleteMany({ where: { stayId: id } });
 
       return tx.stay.update({
