@@ -62,3 +62,24 @@ export interface UpdateSeasonRateInput {
   prixNuit?: string;
   motif: string;
 }
+
+// CH-009 (F10, channel-manager) — WALK_IN/DIRECT existent dans
+// CanalReservation côté backend mais ne sont jamais l'origine d'un mapping
+// OTA (aucun webhook entrant pour ces deux canaux).
+export type CanalOTA = 'BOOKING_COM' | 'EXPEDIA' | 'AIRBNB';
+
+export interface ChannelRoomTypeMapping {
+  id: number;
+  canal: CanalOTA;
+  externalRoomTypeId: string;
+  roomTypeId: number;
+  roomType: { id: number; nom: string };
+  createdAt: string;
+}
+
+export interface CreateChannelRoomTypeMappingInput {
+  canal: CanalOTA;
+  externalRoomTypeId: string;
+  roomTypeId: number;
+  motif: string;
+}

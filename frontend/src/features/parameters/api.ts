@@ -1,5 +1,7 @@
 import { apiRequest } from '@/lib/api-client';
 import type {
+  ChannelRoomTypeMapping,
+  CreateChannelRoomTypeMappingInput,
   CreateSeasonRateInput,
   HotelConfig,
   SeasonRate,
@@ -51,6 +53,24 @@ export function updateSeasonRate(id: number, input: UpdateSeasonRateInput) {
 
 export function deleteSeasonRate(id: number, motif: string) {
   return apiRequest<void>(`/season-rates/${id}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ motif }),
+  });
+}
+
+export function listChannelMappings() {
+  return apiRequest<ChannelRoomTypeMapping[]>('/channel-manager/mappings');
+}
+
+export function createChannelMapping(input: CreateChannelRoomTypeMappingInput) {
+  return apiRequest<ChannelRoomTypeMapping>('/channel-manager/mappings', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteChannelMapping(id: number, motif: string) {
+  return apiRequest<void>(`/channel-manager/mappings/${id}`, {
     method: 'DELETE',
     body: JSON.stringify({ motif }),
   });

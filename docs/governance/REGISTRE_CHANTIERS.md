@@ -203,10 +203,11 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 - **Modules concernés** : frontend (nouveau, probablement intégré à `features/parameters/`).
 - **Priorité** : Important · **Criticité** : Modérée (si le canal OTA est effectivement utilisé)
 - **Impact métier** : Élevé si canaux OTA activés (Booking.com/Expedia/Airbnb ne peuvent pas fonctionner sans ce mapping) · **Impact sécurité** : Aucun · **Impact conformité** : Aucun · **Impact exploitation** : Élevé si OTA activé, nul sinon
-- **Dépendances** : aucune. **Prérequis** : confirmer si un canal OTA réel est déjà branché en production — *à confirmer*, car F10 est un module de test/adaptateur sans compte partenaire réel selon `CLAUDE.md`.
+- **Dépendances** : aucune. **Prérequis** : confirmer si un canal OTA réel est déjà branché en production — *à confirmer*, car F10 est un module de test/adaptateur sans compte partenaire réel selon `CLAUDE.md`. **Non bloquant pour l'implémentation** : le livrable (écran CRUD) est identique quelle que soit la réponse — sans mapping configuré, tout import OTA reste rejeté explicitement (404) qu'un partenaire réel soit branché ou non.
 - **Livrable attendu** : écran CRUD des mappings type de chambre ↔ canal externe.
-- **Statut** : à faire · **Estimation** : Faible (1 jour) · **Confiance** : élevée
+- **Statut** : ✅ **Terminé** (session courante) · **Estimation** : Faible (1 jour) · **Confiance** : élevée
 - **Lien audit** : Phase 8 §2.
+- **Résolution** : nouvelle section « Channel Manager » dans `ParametersPage.tsx` (`frontend/src/features/parameters/`, 4e onglet aux côtés d'Identité/TVA/Grille saisonnière — même page, mêmes conventions RBAC `parameters:write`/`read`, pas un nouvel écran isolé). Réutilise les trois routes existantes telles quelles (`GET/POST /channel-manager/mappings`, `DELETE /channel-manager/mappings/:id`), motif ≥ 10 caractères obligatoire à la création et à la suppression (ADR-005, même pattern que `SeasonRatesSection` dont le composant est directement dérivé). Sélecteur de canal restreint aux 3 OTA réels (`CanalOTA` côté frontend exclut `WALK_IN`/`DIRECT`, jamais l'origine d'un webhook entrant). Vérifié en navigateur réel (Playwright, rôle Administrateur) : création d'un mapping Booking.com « STD-DBL » → Single, **puis vérification bout-en-bout par un vrai appel webhook** (`POST /channel-manager/BOOKING_COM/reservations`, secret partagé réel) confirmant que le mapping créé via l'UI résout effectivement un import OTA vers le bon type de chambre ; suppression via l'UI puis nouvel appel webhook confirmant le rejet 404 attendu une fois le mapping retiré.
 
 ---
 
@@ -335,7 +336,7 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 | Priorité | Nombre de chantiers | Charge cumulée estimée (ordre de grandeur) | Terminés |
 |---|---|---|---|
 | Bloquant | 4 (CH-001 à CH-004) | ~7–11 jours développeur | 4 (CH-001, CH-002, CH-003, CH-004) — tous terminés |
-| Important | 8 (CH-005 à CH-012) | ~11–16 jours développeur | 5 (CH-005, CH-006, CH-007, CH-011, CH-012) |
+| Important | 8 (CH-005 à CH-012) | ~11–16 jours développeur | 6 (CH-005, CH-006, CH-007, CH-009, CH-011, CH-012) |
 | Secondaire | 14 (CH-013 à CH-026) | ~18–28 jours développeur (plusieurs sous conditions d'arbitrage) | 0 (1 partiel : CH-013) |
 
 *Ces charges sont des ordres de grandeur de développement pur (hors tests e2e étendus, hors stabilisation, hors documentation) — voir `docs/planning/ESTIMATION_CHARGE.md` pour l'estimation consolidée par scénario.*
@@ -353,3 +354,4 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 | CH-011 | ✅ Terminé | Session courante | Gating RBAC frontend (granularité onglet entier) — GET /auth/me + filtrage de NAV_ITEMS, voir fiche ci-dessus (RD-009). |
 | CH-006 | ✅ Terminé | Session courante | Filtrage soft-delete centralisé — extension Prisma `$extends`, voir fiche ci-dessus (RD-010). |
 | CH-007 | ✅ Terminé | Session courante | Interface frontend self-checkin (staff) — `SelfCheckinPanel.tsx` sur le détail de réservation, voir fiche ci-dessus. Corrige au passage un bug latent de `lib/api-client.ts` (corps de réponse vide non géré hors 204) et la dette technique #6 (`seed.ts`, `DETTE_TECHNIQUE.md`). |
+| CH-009 | ✅ Terminé | Session courante | Interface frontend channel-manager (mappings OTA) — 4e onglet dans `ParametersPage.tsx`, voir fiche ci-dessus. Vérifié par un appel webhook réel bout-en-bout (import résolu puis rejeté après suppression du mapping). |

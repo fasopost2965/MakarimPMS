@@ -17,9 +17,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  createChannelMapping,
   createSeasonRate,
+  deleteChannelMapping,
   deleteSeasonRate,
   getHotelConfig,
+  listChannelMappings,
   listSeasonRates,
   listTaxRates,
   updateHotelConfig,
@@ -27,6 +30,9 @@ import {
 } from '../api';
 import { listRooms } from '../../reservations/api';
 import type {
+  CanalOTA,
+  ChannelRoomTypeMapping,
+  CreateChannelRoomTypeMappingInput,
   CreateSeasonRateInput,
   HotelConfig,
   SeasonRate,
@@ -34,7 +40,13 @@ import type {
 } from '../types';
 import type { RoomType } from '../../reservations/types';
 
-type Section = 'identite' | 'taxes' | 'saisons';
+type Section = 'identite' | 'taxes' | 'saisons' | 'channel-manager';
+
+const CANAL_OTA_LABEL: Record<CanalOTA, string> = {
+  BOOKING_COM: 'Booking.com',
+  EXPEDIA: 'Expedia',
+  AIRBNB: 'Airbnb',
+};
 
 const TAX_TYPE_LABEL: Record<string, string> = {
   TVA_HEBERGEMENT: 'TVA hébergement',
@@ -73,11 +85,19 @@ export function ParametersPage() {
         >
           Grille saisonnière
         </Button>
+        <Button
+          variant={section === 'channel-manager' ? 'default' : 'ghost'}
+          size="sm"
+          onClick={() => setSection('channel-manager')}
+        >
+          Channel Manager
+        </Button>
       </div>
 
       {section === 'identite' && <HotelIdentitySection />}
       {section === 'taxes' && <TaxRatesSection />}
       {section === 'saisons' && <SeasonRatesSection />}
+      {section === 'channel-manager' && <ChannelManagerSection />}
     </div>
   );
 }
@@ -609,6 +629,293 @@ function CreateSeasonRateForm({
             value={motif}
             onChange={(e) => setMotif(e.target.value)}
             placeholder="Ex. Ouverture de la grille été 2027"
+            required
+          />
+        </div>
+
+        {error && <p className="text-destructive text-sm">{error}</p>}
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Annuler
+          </Button>
+          <Button type="submit" disabled={submitting || !canSubmit}>
+            {submitting ? 'Création…' : 'Créer'}
+          </Button>
+        </DialogFooter>
+      </form>
+    </>
+  );
+}
+
+// CH-009 (F10, channel-manager) — sans mapping configuré, un import de
+// réservation OTA échoue explicitement en 404 (ChannelManagerService,
+// docs/governance/REGISTRE_CHANTIERS.md) plutôt que de deviner un type de
+// chambre. Permission réutilisée : parameters:write/read, même logique que
+// SeasonRate/TaxRateConfig ci-dessus (configuration exceptionnelle, pas une
+// opération métier quotidienne).
+function ChannelManagerSection() {
+  const [mappings, setMappings] = useState<ChannelRoomTypeMapping[]>([]);
+  const [roomTypes, setRoomTypes] = useState<RoomType[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteMotifs, setDeleteMotifs] = useState<Record<number, string>>({});
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const refetch = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const [mappingsData, roomsData] = await Promise.all([
+        listChannelMappings(),
+        listRooms(),
+      ]);
+      setMappings(mappingsData);
+      const uniqueTypes = new Map<number, RoomType>();
+      for (const room of roomsData)
+        uniqueTypes.set(room.roomType.id, room.roomType);
+      setRoomTypes([...uniqueTypes.values()]);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Erreur de chargement');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void refetch();
+  }, [refetch]);
+
+  async function handleDelete(id: number) {
+    const motif = deleteMotifs[id] ?? '';
+    if (motif.length < 10) return;
+    setActionError(null);
+    setDeletingId(id);
+    try {
+      await deleteChannelMapping(id, motif);
+      await refetch();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  async function handleCreate(input: CreateChannelRoomTypeMappingInput) {
+    setFormError(null);
+    setSubmitting(true);
+    try {
+      await createChannelMapping(input);
+      setDialogOpen(false);
+      await refetch();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <p className="text-muted-foreground max-w-lg text-sm">
+          Correspondance entre le type de chambre externe d'un canal OTA
+          (Booking.com, Expedia, Airbnb) et un type de chambre interne — sans
+          mapping configuré, l'import d'une réservation de ce canal est rejeté.
+        </p>
+        <Button size="sm" onClick={() => setDialogOpen(true)}>
+          + Nouveau mapping
+        </Button>
+      </div>
+
+      {loadError && <p className="text-destructive text-sm">{loadError}</p>}
+      {actionError && <p className="text-destructive text-sm">{actionError}</p>}
+
+      {loading ? (
+        <p className="text-muted-foreground text-sm">Chargement…</p>
+      ) : mappings.length === 0 ? (
+        <p className="text-muted-foreground text-sm">
+          Aucun mapping configuré.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {mappings.map((mapping) => {
+            const motif = deleteMotifs[mapping.id] ?? '';
+            return (
+              <div
+                key={mapping.id}
+                className="flex flex-col gap-2 rounded-md border p-3"
+              >
+                <p className="text-sm font-medium">
+                  {CANAL_OTA_LABEL[mapping.canal]} — «{' '}
+                  {mapping.externalRoomTypeId} » → {mapping.roomType.nom}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={motif}
+                    onChange={(e) =>
+                      setDeleteMotifs({
+                        ...deleteMotifs,
+                        [mapping.id]: e.target.value,
+                      })
+                    }
+                    placeholder="Motif de suppression (≥ 10 caractères)"
+                    className="flex-1"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={deletingId === mapping.id || motif.length < 10}
+                    onClick={() => handleDelete(mapping.id)}
+                  >
+                    {deletingId === mapping.id ? 'Suppression…' : 'Supprimer'}
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(next) => !next && setDialogOpen(false)}
+      >
+        <DialogContent>
+          {dialogOpen && (
+            <CreateChannelMappingForm
+              roomTypes={roomTypes}
+              onClose={() => setDialogOpen(false)}
+              onConfirm={handleCreate}
+              submitting={submitting}
+              error={formError}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+interface CreateChannelMappingFormProps {
+  roomTypes: RoomType[];
+  onClose: () => void;
+  onConfirm: (input: CreateChannelRoomTypeMappingInput) => void;
+  submitting: boolean;
+  error: string | null;
+}
+
+function CreateChannelMappingForm({
+  roomTypes,
+  onClose,
+  onConfirm,
+  submitting,
+  error,
+}: CreateChannelMappingFormProps) {
+  const [canal, setCanal] = useState<CanalOTA>('BOOKING_COM');
+  const [externalRoomTypeId, setExternalRoomTypeId] = useState('');
+  const [roomTypeId, setRoomTypeId] = useState(
+    roomTypes[0] ? String(roomTypes[0].id) : '',
+  );
+  const [motif, setMotif] = useState('');
+
+  const canSubmit = externalRoomTypeId && roomTypeId && motif.length >= 10;
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>Nouveau mapping OTA</DialogTitle>
+      </DialogHeader>
+
+      <form
+        className="flex flex-col gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!canSubmit) return;
+          onConfirm({
+            canal,
+            externalRoomTypeId,
+            roomTypeId: Number(roomTypeId),
+            motif,
+          });
+        }}
+      >
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="canal">Canal OTA</Label>
+          <Select
+            value={canal}
+            onValueChange={(v) => v && setCanal(v as CanalOTA)}
+            items={Object.entries(CANAL_OTA_LABEL).map(([value, label]) => ({
+              value,
+              label,
+            }))}
+          >
+            <SelectTrigger id="canal" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(CANAL_OTA_LABEL).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="externalRoomTypeId">
+            Identifiant du type de chambre côté OTA
+          </Label>
+          <Input
+            id="externalRoomTypeId"
+            value={externalRoomTypeId}
+            onChange={(e) => setExternalRoomTypeId(e.target.value)}
+            placeholder="Ex. STD-DBL"
+            required
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="roomTypeInterne">Type de chambre interne</Label>
+          <Select
+            value={roomTypeId}
+            onValueChange={(v) => v && setRoomTypeId(v)}
+            items={roomTypes.map((rt) => ({
+              value: String(rt.id),
+              label: rt.nom,
+            }))}
+          >
+            <SelectTrigger id="roomTypeInterne" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {roomTypes.map((rt) => (
+                <SelectItem key={rt.id} value={String(rt.id)}>
+                  {rt.nom}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="motif">Motif (≥ 10 caractères)</Label>
+          <Input
+            id="motif"
+            value={motif}
+            onChange={(e) => setMotif(e.target.value)}
+            placeholder="Ex. Activation de la synchronisation Booking.com"
             required
           />
         </div>
