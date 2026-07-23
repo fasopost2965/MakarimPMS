@@ -12,7 +12,7 @@ Relie, pour chaque grand domaine fonctionnel, l'exigence métier au module, à l
 | **Corriger une facture émise erronée** | `billing` | `POST /invoices/:id/credit-notes` | `docs/ADR-002-Folio-Billing-Model.md` (multi-folio), `docs/ADR-004` (immuabilité), `docs/governance/REGISTRE_DECISIONS.md` (RD-005) | Phase 6 | **CH-001 — terminé** | ✅ (`billing.e2e-spec.ts`) | ❌ *(aucune UI, action API uniquement — hors périmètre de CH-001, non demandée)* | ⚠️ (backend prêt, pas d'UI) |
 | Encaisser un paiement de façon idempotente | `payments` | `POST /payments` | `docs/modules/payments.md` | Phases 2, 4, 6 | — | ✅ | ✅ | ✅ |
 | Bloquer le check-out sur solde impayé | `stay` | `POST /checkout/:stayId` | `CLAUDE.md` (règle citée non appliquée) | Phase 6 | **CH-005** | ❌ | — | ❌ |
-| Rembourser un acompte déjà imputé | `payments` | `POST /reservations/:id/deposits/:id/rembourser` | `docs/modules/payments.md` | Phase 6 | **CH-012** (dépendance CH-001 levée, non démarré) | ❌ | — | ❌ |
+| Rembourser un acompte déjà imputé | `payments` | `POST /reservations/:id/deposits/:id/rembourser` | `docs/modules/payments.md`, `docs/governance/REGISTRE_DECISIONS.md` (RD-007) | Phase 6 | **CH-012 — terminé** | ✅ (`payments.e2e-spec.ts`) | — | ✅ |
 | Transitionner le statut d'une chambre selon une machine à états | `rooms`, `housekeeping` | `PATCH /rooms/:id/statut` | `docs/ADR-003-Room-State-Machine.md` | Phases 2, 7 | — | ✅ | ✅ | ✅ |
 | Consulter l'historique des transitions de chambre | `rooms` | *(inexistant)* | — | Phase 7 | **CH-014** | — | ❌ | ❌ |
 | Ouvrir/résoudre un ticket de maintenance avec blocage de chambre | `maintenance` | `POST /maintenance-tickets`, `PATCH /:id/resoudre` | `docs/modules/maintenance.md` | Phase 7 | — | ❓ *(à confirmer)* | ✅ | ✅ |

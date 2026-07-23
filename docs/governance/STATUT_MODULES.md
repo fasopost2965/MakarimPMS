@@ -16,7 +16,7 @@ Statut par module backend, croisé avec la présence d'une interface frontend et
 | `maintenance` | ✅ | ✅ | — | — |
 | `guests` (+ `companies`) | ⚠️ | ✅ | CH-010, CH-021 | Pas de déduplication ; `Company` déconnectée |
 | `billing` | ✅ | ⚠️ (via checkin ; pas d'UI pour l'avoir) | — | **CH-001 terminé** — avoir total (`POST /invoices/:id/credit-notes`), régénération de facture corrigée possible sur le même folio |
-| `payments` | ⚠️ | ⚠️ (via checkin) | CH-012 | Remboursement d'acompte imputé non démarré (dépendance CH-001 levée) |
+| `payments` | ✅ | ⚠️ (via checkin) | — | **CH-012 terminé** — remboursement d'acompte imputé fonctionnel (préalable : avoir sur toute facture active) |
 | `dashboard` | ✅ | ✅ | — | — |
 | `audit` | ✅ | ❌ | CH-015 | Aucune UI de consultation |
 | `police` | ✅ | ✅ | — | **CH-003 terminé** — onglet dédié dans `StayDetailsDialog.tsx` |

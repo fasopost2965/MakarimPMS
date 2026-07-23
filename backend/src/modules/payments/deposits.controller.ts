@@ -47,7 +47,7 @@ export class DepositsController {
   @RequirePermission('payments', 'write')
   @ApiOperation({
     summary:
-      'Rembourse un acompte non encore imputé (réservé Administrateur, motif obligatoire)',
+      "Rembourse un acompte (réservé Administrateur, motif obligatoire) — un acompte déjà imputé à un folio exige d'abord l'annulation par avoir de toute facture émise active sur ce folio (CH-012)",
   })
   @Post(':id/deposits/:depositId/rembourser')
   rembourser(

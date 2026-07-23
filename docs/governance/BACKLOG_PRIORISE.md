@@ -5,7 +5,7 @@ Vue condensée et actionnable de `REGISTRE_CHANTIERS.md`, triée pour piloter l'
 ## Ordre d'exécution recommandé
 
 ### Vague 1 — Bloquants (avant go-live)
-Peuvent être menés en parallèle par des développeurs différents — aucune dépendance croisée entre eux à l'exception de CH-012 qui attend CH-001.
+Peuvent être menés en parallèle par des développeurs différents — aucune dépendance croisée entre eux à l'exception de CH-012 (Vague 2) qui attendait CH-001 (dépendance levée, CH-012 également terminé depuis).
 
 1. **CH-002** — ✅ **Terminé** (session courante). Sécuriser le reset password *(le plus rapide, traité en premier pour fermer une faille active)* — voir `REGISTRE_CHANTIERS.md` pour le détail (l'implémentation a nécessité un ajustement frontend non anticipé dans la fiche initiale, traité dans le même chantier).
 2. **CH-001** — ✅ **Terminé** (session courante). Implémenter CreditNote (avoir total) *(le plus structurant, débloque CH-012 et une partie de CH-023)* — voir `REGISTRE_CHANTIERS.md` pour le détail (garde de régénération de facture + correctif d'un bug latent de double-matérialisation de taxe, non anticipés dans la fiche initiale, traités dans le même chantier).
@@ -17,7 +17,7 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 6. **CH-011** — Gating RBAC frontend *(prérequis technique : route `GET /auth/me` à créer — le plus gros chantier de cette vague)*
 7. **CH-010** — Déduplication client
 8. **CH-006** — Centraliser soft-delete
-9. **CH-012** — Remboursement acompte imputé *(débloqué — CH-001 est livré — non démarré)*
+9. **CH-012** — ✅ **Terminé** (session courante). Remboursement acompte imputé — voir `REGISTRE_CHANTIERS.md` pour le détail (l'avoir est un préalable au remboursement, pas une action déclenchée par la route elle-même, RD-007).
 10. **CH-007 / CH-008 / CH-009** — Interfaces frontend self-checkin / notifications / channel-manager *(indépendantes entre elles, à répartir selon la capacité disponible)*
 
 ### Vague 3 — Secondaires (dette technique, à intercaler entre les livraisons fonctionnelles)

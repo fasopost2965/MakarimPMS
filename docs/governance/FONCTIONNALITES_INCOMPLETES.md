@@ -15,7 +15,7 @@ C'est le motif transversal le plus significatif identifié par l'audit (Phase 9 
 | Facturation entreprise / city ledger | Modèle `Company` avec `plafondCredit`, `conditionsPaiement` | Zéro FK vers `Reservation`/`Stay`/`Folio`/`Invoice` ; `plafondCredit` jamais vérifié | CH-021 |
 | Historique consultable des transitions de chambre | `RoomStatusLog` alimenté à chaque transition | Jamais lu par aucune route | CH-014 |
 | Journal d'audit transverse consultable côté interface | Module `audit` fonctionnel côté backend | Aucune UI de consultation | CH-015 |
-| Remboursement d'un acompte déjà imputé à un folio | Le code de `DepositsService.rembourser` référence explicitement « une note de crédit sur la facture » comme voie de recours | Cette voie existe désormais (`BillingService.createCreditNote()`, CH-001 terminé) mais n'est pas encore branchée dans `DepositsService.rembourser` — l'acompte reste bloqué jusqu'à l'implémentation de CH-012 | CH-012 (dépendance CH-001 levée, non démarré) |
+| ~~Remboursement d'un acompte déjà imputé à un folio~~ | Le code de `DepositsService.rembourser` référence explicitement « une note de crédit sur la facture » comme voie de recours | **Résolu (CH-012, session courante)** — `rembourser()` autorise désormais un acompte `IMPUTE` dès que le folio d'imputation ne porte plus de facture `EMISE` active (avoir préalable via CH-001 si nécessaire). Retiré des fonctionnalités incomplètes. | CH-012 (terminé) |
 | Recouvrement tracé de la pénalité d'annulation/no-show | `Reservation.montantPenalite` calculé et figé | Jamais matérialisé en écriture financière, recouvrement entièrement hors système | CH-023 |
 
 ## Ce que ce registre implique pour la suite du développement
