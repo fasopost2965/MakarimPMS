@@ -84,6 +84,33 @@ export class GuestsService {
     return this.prisma.guest.create({ data: dto });
   }
 
+  // CH-010 (docs/governance/REGISTRE_DECISIONS.md, RD-011) — détection
+  // souple à la création : email/téléphone n'ont volontairement aucune
+  // contrainte d'unicité en base (un même contact peut légitimement être
+  // partagé par plusieurs membres d'une famille) — purement consultatif,
+  // jamais bloquant, le frontend affiche le résultat comme avertissement
+  // avant confirmation manuelle. La contrainte dure réelle (pieceIdentite)
+  // est appliquée par la base elle-même (Guest_pieceIdentiteHash_key), pas
+  // ici — aucune vérification de pièce d'identité dans cette méthode.
+  async checkPotentialDuplicate(params: {
+    email?: string;
+    telephone?: string;
+  }) {
+    if (!params.email && !params.telephone) {
+      return [];
+    }
+    return this.prisma.guest.findMany({
+      where: {
+        OR: [
+          params.email ? { email: params.email } : undefined,
+          params.telephone ? { telephone: params.telephone } : undefined,
+        ].filter((clause): clause is NonNullable<typeof clause> => !!clause),
+      },
+      orderBy: { createdAt: 'desc' },
+      take: SEARCH_LIMIT,
+    });
+  }
+
   async findOne(id: number) {
     const guest = await this.prisma.guest.findUnique({ where: { id } });
     if (!guest) {

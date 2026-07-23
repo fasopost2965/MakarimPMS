@@ -14,7 +14,7 @@ Statut par module backend, croisé avec la présence d'une interface frontend et
 | `stay` | ✅ | ✅ (`checkin/`) | — | **CH-005 terminé** — checkout bloqué sur solde impayé (`ConflictException`), check-out forcé réservé à `checkin:force-checkout` |
 | `housekeeping` | ✅ | ✅ | CH-014 | — |
 | `maintenance` | ✅ | ✅ | — | — |
-| `guests` (+ `companies`) | ⚠️ | ✅ | CH-010, CH-021 | Pas de déduplication ; `Company` déconnectée |
+| `guests` (+ `companies`) | ⚠️ | ✅ | CH-021 | **CH-010 terminé** — contrainte dure sur `pieceIdentite` (index aveugle) + détection souple email/téléphone ; `Company` reste déconnectée (CH-021, dépriorisé formellement, EA-001) |
 | `billing` | ✅ | ⚠️ (via checkin ; pas d'UI pour l'avoir) | — | **CH-001 terminé** — avoir total (`POST /invoices/:id/credit-notes`), régénération de facture corrigée possible sur le même folio |
 | `payments` | ✅ | ⚠️ (via checkin) | — | **CH-012 terminé** — remboursement d'acompte imputé fonctionnel (préalable : avoir sur toute facture active) |
 | `dashboard` | ✅ | ✅ | — | — |

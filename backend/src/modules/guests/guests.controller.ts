@@ -38,6 +38,19 @@ export class GuestsController {
   }
 
   @RequirePermission('guests', 'read')
+  @ApiOperation({
+    summary:
+      'Détection souple de doublon par email/téléphone avant création (CH-010, consultatif, jamais bloquant)',
+  })
+  @Get('check-duplicate')
+  checkDuplicate(
+    @Query('email') email?: string,
+    @Query('telephone') telephone?: string,
+  ) {
+    return this.guestsService.checkPotentialDuplicate({ email, telephone });
+  }
+
+  @RequirePermission('guests', 'read')
   @ApiOperation({ summary: "Détail d'un client" })
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {

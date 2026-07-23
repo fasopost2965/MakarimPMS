@@ -1,4 +1,9 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHmac,
+  randomBytes,
+} from 'crypto';
 
 // CH-004 (docs/governance/REGISTRE_CHANTIERS.md) — chiffrement au repos de
 // Guest.pieceIdentite. AES-256-GCM : chiffrement authentifié (détecte toute
@@ -48,6 +53,20 @@ export function encryptField(plaintext: string, key: Buffer): string {
   ]);
   const authTag = cipher.getAuthTag();
   return PREFIX + Buffer.concat([iv, authTag, ciphertext]).toString('base64');
+}
+
+// CH-010 (docs/governance/REGISTRE_DECISIONS.md, RD-011) — index aveugle
+// pour Guest.pieceIdentiteHash : HMAC-SHA256 déterministe (même clé que le
+// chiffrement — HMAC et AES-GCM sont des primitives indépendantes, réutiliser
+// la même clé brute entre les deux ne crée pas de faiblesse croisée connue ;
+// éviter une deuxième variable d'environnement à gérer reste préférable pour
+// un projet de cette taille, CLAUDE.md). Volontairement déterministe
+// (contrairement à encryptField) : c'est le seul moyen de porter une
+// contrainte @@unique en base sur une valeur par ailleurs chiffrée de façon
+// non-déterministe — un hash ne se déchiffre pas, aucune régression sur la
+// garantie de confidentialité de CH-004.
+export function hashField(plaintext: string, key: Buffer): string {
+  return createHmac('sha256', key).update(plaintext, 'utf8').digest('hex');
 }
 
 // Rétrocompatible avec une valeur en clair pré-existante (pas de préfixe

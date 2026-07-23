@@ -32,6 +32,7 @@ import type {
   GuestInvoice,
   GuestStayHistorique,
 } from '../types';
+import { useDuplicateWarning } from '../useDuplicateWarning';
 
 const CATEGORIES: CategorieClient[] = [
   'STANDARD',
@@ -370,6 +371,7 @@ function CreateGuestForm({
   const [telephone, setTelephone] = useState('');
   const [email, setEmail] = useState('');
   const [preferences, setPreferences] = useState('');
+  const duplicates = useDuplicateWarning(email, telephone);
 
   return (
     <>
@@ -452,6 +454,27 @@ function CreateGuestForm({
             onChange={(e) => setPreferences(e.target.value)}
           />
         </div>
+
+        {duplicates.length > 0 && (
+          <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
+            <p className="font-medium">
+              Client(s) potentiellement déjà en base (email/téléphone similaire)
+              :
+            </p>
+            <ul className="mt-1 list-inside list-disc">
+              {duplicates.map((d) => (
+                <li key={d.id}>
+                  {d.nom} {d.prenom}
+                  {d.telephone ? ` — ${d.telephone}` : ''}
+                  {d.email ? ` — ${d.email}` : ''}
+                </li>
+              ))}
+            </ul>
+            <p className="text-muted-foreground mt-1">
+              Vérification informative — la création reste possible.
+            </p>
+          </div>
+        )}
 
         {error && <p className="text-destructive text-sm">{error}</p>}
 

@@ -23,7 +23,15 @@ import { softDeleteExtension } from './soft-delete.extension';
     {
       provide: PrismaService,
       useFactory: (): PrismaService => {
-        const client = new PrismaClient()
+        const client = new PrismaClient({
+          // CH-010 — pieceIdentiteHash (index aveugle HMAC, RD-011) n'est
+          // jamais destiné à être lu par du code applicatif ni renvoyé par
+          // l'API : `omit` global (Prisma 6, GA) l'exclut de tout résultat
+          // par défaut, quel que soit le service appelant — même garantie
+          // structurelle que le filtrage soft-delete (CH-006), pas une
+          // discipline manuelle par endpoint.
+          omit: { guest: { pieceIdentiteHash: true } },
+        })
           .$extends(guestEncryptionExtension(process.env.ENCRYPTION_KEY))
           .$extends(softDeleteExtension());
         return client as unknown as PrismaService;
