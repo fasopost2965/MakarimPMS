@@ -116,7 +116,6 @@ export function CheckinPage() {
   return (
     <div className="flex h-full flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-medium">Check-in / Séjours</h1>
         <Button onClick={() => setWalkinOpen(true)}>+ Check-in walk-in</Button>
       </div>
 
@@ -126,9 +125,9 @@ export function CheckinPage() {
       {loading ? (
         <p className="text-muted-foreground text-sm">Chargement…</p>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2">
-          <section className="flex flex-col gap-2">
-            <h2 className="text-sm font-semibold">Arrivées du jour</h2>
+        <div className="grid gap-4 md:grid-cols-2">
+          <section className="bg-card flex flex-col gap-2 rounded-lg border p-4">
+            <h2 className="text-xs font-bold">Arrivées du jour</h2>
             {arrivals.length === 0 && (
               <p className="text-muted-foreground text-sm">
                 Aucune arrivée prévue aujourd'hui.
@@ -138,7 +137,7 @@ export function CheckinPage() {
               {arrivals.map((reservation) => (
                 <li
                   key={reservation.id}
-                  className="flex items-center justify-between rounded-md border p-2 text-sm"
+                  className="border-l-info bg-background flex items-center justify-between rounded-md border border-l-4 p-2 text-sm"
                 >
                   <span>
                     {reservation.guest.nom} {reservation.guest.prenom} — chambre{' '}
@@ -158,8 +157,8 @@ export function CheckinPage() {
             </ul>
           </section>
 
-          <section className="flex flex-col gap-2">
-            <h2 className="text-sm font-semibold">Départs du jour</h2>
+          <section className="bg-card flex flex-col gap-2 rounded-lg border p-4">
+            <h2 className="text-xs font-bold">Départs du jour</h2>
             {departs.length === 0 && (
               <p className="text-muted-foreground text-sm">
                 Aucun départ prévu aujourd'hui.
@@ -169,7 +168,7 @@ export function CheckinPage() {
               {departs.map((stay) => (
                 <li
                   key={stay.id}
-                  className="hover:bg-muted/50 flex cursor-pointer items-center justify-between rounded-md border p-2 text-sm"
+                  className="border-l-warning bg-background hover:border-primary/50 flex cursor-pointer items-center justify-between rounded-md border border-l-4 p-2 text-sm transition-colors"
                   onClick={() => openStay(stay)}
                 >
                   <span>
@@ -184,8 +183,8 @@ export function CheckinPage() {
             </ul>
           </section>
 
-          <section className="flex flex-col gap-2 md:col-span-2">
-            <h2 className="text-sm font-semibold">Séjours en cours</h2>
+          <section className="bg-card flex flex-col gap-2 rounded-lg border p-4 md:col-span-2">
+            <h2 className="text-xs font-bold">Séjours en cours</h2>
             {staysEnCours.length === 0 && (
               <p className="text-muted-foreground text-sm">
                 Aucun séjour en cours.
@@ -195,7 +194,7 @@ export function CheckinPage() {
               {staysEnCours.map((stay) => (
                 <li
                   key={stay.id}
-                  className="hover:bg-muted/50 flex cursor-pointer items-center justify-between rounded-md border p-2 text-sm"
+                  className="border-l-success bg-background hover:border-primary/50 flex cursor-pointer items-center justify-between rounded-md border border-l-4 p-2 text-sm transition-colors"
                   onClick={() => openStay(stay)}
                 >
                   <span>

@@ -78,8 +78,6 @@ export function ReportingPage() {
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <h1 className="text-xl font-medium">Reporting & comptabilité</h1>
-
       <div className="flex max-w-lg flex-col gap-3 rounded-md border p-4">
         <p className="text-sm font-medium">Synthèse fiscale</p>
         <div className="flex gap-2">

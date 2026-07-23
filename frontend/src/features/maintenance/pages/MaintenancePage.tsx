@@ -113,7 +113,6 @@ export function MaintenancePage() {
   return (
     <div className="flex h-full flex-col gap-4 p-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-medium">Maintenance — tickets</h1>
         <Button size="sm" onClick={() => setDialogOpen(true)}>
           + Nouveau ticket
         </Button>

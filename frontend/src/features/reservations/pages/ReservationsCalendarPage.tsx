@@ -226,7 +226,6 @@ export function ReservationsCalendarPage() {
   return (
     <div className="flex h-full flex-col gap-4 p-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-medium">Réservations — planning</h1>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
