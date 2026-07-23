@@ -27,12 +27,12 @@ Statut par module backend, croisé avec la présence d'une interface frontend et
 | `reporting` | ✅ | ✅ | — | Export CSV du registre de police fonctionnel (mais dépend de CH-003 pour avoir des données à exporter) |
 | `hr` | ✅ | ✅ | — | — |
 | `stock` | ✅ | ✅ | — | — |
-| `channel-manager` | ✅ | ❌ | CH-009 | Backend prêt, config sans UI |
+| `channel-manager` | ✅ | ✅ | — | **CH-009 terminé** — 4e onglet « Channel Manager » dans `ParametersPage.tsx` (CRUD des mappings type de chambre ↔ canal externe) |
 
 ## Synthèse
 
 - **21/21 modules** ont un backend fonctionnel au sens strict (répondent, testés en e2e pour la plupart).
 - **0/21 module** porte encore un chantier bloquant, backend ou frontend — les 4 chantiers bloquants du registre (CH-001 à CH-004) sont désormais tous terminés (`billing`, `auth`, `guests`, `police`).
-- **4/21 modules** n'ont aucune interface frontend (`audit`, `notifications`, `document-ocr`, `channel-manager`) — `booking-engine` est un 5e module sans UI staff mais c'est un choix de conception correct (façade publique). `police` en est retiré (CH-003 terminé), `self-checkin` également (CH-007 terminé).
+- **3/21 modules** n'ont aucune interface frontend (`audit`, `notifications`, `document-ocr`) — `booking-engine` est un 4e module sans UI staff mais c'est un choix de conception correct (façade publique). `police` en est retiré (CH-003 terminé), `self-checkin` (CH-007 terminé) et `channel-manager` (CH-009 terminé) également.
 
 *Mettre à jour ce tableau à chaque clôture de chantier du registre.*

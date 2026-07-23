@@ -75,17 +75,17 @@ Déduite du backend réel (21 modules, `docs/audits/PHASE_04_BACKEND.md`), crois
 - **Parcours utilisateur** : Paramètres (ou nouvel onglet dédié, à trancher — voir §Composants) → Notifications → liste des templates par événement → édition → aperçu du journal filtrable par événement/canal/statut.
 - **Critère de validation** : une modification de template est effective sur le prochain envoi réel (déjà garanti côté backend, l'UI doit juste confirmer visuellement l'enregistrement).
 
-### É-04 — Configuration Channel Manager (mappings OTA) 🔴 — **Priorité : Importante, conditionnelle (CH-009)**
+### É-04 — Configuration Channel Manager (mappings OTA) ✅ — **Priorité : Importante (CH-009 — terminé, session courante)**
 
 - **Doit exister pour** : l'Administrateur (réutilise `parameters:write`/`read`, confirmé `CLAUDE.md`).
-- **Actions** : CRUD `ChannelRoomTypeMapping` (canal, code externe, type de chambre interne).
-- **Règles métier** : sans mapping, un import OTA échoue explicitement (404) — l'écran doit rendre visible qu'un canal actif sans mapping est un état incomplet/à risque.
-- **Dépendances API** : `POST/GET/DELETE /channel-manager/mappings`.
-- **États** : *vide* — aucun mapping configuré pour un canal ; le cas « canal actif mais 0 mapping » devrait être signalé visuellement (avertissement) plutôt que silencieux.
-- **Cas limites** : un `RoomType` supprimé/renommé après qu'un mapping y référence (à vérifier le comportement FK — probablement `RESTRICT`, empêchant la suppression du type de chambre tant qu'un mapping existe, **à confirmer**).
-- **Prérequis produit** : **à confirmer si un canal OTA réel est déjà branché en production** — si aucun canal n'est utilisé, ce chantier peut légitimement être reporté (candidat à `ECARTS_ASSUMES.md`).
-- **Parcours utilisateur** : Paramètres → Channel Manager → liste par canal → ajout/suppression de mapping.
-- **Critère de validation** : un mapping créé permet un import test (webhook) sans erreur 404.
+- **Actions** : CRUD `ChannelRoomTypeMapping` (canal, code externe, type de chambre interne) — **livré tel quel**.
+- **Règles métier** : sans mapping, un import OTA échoue explicitement (404) — vérifié en conditions réelles (voir critère de validation).
+- **Dépendances API** : `POST/GET/DELETE /channel-manager/mappings` — utilisées telles quelles, aucune route ajoutée.
+- **États livrés** : *vide* (« Aucun mapping configuré ») ; *liste* (canal + code externe + type de chambre interne, une ligne par mapping). **Non livré** : pas d'avertissement dédié pour « canal actif mais 0 mapping » — aucun signal en base ne distingue un canal « actif » d'un canal jamais utilisé (F10 reste un module de test/adaptateur sans compte partenaire réel), donc rien à détecter côté frontend.
+- **Cas limites confirmé** : `ChannelRoomTypeMapping.roomTypeId` n'a pas de cascade (`schema.prisma`) — un `RoomType` référencé par un mapping ne peut pas être supprimé (comportement `RESTRICT` MySQL par défaut), confirmé en lisant le schéma, pas de garde applicative supplémentaire nécessaire.
+- **Prérequis produit résolu** : la question « un canal OTA réel est-il déjà branché en production » n'a pas eu besoin d'être tranchée — le livrable (écran CRUD) ne dépend pas de la réponse, voir `REGISTRE_CHANTIERS.md` (fiche CH-009).
+- **Parcours utilisateur livré** : Paramètres → onglet « Channel Manager » → liste des mappings → ajout (canal/code externe/type de chambre/motif) ou suppression (motif ≥ 10 caractères).
+- **Critère de validation** : vérifié bout-en-bout en conditions réelles — mapping créé via l'UI, puis un vrai appel `POST /channel-manager/BOOKING_COM/reservations` (secret webhook réel) résout l'import vers le bon type de chambre ; mapping supprimé via l'UI, le même appel revient en 404.
 
 ### É-05 — Scan de pièce d'identité (document-ocr) 🔴 — **Priorité : Secondaire (CH-022)**
 
