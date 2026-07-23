@@ -12,7 +12,7 @@ Conditions vérifiables avant toute ouverture en production réelle (clients pay
 ## Critères importants (fortement recommandés avant un lancement à pleine charge, tolérables pour un lancement pilote contrôlé si documentés comme dette assumée à court terme)
 
 - [x] CH-005 : le check-out avec solde impayé est bloqué (`ConflictException`), échappatoire de check-out forcé réservée à `checkin:force-checkout` — **terminé, session courante**.
-- [ ] CH-010 : une garde contre la duplication de fiche client existe (dure ou souple selon arbitrage produit).
+- [x] CH-010 : une garde contre la duplication de fiche client existe (contrainte dure sur `pieceIdentite` via index aveugle, détection souple sur email/téléphone) — **terminé, session courante**.
 - [x] CH-006 : le filtrage soft-delete ne dépend plus uniquement d'une convention manuelle (extension Prisma globale, RD-010) — **terminé, session courante**.
 - [x] CH-011 : `GET /auth/me` + gating RBAC frontend (granularité onglet entier, RD-009) — **terminé, session courante**.
 

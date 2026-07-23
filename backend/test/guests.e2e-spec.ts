@@ -3,6 +3,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/prisma/prisma.service';
+import { AllExceptionsFilter } from './../src/common/filters/all-exceptions.filter';
 import { authedRequest, loginAs } from './helpers/auth';
 
 interface GuestResponse {
@@ -45,6 +46,7 @@ describe('Guests / CRM (e2e)', () => {
   let receptionClient: ReturnType<typeof authedRequest>;
   let comptableClient: ReturnType<typeof authedRequest>;
   let adminClient: ReturnType<typeof authedRequest>;
+  let maintenanceClient: ReturnType<typeof authedRequest>;
   let roomTypeId: number;
 
   beforeAll(async () => {
@@ -57,6 +59,15 @@ describe('Guests / CRM (e2e)', () => {
     app.useGlobalPipes(
       new ValidationPipe({ whitelist: true, transform: true }),
     );
+    // CH-010 — nécessaire pour que les tests de contrainte P2002
+    // (Guest.pieceIdentiteHash) reçoivent le même 409 propre qu'en
+    // production plutôt qu'un 500 brut : ce filtre n'est enregistré que
+    // manuellement dans main.ts (bootstrap()), jamais via un provider
+    // APP_FILTER global — donc absent par défaut de toute suite e2e qui
+    // construit l'application sans le répliquer explicitement (gap
+    // préexistant, découvert ici ; non corrigé dans les 19 autres suites,
+    // hors périmètre strict de ce chantier).
+    app.useGlobalFilters(new AllExceptionsFilter());
     await app.init();
 
     prisma = app.get(PrismaService);
@@ -66,6 +77,8 @@ describe('Guests / CRM (e2e)', () => {
     comptableClient = authedRequest(app.getHttpServer(), comptableToken);
     const adminToken = await loginAs(app.getHttpServer(), 'admin');
     adminClient = authedRequest(app.getHttpServer(), adminToken);
+    const maintenanceToken = await loginAs(app.getHttpServer(), 'maintenance');
+    maintenanceClient = authedRequest(app.getHttpServer(), maintenanceToken);
 
     const roomType = await prisma.roomType.create({
       data: {
@@ -447,5 +460,138 @@ describe('Guests / CRM (e2e)', () => {
     expect(
       (factures.body as InvoiceResponse[]).some((f) => f.id === invoiceId),
     ).toBe(true);
+  });
+
+  // CH-010 (docs/governance/REGISTRE_DECISIONS.md, RD-011) — approche
+  // hybride tranchée par l'utilisateur : contrainte dure sur pieceIdentite
+  // (index aveugle Guest.pieceIdentiteHash, @@unique), détection souple sur
+  // email/téléphone (purement consultative). La contrainte dure est
+  // appliquée au niveau de l'extension Prisma (guest-encryption.extension.ts),
+  // donc identiquement quel que soit le chemin d'écriture — vérifié ici sur
+  // les trois : GuestsService.create/update (via /api/guests) et l'écriture
+  // inline de StayService.checkinWalkIn (via /api/checkin/walk-in), qui ne
+  // passe jamais par GuestsService.
+  it('POST /guests avec un pieceIdentite déjà utilisé → 409, aucun doublon créé, pieceIdentiteHash jamais exposé', async () => {
+    const first = await receptionClient.post('/api/guests').send({
+      nom: 'TEST-GUEST-Dedup1',
+      prenom: 'Premier',
+      pieceIdentite: 'TESTDEDUP-001',
+    });
+    expect(first.status).toBe(201);
+    expect(first.body).not.toHaveProperty('pieceIdentiteHash');
+
+    const countBefore = await prisma.guest.count();
+    const second = await receptionClient.post('/api/guests').send({
+      nom: 'TEST-GUEST-Dedup2',
+      prenom: 'Second',
+      pieceIdentite: 'TESTDEDUP-001',
+    });
+    expect(second.status).toBe(409);
+    expect((second.body as { message: string }).message).toContain(
+      "pièce d'identité",
+    );
+
+    const countAfter = await prisma.guest.count();
+    expect(countAfter).toBe(countBefore);
+  });
+
+  it('PATCH /guests/:id vers un pieceIdentite déjà utilisé par un autre client → 409, valeur inchangée', async () => {
+    await receptionClient.post('/api/guests').send({
+      nom: 'TEST-GUEST-Dedup3',
+      prenom: 'Existant',
+      pieceIdentite: 'TESTDEDUP-002',
+    });
+    const other = await receptionClient.post('/api/guests').send({
+      nom: 'TEST-GUEST-Dedup4',
+      prenom: 'Autre',
+    });
+    const otherId = (other.body as GuestResponse).id;
+
+    const res = await receptionClient
+      .patch(`/api/guests/${otherId}`)
+      .send({ pieceIdentite: 'TESTDEDUP-002' });
+    expect(res.status).toBe(409);
+
+    const reread = await prisma.guest.findUniqueOrThrow({
+      where: { id: otherId },
+    });
+    expect(reread.pieceIdentite).toBeNull();
+  });
+
+  it('check-in walk-in avec un nouveau client réutilisant un pieceIdentite déjà en base → 409, aucun séjour ni doublon créé', async () => {
+    await receptionClient.post('/api/guests').send({
+      nom: 'TEST-GUEST-Dedup5',
+      prenom: 'Original',
+      pieceIdentite: 'TESTDEDUP-003',
+    });
+    const roomId = await createRoom();
+    const staysBefore = await prisma.stay.count();
+    const guestsBefore = await prisma.guest.count();
+
+    const res = await receptionClient.post('/api/checkin/walk-in').send({
+      roomId,
+      dateCheckoutPrevue: new Date(Date.now() + 2 * 86_400_000)
+        .toISOString()
+        .slice(0, 10),
+      guest: {
+        nom: 'TEST-GUEST-Dedup6',
+        prenom: 'Usurpe',
+        pieceIdentite: 'TESTDEDUP-003',
+      },
+    });
+    expect(res.status).toBe(409);
+
+    expect(await prisma.stay.count()).toBe(staysBefore);
+    expect(await prisma.guest.count()).toBe(guestsBefore);
+  });
+
+  it('GET /guests/check-duplicate détecte un doublon potentiel par email/téléphone sans jamais bloquer la création réelle', async () => {
+    const created = await receptionClient.post('/api/guests').send({
+      nom: 'TEST-GUEST-Soft',
+      prenom: 'Detection',
+      email: 'test-guest-soft@example.com',
+      telephone: '0699887766',
+    });
+    expect(created.status).toBe(201);
+    const guestId = (created.body as GuestResponse).id;
+
+    const byEmail = await receptionClient.get(
+      '/api/guests/check-duplicate?email=test-guest-soft%40example.com',
+    );
+    expect(byEmail.status).toBe(200);
+    expect(
+      (byEmail.body as GuestResponse[]).some((g) => g.id === guestId),
+    ).toBe(true);
+
+    const byTelephone = await receptionClient.get(
+      '/api/guests/check-duplicate?telephone=0699887766',
+    );
+    expect(
+      (byTelephone.body as GuestResponse[]).some((g) => g.id === guestId),
+    ).toBe(true);
+
+    const noMatch = await receptionClient.get(
+      '/api/guests/check-duplicate?email=test-guest-jamais-utilise%40example.com',
+    );
+    expect(noMatch.body as GuestResponse[]).toHaveLength(0);
+
+    const noParams = await receptionClient.get('/api/guests/check-duplicate');
+    expect(noParams.body as GuestResponse[]).toHaveLength(0);
+
+    // Purement consultatif : un match détecté n'empêche jamais une vraie
+    // création avec les mêmes coordonnées (contrairement à pieceIdentite).
+    const secondWithSameEmail = await receptionClient.post('/api/guests').send({
+      nom: 'TEST-GUEST-Soft2',
+      prenom: 'MemeEmail',
+      email: 'test-guest-soft@example.com',
+    });
+    expect(secondWithSameEmail.status).toBe(201);
+  });
+
+  it('GET /guests/check-duplicate exige guests:read', async () => {
+    const res = await maintenanceClient.get(
+      '/api/guests/check-duplicate?email=x@example.com',
+    );
+    expect(res.status).toBe(403);
   });
 });

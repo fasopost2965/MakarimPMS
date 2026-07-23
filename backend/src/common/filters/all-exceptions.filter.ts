@@ -20,15 +20,35 @@ interface PrismaErrorMapping {
 // sur P2002/idempotencyKey) continuent de les intercepter localement ; ce
 // filtre est le filet de sécurité pour tout le reste, afin qu'aucune erreur
 // Prisma non gérée ne remonte en 500 brute avec sa stack trace.
+// MySQL renvoie le nom de la contrainte/l'index (pas une liste de colonnes,
+// contrairement à Postgres/SQLite) dans meta.target — traduction vers un
+// libellé lisible pour les cas où ce message générique remonte jusqu'à
+// l'utilisateur final (ex. CH-010, contrainte de déduplication client).
+const P2002_TARGET_LABEL: Record<string, string> = {
+  Guest_pieceIdentiteHash_key: "numéro de pièce d'identité",
+};
+
 const PRISMA_ERROR_MAP: Record<string, PrismaErrorMapping> = {
   P2002: {
     status: HttpStatus.CONFLICT,
     error: 'Conflict',
     message: (e) => {
-      const target = (e.meta?.target as string[] | undefined)?.join(', ');
-      return target
-        ? `Une ressource avec la même valeur pour "${target}" existe déjà.`
-        : 'Cette ressource existe déjà.';
+      // meta.target est un tableau de colonnes sur Postgres/SQLite, mais une
+      // chaîne (nom de la contrainte/l'index) sur MySQL (ce projet) —
+      // .join() plantait silencieusement en un 500 brut sur toute violation
+      // de contrainte unique MySQL, jamais exercé avant (les rares P2002
+      // gérés jusqu'ici, ex. Payment.idempotencyKey, sont interceptés
+      // localement par leur service, pas par ce filtre générique). Découvert
+      // en préparant CH-010 (contrainte unique sur Guest.pieceIdentiteHash).
+      const target = e.meta?.target;
+      const raw = Array.isArray(target)
+        ? target.join(', ')
+        : typeof target === 'string'
+          ? target
+          : undefined;
+      if (!raw) return 'Cette ressource existe déjà.';
+      const label = P2002_TARGET_LABEL[raw] ?? raw;
+      return `Une ressource avec la même valeur pour "${label}" existe déjà.`;
     },
   },
   P2025: {

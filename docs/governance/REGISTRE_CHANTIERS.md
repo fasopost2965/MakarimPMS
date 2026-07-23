@@ -219,10 +219,14 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 - **Modules concernés** : `guests`.
 - **Priorité** : Important · **Criticité** : Élevée (contournement d'une règle bloquante existante)
 - **Impact métier** : Élevé · **Impact sécurité** : Faible · **Impact conformité** : Modéré · **Impact exploitation** : Modéré
-- **Dépendances** : aucune technique, mais **décision produit requise** : contrainte dure (email unique, rejet en création) vs détection souple (avertissement à la création si une fiche existante correspond, sans bloquer — un même email peut légitimement être partagé par plusieurs membres d'une famille dans certains contextes hôteliers, *à confirmer avec le métier*).
-- **Livrable attendu** : selon décision — contrainte `@unique` sur `Guest.pieceIdentite` (le plus fiable pour la déduplication réelle) et/ou logique de détection à la création avec confirmation manuelle.
-- **Statut** : à faire · **Estimation** : Moyenne (dépend de la décision ; migration + logique applicative, 1–3 jours) · **Confiance** : moyenne
+- **Dépendances** : aucune technique. **Prérequis** : *(tranché)* décision produit confirmée par l'utilisateur (réponse écrite à une liste d'arbitrages soumise, hors `AskUserQuestion`) — **approche hybride** : contrainte dure sur `pieceIdentite`, détection souple sur email/téléphone. Consigné dans `docs/governance/REGISTRE_DECISIONS.md` (RD-011).
+- **Livrable attendu** : contrainte `@@unique` sur un index aveugle de `pieceIdentite` (voir Résolution ci-dessous — conflit avec le chiffrement CH-004 détecté et résolu avant implémentation) rejetant explicitement la création/mise à jour en doublon ; recherche de correspondance par email/téléphone à la création, renvoyée au frontend comme avertissement non bloquant (confirmation manuelle).
+- **Statut** : ✅ **Terminé** (session courante) · **Estimation** : Moyenne (migration + logique applicative, 1–3 jours) · **Confiance** : élevée (a posteriori)
 - **Lien audit** : Phase 3 §5.5, §8.
+- **Note d'implémentation** : un `@@unique` direct sur `Guest.pieceIdentite` est inapplicable — le chiffrement CH-004 (`field-encryption.ts`) utilise un IV aléatoire à chaque appel *par construction*, précisément pour empêcher toute fuite d'égalité par comparaison du texte chiffré ; deux chiffrements du même numéro produisent des valeurs stockées différentes. Résolution retenue : nouvelle colonne `Guest.pieceIdentiteHash` (HMAC-SHA256 déterministe, jamais exposée à l'API) portant seule la contrainte d'unicité — voir `REGISTRE_DECISIONS.md` (RD-011) pour le détail complet.
+- **Résolution** : `hashField()` (`field-encryption.ts`, HMAC-SHA256 même clé que le chiffrement AES-GCM — primitives indépendantes, pas de faiblesse croisée connue) appelé dans `guest-encryption.extension.ts` (`encryptGuestData()`), donc calculé de façon transparente quel que soit le service appelant (`GuestsService`, mais aussi `ReservationsService`/`StayService` qui créent des `Guest` via `tx.guest.create` sans passer par `GuestsService`) — intercepté au niveau du client Prisma, pas du service. Colonne `pieceIdentiteHash` jamais exposée à l'API via le `omit` global de `PrismaClient` (`prisma.module.ts`). Détection souple : `GuestsService.checkPotentialDuplicate()` + `GET /guests/check-duplicate` (`guests:read`), consultatif uniquement — vérifié qu'une création réelle avec un email/téléphone déjà utilisé réussit toujours (201). Bug connexe découvert et corrigé en même temps : `AllExceptionsFilter` supposait `Prisma.PrismaClientKnownRequestError.meta.target` toujours un tableau (vrai sur Postgres/SQLite) alors que MySQL (ce projet) le renvoie en chaîne — un vrai P2002 dégénérait donc en 500 brut au lieu du 409 attendu, jamais exercé avant faute de contrainte unique sur une table métier courante. Frontend : nouveau hook partagé `useDuplicateWarning(email, telephone)` (`frontend/src/features/guests/useDuplicateWarning.ts`, même pattern de debounce que la recherche existante de `GuestPicker`), branché à la fois dans `GuestPicker` (réservation/walk-in) et `CreateGuestForm` (`GuestsPage.tsx`) — un encart d'avertissement nommant les correspondances potentielles, jamais un blocage. Vérifié en live (curl réel) : création avec `pieceIdentite` dupliqué → 409 avec message localisé ; `GET /guests/check-duplicate` par email → correspondance renvoyée sans `pieceIdentiteHash` ; aucune correspondance → tableau vide.
+- **Éléments testés** : `backend/test/guests.e2e-spec.ts` (+6 scénarios) — contrainte dure sur `POST`/`PATCH /guests`, sur le chemin walk-in inline (`POST /checkin/walk-in`, bypass de `GuestsService`), `GET /guests/check-duplicate` (email/téléphone/aucune correspondance/non-bloquant) et RBAC (`guests:read` requis). Gap connexe corrigé dans ce fichier seulement (documenté en commentaire, pas généralisé aux 19 autres specs e2e) : `AllExceptionsFilter` n'était enregistré que dans `main.ts`, jamais dans le bootstrap `Test.createTestingModule` des tests e2e. Suite complète rejouée : 127/128 e2e (1 flake pré-existant `stock.e2e-spec.ts`, confirmé sans lien en le rejouant seul → vert), 32/32 unitaires, build+lint backend et frontend propres.
+- **Documents liés** : `docs/governance/REGISTRE_DECISIONS.md` (RD-011).
 
 ---
 
@@ -267,8 +271,9 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 
 ### CH-013 — Traiter les enums morts (`StatutSejour.ANNULE`, `StatutFacture.ANNULEE_PAR_AVOIR`)
 - **Source** : Phase 3 §5.2/§6, Phase 6 §3. **Priorité** : Secondaire · **Criticité** : Faible.
-- **Description** : deux valeurs d'enum jamais écrites en base. `ANNULEE_PAR_AVOIR` **résolu par CH-001** (`BillingService.createCreditNote()` écrit désormais cette valeur). `StatutSejour.ANNULE` reste à trancher indépendamment (implémenter le cas d'usage réel, ou retirer la valeur).
-- **Statut** : partiellement résolu (`ANNULEE_PAR_AVOIR` ✅ via CH-001 ; `StatutSejour.ANNULE` toujours à faire) · **Estimation** : Faible (quelques heures, pour la partie restante) · **Confiance** : élevée.
+- **Description** : deux valeurs d'enum jamais écrites en base. `ANNULEE_PAR_AVOIR` **résolu par CH-001** (`BillingService.createCreditNote()` écrit désormais cette valeur).
+- **Statut** : ✅ **Terminé** (session courante) · **Estimation** : Faible (quelques heures) · **Confiance** : élevée.
+- **Résolution** : arbitrage utilisateur tranché conditionnellement (« retirer si aucun cas d'usage réel et stable n'est défini », voir `REGISTRE_DECISIONS.md` RD-012) — vérification exhaustive effectuée avant retrait (seule la définition de type et un libellé d'affichage jamais exercé référençaient `StatutSejour.ANNULE`, aucun chemin d'écriture ni test). Valeur retirée de `enum StatutSejour` (migration Prisma), types frontend et libellé associé mis à jour en conséquence.
 
 ### CH-014 — Route de consultation de `RoomStatusLog`
 - **Source** : Phase 7 §3, §5. **Priorité** : Secondaire · **Criticité** : Faible.
@@ -300,13 +305,14 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 
 ### CH-020 — Revoir la numérotation de facture (remise à zéro mensuelle)
 - **Source** : Phase 6 §3. **Priorité** : Secondaire · **Criticité** : Faible (question de préférence comptable, pas un bug fonctionnel).
-- **Statut** : à faire (arbitrage produit requis d'abord) · **Estimation** : Faible (0,5 jour) · **Confiance** : moyenne (dépend de l'exigence comptable réelle, *à confirmer*).
+- **Statut** : ✅ **Fermé** (session courante) — décision actée, aucun développement · **Confiance** : élevée.
+- **Résolution** : arbitrage utilisateur tranché en faveur du statu quo (séquence continue conservée, pas de remise à zéro mensuelle) — voir `REGISTRE_DECISIONS.md` (RD-013) et `ECARTS_ASSUMES.md` (EA-003).
 
 ### CH-021 — City ledger / `Company` : raccorder réellement ou dépriorité formellement
-- **Source** : Phase 2, Phase 3 §5.3. **Priorité** : Secondaire *(peut devenir Important si la clientèle entreprise est une priorité commerciale — à confirmer)* · **Criticité** : Modérée.
+- **Source** : Phase 2, Phase 3 §5.3. **Priorité** : Secondaire · **Criticité** : Modérée.
 - **Description** : `Company` sans aucune FK vers `Reservation`/`Stay`/`Folio`/`Invoice`, `plafondCredit` jamais vérifié — écart déjà connu avant cet audit (`docs/ARCHITECTURE_AUDIT.md`, Incohérence #1 citée dans le contexte projet).
-- **Livrable attendu** : soit un chantier de raccordement réel (FK `companyId` sur `Reservation`/`Invoice`, moyen de paiement « compte entreprise » dans `MoyenPaiement`, vérification de `plafondCredit`), soit une entrée formelle dans `ECARTS_ASSUMES.md` actant que la facturation entreprise n'est pas un objectif de cette version.
-- **Statut** : à faire (arbitrage requis) · **Estimation** : Élevée si raccordé (3–5 jours, touche `reservations`/`billing`/`payments`) · **Confiance** : faible sur l'estimation tant que le périmètre n'est pas tranché.
+- **Statut** : ✅ **Fermé** (session courante) — dépriorisé formellement, aucun développement · **Confiance** : élevée.
+- **Résolution** : arbitrage utilisateur tranché en faveur de la dépriorisation (pas de raccordement réel pour cette version) — voir `REGISTRE_DECISIONS.md` (RD-014) et `ECARTS_ASSUMES.md` (EA-001, condition de réexamen documentée).
 
 ### CH-022 — Interface frontend document-ocr (scan pièce d'identité)
 - **Source** : Phase 8 §2. **Priorité** : Secondaire · **Criticité** : Faible (confort, pas une obligation contrairement à CH-003/police).
@@ -315,7 +321,8 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 ### CH-023 — Matérialisation financière de la pénalité d'annulation/no-show
 - **Source** : Phase 6 §5. **Priorité** : Secondaire · **Criticité** : Modérée.
 - **Description** : `Reservation.montantPenalite` figé mais jamais traduit en écriture financière traçable — recouvrement entièrement humain hors système.
-- **Statut** : à faire (arbitrage produit requis : le système doit-il tracer le recouvrement, ou cela reste-t-il volontairement hors PMS ?) · **Estimation** : Moyenne (2 jours) si retenu · **Confiance** : faible tant que non tranché.
+- **Statut** : ✅ **Fermé** (session courante) — reste hors PMS par choix, aucun développement · **Confiance** : élevée.
+- **Résolution** : arbitrage utilisateur tranché en faveur du statu quo (recouvrement reste un processus humain hors PMS) — voir `REGISTRE_DECISIONS.md` (RD-015) et `ECARTS_ASSUMES.md` (EA-002, condition de réexamen documentée).
 
 ### CH-024 — Contrainte d'exclusivité `RoomNight.reservationId`/`stayId`
 - **Source** : Phase 3 §5.4. **Priorité** : Secondaire · **Criticité** : Faible (risque théorique, jamais observé en pratique selon l'audit).
@@ -337,8 +344,8 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 | Priorité | Nombre de chantiers | Charge cumulée estimée (ordre de grandeur) | Terminés |
 |---|---|---|---|
 | Bloquant | 4 (CH-001 à CH-004) | ~7–11 jours développeur | 4 (CH-001, CH-002, CH-003, CH-004) — tous terminés |
-| Important | 8 (CH-005 à CH-012) | ~11–16 jours développeur | 7 (CH-005, CH-006, CH-007, CH-008, CH-009, CH-011, CH-012) |
-| Secondaire | 14 (CH-013 à CH-026) | ~18–28 jours développeur (plusieurs sous conditions d'arbitrage) | 0 (1 partiel : CH-013) |
+| Important | 8 (CH-005 à CH-012) | ~11–16 jours développeur | 8 (CH-005, CH-006, CH-007, CH-008, CH-009, CH-010, CH-011, CH-012) — tous terminés |
+| Secondaire | 14 (CH-013 à CH-026) | ~18–28 jours développeur (plusieurs sous conditions d'arbitrage) | 4 (CH-013, CH-020, CH-021, CH-023 — les trois derniers fermés sans développement, écarts assumés ou statu quo actés) |
 
 *Ces charges sont des ordres de grandeur de développement pur (hors tests e2e étendus, hors stabilisation, hors documentation) — voir `docs/planning/ESTIMATION_CHARGE.md` pour l'estimation consolidée par scénario.*
 
@@ -356,4 +363,9 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 | CH-006 | ✅ Terminé | Session courante | Filtrage soft-delete centralisé — extension Prisma `$extends`, voir fiche ci-dessus (RD-010). |
 | CH-007 | ✅ Terminé | Session courante | Interface frontend self-checkin (staff) — `SelfCheckinPanel.tsx` sur le détail de réservation, voir fiche ci-dessus. Corrige au passage un bug latent de `lib/api-client.ts` (corps de réponse vide non géré hors 204) et la dette technique #6 (`seed.ts`, `DETTE_TECHNIQUE.md`). |
 | CH-009 | ✅ Terminé | Session courante | Interface frontend channel-manager (mappings OTA) — 4e onglet dans `ParametersPage.tsx`, voir fiche ci-dessus. Vérifié par un appel webhook réel bout-en-bout (import résolu puis rejeté après suppression du mapping). |
-| CH-008 | ✅ Terminé | Session courante | Interface frontend notifications (templates/journal) — nouvel onglet dédié `features/notifications/`, voir fiche ci-dessus. Vague 2 presque close (7/8) — seul CH-010 reste ouvert (arbitrage produit requis). Preuve RBAC serveur réelle (403 pour Réception en écriture). |
+| CH-008 | ✅ Terminé | Session courante | Interface frontend notifications (templates/journal) — nouvel onglet dédié `features/notifications/`, voir fiche ci-dessus. Preuve RBAC serveur réelle (403 pour Réception en écriture). |
+| CH-013 | ✅ Terminé | Session courante | Retrait de `StatutSejour.ANNULE` (enum mort) — arbitrage utilisateur (RD-012), vérification exhaustive avant retrait. |
+| CH-010 | ✅ Terminé | Session courante | Déduplication client — contrainte dure sur `Guest.pieceIdentite` (index aveugle HMAC, RD-011) + détection souple email/téléphone (`GET /guests/check-duplicate`, non bloquante). Vague 2 désormais close (8/8). Conflit technique avec le chiffrement CH-004 (IV aléatoire) détecté et résolu avant code. Corrige au passage un bug latent MySQL de `AllExceptionsFilter` sur P2002. |
+| CH-020 | ✅ Fermé | Session courante | Numérotation de facture — statu quo acté (séquence continue), aucun développement (RD-013, EA-003). |
+| CH-021 | ✅ Fermé | Session courante | City ledger / `Company` — dépriorisé formellement, écart assumé (RD-014, EA-001). |
+| CH-023 | ✅ Fermé | Session courante | Recouvrement pénalité annulation/no-show — reste hors PMS par choix, écart assumé (RD-015, EA-002). |

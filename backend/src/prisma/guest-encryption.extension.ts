@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import {
   decryptField,
   encryptField,
+  hashField,
   loadEncryptionKey,
 } from '../common/crypto/field-encryption';
 
@@ -30,11 +31,19 @@ import {
 export function guestEncryptionExtension(rawKey: string | undefined) {
   const key = loadEncryptionKey(rawKey);
 
+  // CH-010 — calcule pieceIdentiteHash (index aveugle, @@unique en base) en
+  // même temps que le chiffrement, dans la même fonction : les deux dérivent
+  // de la même valeur en clair, jamais désynchronisés. Jamais exposé à l'API
+  // (voir prisma.module.ts, `omit` global sur ce champ).
   function encryptGuestData<T extends Record<string, unknown>>(data: T): T {
     if (typeof data?.pieceIdentite !== 'string') {
       return data;
     }
-    return { ...data, pieceIdentite: encryptField(data.pieceIdentite, key) };
+    return {
+      ...data,
+      pieceIdentite: encryptField(data.pieceIdentite, key),
+      pieceIdentiteHash: hashField(data.pieceIdentite, key),
+    };
   }
 
   return Prisma.defineExtension({

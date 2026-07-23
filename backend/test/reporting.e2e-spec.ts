@@ -136,7 +136,13 @@ describe('Reporting — ventilation fiscale et rapport de police (e2e)', () => {
         guest: {
           nom: 'Ventilation',
           prenom: 'Test',
-          pieceIdentite: 'CN123456',
+          // CH-010 : pieceIdentite porte désormais une contrainte
+          // d'unicité dure (index aveugle) — un littéral fixe entre en
+          // collision avec la ligne laissée par une exécution précédente
+          // de la suite e2e (base non réinitialisée entre deux runs
+          // complets sans reseed), même convention que `createRoom()`
+          // ci-dessus (Date.now()/Math.random()).
+          pieceIdentite: `CN${Date.now()}${Math.floor(Math.random() * 1000)}`,
         },
       });
       expect(checkin.status).toBe(201);
@@ -210,13 +216,19 @@ describe('Reporting — ventilation fiscale et rapport de police (e2e)', () => {
         .toISOString()
         .slice(0, 10);
 
+      // CH-010 : pieceIdentite porte désormais une contrainte d'unicité
+      // dure (index aveugle) — un littéral fixe entre en collision avec la
+      // ligne laissée par une exécution précédente de la suite e2e (base
+      // non réinitialisée entre deux runs complets sans reseed), même
+      // convention que `createRoom()` ci-dessus (Date.now()/Math.random()).
+      const pieceIdentite = `AB${Date.now()}${Math.floor(Math.random() * 1000)}`;
       const checkin = await adminClient.post('/api/checkin/walk-in').send({
         roomId,
         dateCheckoutPrevue: demain,
         guest: {
           nom: 'Alaoui',
           prenom: 'Karim',
-          pieceIdentite: 'AB998877',
+          pieceIdentite,
         },
       });
       expect(checkin.status).toBe(201);
@@ -230,7 +242,7 @@ describe('Reporting — ventilation fiscale et rapport de police (e2e)', () => {
       const csv = res.text;
       expect(csv).toContain('Alaoui');
       expect(csv).toContain('Karim');
-      expect(csv).toContain('AB998877');
+      expect(csv).toContain(pieceIdentite);
     });
   });
 

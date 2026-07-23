@@ -61,6 +61,11 @@ async function main() {
   await prisma.stockItem.deleteMany();
   await prisma.room.deleteMany();
   await prisma.rateRestriction.deleteMany();
+  // Dette technique #6 (nouvelle occurrence, découverte en préparant
+  // CH-010) : ChannelRoomTypeMapping référence RoomType par FK non-cascade —
+  // doit être vidée avant roomType.deleteMany() juste en dessous. Même
+  // catégorie que les deux occurrences précédentes de ce gap (F6/F10/stock).
+  await prisma.channelRoomTypeMapping.deleteMany();
   await prisma.roomType.deleteMany();
 
   // Priorité 3 (formules d'hébergement) : prixPetitDejeuner = 50 MAD/pers./

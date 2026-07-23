@@ -15,23 +15,23 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 ### Vague 2 — Importants
 5. **CH-005** — ✅ **Terminé** (session courante). Blocage checkout solde impayé — voir `REGISTRE_CHANTIERS.md` pour le détail (blocage dur + échappatoire de check-out forcé réservée à `checkin:force-checkout`, RD-008).
 6. **CH-011** — ✅ **Terminé** (session courante). Gating RBAC frontend (granularité onglet entier) — voir `REGISTRE_CHANTIERS.md` pour le détail (`GET /auth/me` + filtrage de `NAV_ITEMS`, RD-009 ; correctif connexe sur `lib/api-client.ts`, `/auth/me` n'est plus traité à tort comme public).
-7. **CH-010** — Déduplication client
+7. **CH-010** — ✅ **Terminé** (session courante). Déduplication client — voir `REGISTRE_CHANTIERS.md` pour le détail (index aveugle `pieceIdentiteHash` pour la contrainte dure, `GET /guests/check-duplicate` pour la détection souple, RD-011).
 8. **CH-006** — ✅ **Terminé** (session courante). Centraliser soft-delete — voir `REGISTRE_CHANTIERS.md` pour le détail (extension Prisma `$extends`, chaînée avec le chiffrement CH-004, RD-010).
 9. **CH-012** — ✅ **Terminé** (session courante). Remboursement acompte imputé — voir `REGISTRE_CHANTIERS.md` pour le détail (l'avoir est un préalable au remboursement, pas une action déclenchée par la route elle-même, RD-007).
 10. **CH-007** — ✅ **Terminé** (session courante). Interface frontend self-checkin (staff) — voir `REGISTRE_CHANTIERS.md` pour le détail (`SelfCheckinPanel.tsx`, corrige au passage un bug latent de `lib/api-client.ts` et la dette technique #6 de `seed.ts`). **CH-009** — ✅ **Terminé** (session courante). Interface frontend channel-manager (mappings OTA) — voir `REGISTRE_CHANTIERS.md` pour le détail (4e onglet `ParametersPage.tsx`, vérifié par un appel webhook réel bout-en-bout). **CH-008** — ✅ **Terminé** (session courante). Interface frontend notifications (templates/journal) — voir `REGISTRE_CHANTIERS.md` pour le détail (nouvel onglet dédié `features/notifications/`, preuve RBAC serveur 403 réelle)
 
 ### Vague 3 — Secondaires (dette technique, à intercaler entre les livraisons fonctionnelles)
 11. CH-019 — Renommage `room-transitions.ts` *(quasi gratuit, à faire dès qu'un développeur touche ce module)*
-12. CH-013 — Enums morts
+12. ~~CH-013~~ — ✅ **Terminé** (session courante). Enum mort `StatutSejour.ANNULE` retiré — voir `REGISTRE_CHANTIERS.md` (RD-012).
 13. CH-014 — Consultation `RoomStatusLog`
 14. CH-018 — Resynchronisation documentation modules
 15. CH-024 / CH-025 — Contraintes DB additionnelles
 16. CH-015 — Consultation `AuditLog` frontend
 17. CH-022 — UI document-ocr
-18. CH-020 — Numérotation facture
+18. ~~CH-020~~ — ✅ **Fermé** (session courante). Numérotation facture — statu quo acté, aucun développement (RD-013, EA-003).
 19. CH-026 — Durcissement sécurité secondaire
-20. CH-021 — City ledger / Company *(à confirmer si prioritaire selon stratégie commerciale entreprise)*
-21. CH-023 — Matérialisation financière des pénalités
+20. ~~CH-021~~ — ✅ **Fermé** (session courante). City ledger / Company — dépriorisé formellement, écart assumé (RD-014, EA-001).
+21. ~~CH-023~~ — ✅ **Fermé** (session courante). Matérialisation financière des pénalités — reste hors PMS, écart assumé (RD-015, EA-002).
 22. CH-016 — Découpage `ReservationsService`
 23. CH-017 — Couverture de tests unitaires *(pratique continue, pas un chantier ponctuel — voir `CRITERES_GO_LIVE.md`)*
 
@@ -43,11 +43,12 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 | ~~CH-004~~ | ✅ Tranché — implémenter maintenant, voir `REGISTRE_DECISIONS.md` (RD-006). |
 | ~~CH-005~~ | ✅ Tranché — blocage dur + échappatoire de check-out forcé à permission dédiée, voir `REGISTRE_DECISIONS.md` (RD-008). |
 | ~~CH-011~~ | ✅ Tranché — granularité onglet entier, voir `REGISTRE_DECISIONS.md` (RD-009). *Absent par erreur de cette table lors d'une session précédente alors que la fiche détaillée (`REGISTRE_CHANTIERS.md`) portait bien ce prérequis — corrigé avant tout code, pas après.* |
-| CH-010 | Contrainte dure d'unicité, ou détection souple à la création ? |
-| CH-020 | La numérotation doit-elle réellement repartir de 1 chaque mois ? |
-| CH-021 | La facturation entreprise (city ledger) est-elle une priorité produit, ou un écart assumé ? |
-| CH-023 | Le recouvrement de pénalité doit-il être tracé dans le système, ou rester un processus humain hors PMS ? |
+| ~~CH-010~~ | ✅ Tranché — approche hybride (contrainte dure sur `pieceIdentite`, détection souple sur email/téléphone), voir `REGISTRE_DECISIONS.md` (RD-011). Conflit technique avec le chiffrement CH-004 détecté et résolu (index aveugle `pieceIdentiteHash`) avant tout code. Terminé. |
+| ~~CH-013~~ | ✅ Tranché — `StatutSejour.ANNULE` retiré (aucun cas d'usage réel défini), voir `REGISTRE_DECISIONS.md` (RD-012). Terminé. |
+| ~~CH-020~~ | ✅ Tranché — séquence continue conservée, voir `REGISTRE_DECISIONS.md` (RD-013) et `ECARTS_ASSUMES.md` (EA-003). Fermé sans développement. |
+| ~~CH-021~~ | ✅ Tranché — dépriorisé formellement (écart assumé), voir `REGISTRE_DECISIONS.md` (RD-014) et `ECARTS_ASSUMES.md` (EA-001). Fermé sans développement. |
+| ~~CH-023~~ | ✅ Tranché — reste hors PMS (écart assumé), voir `REGISTRE_DECISIONS.md` (RD-015) et `ECARTS_ASSUMES.md` (EA-002). Fermé sans développement. |
 
 ## Statut de couverture
 
-Au moment de la création de ce backlog, tous les chantiers étaient au statut **à faire** (session Claude 1, documentation uniquement). **Les 4 chantiers bloquants (CH-001, CH-002, CH-003, CH-004) sont désormais tous terminés** (session de suite, développement effectif) — la Vague 1 du backlog est intégralement close. En Vague 2, CH-005, CH-006, CH-007, CH-008, CH-009, CH-011 et CH-012 sont également terminés — seul CH-010 (arbitrage produit requis) reste ouvert. La Vague 2 est donc close à l'exception de ce seul chantier. Le suivi de statut se fait dans `REGISTRE_CHANTIERS.md` (champ *Statut* par fiche, section « Suivi d'avancement ») : mettre à jour ce champ, pas ce backlog, quand un chantier avance — ce document liste l'ordre recommandé, pas l'état courant en détail.
+Au moment de la création de ce backlog, tous les chantiers étaient au statut **à faire** (session Claude 1, documentation uniquement). **Les 4 chantiers bloquants (CH-001, CH-002, CH-003, CH-004) sont désormais tous terminés** (session de suite, développement effectif) — la Vague 1 du backlog est intégralement close. **La Vague 2 est désormais intégralement close** : CH-005, CH-006, CH-007, CH-008, CH-009, CH-010, CH-011 et CH-012 sont tous terminés (CH-010, le dernier restant, implémenté cette session — index aveugle `pieceIdentiteHash` + détection souple par email/téléphone, RD-011). En Vague 3, CH-013/CH-020/CH-021/CH-023 sont clos (un terminé avec code, trois fermés sans développement — écarts assumés ou statu quo actés, voir `ECARTS_ASSUMES.md`). Le suivi de statut se fait dans `REGISTRE_CHANTIERS.md` (champ *Statut* par fiche, section « Suivi d'avancement ») : mettre à jour ce champ, pas ce backlog, quand un chantier avance — ce document liste l'ordre recommandé, pas l'état courant en détail.

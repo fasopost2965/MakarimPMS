@@ -15,6 +15,20 @@ export function searchGuests(q?: string) {
   return apiRequest<Guest[]>(`/guests${qs ? `?${qs}` : ''}`);
 }
 
+// CH-010 — détection souple de doublon par email/téléphone, purement
+// consultative (jamais bloquante côté serveur, voir GuestsService.
+// checkPotentialDuplicate).
+export function checkGuestDuplicate(params: {
+  email?: string;
+  telephone?: string;
+}) {
+  const query = new URLSearchParams();
+  if (params.email) query.set('email', params.email);
+  if (params.telephone) query.set('telephone', params.telephone);
+  const qs = query.toString();
+  return apiRequest<Guest[]>(`/guests/check-duplicate${qs ? `?${qs}` : ''}`);
+}
+
 export function getGuest(id: number) {
   return apiRequest<Guest>(`/guests/${id}`);
 }
