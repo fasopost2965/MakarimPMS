@@ -7,6 +7,7 @@ import {
 import { Prisma, StatutAcompte } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { BillingService } from '../billing/billing.service';
 import { CreateReservationDepositDto } from './dto/create-reservation-deposit.dto';
 import { RembourserDepositDto } from './dto/rembourser-deposit.dto';
 
@@ -21,6 +22,11 @@ export class DepositsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    // CH-012 (docs/governance/REGISTRE_CHANTIERS.md) — façade en lecture
+    // seule uniquement (BillingService.findFolioById), jamais de Prisma
+    // direct sur Invoice/Folio : docs/modules/payments.md §10 n'autorise que
+    // cette dépendance.
+    private readonly billingService: BillingService,
   ) {}
 
   // Idempotence : même pattern que PaymentsService.createPayment (clé
@@ -116,13 +122,29 @@ export class DepositsService {
           `Acompte ${depositId} introuvable pour la réservation ${reservationId}.`,
         );
       }
-      if (deposit.statut === StatutAcompte.IMPUTE) {
-        throw new ConflictException(
-          'Cet acompte a déjà été imputé à un folio — le remboursement passe désormais par une note de crédit sur la facture, pas par cette route.',
-        );
-      }
       if (deposit.statut === StatutAcompte.REMBOURSE) {
         throw new ConflictException('Cet acompte est déjà remboursé.');
+      }
+      // CH-012 — un acompte IMPUTE reste remboursable (chemin fonctionnel,
+      // pas de blocage définitif), mais seulement une fois la facture active
+      // du folio d'imputation annulée par avoir (CH-001,
+      // POST /invoices/:id/credit-notes) — jamais tant qu'une facture EMISE
+      // matérialise encore le crédit correspondant à cet acompte, sous peine
+      // de double correction (avoir + remboursement) sur le même montant.
+      // rembourser() reste une opération de statut pure (comme pour
+      // ENCAISSE, aucune FolioLine n'est créée/annulée ici) — le mouvement
+      // d'argent réel reste, comme pour ENCAISSE, un geste humain hors
+      // système.
+      if (deposit.statut === StatutAcompte.IMPUTE) {
+        const folio = await this.billingService.findFolioById(
+          deposit.imputeAuFolioId!,
+        );
+        const factureActive = folio.invoices.some((i) => i.statut === 'EMISE');
+        if (factureActive) {
+          throw new ConflictException(
+            `Cet acompte est imputé à un folio portant une facture émise active — annule-la d'abord par avoir (POST /invoices/${folio.invoices.find((i) => i.statut === 'EMISE')!.id}/credit-notes) avant de rembourser cet acompte.`,
+          );
+        }
       }
 
       const updated = await tx.reservationDeposit.update({

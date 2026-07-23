@@ -13,9 +13,9 @@ Construit **après** la cartographie fonctionnelle (`CARTOGRAPHIE_ECRANS.md`, `M
 
 **Pourquoi en premier** : le Lot 0 ne livre aucune valeur métier visible immédiatement, mais chaque lot suivant en dépend soit techniquement (formulaires), soit pour la cohérence RBAC (contexte d'identité). Le construire en dernier obligerait à retoucher tous les écrans déjà livrés pour y greffer le gating après coup — plus coûteux que de le poser en fondation.
 
-### Lot 1 — Registre de police (É-01)
-- Le seul chantier frontend bloquant (CH-003).
-- Dépend du Lot 0 pour le composant `form`.
+### Lot 1 — Registre de police (É-01) — ✅ **Terminé (session courante)**
+- Le seul chantier frontend bloquant (CH-003), désormais livré. Voir `CARTOGRAPHIE_ECRANS.md` (É-01) et `docs/governance/REGISTRE_CHANTIERS.md` pour le détail.
+- **Écart par rapport au plan** : n'a en réalité **pas** dépendu d'un composant `form`/`date-picker` générique du Lot 0 — les primitives déjà existantes (`Input type="date"`, `Select`, `Label`, même pattern que `WalkinCheckinDialog.tsx`) ont suffi pour les 8 champs du formulaire. Le Lot 0 (`AuthContext`/`GET auth/me`, gating RBAC) reste à faire pour CH-011, mais un composant `form` structuré dédié n'était pas un prérequis réel pour ce lot précis — à réévaluer si un futur écran a des besoins de formulaire plus complexes (validation croisée, champs conditionnels) que ce que les primitives actuelles couvrent.
 - Valeur métier : ferme un risque de conformité légale.
 
 ### Lot 2 — Self check-in staff (É-02)

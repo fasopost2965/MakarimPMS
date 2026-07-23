@@ -11,6 +11,7 @@ interface GuestResponse {
   prenom: string;
   categorie: string;
   telephone: string | null;
+  pieceIdentite: string | null;
 }
 
 interface ReservationResponse {
@@ -143,6 +144,53 @@ describe('Guests / CRM (e2e)', () => {
     expect(
       (byTelephone.body as GuestResponse[]).some((g) => g.id === createdId),
     ).toBe(true);
+  });
+
+  // CH-004 (docs/governance/REGISTRE_CHANTIERS.md) — chiffrement au repos de
+  // Guest.pieceIdentite. Vérifie les trois angles à la fois : (1) la valeur
+  // en base est réellement chiffrée (pas juste "l'API ne la montre pas"),
+  // (2) l'API renvoie tout de même la valeur en clair de bout en bout
+  // (déchiffrement transparent), (3) la recherche par pieceIdentite
+  // fonctionne toujours malgré le repli applicatif nécessaire (guests.service.ts,
+  // `{ contains }` SQL impossible sur un texte chiffré non déterministe).
+  it("Guest.pieceIdentite est chiffré en base (AES-256-GCM) mais lisible en clair via l'API, recherche incluse", async () => {
+    const created = await receptionClient.post('/api/guests').send({
+      nom: 'TEST-GUEST-Chiffre',
+      prenom: 'Amine',
+      pieceIdentite: 'CN9988771',
+    });
+    expect(created.status).toBe(201);
+    const guest = created.body as GuestResponse;
+    expect(guest.pieceIdentite).toBe('CN9988771');
+
+    // Preuve de rigueur (déjà vérifiée manuellement pendant l'implémentation,
+    // reproduite ici comme assertion automatisée) : la valeur brute en base
+    // n'est ni la valeur en clair, ni vide — $queryRaw n'est pas intercepté
+    // par l'extension Prisma (result.guest.pieceIdentite ne s'applique
+    // qu'aux requêtes typées sur le modèle Guest), donc lit vraiment la
+    // colonne SQL brute.
+    const raw = await prisma.$queryRaw<{ pieceIdentite: string | null }[]>`
+      SELECT pieceIdentite FROM Guest WHERE id = ${guest.id}
+    `;
+    expect(raw[0].pieceIdentite).not.toBe('CN9988771');
+    expect(raw[0].pieceIdentite).toMatch(/^enc:v1:/);
+
+    // La recherche par pieceIdentite doit continuer de fonctionner malgré le
+    // chiffrement (repli applicatif en clair côté service, voir
+    // GuestsService.search) — sans ce repli, `{ contains }` SQL sur un texte
+    // chiffré à IV aléatoire ne matcherait jamais.
+    const bySearch = await receptionClient.get('/api/guests?q=9988771');
+    expect(bySearch.status).toBe(200);
+    expect(
+      (bySearch.body as GuestResponse[]).some((g) => g.id === guest.id),
+    ).toBe(true);
+
+    // Relecture directe (GET implicite via update) : déchiffrement toujours
+    // correct après un aller-retour supplémentaire en base.
+    const reread = await prisma.guest.findUniqueOrThrow({
+      where: { id: guest.id },
+    });
+    expect(reread.pieceIdentite).toBe('CN9988771');
   });
 
   it('PATCH /guests/:id met à jour les champs non sensibles', async () => {

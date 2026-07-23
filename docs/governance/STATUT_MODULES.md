@@ -7,7 +7,7 @@ Statut par module backend, croisé avec la présence d'une interface frontend et
 
 | Module | Backend | Frontend | Chantiers ouverts | Remarque |
 |---|---|---|---|---|
-| `auth` | ⚠️ | ✅ | CH-002, CH-026 | Reset password non sécurisé |
+| `auth` | ⚠️ | ✅ | CH-026 | CH-002 (reset password non sécurisé) **terminé** — reste CH-026 (durcissement sécurité secondaire : helmet, verrouillage compte, complexité mot de passe, cookie httpOnly, révocation refresh token) |
 | `rooms` | ✅ | ⚠️ (via housekeeping) | CH-014 | Historique de statut jamais consultable |
 | `parameters` | ✅ | ✅ | — | — |
 | `reservations` | ⚠️ | ✅ | CH-016 | Service le plus volumineux, dette de découpage |
@@ -15,11 +15,11 @@ Statut par module backend, croisé avec la présence d'une interface frontend et
 | `housekeeping` | ✅ | ✅ | CH-014 | — |
 | `maintenance` | ✅ | ✅ | — | — |
 | `guests` (+ `companies`) | ⚠️ | ✅ | CH-010, CH-021 | Pas de déduplication ; `Company` déconnectée |
-| `billing` | ❌ | ⚠️ (via checkin) | **CH-001** | Aucun mécanisme d'avoir |
-| `payments` | ⚠️ | ⚠️ (via checkin) | CH-012 | Remboursement d'acompte imputé bloqué |
+| `billing` | ✅ | ⚠️ (via checkin ; pas d'UI pour l'avoir) | — | **CH-001 terminé** — avoir total (`POST /invoices/:id/credit-notes`), régénération de facture corrigée possible sur le même folio |
+| `payments` | ✅ | ⚠️ (via checkin) | — | **CH-012 terminé** — remboursement d'acompte imputé fonctionnel (préalable : avoir sur toute facture active) |
 | `dashboard` | ✅ | ✅ | — | — |
 | `audit` | ✅ | ❌ | CH-015 | Aucune UI de consultation |
-| `police` | ⚠️ | ❌ | **CH-003** | Aucune UI de saisie (obligation légale) |
+| `police` | ✅ | ✅ | — | **CH-003 terminé** — onglet dédié dans `StayDetailsDialog.tsx` |
 | `notifications` | ⚠️ | ❌ | CH-002 (extension), CH-008 | Backend fonctionnel, pas raccordé au reset password, pas d'UI de gestion |
 | `self-checkin` | ✅ | ❌ | CH-007 | Backend prêt, aucune UI staff |
 | `booking-engine` | ✅ | n/a | — | Façade publique pure, pas d'UI staff attendue |
@@ -32,8 +32,7 @@ Statut par module backend, croisé avec la présence d'une interface frontend et
 ## Synthèse
 
 - **21/21 modules** ont un backend fonctionnel au sens strict (répondent, testés en e2e pour la plupart).
-- **1/21 module** (`billing`) porte un chantier bloquant côté backend (CH-001).
-- **6/21 modules** n'ont aucune interface frontend (`audit`, `police`, `notifications`, `self-checkin`, `document-ocr`, `channel-manager`) — `booking-engine` est le 7e module sans UI staff mais c'est un choix de conception correct (façade publique).
-- **`police` est le seul module cumulant un écart backend/légal ET une absence totale de frontend** — c'est le point de convergence de criticité le plus élevé du statut des modules (cf. CH-003).
+- **0/21 module** porte encore un chantier bloquant, backend ou frontend — les 4 chantiers bloquants du registre (CH-001 à CH-004) sont désormais tous terminés (`billing`, `auth`, `guests`, `police`).
+- **5/21 modules** n'ont aucune interface frontend (`audit`, `notifications`, `self-checkin`, `document-ocr`, `channel-manager`) — `booking-engine` est le 6e module sans UI staff mais c'est un choix de conception correct (façade publique). `police` en est retiré (CH-003 terminé).
 
 *Mettre à jour ce tableau à chaque clôture de chantier du registre.*

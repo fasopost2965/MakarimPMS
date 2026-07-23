@@ -9,23 +9,23 @@ Relie, pour chaque grand domaine fonctionnel, l'exigence métier au module, à l
 | Réserver une chambre disponible sans double-booking | `reservations` | `POST /reservations`, `RoomNight.@@unique` | `docs/modules/reservations.md`, ADR (implicite) | Phases 2, 3 | — | ✅ (`reservations-concurrency.e2e-spec.ts`) | ✅ | ✅ |
 | Check-in (réservation ou walk-in) → séjour actif | `stay` | `POST /checkin/*` | `docs/modules/stay.md` *(nommage `checkin` conservé, écart documenté CLAUDE.md)* | Phase 2 | — | ✅ | ✅ | ✅ |
 | Facturer un séjour (folio → facture) | `billing` | `POST /invoices/generer` | `docs/modules/billing.md` | Phases 2, 3, 6 | — | ✅ | ✅ (embarqué dans check-in) | ✅ |
-| **Corriger une facture émise erronée** | `billing` | *(inexistant)* | `docs/ADR-002-Folio-Billing-Model.md` (multi-folio), `docs/ADR-004` (immuabilité) | Phase 6 | **CH-001** | ❌ | ❌ | ❌ |
+| **Corriger une facture émise erronée** | `billing` | `POST /invoices/:id/credit-notes` | `docs/ADR-002-Folio-Billing-Model.md` (multi-folio), `docs/ADR-004` (immuabilité), `docs/governance/REGISTRE_DECISIONS.md` (RD-005) | Phase 6 | **CH-001 — terminé** | ✅ (`billing.e2e-spec.ts`) | ❌ *(aucune UI, action API uniquement — hors périmètre de CH-001, non demandée)* | ⚠️ (backend prêt, pas d'UI) |
 | Encaisser un paiement de façon idempotente | `payments` | `POST /payments` | `docs/modules/payments.md` | Phases 2, 4, 6 | — | ✅ | ✅ | ✅ |
 | Bloquer le check-out sur solde impayé | `stay` | `POST /checkout/:stayId` | `CLAUDE.md` (règle citée non appliquée) | Phase 6 | **CH-005** | ❌ | — | ❌ |
-| Rembourser un acompte déjà imputé | `payments` | `POST /reservations/:id/deposits/:id/rembourser` | `docs/modules/payments.md` | Phase 6 | **CH-012** (bloqué par CH-001) | ❌ | — | ❌ |
+| Rembourser un acompte déjà imputé | `payments` | `POST /reservations/:id/deposits/:id/rembourser` | `docs/modules/payments.md`, `docs/governance/REGISTRE_DECISIONS.md` (RD-007) | Phase 6 | **CH-012 — terminé** | ✅ (`payments.e2e-spec.ts`) | — | ✅ |
 | Transitionner le statut d'une chambre selon une machine à états | `rooms`, `housekeeping` | `PATCH /rooms/:id/statut` | `docs/ADR-003-Room-State-Machine.md` | Phases 2, 7 | — | ✅ | ✅ | ✅ |
 | Consulter l'historique des transitions de chambre | `rooms` | *(inexistant)* | — | Phase 7 | **CH-014** | — | ❌ | ❌ |
 | Ouvrir/résoudre un ticket de maintenance avec blocage de chambre | `maintenance` | `POST /maintenance-tickets`, `PATCH /:id/resoudre` | `docs/modules/maintenance.md` | Phase 7 | — | ❓ *(à confirmer)* | ✅ | ✅ |
 | S'authentifier avec accès/refresh token | `auth` | `POST /auth/login`, `/refresh` | `docs/ADR-006-RBAC-Enforcement.md` | Phase 5 | CH-026(f) *(révocation, secondaire)* | ❓ | ✅ | ✅ |
-| Réinitialiser un mot de passe oublié en sécurité | `auth`, `notifications` | `POST /auth/forgot-password` | — | Phase 5 | **CH-002** | ❌ | ✅ (UI existe, backend non sécurisé) | ❌ |
+| Réinitialiser un mot de passe oublié en sécurité | `auth`, `notifications` | `POST /auth/forgot-password` | `docs/governance/REGISTRE_DECISIONS.md` (RD-004) | Phase 5 | **CH-002 — terminé** | ✅ (`auth.e2e-spec.ts`) | ✅ | ✅ |
 | Vérifier une permission RBAC à chaque requête sensible | transverse (`PermissionsGuard`) | tous les endpoints `@RequirePermission` | `docs/RBAC_MATRIX.md`, ADR-006 | Phase 5 | — | ✅ | — (serveur uniquement) | ✅ (serveur) |
 | Refléter les permissions réelles dans l'interface | frontend transverse | *(inexistant : pas de `GET /auth/me`)* | — | Phases 5, 8 | **CH-011** | — | ❌ | ❌ |
-| Enregistrer les personnes hébergées (registre légal) | `police` | `POST /police/:stayId` | — *(spec `modules/police.md` absente, cf. CH-018)* | Phases 2, 6, 8 | **CH-003** | ❓ | ❌ | ❌ |
-| Exporter le registre de police (obligation DGSN) | `reporting` | `GET /reporting/police-register` | — | Phase 8 | — | ❓ | ✅ | ⚠️ (export existe, saisie source absente) |
+| Enregistrer les personnes hébergées (registre légal) | `police` | `POST /police/:stayId` | — *(spec `modules/police.md` absente, cf. CH-018)* | Phases 2, 6, 8 | **CH-003 — terminé** | ❓ *(pas de suite e2e frontend dans ce projet, vérifié manuellement en navigateur réel)* | ✅ | ✅ |
+| Exporter le registre de police (obligation DGSN) | `reporting` | `GET /reporting/police-register` | — | Phase 8 | — | ❓ | ✅ | ✅ (export + saisie source désormais disponibles, CH-003) |
 | Générer un lien de self check-in | `self-checkin` | `POST /reservations/:id/self-checkin-link` | — | Phase 8 | **CH-007** | ❓ | ❌ | ❌ |
 | Notifier le client (email/SMS/WhatsApp) à des événements clés | `notifications` | `notify()`, `NotificationTemplate` | — | Phases 2, 5 | CH-002 (extension), CH-008 (UI) | ❓ | ❌ (gestion), n/a (déclenchement auto) | ⚠️ |
 | Importer une réservation OTA (channel manager) | `channel-manager` | webhook `POST /channel-manager/webhooks/:canal` | — | Phase 8 | **CH-009** | ❓ | ❌ | ⚠️ (backend prêt, config sans UI) |
-| Chiffrer les données d'identité au repos | `guests` | *(inexistant)* | `docs/execution/GO_LIVE_CHECKLIST.md` | Phase 5 | **CH-004** | ❌ | n/a | ❌ |
+| Chiffrer les données d'identité au repos | `guests` | *(transparent, extension Prisma — pas de nouvel endpoint)* | `docs/execution/GO_LIVE_CHECKLIST.md`, `docs/governance/REGISTRE_DECISIONS.md` (RD-006) | Phase 5 | **CH-004 — terminé** | ✅ (`field-encryption.spec.ts`, `guests.e2e-spec.ts`) | n/a (transparent) | ✅ |
 | Empêcher la duplication de fiche client (contournement blacklist) | `guests` | *(contrainte absente)* | — | Phase 3 | **CH-010** | ❌ | n/a | ❌ |
 | Filtrer systématiquement les lignes soft-deleted | transverse (Prisma) | *(convention manuelle `NOT_DELETED`)* | `docs/ADR-005-Audit-Soft-Delete.md` | Phases 3, 4, 9 | **CH-006** | ❌ | n/a | ⚠️ |
 | Consulter le journal d'audit transverse | `audit` | `GET /audit-logs` *(existence exacte de la route à confirmer)* | `docs/modules/audit.md` | Phase 8 | **CH-015** | ❓ | ❌ | ⚠️ |

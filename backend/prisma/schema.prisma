@@ -1090,6 +1090,9 @@ enum AuditAction {
   UPDATE_NOTIFICATION_TEMPLATE
   CREATE_CHANNEL_ROOM_TYPE_MAPPING
   DELETE_CHANNEL_ROOM_TYPE_MAPPING
+  // CH-001 (docs/governance/REGISTRE_CHANTIERS.md) — avoir total sur une
+  // facture émise (BillingService.createCreditNote).
+  CREATE_CREDIT_NOTE
 }
 
 // ------------------------------------------------------------------

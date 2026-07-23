@@ -17,6 +17,7 @@ import { AuditService } from '../audit/audit.service';
 import { getNightsBetween } from '../reservations/utils/nights';
 import { AddFolioLineDto } from './dto/add-folio-line.dto';
 import { ExcludeFolioTaxesDto } from './dto/exclude-folio-taxes.dto';
+import { CreateCreditNoteDto } from './dto/create-credit-note.dto';
 import {
   calculateInvoiceTotal,
   computeTaxLineAmount,
@@ -83,7 +84,9 @@ export class BillingService {
 
   // Générer une facture depuis un folio. Règle non négociable : une fois
   // émise, une facture est immuable — elle est toujours EMISE, et ne peut
-  // être modifiée que par un avoir (CreditNote, module 5.13 Phase 2).
+  // être modifiée que par un avoir (CreditNote — CH-001,
+  // docs/governance/REGISTRE_CHANTIERS.md, avoir total uniquement : voir
+  // createCreditNote ci-dessous).
   //
   // Avant de calculer le total, matérialise en FolioLine chaque taxe
   // configurable applicable (TAXE_SEJOUR et toute taxe créée depuis
@@ -116,11 +119,15 @@ export class BillingService {
         throw new NotFoundException(`Folio ${folioId} introuvable.`);
       }
 
-      // Vérifier qu'une facture n'existe pas déjà pour ce folio (en Phase 1,
-      // un folio = une facture maximum).
-      if (folio.invoices.length > 0) {
+      // Une facture ACTIVE (EMISE) bloque toute nouvelle génération — mais
+      // une facture déjà ANNULEE_PAR_AVOIR (CH-001) ne doit plus bloquer :
+      // c'est précisément ce qui permet de régénérer une facture corrigée
+      // sur le même folio après un avoir. `length > 0` seul aurait empêché
+      // toute correction, contredisant l'objet même de l'avoir.
+      const factureActive = folio.invoices.find((i) => i.statut === 'EMISE');
+      if (factureActive) {
         throw new ConflictException(
-          `Une facture existe déjà pour le folio ${folioId}.`,
+          `Une facture active existe déjà pour le folio ${folioId} (facture ${factureActive.numero}) — génère un avoir avant d'en créer une nouvelle.`,
         );
       }
 
@@ -142,8 +149,17 @@ export class BillingService {
           !excludedIds.has(t.id),
       );
 
+      // Ne jamais réinjecter les lignes TAXE_SEJOUR si une génération
+      // précédente (avant un avoir) les a déjà matérialisées sur ce folio —
+      // sinon une régénération après avoir double la taxe de séjour. Les
+      // lignes de taxe restent sur le folio après un avoir (l'avoir annule
+      // la facture, pas les charges réelles sous-jacentes).
+      const taxeDejaMaterialisee = folio.lignes.some(
+        (l) => l.type === TypeLigneFolio.TAXE_SEJOUR,
+      );
+
       const nouvellesLignes: Prisma.FolioLineCreateManyInput[] = [];
-      if (taxesToApply.length > 0) {
+      if (taxesToApply.length > 0 && !taxeDejaMaterialisee) {
         const nights = getNightsBetween(
           folio.stay.dateCheckin,
           folio.stay.dateCheckoutReelle ?? folio.stay.dateCheckoutPrevue,
@@ -207,9 +223,11 @@ export class BillingService {
 
   // Exclut (ou réintègre) des taxes applicables par défaut pour un folio
   // donné (client exonéré) — sémantique PATCH idempotente : remplace
-  // l'ensemble complet des exclusions à chaque appel. Interdit une fois la
-  // facture émise (INV-FAC-001 : la facture ne doit jamais pouvoir changer
-  // rétroactivement suite à une exclusion tardive).
+  // l'ensemble complet des exclusions à chaque appel. Interdit tant qu'une
+  // facture ACTIVE existe (INV-FAC-001 : la facture ne doit jamais pouvoir
+  // changer rétroactivement suite à une exclusion tardive) — mais autorisé
+  // de nouveau après un avoir (CH-001), même logique que generateInvoice :
+  // c'est ce qui permet de corriger l'exclusion avant de régénérer.
   async excludeTaxes(
     folioId: number,
     dto: ExcludeFolioTaxesDto,
@@ -222,9 +240,9 @@ export class BillingService {
     if (!folio) {
       throw new NotFoundException(`Folio ${folioId} introuvable.`);
     }
-    if (folio.invoices.length > 0) {
+    if (folio.invoices.some((i) => i.statut === 'EMISE')) {
       throw new ConflictException(
-        `Une facture existe déjà pour le folio ${folioId} — les exclusions de taxe ne sont plus modifiables.`,
+        `Une facture active existe déjà pour le folio ${folioId} — les exclusions de taxe ne sont plus modifiables.`,
       );
     }
 
@@ -254,6 +272,66 @@ export class BillingService {
       });
 
       return tx.folioTaxExclusion.findMany({ where: { folioId } });
+    });
+  }
+
+  // Avoir sur une facture émise (CH-001, docs/governance/REGISTRE_CHANTIERS.md
+  // — arbitrage confirmé : avoir TOTAL uniquement, jamais partiel). Chemin
+  // d'écriture unique de CreditNote et du passage Invoice.statut à
+  // ANNULEE_PAR_AVOIR : la facture d'origine n'est jamais modifiée
+  // (montantTotal/numero/lignes restent figés, immuabilité ADR-004
+  // préservée), seul son statut change. Les FolioLine sous-jacentes
+  // (HEBERGEMENT/EXTRA/TAXE_SEJOUR déjà matérialisées) ne sont jamais
+  // touchées ici — l'avoir annule le document fiscal, pas les charges
+  // réelles du séjour. Une fois l'avoir posé, generateInvoice() peut être
+  // rappelé sur le même folio pour émettre la facture corrigée (garde
+  // assouplie ci-dessus pour n'exclure que les factures encore actives).
+  async createCreditNote(
+    invoiceId: number,
+    dto: CreateCreditNoteDto,
+    userId?: number,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const invoice = await tx.invoice.findUnique({
+        where: { id: invoiceId },
+      });
+      if (!invoice) {
+        throw new NotFoundException(`Facture ${invoiceId} introuvable.`);
+      }
+      if (invoice.statut !== 'EMISE') {
+        throw new ConflictException(
+          `La facture ${invoice.numero} est déjà annulée par avoir.`,
+        );
+      }
+
+      const creditNote = await tx.creditNote.create({
+        data: {
+          invoiceId,
+          motif: dto.motif,
+          montant: invoice.montantTotal,
+        },
+      });
+
+      await tx.invoice.update({
+        where: { id: invoiceId },
+        data: { statut: 'ANNULEE_PAR_AVOIR' },
+      });
+
+      await this.auditService.writeLog(tx, {
+        userId,
+        action: AuditAction.CREATE_CREDIT_NOTE,
+        targetEntity: AuditEntity.Invoice,
+        targetId: invoiceId,
+        oldValue: { statut: invoice.statut },
+        newValue: {
+          statut: 'ANNULEE_PAR_AVOIR',
+          creditNoteId: creditNote.id,
+          montant: invoice.montantTotal.toString(),
+        },
+        motif: dto.motif,
+      });
+
+      return creditNote;
     });
   }
 

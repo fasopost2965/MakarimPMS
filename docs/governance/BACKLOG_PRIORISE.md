@@ -5,19 +5,19 @@ Vue condensée et actionnable de `REGISTRE_CHANTIERS.md`, triée pour piloter l'
 ## Ordre d'exécution recommandé
 
 ### Vague 1 — Bloquants (avant go-live)
-Peuvent être menés en parallèle par des développeurs différents — aucune dépendance croisée entre eux à l'exception de CH-012 qui attend CH-001.
+Peuvent être menés en parallèle par des développeurs différents — aucune dépendance croisée entre eux à l'exception de CH-012 (Vague 2) qui attendait CH-001 (dépendance levée, CH-012 également terminé depuis).
 
-1. **CH-002** — Sécuriser le reset password *(le plus rapide, à traiter en premier pour fermer une faille active)*
-2. **CH-001** — Implémenter CreditNote *(le plus structurant, débloque CH-012 et une partie de CH-023)*
-3. **CH-003** — UI registre de police *(indépendant, purement frontend, peut démarrer immédiatement)*
-4. **CH-004** — Arbitrage + éventuelle implémentation du chiffrement PII *(commencer par l'arbitrage, qui ne coûte rien et débloque le reste)*
+1. **CH-002** — ✅ **Terminé** (session courante). Sécuriser le reset password *(le plus rapide, traité en premier pour fermer une faille active)* — voir `REGISTRE_CHANTIERS.md` pour le détail (l'implémentation a nécessité un ajustement frontend non anticipé dans la fiche initiale, traité dans le même chantier).
+2. **CH-001** — ✅ **Terminé** (session courante). Implémenter CreditNote (avoir total) *(le plus structurant, débloque CH-012 et une partie de CH-023)* — voir `REGISTRE_CHANTIERS.md` pour le détail (garde de régénération de facture + correctif d'un bug latent de double-matérialisation de taxe, non anticipés dans la fiche initiale, traités dans le même chantier).
+3. **CH-004** — ✅ **Terminé** (session courante). Chiffrement AES-256-GCM de `Guest.pieceIdentite` — voir `REGISTRE_CHANTIERS.md` pour le détail (implémenté au niveau du client Prisma plutôt qu'en wrapper de service, pour couvrir les lectures imbriquées depuis d'autres modules).
+4. **CH-003** — ✅ **Terminé** (session courante). UI registre de police (onglet « Police » dans `StayDetailsDialog.tsx`) — voir `REGISTRE_CHANTIERS.md` pour le détail (badge d'avertissement ajouté dans les listes de séjours, non explicitement prévu par la fiche initiale mais nécessaire pour donner une vraie visibilité).
 
 ### Vague 2 — Importants
 5. **CH-005** — Blocage checkout solde impayé
 6. **CH-011** — Gating RBAC frontend *(prérequis technique : route `GET /auth/me` à créer — le plus gros chantier de cette vague)*
 7. **CH-010** — Déduplication client
 8. **CH-006** — Centraliser soft-delete
-9. **CH-012** — Remboursement acompte imputé *(dès que CH-001 est livré)*
+9. **CH-012** — ✅ **Terminé** (session courante). Remboursement acompte imputé — voir `REGISTRE_CHANTIERS.md` pour le détail (l'avoir est un préalable au remboursement, pas une action déclenchée par la route elle-même, RD-007).
 10. **CH-007 / CH-008 / CH-009** — Interfaces frontend self-checkin / notifications / channel-manager *(indépendantes entre elles, à répartir selon la capacité disponible)*
 
 ### Vague 3 — Secondaires (dette technique, à intercaler entre les livraisons fonctionnelles)
@@ -39,14 +39,14 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 
 | Chantier | Arbitrage requis |
 |---|---|
-| CH-001 | Périmètre de l'avoir : total, partiel, impact sur les lignes de taxe déjà matérialisées ? |
-| CH-004 | Implémenter le chiffrement maintenant, ou accepter le risque formellement et reporter ? |
+| ~~CH-001~~ | ✅ Tranché — avoir total uniquement, voir `REGISTRE_DECISIONS.md` (RD-005). |
+| ~~CH-004~~ | ✅ Tranché — implémenter maintenant, voir `REGISTRE_DECISIONS.md` (RD-006). |
 | CH-005 | Blocage dur du checkout, ou avertissement avec confirmation ? |
 | CH-010 | Contrainte dure d'unicité, ou détection souple à la création ? |
 | CH-020 | La numérotation doit-elle réellement repartir de 1 chaque mois ? |
 | CH-021 | La facturation entreprise (city ledger) est-elle une priorité produit, ou un écart assumé ? |
 | CH-023 | Le recouvrement de pénalité doit-il être tracé dans le système, ou rester un processus humain hors PMS ? |
 
-## Statut de couverture (au moment de la création de ce backlog)
+## Statut de couverture
 
-Tous les chantiers listés sont au statut **à faire** — aucun n'a encore été engagé au moment de la structuration de ce registre (session Claude 1, documentation uniquement, pas de développement fonctionnel). Le suivi de statut se fait désormais dans `REGISTRE_CHANTIERS.md` (champ *Statut* par fiche) : mettre à jour ce champ, pas ce backlog, quand un chantier avance.
+Au moment de la création de ce backlog, tous les chantiers étaient au statut **à faire** (session Claude 1, documentation uniquement). **Les 4 chantiers bloquants (CH-001, CH-002, CH-003, CH-004) sont désormais tous terminés** (session de suite, développement effectif) — la Vague 1 du backlog est intégralement close. Le suivi de statut se fait dans `REGISTRE_CHANTIERS.md` (champ *Statut* par fiche, section « Suivi d'avancement ») : mettre à jour ce champ, pas ce backlog, quand un chantier avance — ce document liste l'ordre recommandé, pas l'état courant en détail.
