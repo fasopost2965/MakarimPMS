@@ -13,23 +13,28 @@ interface KpiCardProps {
   value: string;
   hint?: string;
   onClick?: () => void;
+  accent?: boolean;
 }
 
-function KpiCard({ label, value, hint, onClick }: KpiCardProps) {
+function KpiCard({ label, value, hint, onClick, accent }: KpiCardProps) {
   const clickable = onClick !== undefined;
   return (
     <div
-      className={`flex flex-col gap-1 rounded-lg border p-4 ${
-        clickable ? 'cursor-pointer hover:bg-gray-50' : ''
+      className={`bg-card flex flex-col gap-2 rounded-lg border p-4 transition-colors ${
+        clickable ? 'hover:border-primary/40 cursor-pointer' : ''
       }`}
       onClick={onClick}
       role={clickable ? 'button' : undefined}
       tabIndex={clickable ? 0 : undefined}
     >
-      <p className="text-muted-foreground text-xs font-semibold uppercase">
+      <p className="text-muted-foreground text-[10.5px] font-bold tracking-wide uppercase">
         {label}
       </p>
-      <p className="text-2xl font-semibold">{value}</p>
+      <p
+        className={`text-2xl font-bold tracking-tight ${accent ? 'text-primary' : ''}`}
+      >
+        {value}
+      </p>
       {hint && <p className="text-muted-foreground text-xs">{hint}</p>}
     </div>
   );
@@ -63,8 +68,6 @@ export function DashboardPage({ onNavigate }: Props) {
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
-      <h1 className="text-xl font-medium">Tableau de bord</h1>
-
       {loading && <p className="text-muted-foreground text-sm">Chargement…</p>}
       {error && <p className="text-destructive text-sm">{error}</p>}
 
@@ -75,6 +78,7 @@ export function DashboardPage({ onNavigate }: Props) {
             value={`${resume.tauxOccupation}%`}
             hint={`${resume.chambresOccupees} / ${resume.totalChambres} chambres occupées`}
             onClick={() => onNavigate('housekeeping')}
+            accent
           />
           <KpiCard
             label="Arrivées aujourd'hui"

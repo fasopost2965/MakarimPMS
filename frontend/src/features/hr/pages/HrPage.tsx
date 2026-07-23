@@ -33,8 +33,6 @@ export function HrPage() {
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
-      <h1 className="text-xl font-medium">Ressources humaines</h1>
-
       <div className="flex gap-1 border-b pb-2">
         <Button
           variant={section === 'employes' ? 'default' : 'ghost'}

@@ -117,7 +117,6 @@ export function GuestsPage() {
   return (
     <div className="flex h-full flex-col gap-4 p-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-medium">Clients</h1>
         <Button size="sm" onClick={() => setCreateOpen(true)}>
           + Nouveau client
         </Button>

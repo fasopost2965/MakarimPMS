@@ -51,8 +51,6 @@ export function ParametersPage() {
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
-      <h1 className="text-xl font-medium">Paramètres</h1>
-
       <div className="flex gap-1 border-b pb-2">
         <Button
           variant={section === 'identite' ? 'default' : 'ghost'}

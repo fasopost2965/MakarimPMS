@@ -42,15 +42,28 @@ const STATUT_LABEL: Record<StatutChambre, string> = {
 
 const STATUT_BADGE_VARIANT: Record<
   StatutChambre,
-  'default' | 'secondary' | 'destructive' | 'outline'
+  'success' | 'info' | 'destructive' | 'warning'
 > = {
-  LIBRE_PROPRE: 'default',
-  RESERVEE: 'secondary',
+  LIBRE_PROPRE: 'success',
+  RESERVEE: 'info',
   OCCUPEE: 'destructive',
-  DEPART_PREVU: 'secondary',
-  A_NETTOYER: 'outline',
-  EN_NETTOYAGE: 'outline',
+  DEPART_PREVU: 'info',
+  A_NETTOYER: 'warning',
+  EN_NETTOYAGE: 'warning',
   EN_MAINTENANCE: 'destructive',
+};
+
+// Liseré de couleur sémantique par statut, cohérent avec les puces du
+// mockup de direction visuelle (libre=succès, occupée/maintenance=danger,
+// réservée/départ prévu=info, à nettoyer=alerte).
+const STATUT_BORDER_CLASS: Record<StatutChambre, string> = {
+  LIBRE_PROPRE: 'border-l-success',
+  RESERVEE: 'border-l-info',
+  OCCUPEE: 'border-l-destructive',
+  DEPART_PREVU: 'border-l-info',
+  A_NETTOYER: 'border-l-warning',
+  EN_NETTOYAGE: 'border-l-warning',
+  EN_MAINTENANCE: 'border-l-destructive',
 };
 
 export function HousekeepingPage() {
@@ -95,8 +108,6 @@ export function HousekeepingPage() {
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
-      <h1 className="text-xl font-medium">Housekeeping — chambres</h1>
-
       {loadError && <p className="text-destructive text-sm">{loadError}</p>}
       {actionError && <p className="text-destructive text-sm">{actionError}</p>}
 
@@ -107,7 +118,7 @@ export function HousekeepingPage() {
           {rooms.map((room) => (
             <div
               key={room.id}
-              className="flex items-center justify-between gap-2 rounded-md border p-3"
+              className={`bg-card flex items-center justify-between gap-2 rounded-md border border-l-4 p-3 ${STATUT_BORDER_CLASS[room.statut]}`}
             >
               <div>
                 <p className="text-sm font-medium">
