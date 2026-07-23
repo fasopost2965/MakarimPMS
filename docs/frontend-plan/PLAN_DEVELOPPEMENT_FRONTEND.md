@@ -27,9 +27,9 @@ Construit **après** la cartographie fonctionnelle (`CARTOGRAPHIE_ECRANS.md`, `M
 - **Écart par rapport au plan, tranché explicitement** (RD-009, `docs/governance/REGISTRE_DECISIONS.md`) : le masquage d'actions **à l'intérieur** d'un écran partagé (ex. Maintenance en lecture seule pour la Gouvernante à l'intérieur d'un écran déjà visible) n'est **pas** couvert — granularité onglet entier uniquement, option explicitement recommandée et retenue face au risque « cosmétique/UX, pas une barrière de sécurité » de ce chantier. Resterait un chantier distinct si le besoin réapparaît.
 - Valeur métier : cohérence perçue de l'interface avec les droits réels (fermeture du risque R-09, `REGISTRE_RISQUES.md`).
 
-### Lot 4 — Interfaces de configuration administrative
-- É-03 (notifications), É-04 (channel-manager, **sous réserve de confirmation qu'un canal OTA réel est utilisé** — sinon reporter en `ECARTS_ASSUMES.md`).
-- Réservées à l'Administrateur (Lot 3 doit être livré avant, pour que le gating s'applique dès leur mise en ligne plutôt qu'après coup).
+### Lot 4 — Interfaces de configuration administrative — ✅ Terminé (session courante)
+- É-03 (notifications, CH-008) et É-04 (channel-manager, CH-009) tous deux livrés — la réserve initiale sur É-04 (confirmer qu'un canal OTA réel est utilisé) ne s'est pas révélée bloquante : le livrable ne dépendait pas de la réponse (voir `REGISTRE_CHANTIERS.md`, fiche CH-009).
+- Réservées à l'Administrateur en écriture (Lot 3/CH-011 livré avant, le gating s'applique bien dès leur mise en ligne) ; Réception en lecture seule sur Notifications (`notifications:read`), pas d'accès à Channel Manager (`parameters:*` non accordé à ce rôle).
 
 ### Lot 5 — Consultation et traçabilité
 - É-06 (audit log), É-07 (historique statuts chambre, dépend de la route backend CH-014).

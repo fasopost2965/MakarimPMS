@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Bell,
   Building2,
   CalendarRange,
   LayoutDashboard,
@@ -82,5 +83,11 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Reporting',
     icon: BarChart3,
     permission: 'reporting:read',
+  },
+  {
+    tab: 'notifications',
+    label: 'Notifications',
+    icon: Bell,
+    permission: 'notifications:read',
   },
 ];

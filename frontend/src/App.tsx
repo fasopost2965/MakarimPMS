@@ -12,6 +12,7 @@ import { LogoutGuardDialog } from '@/features/hr/components/LogoutGuardDialog';
 import { statutCourant } from '@/features/hr/api';
 import { StockPage } from '@/features/stock/pages/StockPage';
 import { ReportingPage } from '@/features/reporting/pages/ReportingPage';
+import { NotificationsPage } from '@/features/notifications/pages/NotificationsPage';
 import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { ForgotPasswordPage } from '@/features/auth/pages/ForgotPasswordPage';
 import { me as fetchMe } from '@/features/auth/api';
@@ -32,7 +33,8 @@ export type Tab =
   | 'parameters'
   | 'hr'
   | 'stock'
-  | 'reporting';
+  | 'reporting'
+  | 'notifications';
 type AuthScreen = 'login' | 'forgot-password';
 
 // Coquille applicative : sidebar repliable (navigation principale) + topbar
@@ -165,6 +167,7 @@ function App() {
           {tab === 'hr' && <HrPage />}
           {tab === 'stock' && <StockPage />}
           {tab === 'reporting' && <ReportingPage />}
+          {tab === 'notifications' && <NotificationsPage />}
         </div>
       </div>
       <LogoutGuardDialog

@@ -63,17 +63,17 @@ Déduite du backend réel (21 modules, `docs/audits/PHASE_04_BACKEND.md`), crois
 - **Parcours utilisateur livré** : détail de réservation → panneau « Self check-in » → « Générer le lien » (URL affichée + copie presse-papiers, envoi email automatique si adresse connue) → (client remplit hors application) → réouverture du détail → badge « Informations soumises » + résumé → pré-remplissage de la fiche police au check-in réel (lien avec É-01, inchangé).
 - **Critère de validation** : vérifié en navigateur réel (Playwright) — génération, copie, soumission simulée via l'endpoint public, badge mis à jour à la réouverture du dialogue, sans rafraîchissement de page.
 
-### É-03 — Gestion des notifications (templates + journal) 🔴 — **Priorité : Importante (CH-008)**
+### É-03 — Gestion des notifications (templates + journal) ✅ — **Priorité : Importante (CH-008 — terminé, session courante)**
 
 - **Doit exister pour** : l'Administrateur uniquement (écriture) ; Réception en lecture seule (confirmé seed : `notifications:read` accordé à Réception, `notifications:write` réservé à l'Administrateur — même logique que `parameters:write`).
-- **Actions** : lister/éditer les `NotificationTemplate` par (événement, canal) ; consulter les `NotificationLog` récents (statut envoyé/échec/ignoré, destinataire).
-- **Règles métier** : modification de template auditée (motif ≥10 caractères, cohérent avec le reste de `parameters`) — **à confirmer si `notifications` suit exactement la même discipline d'audit que `parameters`, non vérifié explicitement pendant l'audit backend**.
-- **Dépendances API** : CRUD `NotificationTemplate` (route exacte à confirmer dans `notifications.controller.ts`), lecture `NotificationLog`.
-- **États** : *vide* — aucun log pour la période sélectionnée ; *échec d'envoi* — statut `ECHEC` à distinguer visuellement de `IGNORE` (opt-out client, pas une panne — distinction déjà faite côté backend, doit être reflétée dans l'UI, pas fusionnée).
-- **Cas limites** : template désactivé (`actif: false`) — ne doit jamais être supprimable si historique de logs y référant, à vérifier côté FK.
-- **Critères UX** : les deux sous-écrans (templates / journal) doivent être clairement séparés (édition de contenu vs consultation d'historique — deux intentions différentes).
-- **Parcours utilisateur** : Paramètres (ou nouvel onglet dédié, à trancher — voir §Composants) → Notifications → liste des templates par événement → édition → aperçu du journal filtrable par événement/canal/statut.
-- **Critère de validation** : une modification de template est effective sur le prochain envoi réel (déjà garanti côté backend, l'UI doit juste confirmer visuellement l'enregistrement).
+- **Actions** : lister/éditer les `NotificationTemplate` par (événement, canal) ; créer un template pour une paire (évènement, canal) pas encore configurée ; consulter les `NotificationLog` récents (statut envoyé/échec/ignoré, destinataire) — **livré tel quel**.
+- **Règles métier confirmées** : modification de template auditée (motif ≥ 10 caractères) — même discipline que `parameters` (`AuditAction.UPDATE_NOTIFICATION_TEMPLATE`/`CREATE_NOTIFICATION_TEMPLATE`, vérifié dans `notifications.service.ts`).
+- **Dépendances API** : `GET/POST /notifications/templates`, `PATCH /notifications/templates/:id`, `GET /notifications/logs` — utilisées telles quelles, aucune route ajoutée.
+- **États livrés** : *vide* (aucun template / aucun log) ; badge par statut (`ENVOYE`/`ECHEC`/`IGNORE`/`EN_ATTENTE`), `IGNORE` visuellement distinct d'`ECHEC` (variantes `secondary`/`destructive`) et son motif d'ignorance (opt-out, destinataire manquant, template inactif) affiché en clair à côté du badge.
+- **Cas limite résolu** : pas de route `DELETE` sur `NotificationTemplate` (confirmé en lisant `notifications.controller.ts`) — un template ne peut jamais être supprimé, seulement désactivé (`actif: false`), donc la question FK posée initialement ne se pose pas.
+- **Critères UX** : deux sous-écrans clairement séparés (boutons « Templates » / « Journal d'envoi », même pattern que les sections de `ParametersPage.tsx`) — **livré tel quel**.
+- **Parcours utilisateur livré** : nouvel onglet dédié « Notifications » (tranché en faveur d'un onglet séparé, pas une section de Paramètres, conformément à la fiche initiale) → Templates (édition inline ou création) → Journal d'envoi (liste triée par date décroissante).
+- **Critère de validation** : vérifié en navigateur réel — modification d'un template EMAIL persistée, création d'un template SMS (champ Sujet correctement absent, ce canal ne l'utilise jamais à l'envoi), Journal reflétant des envois réels de la session. **Preuve RBAC serveur réelle** : un compte Réception (lecture seule) voit l'onglet mais une tentative d'écriture directe reçoit un 403 (« Permission requise : notifications:write. »), affiché proprement côté frontend.
 
 ### É-04 — Configuration Channel Manager (mappings OTA) ✅ — **Priorité : Importante (CH-009 — terminé, session courante)**
 
