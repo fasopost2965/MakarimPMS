@@ -23,10 +23,10 @@ PMS interne pour l'Hôtel Makarim (3 étoiles, 24 chambres, Tétouan) — pas de
 
 ## Ce qui ne l'est pas
 
-- **Trois surfaces backend sans interface** : notifications, document-ocr, audit.
+- **Deux surfaces backend sans interface** : document-ocr, audit.
 - **Facturation entreprise (city ledger)** : `Company` existe mais est totalement déconnectée du flux transactionnel.
 
-Résolu depuis (voir `REGISTRE_CHANTIERS.md` pour le détail de chaque implémentation) : correction de facture par avoir (CH-001), sécurité de la réinitialisation de mot de passe (CH-002), interface de saisie du registre de police (CH-003), chiffrement au repos de `Guest.pieceIdentite` (CH-004), remboursement d'un acompte imputé (CH-012), blocage du check-out sur solde impayé (CH-005), gating RBAC côté interface (CH-011 — un rôle sans permission sur un module ne voit plus son onglet dans la navigation), filtrage soft-delete centralisé (CH-006 — extension Prisma globale, plus de dépendance à une convention manuelle par service), interface frontend self-checkin (CH-007 — génération de lien + statut d'attente sur le détail de réservation), interface frontend channel-manager (CH-009 — CRUD des mappings OTA dans les Paramètres).
+Résolu depuis (voir `REGISTRE_CHANTIERS.md` pour le détail de chaque implémentation) : correction de facture par avoir (CH-001), sécurité de la réinitialisation de mot de passe (CH-002), interface de saisie du registre de police (CH-003), chiffrement au repos de `Guest.pieceIdentite` (CH-004), remboursement d'un acompte imputé (CH-012), blocage du check-out sur solde impayé (CH-005), gating RBAC côté interface (CH-011 — un rôle sans permission sur un module ne voit plus son onglet dans la navigation), filtrage soft-delete centralisé (CH-006 — extension Prisma globale, plus de dépendance à une convention manuelle par service), interface frontend self-checkin (CH-007 — génération de lien + statut d'attente sur le détail de réservation), interface frontend channel-manager (CH-009 — CRUD des mappings OTA dans les Paramètres), interface frontend notifications (CH-008 — onglet dédié templates/journal, preuve RBAC serveur réelle).
 
 ## Risques majeurs (voir `REGISTRE_RISQUES.md` pour le détail)
 

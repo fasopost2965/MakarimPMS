@@ -191,8 +191,9 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 - **Dépendances** : CH-011 (le gating RBAC devrait couvrir cet écran, réservé à un rôle administratif).
 - **Livrable attendu** : écran de liste/édition des `NotificationTemplate` par (événement, canal), consultation des `NotificationLog` récents.
 - **Critères de validation** : modification d'un template visible immédiatement sur le prochain envoi.
-- **Statut** : à faire · **Estimation** : Moyenne (2 jours) · **Confiance** : élevée
+- **Statut** : ✅ **Terminé** (session courante) · **Estimation** : Moyenne (2 jours) · **Confiance** : élevée
 - **Lien audit** : Phase 8 §2.
+- **Résolution** : nouveau nom d'onglet dédié « Notifications » (`frontend/src/features/notifications/`, nouvelle entrée `NAV_ITEMS` avec `permission: 'notifications:read'`, dépendance CH-011 désormais satisfaite) — contrairement à CH-009, la fiche demandait explicitement un nouveau `features/notifications/`, pas une intégration dans `parameters`. Deux sections (boutons, même motif que `ParametersPage.tsx`) : *Templates* (édition inline par (évènement, canal) — sujet affiché seulement pour le canal EMAIL, `SMS`/`WHATSAPP` n'en tiennent jamais compte à l'envoi ; case à cocher « Actif » ; motif ≥ 10 caractères obligatoire ; dialogue « + Nouveau template » pour une paire (évènement, canal) pas encore configurée) et *Journal d'envoi* (liste des `NotificationLog` les plus récents en premier, badge coloré par statut ENVOYE/ECHEC/IGNORE/EN_ATTENTE, motif d'ignorance affiché en clair). Réutilise les quatre routes existantes telles quelles (`GET/POST /notifications/templates`, `PATCH /notifications/templates/:id`, `GET /notifications/logs`), aucune modification backend. Pas de composant `Textarea` partagé introduit (aucun autre consommateur dans le projet) — `<textarea>` brut stylé en cohérence visuelle avec `Input`. Vérifié en navigateur réel (Chromium/Playwright) : modification du corps d'un template EMAIL existant persistée, création d'un nouveau template SMS (champ Sujet correctement absent pour ce canal), Journal affichant les envois réels de la session (dont l'import OTA de CH-009) avec le bon statut ; **preuve RBAC serveur réelle** — un compte Réception (`notifications:read` seul) voit l'onglet mais une tentative d'édition renvoie 403 (« Permission requise : notifications:write. »), affiché tel quel côté frontend sans plantage.
 
 ---
 
@@ -336,7 +337,7 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 | Priorité | Nombre de chantiers | Charge cumulée estimée (ordre de grandeur) | Terminés |
 |---|---|---|---|
 | Bloquant | 4 (CH-001 à CH-004) | ~7–11 jours développeur | 4 (CH-001, CH-002, CH-003, CH-004) — tous terminés |
-| Important | 8 (CH-005 à CH-012) | ~11–16 jours développeur | 6 (CH-005, CH-006, CH-007, CH-009, CH-011, CH-012) |
+| Important | 8 (CH-005 à CH-012) | ~11–16 jours développeur | 7 (CH-005, CH-006, CH-007, CH-008, CH-009, CH-011, CH-012) |
 | Secondaire | 14 (CH-013 à CH-026) | ~18–28 jours développeur (plusieurs sous conditions d'arbitrage) | 0 (1 partiel : CH-013) |
 
 *Ces charges sont des ordres de grandeur de développement pur (hors tests e2e étendus, hors stabilisation, hors documentation) — voir `docs/planning/ESTIMATION_CHARGE.md` pour l'estimation consolidée par scénario.*
@@ -355,3 +356,4 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 | CH-006 | ✅ Terminé | Session courante | Filtrage soft-delete centralisé — extension Prisma `$extends`, voir fiche ci-dessus (RD-010). |
 | CH-007 | ✅ Terminé | Session courante | Interface frontend self-checkin (staff) — `SelfCheckinPanel.tsx` sur le détail de réservation, voir fiche ci-dessus. Corrige au passage un bug latent de `lib/api-client.ts` (corps de réponse vide non géré hors 204) et la dette technique #6 (`seed.ts`, `DETTE_TECHNIQUE.md`). |
 | CH-009 | ✅ Terminé | Session courante | Interface frontend channel-manager (mappings OTA) — 4e onglet dans `ParametersPage.tsx`, voir fiche ci-dessus. Vérifié par un appel webhook réel bout-en-bout (import résolu puis rejeté après suppression du mapping). |
+| CH-008 | ✅ Terminé | Session courante | Interface frontend notifications (templates/journal) — nouvel onglet dédié `features/notifications/`, voir fiche ci-dessus. Vague 2 presque close (7/8) — seul CH-010 reste ouvert (arbitrage produit requis). Preuve RBAC serveur réelle (403 pour Réception en écriture). |
