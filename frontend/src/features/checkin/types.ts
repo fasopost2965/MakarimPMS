@@ -1,7 +1,7 @@
 import type { Guest, Reservation, Room } from '../reservations/types';
 import type { PoliceRecord } from '../police/types';
 
-export type StatutSejour = 'EN_COURS' | 'CHECKOUT' | 'ANNULE';
+export type StatutSejour = 'EN_COURS' | 'CHECKOUT';
 export type TypeLigneFolio =
   'HEBERGEMENT' | 'EXTRA' | 'TAXE_SEJOUR' | 'PAIEMENT';
 

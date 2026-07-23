@@ -25,7 +25,6 @@ interface Props {
 const STATUT_LABEL: Record<Stay['statut'], string> = {
   EN_COURS: 'En cours',
   CHECKOUT: 'Check-out effectué',
-  ANNULE: 'Annulé',
 };
 
 export function StayDetailsDialog({

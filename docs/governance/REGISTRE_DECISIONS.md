@@ -83,9 +83,55 @@ Décisions structurantes prises **pendant ou après l'audit** (distinct des ADR 
 - **Date** : session courante (CH-006).
 - **Décideur** : Claude — décision technique d'implémentation, pas un arbitrage produit (consigné par transparence, même discipline que RD-007).
 
+### RD-011 — CH-010 : déduplication client — approche hybride (contrainte dure sur `pieceIdentite`, détection souple sur email/téléphone)
+
+- **Décision** : `Guest.pieceIdentite` reçoit une contrainte d'unicité dure en base (rejet explicite à la création/mise à jour en cas de doublon) ; `Guest.email` et `Guest.telephone` restent sans contrainte de base, mais une détection souple (avertissement non bloquant, confirmation manuelle) est ajoutée à la création si une fiche existante correspond.
+- **Raison** : l'utilisateur a explicitement tranché entre trois options soumises (contrainte dure sur `pieceIdentite`, détection souple sur email/téléphone, ou les deux) en faveur de la troisième — reconnaissant que `pieceIdentite` est une donnée fiable et rarement partagée (justifie un blocage dur, seul mécanisme qui empêche réellement le contournement du blacklist par recréation de fiche, R-05) alors qu'email/téléphone peuvent légitimement être partagés par plusieurs membres d'une même famille dans un contexte hôtelier (justifie de ne jamais bloquer dessus).
+- **Alternatives considérées** : (1) contrainte dure seule sur `pieceIdentite` — rejetée par l'utilisateur, laissait passer un contournement par email/téléphone identique sans aucun signal à la réception ; (2) détection souple seule — rejetée par l'utilisateur, n'empêche pas réellement le contournement du blacklist (un utilisateur peut ignorer l'avertissement).
+- **Conflit technique détecté et résolu avant implémentation** : un `@@unique` direct sur `Guest.pieceIdentite` est **inapplicable tel quel** — `field-encryption.ts` (CH-004/RD-006) chiffre avec un IV aléatoire à chaque appel *par construction*, précisément pour empêcher toute fuite d'égalité par comparaison du texte chiffré (commentaire explicite dans le fichier) : deux chiffrements du même numéro de pièce produisent deux valeurs stockées différentes, donc une contrainte unique sur la colonne chiffrée ne détecterait jamais un doublon réel. Résolu par un **index aveugle** (blind index), pattern standard pour concilier chiffrement non-déterministe et recherche/unicité : nouvelle colonne `Guest.pieceIdentiteHash` (HMAC-SHA256 déterministe du texte en clair, jamais l'algorithme de chiffrement lui-même — un hash ne se déchiffre pas), portant seule la contrainte `@@unique`. `pieceIdentite` reste chiffré de façon non-déterministe comme avant (aucune régression sur la garantie de CH-004) ; `pieceIdentiteHash` n'est jamais exposé à l'API ni utilisé pour autre chose que la détection de doublon à l'écriture.
+- **Conséquence** : migration Prisma à venir (nouvelle colonne `Guest.pieceIdentiteHash` + `@@unique`) ; extension Prisma existante (`guest-encryption.extension.ts`) étendue pour calculer ce hash à chaque `create`/`update`/`upsert` portant `pieceIdentite`, en plus du chiffrement déjà en place. `GuestsService.create()`/`update()` gèrent l'erreur de contrainte unique (P2002 sur `pieceIdentiteHash`) avec un message explicite, et exposent un contrôle de correspondance souple (recherche par email/téléphone avant création, renvoyée au frontend pour confirmation) sans jamais bloquer la requête. Chantier d'implémentation à suivre (CH-010, `REGISTRE_CHANTIERS.md`).
+- **Date** : session courante (arbitrage utilisateur).
+- **Décideur** : utilisateur (arbitrage produit explicite, hors `AskUserQuestion` — réponse écrite directe à une liste d'arbitrages soumise).
+
+### RD-012 — CH-013 : retrait de la valeur d'enum morte `StatutSejour.ANNULE`
+
+- **Décision** : `StatutSejour.ANNULE` est retiré du schéma Prisma — aucun cas d'usage réel et stable n'étant défini pour annuler un séjour déjà en cours (`EN_COURS`), distinct du check-out normal et de l'annulation d'une réservation avant arrivée (`StatutReservation.ANNULEE`, mécanisme différent et déjà fonctionnel).
+- **Raison** : l'utilisateur a tranché conditionnellement (« retirer si aucun cas d'usage réel et stable n'est défini ») — vérification effectuée avant retrait : recherche exhaustive dans `backend/src`, `backend/test`, `frontend/src` confirmant que seule la définition du type et un libellé d'affichage (jamais exercé) référencent cette valeur, aucun chemin d'écriture ni test ne l'utilise.
+- **Alternatives considérées** : implémenter un vrai mécanisme d'annulation de séjour en cours (ex. erreur de check-in, départ anticipé imprévu non facturé) — non retenue, aucun besoin métier documenté ne le justifie actuellement ; resterait un chantier distinct si un besoin réel émergeait plus tard.
+- **Conséquence** : migration Prisma retirant `ANNULE` de `enum StatutSejour` (colonne `Stay.statut`, `20260723210332_ch013_remove_statut_sejour_annule`, appliquée sans risque puisqu'aucune ligne n'utilisait cette valeur) ; types frontend `StatutSejour` (`features/checkin/types.ts`, `features/guests/types.ts`) et le libellé associé dans `StayDetailsDialog.tsx` mis à jour en conséquence. Si un besoin réel d'annulation de séjour émerge plus tard, il faudra rouvrir un chantier dédié (nouvelle valeur d'enum + logique complète), pas réutiliser cette suppression.
+- **Date** : session courante (arbitrage utilisateur).
+- **Décideur** : utilisateur (arbitrage conditionnel, condition vérifiée par Claude avant exécution).
+
+### RD-013 — CH-020 : numérotation de facture — séquence continue conservée (pas de remise à zéro mensuelle)
+
+- **Décision** : aucun changement au mécanisme de numérotation de facture existant (séquence continue) — la remise à zéro mensuelle envisagée par la fiche de chantier n'est pas retenue.
+- **Raison** : l'utilisateur a tranché en faveur du statu quo, la question étant une préférence comptable et non une exigence documentée.
+- **Alternatives considérées** : remise à zéro mensuelle (format `FAC-{année}-{mois}-{séquence}`) — non retenue, aucune exigence comptable réelle ne l'imposait.
+- **Conséquence** : aucune (pas de code touché). CH-020 clos sans développement — voir `ECARTS_ASSUMES.md` (EA-003) pour la forme, bien qu'il ne s'agisse pas d'un écart au sens strict (le comportement actuel n'était jamais non conforme, seulement une alternative envisagée puis écartée).
+- **Date** : session courante (arbitrage utilisateur).
+- **Décideur** : utilisateur.
+
+### RD-014 — CH-021 : city ledger / `Company` — dépriorisé formellement pour cette version
+
+- **Décision** : la facturation entreprise (raccordement réel de `Company` à `Reservation`/`Invoice`, vérification de `plafondCredit`) n'est pas un objectif de cette version du PMS — écart assumé, pas un chantier actif.
+- **Raison** : l'utilisateur a tranché en faveur de la dépriorisation formelle plutôt que du raccordement (3–5 jours de développement touchant `reservations`/`billing`/`payments`), sans confirmation qu'il s'agit d'une priorité commerciale actuelle pour l'Hôtel Makarim.
+- **Alternatives considérées** : raccordement réel (FK `companyId` sur `Reservation`/`Invoice`, moyen de paiement « compte entreprise », vérification de plafond de crédit) — non retenu à ce stade.
+- **Conséquence** : `Company` reste sans FK vers `Reservation`/`Stay`/`Folio`/`Invoice`, `plafondCredit` jamais vérifié — état inchangé, désormais documenté comme assumé plutôt que comme un simple oubli. Voir `ECARTS_ASSUMES.md` (EA-001) pour le risque résiduel et la condition de réexamen.
+- **Date** : session courante (arbitrage utilisateur).
+- **Décideur** : utilisateur.
+
+### RD-015 — CH-023 : recouvrement de la pénalité d'annulation/no-show — reste hors PMS
+
+- **Décision** : le système continue de calculer et figer `Reservation.montantPenalite` (BR-RES-006) sans le traduire en écriture financière traçable — le recouvrement réel (retenue sur un `ReservationDeposit` existant, facturation manuelle) reste un processus humain hors PMS, par choix explicite.
+- **Raison** : l'utilisateur a tranché en faveur du statu quo plutôt que d'une matérialisation financière (2 jours si retenue), le processus humain actuel étant jugé suffisant pour l'instant.
+- **Alternatives considérées** : matérialiser la pénalité en écriture financière traçable — non retenue (le schéma actuel n'a de toute façon pas de `Folio` pour une réservation annulée avant tout séjour, ADR-002, donc le mécanisme technique restait à inventer).
+- **Conséquence** : aucune (pas de code touché). Voir `ECARTS_ASSUMES.md` (EA-002) pour le risque résiduel et la condition de réexamen.
+- **Date** : session courante (arbitrage utilisateur).
+- **Décideur** : utilisateur.
+
 ## Décisions en attente (questions ouvertes de l'audit nécessitant un arbitrage humain)
 
-Voir `ECARTS_ASSUMES.md` §Candidats pour la liste des arbitrages produit encore ouverts (city ledger, multi-folio vs folio unique, numérotation de facture, matérialisation des pénalités — le périmètre de l'avoir, le chiffrement PII, le blocage du check-out sur solde impayé, la granularité du gating RBAC frontend et le filtrage soft-delete centralisé sont désormais tranchés, voir RD-005, RD-006, RD-008, RD-009 et RD-010). Ces questions ne sont **pas** tranchées ici — ce registre attend leur décision effective pour les consigner.
+Aucune ne reste ouverte parmi les arbitrages initialement soumis (voir `ECARTS_ASSUMES.md` pour l'historique complet) — le périmètre de l'avoir (RD-005), le chiffrement PII (RD-006), le blocage du check-out sur solde impayé (RD-008), la granularité du gating RBAC frontend (RD-009), le filtrage soft-delete centralisé (RD-010), la déduplication client (RD-011), l'enum `StatutSejour.ANNULE` (RD-012), la numérotation de facture (RD-013), le city ledger (RD-014) et la matérialisation des pénalités (RD-015) sont désormais tous tranchés. Le seul écart encore ouvert et non trivial (multi-folio vs folio unique en pratique, `ECARTS_ASSUMES.md` §Candidats) n'a pas été soumis à arbitrage dans cette série de questions — reste en attente.
 
 ## Gabarit pour une nouvelle décision
 

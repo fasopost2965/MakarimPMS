@@ -41,7 +41,7 @@ export interface GuestStayHistorique {
   dateCheckin: string;
   dateCheckoutPrevue: string;
   dateCheckoutReelle: string | null;
-  statut: 'EN_COURS' | 'CHECKOUT' | 'ANNULE';
+  statut: 'EN_COURS' | 'CHECKOUT';
 }
 
 export type GuestInvoice = Invoice;

@@ -366,10 +366,13 @@ model RoomNight {
 // 5.5 — Check-in / Check-out / Séjours
 // ------------------------------------------------------------------
 
+// CH-013 (docs/governance/REGISTRE_CHANTIERS.md, RD-012) : ANNULE retiré —
+// jamais écrit en base, aucun cas d'usage réel défini pour annuler un
+// séjour déjà en cours (distinct du check-out normal et de l'annulation
+// d'une réservation avant arrivée, StatutReservation.ANNULEE).
 enum StatutSejour {
   EN_COURS
   CHECKOUT
-  ANNULE
 }
 
 // Le séjour est l'objet central (CLAUDE.md règle 1) : une réservation peut
