@@ -172,8 +172,12 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 - **Impact métier** : Modéré (fonctionnalité F6 livrée mais inutilisable) · **Impact sécurité** : Aucun · **Impact conformité** : Aucun · **Impact exploitation** : Modéré
 - **Dépendances** : aucune. **Livrable attendu** : bouton « Générer/régénérer le lien self check-in » sur le détail de réservation, affichage du statut d'attente.
 - **Critères de validation** : la réception peut générer un lien et voir s'il a été utilisé, sans appel API manuel.
-- **Statut** : à faire · **Estimation** : Faible (1 jour) · **Confiance** : élevée
+- **Statut** : ✅ **Terminé** (session courante) · **Estimation** : Faible (1 jour) · **Confiance** : élevée
 - **Lien audit** : Phase 8 §2.
+- **Résolution** : nouveau composant `SelfCheckinPanel.tsx` (`frontend/src/features/reservations/components/`), affiché dans `ReservationDetailsDialog.tsx` pour toute réservation `statut === 'CONFIRMEE'` (self check-in n'a plus de sens après transformation en séjour ou annulation). Réutilise les deux routes existantes telles quelles, sans aucune modification backend au périmètre initial : `POST .../self-checkin-link` (génère/régénère, affiche l'URL retournée avec un bouton copier — cette URL n'est persistée nulle part côté lecture, donc uniquement disponible au moment de la génération) et `GET .../self-checkin-pending` (réutilisé aussi côté Police pour le pré-remplissage, mais jamais affiché tel quel avant ce chantier). **Limite assumée, pas un oubli** : cette dernière route ne permet pas de distinguer « aucun lien généré » de « lien généré mais pas encore soumis » (elle renvoie `null` dans les deux cas) — le badge affiche donc uniquement « En attente » vs « Informations soumises », sans état intermédiaire « lien envoyé ».
+  - **Bug latent corrigé au passage** (`frontend/src/lib/api-client.ts`) : NestJS renvoie un corps de réponse vide (pas le littéral JSON `"null"`) pour un handler qui retourne `null`/`undefined`, y compris sur un statut 200 — `apiRequest()` ne traitait ce cas que pour le statut 204 explicite, provoquant `Unexpected end of JSON input` sur tout appel de `GET .../self-checkin-pending` sans soumission existante. Ce bug préexistait silencieusement dans `PoliceRecordForm.tsx` (même endpoint, jamais déclenché en pratique car la vérification manuelle de CH-003 avait dû passer par un séjour walk-in) — corrigé une seule fois dans le client HTTP partagé plutôt que contourné localement dans le nouveau composant.
+  - **Dette technique #6 corrigée au passage** (`docs/governance/DETTE_TECHNIQUE.md`) : `prisma/seed.ts` échouait au reseed (`StockItem_code_key` unique constraint) dès que les fonctionnalités F6/F10/stock avaient été exercées localement — bloquait littéralement la vérification en navigateur de ce chantier, déclenchant exactement la condition documentée pour un correctif isolé. Ajout des `deleteMany()` manquants (`channelReservationImport`, `selfCheckinToken`, `stockMovement`, `stockItem`) dans le bon ordre de dépendance FK.
+  - Vérifié en navigateur réel (Chromium/Playwright) : création d'une réservation, génération du lien (URL affichée + copie presse-papiers fonctionnelle), soumission réelle via `POST /self-checkin/:token` (simulant le client), réouverture du détail de réservation confirmant le badge « Informations soumises » et le résumé des champs. `cd backend && npm run build && npm run lint && npm run test && npm run test:e2e` (123/123 e2e, 32/32 unitaires) et `cd frontend && npm run build && npm run lint` — tous verts, aucune régression.
 
 ---
 
@@ -331,7 +335,7 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 | Priorité | Nombre de chantiers | Charge cumulée estimée (ordre de grandeur) | Terminés |
 |---|---|---|---|
 | Bloquant | 4 (CH-001 à CH-004) | ~7–11 jours développeur | 4 (CH-001, CH-002, CH-003, CH-004) — tous terminés |
-| Important | 8 (CH-005 à CH-012) | ~11–16 jours développeur | 4 (CH-005, CH-006, CH-011, CH-012) |
+| Important | 8 (CH-005 à CH-012) | ~11–16 jours développeur | 5 (CH-005, CH-006, CH-007, CH-011, CH-012) |
 | Secondaire | 14 (CH-013 à CH-026) | ~18–28 jours développeur (plusieurs sous conditions d'arbitrage) | 0 (1 partiel : CH-013) |
 
 *Ces charges sont des ordres de grandeur de développement pur (hors tests e2e étendus, hors stabilisation, hors documentation) — voir `docs/planning/ESTIMATION_CHARGE.md` pour l'estimation consolidée par scénario.*
@@ -348,3 +352,4 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 | CH-005 | ✅ Terminé | Session courante | Blocage dur du check-out sur solde impayé, avec échappatoire de check-out forcé réservée à checkin:force-checkout — voir fiche ci-dessus (RD-008). |
 | CH-011 | ✅ Terminé | Session courante | Gating RBAC frontend (granularité onglet entier) — GET /auth/me + filtrage de NAV_ITEMS, voir fiche ci-dessus (RD-009). |
 | CH-006 | ✅ Terminé | Session courante | Filtrage soft-delete centralisé — extension Prisma `$extends`, voir fiche ci-dessus (RD-010). |
+| CH-007 | ✅ Terminé | Session courante | Interface frontend self-checkin (staff) — `SelfCheckinPanel.tsx` sur le détail de réservation, voir fiche ci-dessus. Corrige au passage un bug latent de `lib/api-client.ts` (corps de réponse vide non géré hors 204) et la dette technique #6 (`seed.ts`, `DETTE_TECHNIQUE.md`). |

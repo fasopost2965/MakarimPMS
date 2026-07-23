@@ -21,7 +21,7 @@ Statut par module backend, croisé avec la présence d'une interface frontend et
 | `audit` | ✅ | ❌ | CH-015 | Aucune UI de consultation |
 | `police` | ✅ | ✅ | — | **CH-003 terminé** — onglet dédié dans `StayDetailsDialog.tsx` |
 | `notifications` | ⚠️ | ❌ | CH-002 (extension), CH-008 | Backend fonctionnel, pas raccordé au reset password, pas d'UI de gestion |
-| `self-checkin` | ✅ | ❌ | CH-007 | Backend prêt, aucune UI staff |
+| `self-checkin` | ✅ | ✅ | — | **CH-007 terminé** — `SelfCheckinPanel.tsx` sur le détail de réservation (génération/régénération de lien, statut d'attente) |
 | `booking-engine` | ✅ | n/a | — | Façade publique pure, pas d'UI staff attendue |
 | `document-ocr` | ✅ | ❌ | CH-022 | Backend prêt, aucune UI |
 | `reporting` | ✅ | ✅ | — | Export CSV du registre de police fonctionnel (mais dépend de CH-003 pour avoir des données à exporter) |
@@ -33,6 +33,6 @@ Statut par module backend, croisé avec la présence d'une interface frontend et
 
 - **21/21 modules** ont un backend fonctionnel au sens strict (répondent, testés en e2e pour la plupart).
 - **0/21 module** porte encore un chantier bloquant, backend ou frontend — les 4 chantiers bloquants du registre (CH-001 à CH-004) sont désormais tous terminés (`billing`, `auth`, `guests`, `police`).
-- **5/21 modules** n'ont aucune interface frontend (`audit`, `notifications`, `self-checkin`, `document-ocr`, `channel-manager`) — `booking-engine` est le 6e module sans UI staff mais c'est un choix de conception correct (façade publique). `police` en est retiré (CH-003 terminé).
+- **4/21 modules** n'ont aucune interface frontend (`audit`, `notifications`, `document-ocr`, `channel-manager`) — `booking-engine` est un 5e module sans UI staff mais c'est un choix de conception correct (façade publique). `police` en est retiré (CH-003 terminé), `self-checkin` également (CH-007 terminé).
 
 *Mettre à jour ce tableau à chaque clôture de chantier du registre.*
