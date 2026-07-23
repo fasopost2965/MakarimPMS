@@ -25,17 +25,15 @@ PMS interne pour l'Hôtel Makarim (3 étoiles, 24 chambres, Tétouan) — pas de
 
 - **RBAC côté interface** : aucun rôle n'est reflété dans la navigation frontend — tout utilisateur voit tout.
 - **Cinq surfaces backend sans interface** : self-checkin (staff), notifications, document-ocr, channel-manager, audit.
-- **Blocage de check-out sur solde impayé** : aucune barrière, fuite de revenus possible.
 - **Facturation entreprise (city ledger)** : `Company` existe mais est totalement déconnectée du flux transactionnel.
 
-Résolu depuis (voir `REGISTRE_CHANTIERS.md` pour le détail de chaque implémentation) : correction de facture par avoir (CH-001), sécurité de la réinitialisation de mot de passe (CH-002), interface de saisie du registre de police (CH-003), chiffrement au repos de `Guest.pieceIdentite` (CH-004).
+Résolu depuis (voir `REGISTRE_CHANTIERS.md` pour le détail de chaque implémentation) : correction de facture par avoir (CH-001), sécurité de la réinitialisation de mot de passe (CH-002), interface de saisie du registre de police (CH-003), chiffrement au repos de `Guest.pieceIdentite` (CH-004), remboursement d'un acompte imputé (CH-012), blocage du check-out sur solde impayé (CH-005).
 
 ## Risques majeurs (voir `REGISTRE_RISQUES.md` pour le détail)
 
-1. Fuite de revenus par check-out non contrôlé.
-2. Contournement du blacklist par duplication de fiche client.
+1. Contournement du blacklist par duplication de fiche client.
 
-Fermés depuis (voir `REGISTRE_RISQUES.md`) : prise de contrôle de compte via le token de reset exposé (R-01, CH-002), facture erronée non corrigible (R-02, CH-001), registre de police légal non tenable en usage réel (R-03, CH-003), exposition de données d'identité en cas de compromission de la base (R-06, CH-004).
+Fermés depuis (voir `REGISTRE_RISQUES.md`) : prise de contrôle de compte via le token de reset exposé (R-01, CH-002), facture erronée non corrigible (R-02, CH-001), registre de police légal non tenable en usage réel (R-03, CH-003), fuite de revenus par check-out non contrôlé (R-04, CH-005), exposition de données d'identité en cas de compromission de la base (R-06, CH-004), acompte imputé sans chemin de remboursement (R-08, CH-012).
 
 ## Conditions minimales pour une mise en production réelle
 

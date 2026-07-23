@@ -172,7 +172,12 @@ describe('Maintenance — tickets et connexion au statut chambre (e2e)', () => {
       });
       expect(roomAfter.statut).toBe('OCCUPEE');
 
-      await adminClient.post(`/api/checkout/${stayId}`).send();
+      // Solde jamais réglé dans ce test (hors périmètre — maintenance) :
+      // check-out forcé (CH-005, adminClient = Administrateur).
+      await adminClient.post(`/api/checkout/${stayId}`).send({
+        force: true,
+        motif: 'Nettoyage de fixture de test (maintenance e2e)',
+      });
     },
   );
 

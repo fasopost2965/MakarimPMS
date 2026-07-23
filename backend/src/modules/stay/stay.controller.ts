@@ -12,6 +12,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { StayService } from './stay.service';
 import { WalkinDto } from './dto/walkin.dto';
+import { ForceCheckoutDto } from './dto/force-checkout.dto';
 
 // Routes HTTP et clé de permission ('checkin') volontairement inchangées
 // malgré le renommage du module (voir CLAUDE.md) — aucun consommateur
@@ -63,13 +64,22 @@ export class StayController {
     return this.stayService.findOne(id);
   }
 
+  // checkin:write comme garde générique (décorateur statique) + vérification
+  // manuelle de checkin:force-checkout dans le service quand force=true —
+  // même pattern que DepositsController.rembourser/payments:refund (CH-005) :
+  // une action dédiée hors de la grille read/write/delete/export ne peut pas
+  // s'exprimer via @RequirePermission.
   @RequirePermission('checkin', 'write')
-  @ApiOperation({ summary: "Check-out d'un séjour" })
+  @ApiOperation({
+    summary:
+      "Check-out d'un séjour — bloqué si le solde du séjour est positif (CH-005), sauf check-out forcé (force: true, motif obligatoire, réservé Administrateur — checkin:force-checkout)",
+  })
   @Post('checkout/:stayId')
   checkout(
     @Param('stayId', ParseIntPipe) stayId: number,
+    @Body() dto: ForceCheckoutDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.stayService.checkout(stayId, user.sub);
+    return this.stayService.checkout(stayId, dto, user.sub, user.roleId);
   }
 }

@@ -101,7 +101,12 @@ describe('Housekeeping — machine à états complète (e2e)', () => {
       );
       expect(ours!.statut).toBe('OCCUPEE');
 
-      const checkout = await client.post(`/api/checkout/${stayId}`).send();
+      // Solde jamais réglé dans ce test (hors périmètre — machine à états
+      // des chambres) : check-out forcé (CH-005, client = Administrateur ici).
+      const checkout = await client.post(`/api/checkout/${stayId}`).send({
+        force: true,
+        motif: 'Nettoyage de fixture de test (housekeeping e2e)',
+      });
       expect(checkout.status).toBe(201);
 
       // Aucun appel PATCH manuel n'a eu lieu : la transition vient
@@ -251,7 +256,12 @@ describe('Housekeeping — machine à états complète (e2e)', () => {
       .send({ statut: 'A_NETTOYER' });
     expect(blocked.status).toBe(409);
 
-    // Nettoyage : check-out réel pour ne pas laisser un séjour actif orphelin.
-    await client.post(`/api/checkout/${stayId}`).send();
+    // Nettoyage : check-out réel pour ne pas laisser un séjour actif
+    // orphelin. Solde jamais réglé : check-out forcé (CH-005, client =
+    // Administrateur ici).
+    await client.post(`/api/checkout/${stayId}`).send({
+      force: true,
+      motif: 'Nettoyage de fixture de test (housekeeping e2e)',
+    });
   });
 });

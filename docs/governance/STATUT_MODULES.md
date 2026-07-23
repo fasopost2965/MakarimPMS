@@ -11,7 +11,7 @@ Statut par module backend, croisé avec la présence d'une interface frontend et
 | `rooms` | ✅ | ⚠️ (via housekeeping) | CH-014 | Historique de statut jamais consultable |
 | `parameters` | ✅ | ✅ | — | — |
 | `reservations` | ⚠️ | ✅ | CH-016 | Service le plus volumineux, dette de découpage |
-| `stay` | ⚠️ | ✅ (`checkin/`) | CH-005 | Checkout sans blocage sur solde impayé |
+| `stay` | ✅ | ✅ (`checkin/`) | — | **CH-005 terminé** — checkout bloqué sur solde impayé (`ConflictException`), check-out forcé réservé à `checkin:force-checkout` |
 | `housekeeping` | ✅ | ✅ | CH-014 | — |
 | `maintenance` | ✅ | ✅ | — | — |
 | `guests` (+ `companies`) | ⚠️ | ✅ | CH-010, CH-021 | Pas de déduplication ; `Company` déconnectée |

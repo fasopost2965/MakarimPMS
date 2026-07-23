@@ -11,7 +11,7 @@ Conditions vérifiables avant toute ouverture en production réelle (clients pay
 
 ## Critères importants (fortement recommandés avant un lancement à pleine charge, tolérables pour un lancement pilote contrôlé si documentés comme dette assumée à court terme)
 
-- [ ] CH-005 : le check-out avec solde impayé produit au minimum une alerte explicite nécessitant une action reconnue de l'utilisateur.
+- [x] CH-005 : le check-out avec solde impayé est bloqué (`ConflictException`), échappatoire de check-out forcé réservée à `checkin:force-checkout` — **terminé, session courante**.
 - [ ] CH-010 : une garde contre la duplication de fiche client existe (dure ou souple selon arbitrage produit).
 - [ ] CH-006 : le filtrage soft-delete ne dépend plus uniquement d'une convention manuelle.
 - [ ] CH-011 : au minimum, un contexte d'identité/rôle existe côté frontend pour permettre un gating a minima.

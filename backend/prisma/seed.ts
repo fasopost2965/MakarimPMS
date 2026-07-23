@@ -416,6 +416,13 @@ async function main() {
   permissions['payments:refund'] = await prisma.permission.create({
     data: { module: 'payments', action: 'refund' },
   });
+  // CH-005 — check-out forcé malgré un solde impayé (StayService.checkout) :
+  // checkin:write couvre le check-out normal (solde nul/négatif), mais
+  // passer outre un solde positif est une action distincte réservée à
+  // l'Administrateur, même convention que guests:blacklist/payments:refund.
+  permissions['checkin:force-checkout'] = await prisma.permission.create({
+    data: { module: 'checkin', action: 'force-checkout' },
+  });
 
   const rolesData: Array<{
     nom: string;
