@@ -24,7 +24,7 @@ Ce document consigne les écarts entre l'architecture cible/le code idéal et le
 
 Les chantiers suivants ont, dans leur fiche du registre, une issue légitime de type « accepter le risque plutôt que développer » — ils sont listés ici comme rappel, mais **restent au statut `à faire` dans `REGISTRE_CHANTIERS.md` tant qu'aucune décision explicite n'a été prise** :
 
-- **CH-004** (chiffrement PII) — alternative légitime : acceptation de risque documentée avec date de réexamen.
+- ~~CH-004~~ (chiffrement PII) — retiré de cette liste : l'arbitrage a tranché en faveur de l'implémentation immédiate, pas de l'acceptation de risque (voir `REGISTRE_DECISIONS.md`, RD-006 ; chantier terminé, `REGISTRE_CHANTIERS.md`).
 - **CH-020** (numérotation de facture mensuelle) — alternative légitime : la séquence globale actuelle peut être actée comme suffisante si la comptabilité de l'hôtel ne l'exige pas autrement.
 - **CH-021** (city ledger / `Company`) — alternative légitime : documenter que la facturation entreprise n'est pas un objectif de cette version, si confirmé par le métier.
 - **Multi-folio (ADR-002) vs folio unique en pratique** — alternative légitime : acter formellement le folio unique comme la réalité opérationnelle voulue, et mettre à jour ADR-002 en conséquence plutôt que de laisser un schéma plus permissif que l'usage réel (voir `REGISTRE_DECISIONS.md`).

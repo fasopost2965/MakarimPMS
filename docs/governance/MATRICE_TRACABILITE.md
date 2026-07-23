@@ -25,7 +25,7 @@ Relie, pour chaque grand domaine fonctionnel, l'exigence métier au module, à l
 | Générer un lien de self check-in | `self-checkin` | `POST /reservations/:id/self-checkin-link` | — | Phase 8 | **CH-007** | ❓ | ❌ | ❌ |
 | Notifier le client (email/SMS/WhatsApp) à des événements clés | `notifications` | `notify()`, `NotificationTemplate` | — | Phases 2, 5 | CH-002 (extension), CH-008 (UI) | ❓ | ❌ (gestion), n/a (déclenchement auto) | ⚠️ |
 | Importer une réservation OTA (channel manager) | `channel-manager` | webhook `POST /channel-manager/webhooks/:canal` | — | Phase 8 | **CH-009** | ❓ | ❌ | ⚠️ (backend prêt, config sans UI) |
-| Chiffrer les données d'identité au repos | `guests` | *(inexistant)* | `docs/execution/GO_LIVE_CHECKLIST.md` | Phase 5 | **CH-004** | ❌ | n/a | ❌ |
+| Chiffrer les données d'identité au repos | `guests` | *(transparent, extension Prisma — pas de nouvel endpoint)* | `docs/execution/GO_LIVE_CHECKLIST.md`, `docs/governance/REGISTRE_DECISIONS.md` (RD-006) | Phase 5 | **CH-004 — terminé** | ✅ (`field-encryption.spec.ts`, `guests.e2e-spec.ts`) | n/a (transparent) | ✅ |
 | Empêcher la duplication de fiche client (contournement blacklist) | `guests` | *(contrainte absente)* | — | Phase 3 | **CH-010** | ❌ | n/a | ❌ |
 | Filtrer systématiquement les lignes soft-deleted | transverse (Prisma) | *(convention manuelle `NOT_DELETED`)* | `docs/ADR-005-Audit-Soft-Delete.md` | Phases 3, 4, 9 | **CH-006** | ❌ | n/a | ⚠️ |
 | Consulter le journal d'audit transverse | `audit` | `GET /audit-logs` *(existence exacte de la route à confirmer)* | `docs/modules/audit.md` | Phase 8 | **CH-015** | ❓ | ❌ | ⚠️ |

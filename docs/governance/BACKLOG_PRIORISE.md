@@ -9,8 +9,8 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 
 1. **CH-002** — ✅ **Terminé** (session courante). Sécuriser le reset password *(le plus rapide, traité en premier pour fermer une faille active)* — voir `REGISTRE_CHANTIERS.md` pour le détail (l'implémentation a nécessité un ajustement frontend non anticipé dans la fiche initiale, traité dans le même chantier).
 2. **CH-001** — ✅ **Terminé** (session courante). Implémenter CreditNote (avoir total) *(le plus structurant, débloque CH-012 et une partie de CH-023)* — voir `REGISTRE_CHANTIERS.md` pour le détail (garde de régénération de facture + correctif d'un bug latent de double-matérialisation de taxe, non anticipés dans la fiche initiale, traités dans le même chantier).
-3. **CH-003** — UI registre de police *(indépendant, purement frontend, peut démarrer immédiatement)*
-4. **CH-004** — Arbitrage + éventuelle implémentation du chiffrement PII *(commencer par l'arbitrage, qui ne coûte rien et débloque le reste)*
+3. **CH-004** — ✅ **Terminé** (session courante). Chiffrement AES-256-GCM de `Guest.pieceIdentite` — voir `REGISTRE_CHANTIERS.md` pour le détail (implémenté au niveau du client Prisma plutôt qu'en wrapper de service, pour couvrir les lectures imbriquées depuis d'autres modules).
+4. **CH-003** — UI registre de police *(seul chantier bloquant restant, purement frontend, peut démarrer immédiatement)*
 
 ### Vague 2 — Importants
 5. **CH-005** — Blocage checkout solde impayé
@@ -40,7 +40,7 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 | Chantier | Arbitrage requis |
 |---|---|
 | ~~CH-001~~ | ✅ Tranché — avoir total uniquement, voir `REGISTRE_DECISIONS.md` (RD-005). |
-| CH-004 | Implémenter le chiffrement maintenant, ou accepter le risque formellement et reporter ? |
+| ~~CH-004~~ | ✅ Tranché — implémenter maintenant, voir `REGISTRE_DECISIONS.md` (RD-006). |
 | CH-005 | Blocage dur du checkout, ou avertissement avec confirmation ? |
 | CH-010 | Contrainte dure d'unicité, ou détection souple à la création ? |
 | CH-020 | La numérotation doit-elle réellement repartir de 1 chaque mois ? |
@@ -49,4 +49,4 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 
 ## Statut de couverture
 
-Au moment de la création de ce backlog, tous les chantiers étaient au statut **à faire** (session Claude 1, documentation uniquement). **CH-002 et CH-001 sont désormais terminés** (session de suite, développement effectif). Le suivi de statut se fait dans `REGISTRE_CHANTIERS.md` (champ *Statut* par fiche, section « Suivi d'avancement ») : mettre à jour ce champ, pas ce backlog, quand un chantier avance — ce document liste l'ordre recommandé, pas l'état courant en détail.
+Au moment de la création de ce backlog, tous les chantiers étaient au statut **à faire** (session Claude 1, documentation uniquement). **CH-002, CH-001 et CH-004 sont désormais terminés** (session de suite, développement effectif) — CH-003 reste le seul chantier bloquant ouvert. Le suivi de statut se fait dans `REGISTRE_CHANTIERS.md` (champ *Statut* par fiche, section « Suivi d'avancement ») : mettre à jour ce champ, pas ce backlog, quand un chantier avance — ce document liste l'ordre recommandé, pas l'état courant en détail.

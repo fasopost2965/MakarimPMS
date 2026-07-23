@@ -6,11 +6,11 @@ import { toCsv } from './utils/csv.util';
 // service compile les arrivées d'une journée (date de check-in) pour la
 // déclaration réglementaire marocaine. Lecture seule (INV-REP-001).
 //
-// Point de vigilance non résolu (voir SPRINT_13.md §6) : Guest.pieceIdentite
-// est actuellement stocké en clair — aucun chiffrement au repos n'existe
-// dans ce code base (GO_LIVE_CHECKLIST.md réclame un ENCRYPTION_KEY jamais
-// implémenté). Ce service lit le champ tel qu'il existe ; le chiffrement
-// est un chantier de sécurité séparé, pas construit ici.
+// CH-004 (docs/governance/REGISTRE_CHANTIERS.md) : Guest.pieceIdentite est
+// chiffré au repos (AES-256-GCM). Ce service ne fait rien de spécial pour
+// autant — le déchiffrement est transparent (extension Prisma sur le modèle
+// Guest, y compris via `include: { guest: true }` comme ci-dessous) ; le
+// champ arrive déjà en clair ici.
 @Injectable()
 export class PoliceReportService {
   constructor(private readonly prisma: PrismaService) {}

@@ -102,23 +102,25 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 - **Description factuelle** : `Guest.pieceIdentite` est stocké en clair — confirmé par un commentaire explicite dans `police-report.service.ts` reconnaissant l'absence de chiffrement au repos. `docs/execution/GO_LIVE_CHECKLIST.md` référence une variable `ENCRYPTION_KEY` qui **n'apparaît dans aucun fichier de code** (recherche exhaustive : seulement 3 documents et le commentaire qui documente son absence).
 - **Pourquoi ce chantier existe** : donnée d'identité sensible (numéro de CIN/passeport), exigence déjà documentée dans le propre référentiel du projet mais jamais exécutée.
 - **Modules concernés** : `guests` (propriétaire de `Guest`), `police` (lit le champ), infrastructure (gestion du secret `ENCRYPTION_KEY`).
-- **Priorité** : Bloquant *(ou reporté avec acceptation de risque formelle — voir ci-dessous)*
+- **Priorité** : Bloquant
 - **Criticité** : Élevée
 - **Impact métier** : Faible direct.
 - **Impact sécurité** : Élevé — exposition immédiate en cas de compromission de la base.
 - **Impact conformité** : Élevé — exigence déjà auto-documentée par le projet (`GO_LIVE_CHECKLIST.md`) et non tenue.
 - **Impact exploitation** : Faible si implémenté correctement (chiffrement/déchiffrement transparent en lecture pour la réception).
-- **Dépendances** : aucune technique bloquante identifiée, mais un choix d'implémentation (chiffrement applicatif au niveau champ vs chiffrement au niveau colonne MySQL) doit être arbitré.
-- **Prérequis** : **décision explicite requise avant tout développement** — ce chantier a une alternative légitime qui n'est pas un développement : documenter formellement une acceptation de risque temporaire dans `docs/governance/ECARTS_ASSUMES.md` si l'implémentation est reportée. Le point n'est pas « bloquant = doit être codé », mais « bloquant = doit être tranché, codé ou explicitement accepté, avant le go-live ».
-- **Livrable attendu** : soit (a) chiffrement applicatif du champ `pieceIdentite` (ex. AES-256-GCM avec clé issue de `ENCRYPTION_KEY`, déchiffrement à la lecture dans `GuestsService`/`PoliceReportService`), soit (b) une entrée dans `ECARTS_ASSUMES.md` documentant la décision de report avec justification et date de réexamen.
-- **Critères de validation** : si implémenté — (1) `pieceIdentite` illisible par une requête SQL brute sur la base ; (2) aucune régression sur les flux existants (recherche client, export police) ; (3) `ENCRYPTION_KEY` validée au démarrage par un mécanisme équivalent à `assertStrongSecrets()`.
-- **Statut** : à faire *(arbitrage requis en premier)*
-- **Estimation de charge** : Moyenne (2–3 jours si implémenté ; quelques heures si documenté comme écart assumé).
-- **Niveau de confiance de l'estimation** : moyen (dépend du choix a/b).
+- **Dépendances** : aucune technique bloquante — le choix d'implémentation (chiffrement applicatif au niveau champ, retenu, vs chiffrement au niveau colonne MySQL) a été arbitré en faveur du premier (voir Décision ci-dessous).
+- **Prérequis** : *(tranché)* décision produit confirmée par l'utilisateur (`AskUserQuestion`, entre « implémenter maintenant » et « accepter le risque formellement ») : **implémenter maintenant**. Consigné dans `docs/governance/REGISTRE_DECISIONS.md` (RD-006).
+- **Livrable attendu** *(réalisé)* : chiffrement applicatif AES-256-GCM du champ `pieceIdentite`, clé issue de `ENCRYPTION_KEY` (32 octets base64), déchiffrement transparent à la lecture — implémenté au niveau du **client Prisma** (extension `result.guest.pieceIdentite`, `backend/src/prisma/guest-encryption.extension.ts`), pas dans `GuestsService`/`PoliceReportService` individuellement (voir écart de conception ci-dessous).
+- **Écart de conception découvert et traité pendant l'implémentation (par rapport au plan initial « déchiffrement dans GuestsService/PoliceReportService »)** : `Guest` est lu par relation imbriquée (`include: { guest: true }`) depuis plusieurs modules en façade lecture seule (`PoliceReportService.getDailyReport`, `ReservationsService`, `StayService`...), jamais uniquement via un appel direct `prisma.guest.findMany`. Un wrapper de déchiffrement local à `GuestsService` aurait laissé ces lectures imbriquées renvoyer le texte chiffré brut. Vérifié empiriquement avant d'écrire le code définitif (script de test jetable) : une extension Prisma `result` (contrairement à une extension `query`, qui n'intercepte que les opérations top-level sur le modèle) s'applique bien à `Guest` partout où il apparaît dans un résultat, y compris imbriqué depuis un autre modèle et à l'intérieur d'une transaction interactive (`$transaction(async (tx) => ...)`). Conséquence architecturale : `PrismaService` (`backend/src/prisma/prisma.module.ts`) fournit désormais le client Prisma étendu via un `useFactory` plutôt qu'une instanciation directe de la classe — tous les consommateurs existants (`constructor(private prisma: PrismaService)`) sont inchangés, seul l'objet réellement injecté par le DI a changé.
+- **Deuxième écart découvert : recherche cassée** — `GuestsService.search()` filtrait `pieceIdentite` via `{ contains: q }` au niveau SQL ; un texte chiffré non déterministe (IV aléatoire à chaque écriture, propriété de sécurité intentionnelle d'AES-GCM) ne peut plus jamais matcher un `LIKE` SQL. Corrigé par un repli applicatif : les candidats non trouvés par nom/prénom/téléphone (toujours filtrables en SQL, non chiffrés) sont déchiffrés et filtrés côté application. Acceptable pour un hôtel de 24 chambres (CLAUDE.md) où la table `Guest` ne grossit jamais à une échelle rendant ce repli coûteux — limite assumée documentée si le volume change un jour (RD-006).
+- **Critères de validation** : (1) ✅ `pieceIdentite` illisible par une requête SQL brute sur la base — vérifié par `$queryRaw` dans le test e2e (préfixe `enc:v1:`, jamais la valeur en clair) ; (2) ✅ aucune régression sur les flux existants (recherche client — corrigée, voir ci-dessus — export police, suite e2e complète rejouée) ; (3) ✅ `ENCRYPTION_KEY` validée au démarrage dans **tous** les environnements (pas seulement en production comme les secrets JWT — sans elle, `Guest` est totalement inutilisable), plus une garde supplémentaire prod-only réutilisant `assertStrongSecrets()` contre la valeur de développement documentée dans `.env.example`.
+- **Statut** : **terminé**
+- **Estimation de charge** : réalisée en une session (~1 jour équivalent développeur, tests inclus) — cohérente avec l'estimation initiale (« Moyenne, 2–3 jours si implémenté »), le temps de vérification empirique du comportement d'extension Prisma (nested include, transaction) ayant été le poste le plus long, pas l'écriture du chiffrement lui-même.
+- **Niveau de confiance de l'estimation** : élevé (a posteriori).
 - **Lien(s) audit** : Phase 5 (§3, Risques), Phase 2 (mention initiale), Phase 10 (Priorité bloquante #4).
-- **Éléments à tester** : si implémenté, test unitaire du chiffrement/déchiffrement + e2e sur le flux police/guests.
-- **Documents liés** : `docs/execution/GO_LIVE_CHECKLIST.md` (exigence d'origine), `docs/governance/ECARTS_ASSUMES.md` (si reporté).
-- **Remarques** : c'est le seul des 4 chantiers bloquants dont l'issue légitime n'est pas nécessairement « coder une solution » — une décision d'acceptation de risque documentée est une clôture valable de ce chantier, à condition d'être explicite et datée.
+- **Éléments testés** : `backend/src/common/crypto/field-encryption.spec.ts` (9 tests unitaires — round-trip, non-déterminisme de l'IV, rejet sur mauvaise clé, **preuve de rigueur sabotage/restore réelle** sur la détection d'altération du texte chiffré par l'auth tag GCM, rétrocompatibilité avec une valeur en clair pré-existante) ; `backend/test/guests.e2e-spec.ts` (nouveau test : valeur brute chiffrée en base via `$queryRaw`, valeur en clair via l'API, recherche par pieceIdentite toujours fonctionnelle) ; assertion **pré-existante** de `backend/test/reporting.e2e-spec.ts` (`expect(csv).toContain('AB998877')`, export CSV du registre de police via `stay.guest.pieceIdentite` imbriqué) confirmée toujours verte — preuve indépendante que le déchiffrement se propage bien à travers un `include` imbriqué. Suite e2e complète rejouée : 112/114 tests verts, les 2 échecs restants confirmés pré-existants et sans lien (même flake `stock.e2e-spec.ts` déjà documenté pour CH-001).
+- **Documents liés** : `docs/execution/GO_LIVE_CHECKLIST.md` (exigence d'origine, désormais tenue — voir `ECARTS_DOC_VS_CODE.md`), `docs/governance/REGISTRE_DECISIONS.md` (RD-006).
+- **Remarques** : seul des 4 chantiers bloquants dont l'issue légitime n'était pas nécessairement « coder une solution » — l'arbitrage a confirmé l'implémentation plutôt que l'acceptation de risque formelle, retiré en conséquence de la liste des candidats dans `ECARTS_ASSUMES.md`.
 
 ---
 
@@ -318,7 +320,7 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 
 | Priorité | Nombre de chantiers | Charge cumulée estimée (ordre de grandeur) | Terminés |
 |---|---|---|---|
-| Bloquant | 4 (CH-001 à CH-004) | ~7–11 jours développeur | 2 (CH-001, CH-002) |
+| Bloquant | 4 (CH-001 à CH-004) | ~7–11 jours développeur | 3 (CH-001, CH-002, CH-004) |
 | Important | 8 (CH-005 à CH-012) | ~11–16 jours développeur | 0 |
 | Secondaire | 14 (CH-013 à CH-026) | ~18–28 jours développeur (plusieurs sous conditions d'arbitrage) | 0 (1 partiel : CH-013) |
 
@@ -329,3 +331,5 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 | Chantier | Statut | Date | Résumé |
 |---|---|---|---|
 | CH-002 | ✅ Terminé | Session courante | Reset password sécurisé — voir fiche ci-dessus pour le détail et l'écart de conception (MailerService vs NotificationsService.notify()) |
+| CH-001 | ✅ Terminé | Session courante | Avoir total sur facture émise — voir fiche ci-dessus (garde de régénération + correctif double-taxe) |
+| CH-004 | ✅ Terminé | Session courante | Chiffrement AES-256-GCM de Guest.pieceIdentite — voir fiche ci-dessus (extension Prisma au niveau du client, pas du service, pour couvrir les lectures imbriquées) |

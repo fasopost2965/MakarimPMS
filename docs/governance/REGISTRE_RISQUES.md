@@ -9,7 +9,7 @@ Chaque risque cite sa source d'audit, sa probabilité d'occurrence en usage rée
 | R-03 | Registre de police légal non tenu en usage réel (absence de saisie UI) | Phases 6, 8 | Élevée (si aucun canal alternatif de saisie n'existe) | Critique (conformité DGSN) | CH-003 | Ouvert |
 | R-04 | Check-out avec solde impayé non tracé/bloqué | Phase 6 §5 | Modérée à élevée selon discipline de caisse de la réception | Élevé (financier) | CH-005 | Ouvert |
 | R-05 | Contournement du blacklist par recréation de fiche client | Phase 3 §5.5 | Faible à modérée (nécessite une intention du client ou une erreur de saisie) | Modéré (métier) | CH-010 | Ouvert |
-| R-06 | Exposition des données d'identité en cas de compromission de la base | Phase 5 §3 | Faible (nécessite une compromission préalable) mais impact fort si elle survient | Critique (conditionnel) | CH-004 | Ouvert |
+| R-06 | Exposition des données d'identité en cas de compromission de la base | Phase 5 §3 | Faible (nécessite une compromission préalable) mais impact fort si elle survient | Critique (conditionnel) | CH-004 | **Fermé** — CH-004 terminé (session courante) : `Guest.pieceIdentite` chiffré au repos (AES-256-GCM), une compromission de la base MySQL seule ne suffit plus à lire les numéros de CIN/passeport en clair (il faudrait aussi `ENCRYPTION_KEY`, gérée hors base). Vérifié par test e2e (`$queryRaw` confirme le texte chiffré en base). |
 | R-07 | Résurgence de données soft-deleted par oubli du filtre manuel dans un futur développement | Phases 3, 4, 9 | Modérée (dépend de la vigilance des futurs développeurs) | Modéré | CH-006 | Ouvert |
 | R-08 | Acompte imputé sans chemin de remboursement fonctionnel | Phase 6 §4 | Modérée (cas réel mais pas quotidien) | Modéré | CH-012 (dépendance CH-001 levée, chantier non démarré) | Ouvert |
 | R-09 | Personnel voit des fonctionnalités hors de son rôle réel (UX trompeuse, pas une faille technique) | Phases 5, 8 | Élevée (visible en permanence) | Faible à modéré (perception, pas une brèche de sécurité en soi) | CH-011 | Ouvert |
@@ -21,6 +21,7 @@ Chaque risque cite sa source d'audit, sa probabilité d'occurrence en usage rée
 
 - **R-01** (prise de contrôle de compte via token de reset exposé) — fermé, CH-002 terminé. Le mécanisme de fuite n'existe plus : la réponse HTTP de `POST /auth/forgot-password` ne contient jamais de jeton, dans aucune branche. Vérifié par test e2e (assertion négative sur les deux cas, plus une assertion positive que l'email est réellement transmis).
 - **R-02** (facture émise erronée non corrigible) — fermé, CH-001 terminé. `BillingService.createCreditNote()` permet l'avoir total et la régénération d'une facture corrigée sur le même folio. Vérifié par test e2e (immuabilité de la facture d'origine, blocage du double-avoir, absence de doublon de taxe à la régénération, preuve sabotage/restore pour la garde anti-double-taxe).
+- **R-06** (exposition des données d'identité en cas de compromission de la base) — fermé, CH-004 terminé. `Guest.pieceIdentite` chiffré au repos (AES-256-GCM, extension Prisma). Vérifié par test e2e (`$queryRaw` sur la valeur brute en base) et test unitaire (round-trip, détection d'altération par preuve sabotage/restore).
 
 ## Méthode de mise à jour
 

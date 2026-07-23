@@ -29,6 +29,17 @@ export class GuestsService {
   // Recherche rapide multi-critères (cahier des charges §5.7) : nom,
   // prénom, téléphone, pièce d'identité. Sans `q`, renvoie les clients les
   // plus récents (utile pour un premier affichage de liste).
+  //
+  // CH-004 : pieceIdentite est chiffré au repos (AES-256-GCM, IV aléatoire à
+  // chaque écriture — non déterministe par construction), donc `{ contains:
+  // q }` au niveau SQL ne peut plus jamais matcher un texte chiffré. nom /
+  // prénom / téléphone restent filtrables en base normalement ; la
+  // correspondance sur pieceIdentite se fait en repli, en clair, côté
+  // application, sur les candidats non déjà trouvés par les autres champs —
+  // acceptable pour un hôtel de 24 chambres (CLAUDE.md) où la table Guest ne
+  // grossit jamais à une échelle rendant un déchiffrement en mémoire
+  // coûteux ; documenté comme limite assumée si le volume change un jour
+  // (docs/governance/REGISTRE_DECISIONS.md, RD-006).
   async search(q?: string) {
     if (!q) {
       return this.prisma.guest.findMany({
@@ -36,18 +47,37 @@ export class GuestsService {
         take: SEARCH_LIMIT,
       });
     }
-    return this.prisma.guest.findMany({
+
+    const byIndexedFields = await this.prisma.guest.findMany({
       where: {
         OR: [
           { nom: { contains: q } },
           { prenom: { contains: q } },
           { telephone: { contains: q } },
-          { pieceIdentite: { contains: q } },
         ],
       },
       orderBy: { createdAt: 'desc' },
       take: SEARCH_LIMIT,
     });
+
+    const remaining = SEARCH_LIMIT - byIndexedFields.length;
+    if (remaining <= 0) {
+      return byIndexedFields;
+    }
+
+    const alreadyFoundIds = byIndexedFields.map((g) => g.id);
+    const candidates = await this.prisma.guest.findMany({
+      where: {
+        id: { notIn: alreadyFoundIds },
+        pieceIdentite: { not: null },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const byPieceIdentite = candidates
+      .filter((g) => g.pieceIdentite?.includes(q))
+      .slice(0, remaining);
+
+    return [...byIndexedFields, ...byPieceIdentite];
   }
 
   async create(dto: CreateGuestDto) {

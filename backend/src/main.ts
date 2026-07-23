@@ -5,7 +5,10 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import type { IncomingMessage } from 'http';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
-import { assertStrongSecrets } from './common/config/assert-strong-secrets';
+import {
+  assertEncryptionKeyConfigured,
+  assertStrongSecrets,
+} from './common/config/assert-strong-secrets';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
@@ -14,6 +17,11 @@ async function bootstrap() {
   // premier token émis, donc on refuse de démarrer plutôt que de logger un
   // avertissement ignorable.
   assertStrongSecrets();
+  // CH-004 — contrairement à assertStrongSecrets ci-dessus, s'exécute dans
+  // tous les environnements : ENCRYPTION_KEY est requise pour que le module
+  // guests fonctionne du tout, pas seulement une garde de sécurité propre à
+  // la production.
+  assertEncryptionKeyConfigured();
 
   // bufferLogs + useLogger ci-dessous : remplace le logger console par
   // défaut de Nest par nestjs-pino dès le bootstrap (pas seulement après),

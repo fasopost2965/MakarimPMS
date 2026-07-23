@@ -32,7 +32,7 @@ Statut par module backend, croisé avec la présence d'une interface frontend et
 ## Synthèse
 
 - **21/21 modules** ont un backend fonctionnel au sens strict (répondent, testés en e2e pour la plupart).
-- **0/21 module** porte encore un chantier bloquant côté backend — `billing` (CH-001) est désormais résolu, comme `auth` (CH-002) précédemment. Restent des chantiers bloquants non backend (CH-003 frontend, CH-004 arbitrage/infra).
+- **0/21 module** porte encore un chantier bloquant côté backend — `billing` (CH-001), `auth` (CH-002) et `guests` (CH-004, chiffrement `pieceIdentite`) sont désormais résolus. Reste un seul chantier bloquant, purement frontend (CH-003, UI registre de police).
 - **6/21 modules** n'ont aucune interface frontend (`audit`, `police`, `notifications`, `self-checkin`, `document-ocr`, `channel-manager`) — `booking-engine` est le 7e module sans UI staff mais c'est un choix de conception correct (façade publique).
 - **`police` est le seul module cumulant un écart backend/légal ET une absence totale de frontend** — c'est le point de convergence de criticité le plus élevé du statut des modules (cf. CH-003).
 
