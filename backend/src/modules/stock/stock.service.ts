@@ -21,7 +21,6 @@ export class StockService {
 
   async findAll() {
     const items = await this.prisma.stockItem.findMany({
-      where: { deletedAt: null },
       orderBy: { code: 'asc' },
     });
     return items.map((item) => ({
@@ -80,7 +79,7 @@ export class StockService {
   // attendu).
   async decompterKitAccueil(roomId: number, capaciteChambre: number) {
     const kitItems = await this.prisma.stockItem.findMany({
-      where: { kitAccueil: true, deletedAt: null },
+      where: { kitAccueil: true },
     });
 
     for (const item of kitItems) {

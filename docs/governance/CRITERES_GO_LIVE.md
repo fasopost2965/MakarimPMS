@@ -13,7 +13,7 @@ Conditions vérifiables avant toute ouverture en production réelle (clients pay
 
 - [x] CH-005 : le check-out avec solde impayé est bloqué (`ConflictException`), échappatoire de check-out forcé réservée à `checkin:force-checkout` — **terminé, session courante**.
 - [ ] CH-010 : une garde contre la duplication de fiche client existe (dure ou souple selon arbitrage produit).
-- [ ] CH-006 : le filtrage soft-delete ne dépend plus uniquement d'une convention manuelle.
+- [x] CH-006 : le filtrage soft-delete ne dépend plus uniquement d'une convention manuelle (extension Prisma globale, RD-010) — **terminé, session courante**.
 - [x] CH-011 : `GET /auth/me` + gating RBAC frontend (granularité onglet entier, RD-009) — **terminé, session courante**.
 
 ## Critères de « done » par chantier (gabarit à appliquer à chaque fiche du registre)

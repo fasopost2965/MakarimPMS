@@ -137,7 +137,7 @@ export class PayrollService {
 
   findSlipsValides(employeeId?: number) {
     return this.prisma.paySlip.findMany({
-      where: { estValide: true, deletedAt: null, employeeId },
+      where: { estValide: true, employeeId },
       orderBy: [{ annee: 'desc' }, { mois: 'desc' }],
     });
   }

@@ -29,7 +29,6 @@ export class PoliceReportService {
 
     return this.prisma.stay.findMany({
       where: {
-        deletedAt: null,
         dateCheckin: { gte: debut, lt: finExclusive },
       },
       include: {

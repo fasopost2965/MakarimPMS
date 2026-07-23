@@ -4,10 +4,10 @@ Ce document isole la dette **structurelle** (comment le code est construit) de l
 
 ## Zones de fragilité structurelle identifiées
 
-### 1. Filtrage soft-delete non centralisé (Phase 3 §5.6, Phase 4 §5, Phase 9 §4)
-**Nature** : 12 modèles portent `deletedAt`, seuls 9 fichiers de service appliquent le filtre par convention manuelle (`NOT_DELETED`). Aucune garantie structurelle (middleware/extension Prisma).
-**Pourquoi c'est fragile** : chaque nouvelle requête `findMany`/`findFirst` sur un de ces 12 modèles est un point où l'oubli est possible et invisible (pas d'erreur de compilation, pas de test qui échoue par défaut). La dette **grossit avec chaque nouveau développeur/chantier** tant que le mécanisme n'est pas centralisé.
-**Chantier** : CH-006.
+### 1. ~~Filtrage soft-delete non centralisé~~ (Phase 3 §5.6, Phase 4 §5, Phase 9 §4) — **Résolu (CH-006, session courante)**
+**Nature d'origine** : 12 modèles portent `deletedAt`, seuls 8 fichiers de service appliquaient le filtre par convention manuelle inline (la constante `NOT_DELETED` elle-même n'était en réalité jamais importée nulle part). Aucune garantie structurelle (middleware/extension Prisma).
+**Résolution** : extension Prisma globale (`$extends`, `backend/src/prisma/soft-delete.extension.ts`), chaînée avec l'extension de chiffrement CH-004 — intercepte `findMany`/`findFirst`/`findFirstOrThrow`/`findUnique`/`findUniqueOrThrow`/`count`/`aggregate`/`groupBy` sur les 12 modèles via `$allModels`. Chaque nouvelle requête top-level sur ces modèles est désormais filtrée par construction, plus par discipline individuelle — l'oubli reste possible pour une lecture imbriquée via `include`/`select` (limite Prisma structurelle, documentée dans le fichier et dans `docs/governance/REGISTRE_DECISIONS.md`, RD-010), mais plus pour un appel direct. Voir `docs/governance/REGISTRE_CHANTIERS.md` (fiche CH-006) pour le détail complet.
+**Chantier** : CH-006 (terminé).
 
 ### 2. `ReservationsService` en agrégation de responsabilités (Phase 9 §2, §5)
 **Nature** : 655 lignes, une seule classe portant CRUD réservation, tarification, restrictions, disponibilité, pénalités, façades multi-modules.
@@ -24,10 +24,10 @@ Ce document isole la dette **structurelle** (comment le code est construit) de l
 **Pourquoi c'est fragile** : risque de confusion pour un nouveau développeur ou une IA qui chercherait « la » matrice de transition et tomberait sur le mauvais fichier.
 **Chantier** : CH-019 (quasi gratuit à corriger).
 
-### 5. `PrismaService` minimal sans point d'extension (Phase 4 §1)
-**Nature** : à l'origine, une classe `extends PrismaClient` sans `$use()`/`$extends()`. **Partiellement résolu (CH-004, chiffrement `Guest.pieceIdentite`)** : `PrismaModule` fournit désormais le token `PrismaService` via un `useFactory` qui applique une extension `$extends()` (`backend/src/prisma/guest-encryption.extension.ts`) — le point d'extension existe donc concrètement depuis CH-004, mais reste utilisé pour une seule préoccupation (le chiffrement d'un champ). Le filtrage soft-delete centralisé (§1 ci-dessus) n'en profite pas encore.
-**Pourquoi c'est fragile** : toute nouvelle règle transverse (soft-delete, futur audit automatique, future limite de débit applicative) devra encore composer avec l'extension existante plutôt que de partir d'un point d'extension vierge — pas bloquant (`$extends` compose plusieurs préoccupations), mais à vérifier explicitement lors de CH-006 plutôt que de supposer un `PrismaService` nu.
-**Chantier** : lié à CH-006 — vérifier la composition avec l'extension CH-004 lors de l'implémentation, pas un correctif ponctuel isolé.
+### 5. ~~`PrismaService` minimal sans point d'extension~~ (Phase 4 §1) — **Résolu (CH-004 + CH-006)**
+**Nature d'origine** : à l'origine, une classe `extends PrismaClient` sans `$use()`/`$extends()`.
+**Résolution** : `PrismaModule` fournit le token `PrismaService` via un `useFactory` qui chaîne désormais **deux** extensions (`.$extends(guestEncryptionExtension(...)).$extends(softDeleteExtension())`) — chiffrement `Guest.pieceIdentite` (CH-004) et filtrage soft-delete centralisé (CH-006). Composition vérifiée en live avant d'écrire le code définitif (script jetable, supprimé après usage) : un `Guest` créé/lu via le client composé continue de déchiffrer correctement `pieceIdentite` *et* respecte le filtrage `deletedAt`, dans le même appel — les deux extensions ne se marchent pas dessus. Toute future règle transverse (futur audit automatique, future limite de débit applicative) composera de la même façon.
+**Chantier** : CH-004 (terminé) + CH-006 (terminé).
 
 ### 6. `prisma/seed.ts` — ordre de nettoyage incomplet pour plusieurs tables (découvert en session, non lié à un audit formel)
 **Nature** : la séquence de `deleteMany()` en tête de `main()` ne couvre pas `SelfCheckinToken`, `ChannelReservationImport`, `StockMovement`/`StockItem` — trois tables ajoutées par des chantiers postérieurs à l'écriture initiale de cette séquence (F6, F10, module stock) sans que la liste de nettoyage n'ait été mise à jour en conséquence.

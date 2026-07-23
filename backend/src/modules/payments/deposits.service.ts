@@ -80,7 +80,7 @@ export class DepositsService {
 
   findByReservation(reservationId: number) {
     return this.prisma.reservationDeposit.findMany({
-      where: { reservationId, deletedAt: null },
+      where: { reservationId },
       orderBy: { createdAt: 'asc' },
     });
   }

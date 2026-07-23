@@ -43,7 +43,6 @@ export class EmployeesService {
 
   findAll() {
     return this.prisma.employee.findMany({
-      where: { deletedAt: null },
       include: { user: { select: { id: true, nom: true, email: true } } },
       orderBy: { id: 'asc' },
     });

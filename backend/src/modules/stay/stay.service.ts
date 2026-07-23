@@ -328,7 +328,6 @@ export class StayService {
       where: {
         reservationId,
         statut: StatutAcompte.ENCAISSE,
-        deletedAt: null,
       },
     });
 

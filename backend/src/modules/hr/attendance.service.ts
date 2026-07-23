@@ -45,7 +45,6 @@ export class AttendanceService {
         where: {
           employeeId: employee.id,
           statut: { in: ETATS_OUVERTS },
-          deletedAt: null,
         },
       });
       if (existant) {
@@ -78,7 +77,7 @@ export class AttendanceService {
 
     return this.prisma.$transaction(async (tx) => {
       const timeShift = await tx.timeShift.findFirst({
-        where: { employeeId: employee.id, statut: 'ACTIF', deletedAt: null },
+        where: { employeeId: employee.id, statut: 'ACTIF' },
       });
       if (!timeShift) {
         throw new ConflictException(
@@ -105,7 +104,7 @@ export class AttendanceService {
 
     return this.prisma.$transaction(async (tx) => {
       const timeShift = await tx.timeShift.findFirst({
-        where: { employeeId: employee.id, statut: 'EN_PAUSE', deletedAt: null },
+        where: { employeeId: employee.id, statut: 'EN_PAUSE' },
       });
       if (!timeShift) {
         throw new ConflictException(
@@ -137,7 +136,6 @@ export class AttendanceService {
         where: {
           employeeId: employee.id,
           statut: { in: ETATS_OUVERTS },
-          deletedAt: null,
         },
       });
       if (!current) {
@@ -176,7 +174,6 @@ export class AttendanceService {
       where: {
         employeeId: employee.id,
         statut: { in: ETATS_OUVERTS },
-        deletedAt: null,
       },
     });
     return {
@@ -189,7 +186,11 @@ export class AttendanceService {
 
   findHistorique(employeeId: number) {
     return this.prisma.timeShift.findMany({
-      where: { employeeId, deletedAt: null },
+      where: { employeeId },
+      // Filtre conservé ici (contrairement au `where` top-level ci-dessus,
+      // désormais redondant avec le filtrage global CH-006) : une lecture
+      // imbriquée via `include` n'est jamais interceptée par l'extension
+      // Prisma (limite documentée dans soft-delete.extension.ts).
       include: { segments: { where: { deletedAt: null } } },
       orderBy: { startedAt: 'desc' },
     });
@@ -254,7 +255,6 @@ export class AttendanceService {
       where: {
         statut: { in: ETATS_OUVERTS },
         startedAt: { lt: seuil },
-        deletedAt: null,
       },
     });
 
@@ -291,7 +291,7 @@ export class AttendanceService {
     fin: Date,
   ) {
     const ouvert = await tx.timeShiftSegment.findFirst({
-      where: { timeShiftId, type, fin: null, deletedAt: null },
+      where: { timeShiftId, type, fin: null },
     });
     // Ne devrait jamais manquer si la machine à états est respectée (chaque
     // transition ouvre systématiquement un segment) — filet de sécurité

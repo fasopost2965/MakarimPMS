@@ -16,7 +16,7 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 5. **CH-005** — ✅ **Terminé** (session courante). Blocage checkout solde impayé — voir `REGISTRE_CHANTIERS.md` pour le détail (blocage dur + échappatoire de check-out forcé réservée à `checkin:force-checkout`, RD-008).
 6. **CH-011** — ✅ **Terminé** (session courante). Gating RBAC frontend (granularité onglet entier) — voir `REGISTRE_CHANTIERS.md` pour le détail (`GET /auth/me` + filtrage de `NAV_ITEMS`, RD-009 ; correctif connexe sur `lib/api-client.ts`, `/auth/me` n'est plus traité à tort comme public).
 7. **CH-010** — Déduplication client
-8. **CH-006** — Centraliser soft-delete
+8. **CH-006** — ✅ **Terminé** (session courante). Centraliser soft-delete — voir `REGISTRE_CHANTIERS.md` pour le détail (extension Prisma `$extends`, chaînée avec le chiffrement CH-004, RD-010).
 9. **CH-012** — ✅ **Terminé** (session courante). Remboursement acompte imputé — voir `REGISTRE_CHANTIERS.md` pour le détail (l'avoir est un préalable au remboursement, pas une action déclenchée par la route elle-même, RD-007).
 10. **CH-007 / CH-008 / CH-009** — Interfaces frontend self-checkin / notifications / channel-manager *(indépendantes entre elles, à répartir selon la capacité disponible)*
 
@@ -50,4 +50,4 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 
 ## Statut de couverture
 
-Au moment de la création de ce backlog, tous les chantiers étaient au statut **à faire** (session Claude 1, documentation uniquement). **Les 4 chantiers bloquants (CH-001, CH-002, CH-003, CH-004) sont désormais tous terminés** (session de suite, développement effectif) — la Vague 1 du backlog est intégralement close. En Vague 2, CH-005, CH-011 et CH-012 sont également terminés. Le suivi de statut se fait dans `REGISTRE_CHANTIERS.md` (champ *Statut* par fiche, section « Suivi d'avancement ») : mettre à jour ce champ, pas ce backlog, quand un chantier avance — ce document liste l'ordre recommandé, pas l'état courant en détail.
+Au moment de la création de ce backlog, tous les chantiers étaient au statut **à faire** (session Claude 1, documentation uniquement). **Les 4 chantiers bloquants (CH-001, CH-002, CH-003, CH-004) sont désormais tous terminés** (session de suite, développement effectif) — la Vague 1 du backlog est intégralement close. En Vague 2, CH-005, CH-006, CH-011 et CH-012 sont également terminés — seuls CH-010 (arbitrage requis) et CH-007/CH-008/CH-009 (interfaces frontend) restent ouverts. Le suivi de statut se fait dans `REGISTRE_CHANTIERS.md` (champ *Statut* par fiche, section « Suivi d'avancement ») : mettre à jour ce champ, pas ce backlog, quand un chantier avance — ce document liste l'ordre recommandé, pas l'état courant en détail.
