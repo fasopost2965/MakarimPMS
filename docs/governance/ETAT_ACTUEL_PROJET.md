@@ -26,7 +26,7 @@ PMS interne pour l'Hôtel Makarim (3 étoiles, 24 chambres, Tétouan) — pas de
 - **Cinq surfaces backend sans interface** : self-checkin (staff), notifications, document-ocr, channel-manager, audit.
 - **Facturation entreprise (city ledger)** : `Company` existe mais est totalement déconnectée du flux transactionnel.
 
-Résolu depuis (voir `REGISTRE_CHANTIERS.md` pour le détail de chaque implémentation) : correction de facture par avoir (CH-001), sécurité de la réinitialisation de mot de passe (CH-002), interface de saisie du registre de police (CH-003), chiffrement au repos de `Guest.pieceIdentite` (CH-004), remboursement d'un acompte imputé (CH-012), blocage du check-out sur solde impayé (CH-005), gating RBAC côté interface (CH-011 — un rôle sans permission sur un module ne voit plus son onglet dans la navigation).
+Résolu depuis (voir `REGISTRE_CHANTIERS.md` pour le détail de chaque implémentation) : correction de facture par avoir (CH-001), sécurité de la réinitialisation de mot de passe (CH-002), interface de saisie du registre de police (CH-003), chiffrement au repos de `Guest.pieceIdentite` (CH-004), remboursement d'un acompte imputé (CH-012), blocage du check-out sur solde impayé (CH-005), gating RBAC côté interface (CH-011 — un rôle sans permission sur un module ne voit plus son onglet dans la navigation), filtrage soft-delete centralisé (CH-006 — extension Prisma globale, plus de dépendance à une convention manuelle par service).
 
 ## Risques majeurs (voir `REGISTRE_RISQUES.md` pour le détail)
 

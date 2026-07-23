@@ -74,9 +74,18 @@ Décisions structurantes prises **pendant ou après l'audit** (distinct des ADR 
 - **Date** : session courante (CH-011).
 - **Décideur** : utilisateur (arbitrage produit explicite via `AskUserQuestion`, option « Onglets entiers uniquement (Recommandé) » sélectionnée).
 
+### RD-010 — CH-006 : filtrage soft-delete via extension Prisma `$extends`, chaînée avec l'extension CH-004
+
+- **Décision** : mécanisme de filtrage implémenté comme une seconde Prisma Client Extension (`soft-delete.extension.ts`), chaînée après `guestEncryptionExtension` dans `PrismaModule` (`.$extends(guestEncryptionExtension(...)).$extends(softDeleteExtension())`) — pas un middleware `$use`.
+- **Raison** : c'est une décision **technique**, pas un arbitrage produit — la fiche de chantier posait la question comme un choix entre `$use` et `$extends` « à confirmer selon la version de Prisma du projet » ; `$use` est déprécié depuis Prisma 5 (le projet est en Prisma 6.19.3), et `$extends` est déjà le mécanisme établi par CH-004, donc la seule option cohérente avec l'architecture existante. Aucune sollicitation de l'utilisateur nécessaire (même posture que RD-007 : l'espace de décision restait au niveau de l'implémentation).
+- **Alternatives considérées** : (1) middleware `$use` — rejeté, déprécié ; (2) dupliquer le filtre dans chaque service comme avant — rejeté, c'est exactement ce que le chantier doit éliminer (un oubli reste possible, invisible, sans erreur de compilation) ; (3) Row-Level Security au niveau base de données — rejeté, MySQL 8 (ce projet) n'a pas de RLS natif contrairement à Postgres.
+- **Conséquence** : le mécanisme n'intercepte que les opérations Prisma top-level (`prisma.model.findMany(...)`), jamais les lectures imbriquées via `include`/`select` — limite structurelle de Prisma, pas un choix d'implémentation évitable (documentée en tête de `soft-delete.extension.ts` et dans la fiche CH-006). Recherche exhaustive avant implémentation : aucun code du projet n'écrit `deletedAt` à ce jour, donc ce mécanisme change zéro comportement observable aujourd'hui (vérifié empiriquement) — c'est un filet de sécurité pour le jour où un futur chantier commencera à soft-supprimer réellement une ligne. `NOT_DELETED` (jamais importé nulle part) et ses 8 usages inline désormais redondants sur des appels top-level ont été retirés ; les filtres inline sur une relation `include` ont été conservés (seule protection restante pour ce cas, non couvert par l'extension).
+- **Date** : session courante (CH-006).
+- **Décideur** : Claude — décision technique d'implémentation, pas un arbitrage produit (consigné par transparence, même discipline que RD-007).
+
 ## Décisions en attente (questions ouvertes de l'audit nécessitant un arbitrage humain)
 
-Voir `ECARTS_ASSUMES.md` §Candidats pour la liste des arbitrages produit encore ouverts (city ledger, multi-folio vs folio unique, numérotation de facture, matérialisation des pénalités — le périmètre de l'avoir, le chiffrement PII, le blocage du check-out sur solde impayé et la granularité du gating RBAC frontend sont désormais tranchés, voir RD-005, RD-006, RD-008 et RD-009). Ces questions ne sont **pas** tranchées ici — ce registre attend leur décision effective pour les consigner.
+Voir `ECARTS_ASSUMES.md` §Candidats pour la liste des arbitrages produit encore ouverts (city ledger, multi-folio vs folio unique, numérotation de facture, matérialisation des pénalités — le périmètre de l'avoir, le chiffrement PII, le blocage du check-out sur solde impayé, la granularité du gating RBAC frontend et le filtrage soft-delete centralisé sont désormais tranchés, voir RD-005, RD-006, RD-008, RD-009 et RD-010). Ces questions ne sont **pas** tranchées ici — ce registre attend leur décision effective pour les consigner.
 
 ## Gabarit pour une nouvelle décision
 
