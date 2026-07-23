@@ -8,24 +8,24 @@ Construit **après** la cartographie fonctionnelle (`CARTOGRAPHIE_ECRANS.md`, `M
 
 ### Lot 0 — Fondations transverses (prérequis de tout le reste)
 - `error-boundary` (composant partagé).
-- Contexte `AuthContext` côté frontend + route backend `GET /auth/me` (CH-011, coordonné avec le plan backend).
+- ~~Contexte `AuthContext` côté frontend~~ + route backend `GET /auth/me` — **✅ Terminé (CH-011, session courante)**, avec un écart par rapport au plan : pas de `AuthContext` séparé, un seul consommateur (`AppSidebar`) au moment de l'implémentation ne le justifiait pas — l'état `permissions` vit dans `App.tsx`, transmis en prop (voir §4 ci-dessous pour le détail réel).
 - `form` structuré + `date-picker` (composants partagés).
 
 **Pourquoi en premier** : le Lot 0 ne livre aucune valeur métier visible immédiatement, mais chaque lot suivant en dépend soit techniquement (formulaires), soit pour la cohérence RBAC (contexte d'identité). Le construire en dernier obligerait à retoucher tous les écrans déjà livrés pour y greffer le gating après coup — plus coûteux que de le poser en fondation.
 
 ### Lot 1 — Registre de police (É-01) — ✅ **Terminé (session courante)**
 - Le seul chantier frontend bloquant (CH-003), désormais livré. Voir `CARTOGRAPHIE_ECRANS.md` (É-01) et `docs/governance/REGISTRE_CHANTIERS.md` pour le détail.
-- **Écart par rapport au plan** : n'a en réalité **pas** dépendu d'un composant `form`/`date-picker` générique du Lot 0 — les primitives déjà existantes (`Input type="date"`, `Select`, `Label`, même pattern que `WalkinCheckinDialog.tsx`) ont suffi pour les 8 champs du formulaire. Le Lot 0 (`AuthContext`/`GET auth/me`, gating RBAC) reste à faire pour CH-011, mais un composant `form` structuré dédié n'était pas un prérequis réel pour ce lot précis — à réévaluer si un futur écran a des besoins de formulaire plus complexes (validation croisée, champs conditionnels) que ce que les primitives actuelles couvrent.
+- **Écart par rapport au plan** : n'a en réalité **pas** dépendu d'un composant `form`/`date-picker` générique du Lot 0 — les primitives déjà existantes (`Input type="date"`, `Select`, `Label`, même pattern que `WalkinCheckinDialog.tsx`) ont suffi pour les 8 champs du formulaire. Un composant `form` structuré dédié n'était pas un prérequis réel pour ce lot précis — à réévaluer si un futur écran a des besoins de formulaire plus complexes (validation croisée, champs conditionnels) que ce que les primitives actuelles couvrent. (`GET auth/me`/gating RBAC — CH-011 — terminé depuis, voir Lot 0 ci-dessus.)
 - Valeur métier : ferme un risque de conformité légale.
 
 ### Lot 2 — Self check-in staff (É-02)
 - Indépendant du Lot 1 au niveau technique, mais logiquement lié (même flux de check-in) — à développer par la même personne si possible pour cohérence de parcours.
 - Valeur métier : rend utilisable une fonctionnalité déjà livrée côté backend (F6).
 
-### Lot 3 — Gating RBAC appliqué aux écrans existants
-- Une fois le Lot 0 (contexte d'identité) en place, appliquer le masquage aux 11 écrans existants + Lots 1/2, selon `MATRICE_ROLE_PERMISSIONS_ECRANS.md`.
-- Attention particulière : le masquage d'actions **à l'intérieur** d'un écran (Maintenance pour la Gouvernante, Paramètres en lecture pour Réception/Comptable) — pas seulement le masquage d'onglets entiers.
-- Valeur métier : cohérence perçue de l'interface avec les droits réels (fermeture du risque R-09).
+### Lot 3 — Gating RBAC appliqué aux écrans existants — ✅ **Partiellement terminé (CH-011, session courante), portée réduite par arbitrage produit**
+- Le masquage des 11 onglets existants (granularité onglet entier, `AppSidebar`/`NAV_ITEMS`) est livré avec CH-011 lui-même — pas un lot séparé après coup, contrairement au séquencement initialement prévu ici.
+- **Écart par rapport au plan, tranché explicitement** (RD-009, `docs/governance/REGISTRE_DECISIONS.md`) : le masquage d'actions **à l'intérieur** d'un écran partagé (ex. Maintenance en lecture seule pour la Gouvernante à l'intérieur d'un écran déjà visible) n'est **pas** couvert — granularité onglet entier uniquement, option explicitement recommandée et retenue face au risque « cosmétique/UX, pas une barrière de sécurité » de ce chantier. Resterait un chantier distinct si le besoin réapparaît.
+- Valeur métier : cohérence perçue de l'interface avec les droits réels (fermeture du risque R-09, `REGISTRE_RISQUES.md`).
 
 ### Lot 4 — Interfaces de configuration administrative
 - É-03 (notifications), É-04 (channel-manager, **sous réserve de confirmation qu'un canal OTA réel est utilisé** — sinon reporter en `ECARTS_ASSUMES.md`).
@@ -55,17 +55,17 @@ Ordre déjà établi dans ce document, repris ici pour la cohérence du plan : `
 
 Voir `EXIGENCES_UX.md` — s'applique à chaque lot ci-dessus, en particulier la règle « aucune action sans confirmation pour un geste financier ou destructif » qui concerne directement le Lot 7.
 
-## 4. Logique de gating RBAC côté client (cohérente avec le backend)
+## 4. Logique de gating RBAC côté client (cohérente avec le backend) — ✅ Implémenté (CH-011), mécanique réelle différente de la proposition initiale ci-dessous
 
-**Principe** : le frontend ne doit jamais réimplémenter la logique RBAC — il consomme la même paire `(module, action)` que le backend, jamais une logique de rôle codée en dur côté client (ex. `if (role === 'Réception')` est **à proscrire** — cela dupliquerait la matrice déjà tenue par `RolePermission` en base, avec un risque de désynchronisation entre les deux couches).
+**Principe** (respecté) : le frontend ne réimplémente jamais la logique RBAC — il consomme la même paire `(module, action)` que le backend, jamais une logique de rôle codée en dur côté client.
 
-**Mécanique proposée** :
-1. `GET /auth/me` (CH-011, backend) retourne `{ roleId, roleName, permissions: [{module, action}] }`.
-2. `AuthContext` (frontend) charge cette liste une fois à la connexion, l'expose via un hook `useHasPermission(module, action)`.
-3. `NAV_ITEMS` (existant) est étendu avec un champ `requiredPermission?: {module, action}` par entrée — un item sans permission déclarée reste visible à tous les utilisateurs authentifiés (cohérent avec le comportement backend actuel : une route sans `@RequirePermission` est accessible à tout utilisateur authentifié).
-4. Les actions à l'intérieur d'un écran (boutons, formulaires) utilisent le même hook — pas de logique dupliquée entre le filtrage de navigation et le filtrage d'action.
+**Mécanique réellement livrée** (voir RD-009, `docs/governance/REGISTRE_DECISIONS.md`, pour l'arbitrage qui explique les écarts ci-dessous) :
+1. `GET /auth/me` (`AuthController`/`AuthService.me()`) retourne `{ id, email, roleId, roleName, permissions: string[] }` — `permissions` est une liste à plat de chaînes `"module:action"` (pas un tableau d'objets `{module, action}` comme envisagé ici).
+2. **Pas de `AuthContext`** : `App.tsx` porte l'état `permissions`, rechargé à chaque connexion via un `useEffect`, transmis en prop à `AppSidebar` — un seul consommateur au moment de l'implémentation ne justifiait pas un Context dédié (à réintroduire si un second consommateur apparaît, ex. masquage d'action au Lot 3 étendu).
+3. `NAV_ITEMS` (existant) est étendu avec un champ `permission: string` (obligatoire, pas optionnel `requiredPermission?`) — chaque item déclare toujours sa permission `:read`, aucun item sans permission déclarée dans la pratique.
+4. **Pas de hook `useHasPermission`, pas de masquage d'action à l'intérieur d'un écran** — hors périmètre par arbitrage produit (RD-009), voir Lot 3 ci-dessus.
 
-**Ce que cette logique ne doit pas devenir** : une seconde source de vérité RBAC. Si le backend refuse une action que le frontend croyait autorisée (dérive entre le moment du chargement de `GET /auth/me` et l'action réelle, ex. permission retirée entre-temps), le frontend doit afficher l'erreur 403 renvoyée par le serveur normalement (déjà géré par le pattern d'erreur existant) — jamais supposer que son propre état de permissions est toujours à jour.
+**Ce que cette logique ne doit pas devenir** (toujours vrai) : une seconde source de vérité RBAC. Si le backend refuse une action que le frontend croyait autorisée (dérive entre le chargement de `GET /auth/me` et l'action réelle, ex. permission retirée entre-temps), le frontend affiche l'erreur 403 renvoyée par le serveur normalement (pattern d'erreur existant) — jamais supposer que son propre état de permissions est toujours à jour. Cohérent avec le choix de ne pas rafraîchir `permissions` en cours de session (seulement à la connexion) : le vrai contrôle reste `PermissionsGuard`, vérifié en base à chaque requête serveur.
 
 ## 5. Compatibilité avec un suivi visuel continu du rendu
 

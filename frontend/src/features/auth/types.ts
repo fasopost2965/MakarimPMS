@@ -15,3 +15,16 @@ export interface RoleActif {
 export interface ForgotPasswordResponse {
   message: string;
 }
+
+// CH-011 — identité + permissions effectives de l'utilisateur courant
+// (backend/src/modules/auth/auth.service.ts, AuthService.me()). `permissions`
+// est une liste à plat de chaînes "module:action" (ex. "hr:read",
+// "guests:blacklist") — jamais interprétée côté client autrement que par
+// une recherche exacte dans ce tableau.
+export interface CurrentUser {
+  id: number;
+  email: string;
+  roleId: number;
+  roleName: string;
+  permissions: string[];
+}

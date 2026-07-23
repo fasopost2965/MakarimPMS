@@ -19,7 +19,7 @@ Relie, pour chaque grand domaine fonctionnel, l'exigence métier au module, à l
 | S'authentifier avec accès/refresh token | `auth` | `POST /auth/login`, `/refresh` | `docs/ADR-006-RBAC-Enforcement.md` | Phase 5 | CH-026(f) *(révocation, secondaire)* | ❓ | ✅ | ✅ |
 | Réinitialiser un mot de passe oublié en sécurité | `auth`, `notifications` | `POST /auth/forgot-password` | `docs/governance/REGISTRE_DECISIONS.md` (RD-004) | Phase 5 | **CH-002 — terminé** | ✅ (`auth.e2e-spec.ts`) | ✅ | ✅ |
 | Vérifier une permission RBAC à chaque requête sensible | transverse (`PermissionsGuard`) | tous les endpoints `@RequirePermission` | `docs/RBAC_MATRIX.md`, ADR-006 | Phase 5 | — | ✅ | — (serveur uniquement) | ✅ (serveur) |
-| Refléter les permissions réelles dans l'interface | frontend transverse | *(inexistant : pas de `GET /auth/me`)* | — | Phases 5, 8 | **CH-011** | — | ❌ | ❌ |
+| Refléter les permissions réelles dans l'interface | frontend transverse | `GET /auth/me`, `AppSidebar` (filtrage `NAV_ITEMS`) | `docs/governance/REGISTRE_DECISIONS.md` (RD-009) | Phases 5, 8 | **CH-011 — terminé** | ✅ (`auth.e2e-spec.ts`) | ✅ | ✅ |
 | Enregistrer les personnes hébergées (registre légal) | `police` | `POST /police/:stayId` | — *(spec `modules/police.md` absente, cf. CH-018)* | Phases 2, 6, 8 | **CH-003 — terminé** | ❓ *(pas de suite e2e frontend dans ce projet, vérifié manuellement en navigateur réel)* | ✅ | ✅ |
 | Exporter le registre de police (obligation DGSN) | `reporting` | `GET /reporting/police-register` | — | Phase 8 | — | ❓ | ✅ | ✅ (export + saisie source désormais disponibles, CH-003) |
 | Générer un lien de self check-in | `self-checkin` | `POST /reservations/:id/self-checkin-link` | — | Phase 8 | **CH-007** | ❓ | ❌ | ❌ |

@@ -337,4 +337,91 @@ describe('Auth — JWT, rôles et permissions (e2e)', () => {
       );
     });
   });
+
+  // CH-011 — alimente le gating RBAC frontend (filtrage de NAV_ITEMS par
+  // permission déclarée, granularité onglet entier — voir
+  // docs/governance/REGISTRE_DECISIONS.md RD-009).
+  describe('Identité courante (GET /auth/me)', () => {
+    it('renvoie 401 sans token (contrairement à /auth/roles-actifs, cette route exige un Bearer)', async () => {
+      const res = await request(server()).get('/api/auth/me');
+      expect(res.status).toBe(401);
+    });
+
+    it("renvoie les permissions réelles d'un rôle restreint (Gouvernante), jamais les permissions d'un autre module", async () => {
+      const token = await loginAs(server(), 'gouvernante');
+      const client = authedRequest(server(), token);
+      const res = await client.get('/api/auth/me');
+      expect(res.status).toBe(200);
+      const body = res.body as {
+        email: string;
+        roleName: string;
+        permissions: string[];
+      };
+      expect(body.email).toBe(SEED_USERS.gouvernante);
+      expect(body.roleName).toBe('Gouvernante');
+      expect(body.permissions).toEqual(
+        expect.arrayContaining([
+          'housekeeping:read',
+          'housekeeping:write',
+          'maintenance:read',
+          'stock:read',
+          'stock:write',
+        ]),
+      );
+      // Gouvernante n'a explicitement pas accès à billing (voir seed.ts) —
+      // le test de la route protégée plus haut le vérifie déjà côté 403,
+      // ici on vérifie que /me ne prétend pas le contraire.
+      expect(body.permissions).not.toEqual(
+        expect.arrayContaining(['billing:read', 'billing:write']),
+      );
+    });
+
+    it('renvoie les actions dédiées hors grille read/write/delete/export pour un Administrateur (guests:blacklist, payments:refund, checkin:force-checkout)', async () => {
+      const token = await loginAs(server(), 'admin');
+      const client = authedRequest(server(), token);
+      const res = await client.get('/api/auth/me');
+      expect(res.status).toBe(200);
+      const body = res.body as { permissions: string[] };
+      expect(body.permissions).toEqual(
+        expect.arrayContaining([
+          'guests:blacklist',
+          'payments:refund',
+          'checkin:force-checkout',
+        ]),
+      );
+    });
+
+    it("reflète immédiatement le retrait d'une permission au rôle, sans mise en cache (même garantie que PermissionsGuard)", async () => {
+      const token = await loginAs(server(), 'maintenance');
+      const client = authedRequest(server(), token);
+
+      const before = await client.get('/api/auth/me');
+      expect((before.body as { permissions: string[] }).permissions).toEqual(
+        expect.arrayContaining(['maintenance:write']),
+      );
+
+      const role = await prisma.role.findFirstOrThrow({
+        where: { nom: 'Maintenance' },
+      });
+      const permission = await prisma.permission.findFirstOrThrow({
+        where: { module: 'maintenance', action: 'write' },
+      });
+      await prisma.rolePermission.deleteMany({
+        where: { roleId: role.id, permissionId: permission.id },
+      });
+
+      try {
+        const after = await client.get('/api/auth/me');
+        expect(
+          (after.body as { permissions: string[] }).permissions,
+        ).not.toEqual(expect.arrayContaining(['maintenance:write']));
+      } finally {
+        // Restauration — ne pas laisser le seed de dev dans un état modifié
+        // pour les suites e2e suivantes (maintenance.e2e-spec.ts en dépend).
+        await prisma.rolePermission.create({
+          data: { roleId: role.id, permissionId: permission.id },
+        });
+      }
+    });
+  });
 });

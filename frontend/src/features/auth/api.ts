@@ -1,5 +1,10 @@
 import { apiRequest } from '@/lib/api-client';
-import type { ForgotPasswordResponse, LoginResponse, RoleActif } from './types';
+import type {
+  CurrentUser,
+  ForgotPasswordResponse,
+  LoginResponse,
+  RoleActif,
+} from './types';
 
 export function login(email: string, motDePasse: string) {
   return apiRequest<LoginResponse>('/auth/login', {
@@ -24,4 +29,8 @@ export function resetPassword(token: string, nouveauMotDePasse: string) {
     method: 'POST',
     body: JSON.stringify({ token, nouveauMotDePasse }),
   });
+}
+
+export function me() {
+  return apiRequest<CurrentUser>('/auth/me');
 }

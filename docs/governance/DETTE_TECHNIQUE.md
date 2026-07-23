@@ -25,9 +25,14 @@ Ce document isole la dette **structurelle** (comment le code est construit) de l
 **Chantier** : CH-019 (quasi gratuit à corriger).
 
 ### 5. `PrismaService` minimal sans point d'extension (Phase 4 §1)
-**Nature** : classe `extends PrismaClient` sans `$use()`/`$extends()`.
-**Pourquoi c'est fragile** : toute règle transverse future (pas seulement le soft-delete) devra être ajoutée service par service plutôt que centralement — le problème du §1 ci-dessus se reproduira pour toute nouvelle préoccupation transverse (ex. un futur audit automatique, une future limite de débit applicative).
-**Chantier** : lié à CH-006, mais la portée est plus large que le seul soft-delete — à garder en tête lors de l'implémentation de CH-006 (choisir un mécanisme extensible, pas un correctif ponctuel).
+**Nature** : à l'origine, une classe `extends PrismaClient` sans `$use()`/`$extends()`. **Partiellement résolu (CH-004, chiffrement `Guest.pieceIdentite`)** : `PrismaModule` fournit désormais le token `PrismaService` via un `useFactory` qui applique une extension `$extends()` (`backend/src/prisma/guest-encryption.extension.ts`) — le point d'extension existe donc concrètement depuis CH-004, mais reste utilisé pour une seule préoccupation (le chiffrement d'un champ). Le filtrage soft-delete centralisé (§1 ci-dessus) n'en profite pas encore.
+**Pourquoi c'est fragile** : toute nouvelle règle transverse (soft-delete, futur audit automatique, future limite de débit applicative) devra encore composer avec l'extension existante plutôt que de partir d'un point d'extension vierge — pas bloquant (`$extends` compose plusieurs préoccupations), mais à vérifier explicitement lors de CH-006 plutôt que de supposer un `PrismaService` nu.
+**Chantier** : lié à CH-006 — vérifier la composition avec l'extension CH-004 lors de l'implémentation, pas un correctif ponctuel isolé.
+
+### 6. `prisma/seed.ts` — ordre de nettoyage incomplet pour plusieurs tables (découvert en session, non lié à un audit formel)
+**Nature** : la séquence de `deleteMany()` en tête de `main()` ne couvre pas `SelfCheckinToken`, `ChannelReservationImport`, `StockMovement`/`StockItem` — trois tables ajoutées par des chantiers postérieurs à l'écriture initiale de cette séquence (F6, F10, module stock) sans que la liste de nettoyage n'ait été mise à jour en conséquence.
+**Pourquoi c'est fragile** : `npx prisma db seed` échoue de façon opaque (violation de contrainte FK sur `Reservation.deleteMany()` à cause de `SelfCheckinToken`/`ChannelReservationImport` orphelins, ou violation de contrainte unique `StockItem_code_key` sur la ré-insertion) dès qu'un développeur a exercé ces fonctionnalités localement avant de reseeder — sans lien évident entre le message d'erreur et la cause réelle (ordre de nettoyage, pas une régression du chantier en cours). Rencontré concrètement pendant CH-005/CH-011 (session courante), contourné par des suppressions SQL manuelles ciblées, jamais corrigé dans `seed.ts` lui-même (hors périmètre strict de ces deux chantiers).
+**Chantier** : aucun dédié — correctif mineur et autonome (ajouter les trois `deleteMany()` manquants, dans le bon ordre de dépendance FK), à faire dès qu'un développeur touche `seed.ts` pour une autre raison, ou en tâche isolée si elle recommence à gêner.
 
 ## Zones explicitement vérifiées comme SANS dette structurelle significative
 

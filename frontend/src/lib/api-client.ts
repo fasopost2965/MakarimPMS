@@ -16,6 +16,19 @@ export function onAuthFailure(listener: AuthFailureListener) {
   authFailureListener = listener;
 }
 
+// CH-011 : GET /auth/me exige un Bearer (contrairement au reste du module
+// auth) — un préfixe "/auth/" générique traiterait à tort son 401 comme un
+// mauvais mot de passe et ne tenterait jamais de refresh. Liste explicite
+// plutôt qu'un préfixe, pour ne plus jamais avoir ce même angle mort si une
+// future route non publique s'ajoute sous /auth/.
+const PUBLIC_AUTH_ENDPOINTS = [
+  '/auth/login',
+  '/auth/refresh',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+  '/auth/roles-actifs',
+];
+
 // Mutualise les tentatives de refresh concurrentes (plusieurs requêtes en
 // 401 en même temps) pour n'appeler /auth/refresh qu'une seule fois.
 let refreshPromise: Promise<string | null> | null = null;
@@ -44,11 +57,12 @@ export async function apiRequest<T>(
   init?: RequestInit,
   _retried = false,
 ): Promise<T> {
-  // Les routes du module auth (login, refresh, forgot/reset-password,
-  // roles-actifs) sont publiques côté backend et ne doivent jamais
-  // déclencher une tentative de refresh sur un 401 (ex. mauvais mot de
-  // passe) — l'erreur réelle doit remonter telle quelle.
-  const isAuthEndpoint = path.startsWith('/auth/');
+  // Les routes publiques du module auth (login, refresh, forgot/reset-
+  // password, roles-actifs) ne doivent jamais déclencher une tentative de
+  // refresh sur un 401 (ex. mauvais mot de passe) — l'erreur réelle doit
+  // remonter telle quelle. GET /auth/me n'en fait pas partie (CH-011) : un
+  // 401 dessus peut légitimement venir d'un access token expiré.
+  const isAuthEndpoint = PUBLIC_AUTH_ENDPOINTS.includes(path);
   const accessToken = getAccessToken();
 
   const res = await fetch(`${API_URL}${path}`, {

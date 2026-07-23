@@ -8,18 +8,34 @@ interface Props {
   onNavigate: (tab: Tab) => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
+  // CH-011 — permissions effectives de l'utilisateur courant (format
+  // "module:action", voir GET /auth/me) ; `null` tant qu'elles n'ont pas
+  // encore été chargées (aucun onglet affiché plutôt qu'un flash de tous
+  // les onglets suivi d'un filtrage tardif).
+  permissions: string[] | null;
 }
 
 // Navigation principale (sidebar repliable) — remplace l'ancienne rangée de
 // boutons horizontale, devenue trop étroite à 11 modules. Palette "Ardoise &
 // Laiton" pilotée exclusivement via les tokens --sidebar-* (index.css), donc
 // ce composant ne code aucune couleur en dur.
+//
+// CH-011 — gating RBAC minimal (granularité onglet entier, RD-009) : un
+// onglet n'est rendu que si `permissions` contient la permission déclarée
+// dans NAV_ITEMS. Purement cosmétique/UX — le vrai contrôle d'accès reste
+// PermissionsGuard côté serveur (docs/governance/REGISTRE_CHANTIERS.md,
+// CH-011 : "Impact sécurité : Faible").
 export function AppSidebar({
   activeTab,
   onNavigate,
   collapsed,
   onToggleCollapsed,
+  permissions,
 }: Props) {
+  const visibleItems =
+    permissions === null
+      ? []
+      : NAV_ITEMS.filter((item) => permissions.includes(item.permission));
   return (
     <aside
       className={cn(
@@ -49,7 +65,7 @@ export function AppSidebar({
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
-        {NAV_ITEMS.map(({ tab, label, icon: Icon }) => {
+        {visibleItems.map(({ tab, label, icon: Icon }) => {
           const active = tab === activeTab;
           return (
             <button

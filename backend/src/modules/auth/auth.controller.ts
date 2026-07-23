@@ -1,15 +1,19 @@
 import { Body, Controller, Ip, Post, Get } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 
-// Toutes les routes sont @Public() (aucune n'exige de Bearer) — pas
-// d'@ApiBearerAuth() ici, contrairement aux autres controllers.
+// Toutes les routes sont @Public() (aucune n'exige de Bearer), à
+// l'exception de GET /me (CH-011) — seule route de ce controller à exiger
+// un token, @ApiBearerAuth() posée sur cette route précisément plutôt qu'au
+// niveau de la classe.
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
@@ -64,5 +68,19 @@ export class AuthController {
   @Get('roles-actifs')
   rolesActifs() {
     return this.authService.rolesActifs();
+  }
+
+  // CH-011 — pas de @RequirePermission ici : tout utilisateur authentifié
+  // peut consulter sa propre identité/ses propres permissions, quel que
+  // soit son rôle (nécessaire pour que le frontend puisse se gater
+  // lui-même dès la connexion).
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      "Identité et permissions effectives de l'utilisateur courant (alimente le gating RBAC frontend)",
+  })
+  @Get('me')
+  me(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.me(user);
   }
 }
