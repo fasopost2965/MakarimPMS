@@ -13,9 +13,18 @@ import { AppModule } from './../src/app.module';
 // est couverte ici).
 describe('Channel Manager — garde webhook à temps constant (e2e)', () => {
   let app: INestApplication<App>;
-  let webhookSecret: string;
+  // Fixé par le test lui-même plutôt que relu depuis backend/.env : CI ne
+  // fournit pas de CHANNEL_WEBHOOK_SECRET dans son bloc `env:` (voir
+  // .github/workflows/ci.yml, même raison que ENCRYPTION_KEY — une valeur
+  // propre à CI, sans rapport avec celle du .env de dev). dotenv (utilisé
+  // par ConfigModule.forRoot()) ne réécrit jamais une variable déjà
+  // présente dans process.env, donc l'affecter avant `compile()` garantit
+  // que ChannelWebhookGuard lira cette valeur, en local comme en CI.
+  const webhookSecret = 'ci-e2e-webhook-secret';
 
   beforeAll(async () => {
+    process.env.CHANNEL_WEBHOOK_SECRET = webhookSecret;
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -26,9 +35,6 @@ describe('Channel Manager — garde webhook à temps constant (e2e)', () => {
       new ValidationPipe({ whitelist: true, transform: true }),
     );
     await app.init();
-
-    webhookSecret = process.env.CHANNEL_WEBHOOK_SECRET as string;
-    expect(typeof webhookSecret).toBe('string');
   });
 
   afterAll(async () => {
