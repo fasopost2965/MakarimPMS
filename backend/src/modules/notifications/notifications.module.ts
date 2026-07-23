@@ -44,6 +44,15 @@ import { RappelJMoins1Cron } from './cron/rappel-j-moins-1.cron';
     CheckoutEffectueListener,
     RappelJMoins1Cron,
   ],
-  exports: [NotificationsService],
+  // MailerService exporté en plus de NotificationsService — CH-002
+  // (docs/governance/REGISTRE_CHANTIERS.md) : AuthService.forgotPassword()
+  // doit envoyer un email de réinitialisation, mais NotificationsService.notify()
+  // est structurellement scopé à Guest (guestId obligatoire, NotificationLog.guestId
+  // référence Guest, jamais User) — un compte User (personnel) n'a pas sa place
+  // dans ce flux CRM/marketing. MailerService est un wrapper SMTP générique
+  // sans dépendance à Guest/NotificationLog : le réutiliser tel quel évite de
+  // dupliquer l'envoi SMTP dans le module auth, sans détourner le pipeline
+  // Guest pour un évènement qui ne concerne jamais un client de l'hôtel.
+  exports: [NotificationsService, MailerService],
 })
 export class NotificationsModule {}

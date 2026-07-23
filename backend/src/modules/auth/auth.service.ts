@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MailerService } from '../notifications/mailer.service';
 import { LoginDto } from './dto/login.dto';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 
@@ -20,6 +21,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly mailerService: MailerService,
   ) {}
 
   // Vérifie le mot de passe (bcrypt, jamais en clair) et journalise la
@@ -125,17 +127,19 @@ export class AuthService {
   }
 
   // Génère un jeton de réinitialisation à usage unique, expirant après 30
-  // minutes. Pas d'envoi d'email réel à ce stade (cahier des charges,
-  // itération actuelle) : le jeton est renvoyé directement dans la réponse
-  // pour permettre au flux frontend de fonctionner de bout en bout — un
-  // e-mail réel remplacera cette exposition directe quand le module
-  // notifications sera livré, sans changer le contrat de reset-password.
+  // minutes, et l'envoie exclusivement par email (CH-002,
+  // docs/governance/REGISTRE_CHANTIERS.md — corrige l'exposition directe du
+  // jeton dans la réponse HTTP qui permettait une prise de contrôle de
+  // compte en un seul appel non authentifié, sans jamais avoir accès à la
+  // boîte mail de la victime). Le contrat de réponse est désormais
+  // strictement identique que le compte existe ou non — ni le jeton ni un
+  // champ optionnel distinctif ne doivent permettre de déduire l'existence
+  // d'un compte via la forme de la réponse (pas seulement via son contenu).
   async forgotPassword(email: string) {
+    const message = 'Si ce compte existe, un lien a été envoyé par email.';
     const user = await this.prisma.user.findUnique({ where: { email } });
-    // Réponse identique que l'utilisateur existe ou non, pour ne pas
-    // divulguer quels emails sont enregistrés.
     if (!user) {
-      return { message: 'Si ce compte existe, un lien a été généré.' };
+      return { message };
     }
 
     const token = randomBytes(32).toString('hex');
@@ -147,11 +151,23 @@ export class AuthService {
       data: { userId: user.id, token, expiresAt },
     });
 
-    return {
-      message: 'Si ce compte existe, un lien a été généré.',
-      resetToken: token,
-      expiresAt,
-    };
+    // Dégradation gracieuse déjà portée par MailerService (SMTP_HOST absent
+    // => journalisé, jamais d'exception) — cohérent avec le reste du
+    // module notifications, aucune logique de repli à dupliquer ici.
+    const frontendUrl = this.config.get<string>('FRONTEND_URL');
+    const resetLink = frontendUrl
+      ? `${frontendUrl}/?resetToken=${token}`
+      : null;
+    await this.mailerService.send(
+      user.email,
+      'Réinitialisation de votre mot de passe — PMS Hôtel Makarim',
+      `<p>Une réinitialisation de mot de passe a été demandée pour ce compte.</p>
+<p>Code de réinitialisation (valable ${RESET_TOKEN_TTL_MINUTES} minutes) : <strong>${token}</strong></p>
+${resetLink ? `<p>Ou cliquez sur ce lien pour préremplir le code : <a href="${resetLink}">${resetLink}</a></p>` : ''}
+<p>Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>`,
+    );
+
+    return { message };
   }
 
   async resetPassword(token: string, nouveauMotDePasse: string) {

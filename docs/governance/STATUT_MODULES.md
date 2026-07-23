@@ -7,7 +7,7 @@ Statut par module backend, croisé avec la présence d'une interface frontend et
 
 | Module | Backend | Frontend | Chantiers ouverts | Remarque |
 |---|---|---|---|---|
-| `auth` | ⚠️ | ✅ | CH-002, CH-026 | Reset password non sécurisé |
+| `auth` | ⚠️ | ✅ | CH-026 | CH-002 (reset password non sécurisé) **terminé** — reste CH-026 (durcissement sécurité secondaire : helmet, verrouillage compte, complexité mot de passe, cookie httpOnly, révocation refresh token) |
 | `rooms` | ✅ | ⚠️ (via housekeeping) | CH-014 | Historique de statut jamais consultable |
 | `parameters` | ✅ | ✅ | — | — |
 | `reservations` | ⚠️ | ✅ | CH-016 | Service le plus volumineux, dette de découpage |

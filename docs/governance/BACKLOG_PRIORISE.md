@@ -7,7 +7,7 @@ Vue condensée et actionnable de `REGISTRE_CHANTIERS.md`, triée pour piloter l'
 ### Vague 1 — Bloquants (avant go-live)
 Peuvent être menés en parallèle par des développeurs différents — aucune dépendance croisée entre eux à l'exception de CH-012 qui attend CH-001.
 
-1. **CH-002** — Sécuriser le reset password *(le plus rapide, à traiter en premier pour fermer une faille active)*
+1. **CH-002** — ✅ **Terminé** (session courante). Sécuriser le reset password *(le plus rapide, traité en premier pour fermer une faille active)* — voir `REGISTRE_CHANTIERS.md` pour le détail (l'implémentation a nécessité un ajustement frontend non anticipé dans la fiche initiale, traité dans le même chantier).
 2. **CH-001** — Implémenter CreditNote *(le plus structurant, débloque CH-012 et une partie de CH-023)*
 3. **CH-003** — UI registre de police *(indépendant, purement frontend, peut démarrer immédiatement)*
 4. **CH-004** — Arbitrage + éventuelle implémentation du chiffrement PII *(commencer par l'arbitrage, qui ne coûte rien et débloque le reste)*
@@ -47,6 +47,6 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 | CH-021 | La facturation entreprise (city ledger) est-elle une priorité produit, ou un écart assumé ? |
 | CH-023 | Le recouvrement de pénalité doit-il être tracé dans le système, ou rester un processus humain hors PMS ? |
 
-## Statut de couverture (au moment de la création de ce backlog)
+## Statut de couverture
 
-Tous les chantiers listés sont au statut **à faire** — aucun n'a encore été engagé au moment de la structuration de ce registre (session Claude 1, documentation uniquement, pas de développement fonctionnel). Le suivi de statut se fait désormais dans `REGISTRE_CHANTIERS.md` (champ *Statut* par fiche) : mettre à jour ce champ, pas ce backlog, quand un chantier avance.
+Au moment de la création de ce backlog, tous les chantiers étaient au statut **à faire** (session Claude 1, documentation uniquement). **CH-002 est désormais terminé** (session de suite, développement effectif). Le suivi de statut se fait dans `REGISTRE_CHANTIERS.md` (champ *Statut* par fiche, section « Suivi d'avancement ») : mettre à jour ce champ, pas ce backlog, quand un chantier avance — ce document liste l'ordre recommandé, pas l'état courant en détail.

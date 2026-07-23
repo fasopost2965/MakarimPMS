@@ -20,6 +20,15 @@ Décisions structurantes prises **pendant ou après l'audit** (distinct des ADR 
 - **Décision** : trois espaces distincts (`docs/governance/`, `docs/backend-plan/`, `docs/frontend-plan/`) plutôt qu'un unique dossier fourre-tout.
 - **Raison** : la mission distingue explicitement trois publics/usages successifs (pilotage transversal, exécution backend, exécution frontend) — correspond à la structure « Claude 1 / Claude 2 / Claude 3 » du brief d'origine.
 
+### RD-004 — CH-002 : réutiliser `MailerService`, pas `NotificationsService.notify()`, pour l'email de reset password
+
+- **Décision** : `AuthService.forgotPassword()` envoie l'email de réinitialisation via `MailerService.send()` (exporté par `NotificationsModule`, importé dans `AuthModule`), jamais via `NotificationsService.notify()`.
+- **Raison** : `notify()` est structurellement scopé à `Guest` — `guestId` obligatoire en paramètre, `NotificationLog.guestId` référence `Guest` par FK, jamais `User`. Un compte `User` (personnel administratif/opérationnel) n'a pas de place légitime dans ce pipeline CRM/marketing conçu pour les clients de l'hôtel. Découvert en lisant `notifications.service.ts` au moment de l'implémentation (la fiche de chantier initiale, écrite pendant l'audit, n'avait pas vérifié cette contrainte avant de proposer `notify()` comme solution).
+- **Alternatives considérées** : (1) étendre `NotificationLog`/`EvenementNotification` pour supporter un `userId` optionnel en plus de `guestId` — rejeté, hors périmètre strict du chantier (« reset password sécurisé »), aurait touché le modèle de données CRM pour un besoin qui n'en fait pas partie ; (2) dupliquer un envoi SMTP minimal directement dans `auth` — rejeté, duplication de logique déjà existante (`MailerService`), contraire à la discipline anti-duplication du projet.
+- **Conséquence** : nouvelle dépendance de module `auth → notifications` (façade `MailerService` uniquement, pas `NotificationsService`) — vérifié non circulaire (`NotificationsModule` n'importe jamais `AuthModule`). `EvenementNotification`/`NotificationTemplate` restent strictement scopés aux événements client, sans exception pour les comptes `User`.
+- **Date** : session courante (CH-002).
+- **Décideur** : Claude (implémentation), dans le cadre du mandat « limite-toi strictement au périmètre du reset password sécurisé » — décision technique d'implémentation, pas un arbitrage produit nécessitant validation humaine préalable.
+
 ## Décisions en attente (questions ouvertes de l'audit nécessitant un arbitrage humain)
 
 Voir `ECARTS_ASSUMES.md` §Candidats pour la liste des arbitrages produit encore ouverts (périmètre de l'avoir, chiffrement PII, city ledger, multi-folio vs folio unique, numérotation de facture, matérialisation des pénalités). Ces questions ne sont **pas** tranchées ici — ce registre attend leur décision effective pour les consigner.

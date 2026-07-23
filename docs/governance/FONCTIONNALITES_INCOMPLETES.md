@@ -7,7 +7,7 @@ C'est le motif transversal le plus significatif identifié par l'audit (Phase 9 
 | Fonctionnalité | Trace de l'intention | État réel | Chantier |
 |---|---|---|---|
 | Correction de facture par avoir | Modèle `CreditNote` en schéma, relation incluse dans les lectures, `StatutFacture.ANNULEE_PAR_AVOIR`, 2 commentaires de code y renvoyant explicitement | Aucune écriture nulle part dans le code | CH-001 |
-| Réinitialisation de mot de passe par email | Commentaire explicite dans `auth.service.ts` : « un e-mail réel remplacera cette exposition directe quand le module notifications sera livré » | Le module notifications est livré (F7) mais jamais raccordé ; aucun événement `PASSWORD_RESET` dans l'enum | CH-002 |
+| ~~Réinitialisation de mot de passe par email~~ | Commentaire explicite dans `auth.service.ts` : « un e-mail réel remplacera cette exposition directe quand le module notifications sera livré » | **Résolu (CH-002, session courante)** — `forgotPassword()` envoie désormais l'email via `MailerService` (pas `NotificationsService.notify()`, structurellement scopé à `Guest` — voir RD-004). Retiré des fonctionnalités incomplètes. | CH-002 (terminé) |
 | Registre de police alimenté en continu | Route backend `POST /police/:stayId` fonctionnelle, export CSV fonctionnel côté reporting | Aucune saisie possible depuis l'interface — le registre reste vide en usage normal | CH-003 |
 | Chiffrement au repos des données d'identité | `docs/execution/GO_LIVE_CHECKLIST.md` exige `ENCRYPTION_KEY` ; commentaire dans `police-report.service.ts` reconnaissant l'absence | Aucune implémentation, variable absente de tout le code | CH-004 |
 | Séjour annulé (`StatutSejour.ANNULE`) | Valeur d'enum présente dans le schéma | Jamais écrite par aucun chemin de code | CH-013 |

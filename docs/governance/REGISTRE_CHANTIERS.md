@@ -50,17 +50,18 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 - **Impact sécurité** : Critique.
 - **Impact conformité** : Modéré (protection des données personnelles des comptes utilisateurs).
 - **Impact exploitation** : Faible (le changement n'affecte pas le flux fonctionnel côté utilisateur final, seulement le canal de livraison du token).
-- **Dépendances** : aucune — `NotificationsService.notify()` et son infrastructure (templates, `MailerService`) existent déjà et sont opérationnels pour 4 autres événements.
-- **Prérequis** : ajouter `PASSWORD_RESET` à l'enum `EvenementNotification` (migration Prisma additive), créer le `NotificationTemplate` correspondant.
-- **Livrable attendu** : `forgotPassword()` appelle `NotificationsService.notify(guest/user, PASSWORD_RESET, {token, expiresAt})` au lieu de retourner `resetToken` dans la réponse HTTP ; la réponse HTTP reste le message générique anti-énumération déjà en place.
-- **Critères de validation** : (1) la réponse HTTP de `POST /auth/forgot-password` ne contient plus jamais `resetToken` ; (2) un email est effectivement envoyé (ou loggé en dégradation gracieuse si SMTP absent, cohérent avec `MailerService`) ; (3) le flux `reset-password` en aval reste inchangé (déjà fonctionnel).
-- **Statut** : à faire
-- **Estimation de charge** : Faible (0,5–1 jour) — le mécanisme d'envoi existe déjà, seul le raccordement manque.
-- **Niveau de confiance de l'estimation** : élevé.
+- **Dépendances** : aucune.
+- **Prérequis** : *(réalisé)* — voir écart de conception ci-dessous.
+- **Livrable attendu** *(réalisé, avec un écart de conception assumé par rapport à la fiche initiale)* : `forgotPassword()` envoie désormais l'email via `MailerService.send()` (module `notifications`, exporté et importé dans `AuthModule`) plutôt que via `NotificationsService.notify()`. **Raison de l'écart** : `notify()` est structurellement scopé à `Guest` (`guestId` obligatoire, `NotificationLog.guestId` référence `Guest`, jamais `User`) — un compte `User` (personnel) n'a pas sa place dans ce pipeline CRM/marketing, et forcer un `guestId` factice aurait été une corruption de données, pas une réutilisation légitime. `MailerService` est un simple wrapper SMTP générique sans dépendance à `Guest`/`NotificationLog` : le réutiliser directement évite de dupliquer l'envoi SMTP sans détourner le pipeline Guest. Décision consignée dans `docs/governance/REGISTRE_DECISIONS.md` (RD-004). Aucun ajout à `EvenementNotification`/`NotificationTemplate` — cet enum reste strictement scopé aux événements client.
+- **Écart supplémentaire découvert et traité (hors scope initial de la fiche, mais nécessaire à la clôture réelle du chantier)** : le frontend (`ForgotPasswordPage.tsx`) lisait directement `res.resetToken` pour enchaîner sur l'étape de réinitialisation dans la même page (seul mécanisme possible en l'absence de routeur/deep-linking, Phase 8). Retirer `resetToken` de la réponse HTTP sans adapter le frontend aurait cassé le flux de bout en bout, pas seulement réduit une fuite d'information. Traité : la page passe désormais systématiquement à l'étape de saisie après la demande (même comportement observable, cohérent avec l'anti-énumération), avec un champ pour coller le code reçu par email (préremplissable via `?resetToken=` dans l'URL si l'utilisateur clique le lien de l'email, lecture simple de `window.location.search`, aucune dépendance à un routeur ajoutée).
+- **Critères de validation** : (1) ✅ la réponse HTTP de `POST /auth/forgot-password` ne contient plus jamais `resetToken`/`expiresAt`, dans les deux cas (compte existant ou non — forme de réponse strictement identique) ; (2) ✅ `MailerService.send()` est appelé avec l'email du compte et un corps contenant le jeton (vérifié par un test qui espionne l'instance réelle du service, pas un mock du service) ; (3) ✅ le flux `reset-password` en aval reste fonctionnel de bout en bout, y compris côté frontend (jeton désormais saisi manuellement/collé plutôt qu'auto-rempli depuis la réponse API).
+- **Statut** : **terminé**
+- **Estimation de charge** : réalisée en une session — proche de l'estimation initiale (0,5–1 jour) une fois l'écart de conception (MailerService vs notify()) identifié et le correctif frontend inclus.
+- **Niveau de confiance de l'estimation** : élevé (a posteriori, confirmé par l'implémentation réelle).
 - **Lien(s) audit** : Phase 5 (§1, §4 Risques), Phase 9 (§4, cité comme exemple du motif récurrent), Phase 10 (Priorité bloquante #2).
-- **Éléments à tester** : e2e — vérifier absence de `resetToken` dans la réponse, vérifier `NotificationLog` créé avec `evenement: PASSWORD_RESET`.
-- **Documents liés** : aucun ADR dédié existant — à noter dans `docs/governance/REGISTRE_DECISIONS.md` une fois tranché.
-- **Remarques** : chantier le plus simple des 4 bloquants (infrastructure déjà présente), devrait être traité en premier pour un rapport effort/risque optimal.
+- **Éléments testés** : suite e2e `backend/test/auth.e2e-spec.ts` (16 tests, dont 2 réécrits pour ce chantier + assertions ajoutées sur l'envoi email par spy) — absence de `resetToken`/`expiresAt` dans les deux branches de réponse, appel réel de `MailerService.send()` avec la bonne adresse et le bon jeton dans le corps, aucun appel pour un email inconnu, relecture du jeton en base (`PasswordResetToken`) plutôt que dans la réponse HTTP, cycle complet reset → nouveau mot de passe fonctionnel → ancien mot de passe rejeté → jeton à usage unique refusé à la deuxième utilisation. Suite e2e complète (19 fichiers, 110 tests) rejouée sans régression après le changement de câblage de module (`AuthModule` → `NotificationsModule`).
+- **Documents liés** : `docs/governance/REGISTRE_DECISIONS.md` (RD-004, décision MailerService vs notify()), `docs/backend-plan/PLAN_BACKEND_100_REEL.md` (§Domaine Sécurité, mis à jour).
+- **Remarques** : la fiche initiale supposait à tort que `NotificationsService.notify()` serait directement réutilisable — l'implémentation a révélé une incompatibilité structurelle (`Guest` vs `User`) non détectée pendant l'audit (celui-ci n'avait pas relu la signature exacte de `notify()` au moment d'écrire cette fiche). Corrigé avant tout code, pas après — cohérent avec la discipline « documenter les écarts plutôt que les cacher » (`docs/governance/CRITERES_STABILITE_LONG_TERME.md`).
 
 ---
 
@@ -312,10 +313,16 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 
 ## Résumé quantitatif
 
-| Priorité | Nombre de chantiers | Charge cumulée estimée (ordre de grandeur) |
-|---|---|---|
-| Bloquant | 4 (CH-001 à CH-004) | ~7–11 jours développeur |
-| Important | 8 (CH-005 à CH-012) | ~11–16 jours développeur |
-| Secondaire | 14 (CH-013 à CH-026) | ~18–28 jours développeur (plusieurs sous conditions d'arbitrage) |
+| Priorité | Nombre de chantiers | Charge cumulée estimée (ordre de grandeur) | Terminés |
+|---|---|---|---|
+| Bloquant | 4 (CH-001 à CH-004) | ~7–11 jours développeur | 1 (CH-002) |
+| Important | 8 (CH-005 à CH-012) | ~11–16 jours développeur | 0 |
+| Secondaire | 14 (CH-013 à CH-026) | ~18–28 jours développeur (plusieurs sous conditions d'arbitrage) | 0 |
 
 *Ces charges sont des ordres de grandeur de développement pur (hors tests e2e étendus, hors stabilisation, hors documentation) — voir `docs/planning/ESTIMATION_CHARGE.md` pour l'estimation consolidée par scénario.*
+
+## Suivi d'avancement
+
+| Chantier | Statut | Date | Résumé |
+|---|---|---|---|
+| CH-002 | ✅ Terminé | Session courante | Reset password sécurisé — voir fiche ci-dessus pour le détail et l'écart de conception (MailerService vs NotificationsService.notify()) |

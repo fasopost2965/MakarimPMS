@@ -8,6 +8,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/prisma/prisma.service';
+import { MailerService } from './../src/modules/notifications/mailer.service';
 import { authedRequest, loginAs, SEED_USERS } from './helpers/auth';
 
 // Stockage de secours jamais bloquant, en remplacement du
@@ -32,6 +33,7 @@ class NeverBlockingThrottlerStorage implements ThrottlerStorage {
 describe('Auth — JWT, rôles et permissions (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
+  let mailerService: MailerService;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -66,6 +68,7 @@ describe('Auth — JWT, rôles et permissions (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
+    mailerService = app.get(MailerService);
   });
 
   afterAll(async () => {
@@ -195,28 +198,79 @@ describe('Auth — JWT, rôles et permissions (e2e)', () => {
   });
 
   describe('Mot de passe oublié (POST /auth/forgot-password + reset-password)', () => {
-    it('génère un jeton à usage unique pour un compte existant', async () => {
-      const res = await request(server())
-        .post('/api/auth/forgot-password')
-        .send({ email: SEED_USERS.comptable });
-      expect(res.status).toBe(201);
-      expect(res.body).toHaveProperty('resetToken');
-      expect(res.body).toHaveProperty('expiresAt');
+    // CH-002 (docs/governance/REGISTRE_CHANTIERS.md) : le jeton n'est plus
+    // jamais exposé dans la réponse HTTP (envoyé par email désormais, voir
+    // AuthService.forgotPassword) — ces tests le relisent directement en
+    // base (vraie base MySQL, pas un mock) plutôt que dans le corps de la
+    // réponse, exactement comme le ferait un utilisateur consultant sa
+    // boîte mail.
+    async function latestTokenFor(email: string): Promise<string> {
+      const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+      const record = await prisma.passwordResetToken.findFirstOrThrow({
+        where: { userId: user.id },
+        orderBy: { createdAt: 'desc' },
+      });
+      return record.token;
+    }
+
+    it('renvoie un message générique sans jamais exposer de jeton, et envoie le jeton par email, pour un compte existant', async () => {
+      const sendSpy = jest
+        .spyOn(mailerService, 'send')
+        .mockImplementation(() => Promise.resolve());
+      try {
+        const res = await request(server())
+          .post('/api/auth/forgot-password')
+          .send({ email: SEED_USERS.comptable });
+        expect(res.status).toBe(201);
+        expect(res.body).not.toHaveProperty('resetToken');
+        expect(res.body).not.toHaveProperty('expiresAt');
+        expect(res.body).toHaveProperty('message');
+
+        // Le jeton existe bien en base (envoyé par email, jamais dans la
+        // réponse HTTP) — sabotage/restore : si le jeton n'était plus créé
+        // du tout, cette relecture échouerait (findFirstOrThrow), ce qui
+        // distingue "jeton créé mais pas exposé" de "jeton jamais créé".
+        const token = await latestTokenFor(SEED_USERS.comptable);
+        expect(typeof token).toBe('string');
+        expect(token.length).toBeGreaterThan(0);
+
+        // MailerService.send() est bien appelé avec l'adresse du compte et
+        // un corps contenant le jeton fraîchement créé — preuve que le
+        // jeton part réellement par email plutôt que d'être simplement
+        // écrit en base sans être communiqué à personne.
+        expect(sendSpy).toHaveBeenCalledTimes(1);
+        const [to, subject, html] = sendSpy.mock.calls[0];
+        expect(to).toBe(SEED_USERS.comptable);
+        expect(subject).toMatch(/réinitialisation/i);
+        expect(html).toContain(token);
+      } finally {
+        sendSpy.mockRestore();
+      }
     });
 
-    it('ne révèle pas si un email est inconnu (même message, pas de resetToken)', async () => {
-      const res = await request(server())
-        .post('/api/auth/forgot-password')
-        .send({ email: 'inconnu@makarim.test' });
-      expect(res.status).toBe(201);
-      expect(res.body).not.toHaveProperty('resetToken');
+    it('ne révèle pas si un email est inconnu — réponse strictement identique (même forme) au cas existant, et n’envoie aucun email', async () => {
+      const sendSpy = jest
+        .spyOn(mailerService, 'send')
+        .mockImplementation(() => Promise.resolve());
+      try {
+        const res = await request(server())
+          .post('/api/auth/forgot-password')
+          .send({ email: 'inconnu@makarim.test' });
+        expect(res.status).toBe(201);
+        expect(res.body).not.toHaveProperty('resetToken');
+        expect(res.body).not.toHaveProperty('expiresAt');
+        expect(Object.keys(res.body as object)).toEqual(['message']);
+        expect(sendSpy).not.toHaveBeenCalled();
+      } finally {
+        sendSpy.mockRestore();
+      }
     });
 
     it('permet de définir un nouveau mot de passe avec un jeton valide, puis le rejette à la deuxième utilisation', async () => {
-      const forgot = await request(server())
+      await request(server())
         .post('/api/auth/forgot-password')
         .send({ email: SEED_USERS.maintenance });
-      const { resetToken } = forgot.body as { resetToken: string };
+      const resetToken = await latestTokenFor(SEED_USERS.maintenance);
 
       const reset = await request(server())
         .post('/api/auth/reset-password')
@@ -248,12 +302,10 @@ describe('Auth — JWT, rôles et permissions (e2e)', () => {
       // module 5.8) — l'ordre d'exécution des fichiers par Jest n'est pas
       // garanti alphabétique, donc laisser le mot de passe modifié ferait
       // échouer maintenance.e2e-spec.ts de façon intermittente selon l'ordre.
-      const restore = await request(server())
+      await request(server())
         .post('/api/auth/forgot-password')
         .send({ email: SEED_USERS.maintenance });
-      const { resetToken: restoreToken } = restore.body as {
-        resetToken: string;
-      };
+      const restoreToken = await latestTokenFor(SEED_USERS.maintenance);
       await request(server())
         .post('/api/auth/reset-password')
         .send({ token: restoreToken, nouveauMotDePasse: 'Password123!' });

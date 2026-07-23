@@ -17,7 +17,7 @@ Relie, pour chaque grand domaine fonctionnel, l'exigence métier au module, à l
 | Consulter l'historique des transitions de chambre | `rooms` | *(inexistant)* | — | Phase 7 | **CH-014** | — | ❌ | ❌ |
 | Ouvrir/résoudre un ticket de maintenance avec blocage de chambre | `maintenance` | `POST /maintenance-tickets`, `PATCH /:id/resoudre` | `docs/modules/maintenance.md` | Phase 7 | — | ❓ *(à confirmer)* | ✅ | ✅ |
 | S'authentifier avec accès/refresh token | `auth` | `POST /auth/login`, `/refresh` | `docs/ADR-006-RBAC-Enforcement.md` | Phase 5 | CH-026(f) *(révocation, secondaire)* | ❓ | ✅ | ✅ |
-| Réinitialiser un mot de passe oublié en sécurité | `auth`, `notifications` | `POST /auth/forgot-password` | — | Phase 5 | **CH-002** | ❌ | ✅ (UI existe, backend non sécurisé) | ❌ |
+| Réinitialiser un mot de passe oublié en sécurité | `auth`, `notifications` | `POST /auth/forgot-password` | `docs/governance/REGISTRE_DECISIONS.md` (RD-004) | Phase 5 | **CH-002 — terminé** | ✅ (`auth.e2e-spec.ts`) | ✅ | ✅ |
 | Vérifier une permission RBAC à chaque requête sensible | transverse (`PermissionsGuard`) | tous les endpoints `@RequirePermission` | `docs/RBAC_MATRIX.md`, ADR-006 | Phase 5 | — | ✅ | — (serveur uniquement) | ✅ (serveur) |
 | Refléter les permissions réelles dans l'interface | frontend transverse | *(inexistant : pas de `GET /auth/me`)* | — | Phases 5, 8 | **CH-011** | — | ❌ | ❌ |
 | Enregistrer les personnes hébergées (registre légal) | `police` | `POST /police/:stayId` | — *(spec `modules/police.md` absente, cf. CH-018)* | Phases 2, 6, 8 | **CH-003** | ❓ | ❌ | ❌ |

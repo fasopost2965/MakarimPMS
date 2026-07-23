@@ -4,7 +4,7 @@ Chaque risque cite sa source d'audit, sa probabilité d'occurrence en usage rée
 
 | ID | Risque | Source | Probabilité en usage réel | Impact | Chantier | Statut |
 |---|---|---|---|---|---|---|
-| R-01 | Prise de contrôle de compte via le token de reset password exposé en clair | Phase 5 §1, §4 | Élevée (exploitable dès qu'un attaquant connaît un email + a accès à l'API) | Critique | CH-002 | Ouvert |
+| R-01 | Prise de contrôle de compte via le token de reset password exposé en clair | Phase 5 §1, §4 | Élevée (exploitable dès qu'un attaquant connaît un email + a accès à l'API) | Critique | CH-002 | **Fermé** — CH-002 terminé (session courante) : le token n'est plus jamais retourné dans la réponse HTTP, envoyé exclusivement à l'adresse email du compte via `MailerService`. Vérifié par test e2e (absence du champ dans les deux branches de réponse + preuve que l'email est réellement envoyé). |
 | R-02 | Facture émise erronée non corrigible par le système | Phase 6 §3, §7 | Élevée (une erreur de facturation survient nécessairement sur la durée) | Critique | CH-001 | Ouvert |
 | R-03 | Registre de police légal non tenu en usage réel (absence de saisie UI) | Phases 6, 8 | Élevée (si aucun canal alternatif de saisie n'existe) | Critique (conformité DGSN) | CH-003 | Ouvert |
 | R-04 | Check-out avec solde impayé non tracé/bloqué | Phase 6 §5 | Modérée à élevée selon discipline de caisse de la réception | Élevé (financier) | CH-005 | Ouvert |
@@ -19,7 +19,7 @@ Chaque risque cite sa source d'audit, sa probabilité d'occurrence en usage rée
 
 ## Risques déjà couverts (pour référence — ne pas re-traiter)
 
-Aucun risque de cette liste n'est actuellement fermé — le registre reflète l'état immédiatement post-audit, avant tout développement correctif. Cette section sera alimentée au fur et à mesure des clôtures de chantiers.
+- **R-01** (prise de contrôle de compte via token de reset exposé) — fermé, CH-002 terminé. Le mécanisme de fuite n'existe plus : la réponse HTTP de `POST /auth/forgot-password` ne contient jamais de jeton, dans aucune branche. Vérifié par test e2e (assertion négative sur les deux cas, plus une assertion positive que l'email est réellement transmis).
 
 ## Méthode de mise à jour
 

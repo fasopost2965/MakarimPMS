@@ -8,37 +8,35 @@ interface Props {
   onBackToLogin: () => void;
 }
 
-// Flux "mot de passe oublié" basique (cahier des charges §5.2.1) : pas de
-// véritable envoi d'email à ce stade — le backend renvoie directement le
-// jeton à usage unique dans la réponse (voir AuthService.forgotPassword),
-// donc cette page enchaîne directement sur le formulaire de réinitialisation
-// dès qu'un jeton est reçu, plutôt que d'attendre un clic sur un lien reçu
-// par email qui n'existe pas encore.
+// CH-002 (docs/governance/REGISTRE_CHANTIERS.md) : le jeton de
+// réinitialisation n'est plus jamais renvoyé dans la réponse HTTP — il est
+// envoyé exclusivement par email (voir AuthService.forgotPassword). Cette
+// page passe donc systématiquement à l'étape de saisie du code après la
+// demande, que le compte existe ou non (même comportement observable dans
+// les deux cas, cohérent avec le message anti-énumération déjà en place
+// côté backend) ; le champ "code" est prérempli automatiquement si l'email
+// contenait un lien avec ?resetToken=... (pas de routeur dans ce projet —
+// une simple lecture de window.location.search suffit, sans dépendance
+// supplémentaire), sinon l'utilisateur colle le code reçu par email.
 export function ForgotPasswordPage({ onBackToLogin }: Props) {
   const [step, setStep] = useState<'demande' | 'reinitialisation' | 'termine'>(
     'demande',
   );
   const [email, setEmail] = useState('');
-  const [resetToken, setResetToken] = useState('');
+  const [resetToken, setResetToken] = useState(
+    () => new URLSearchParams(window.location.search).get('resetToken') ?? '',
+  );
   const [nouveauMotDePasse, setNouveauMotDePasse] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
 
   async function handleRequestToken(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
-      const res = await forgotPassword(email);
-      if (res.resetToken) {
-        setResetToken(res.resetToken);
-        setStep('reinitialisation');
-      } else {
-        // Compte inexistant : même message générique, pas de fuite
-        // d'information (voir AuthService.forgotPassword).
-        setInfo(res.message);
-      }
+      await forgotPassword(email);
+      setStep('reinitialisation');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -80,9 +78,8 @@ export function ForgotPasswordPage({ onBackToLogin }: Props) {
               />
             </div>
             {error && <p className="text-destructive text-sm">{error}</p>}
-            {info && <p className="text-muted-foreground text-sm">{info}</p>}
             <Button type="submit" disabled={submitting}>
-              {submitting ? 'Envoi…' : 'Générer un lien de réinitialisation'}
+              {submitting ? 'Envoi…' : 'Envoyer le code par email'}
             </Button>
             <Button type="button" variant="link" onClick={onBackToLogin}>
               Retour à la connexion
@@ -93,9 +90,19 @@ export function ForgotPasswordPage({ onBackToLogin }: Props) {
         {step === 'reinitialisation' && (
           <form onSubmit={handleReset} className="flex flex-col gap-4">
             <p className="text-muted-foreground text-sm">
-              Lien généré (valable 30 minutes). Choisissez votre nouveau mot de
-              passe.
+              Si ce compte existe, un code de réinitialisation a été envoyé par
+              email (valable 30 minutes). Collez-le ci-dessous avec votre
+              nouveau mot de passe.
             </p>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="resetToken">Code reçu par email</Label>
+              <Input
+                id="resetToken"
+                value={resetToken}
+                onChange={(e) => setResetToken(e.target.value)}
+                required
+              />
+            </div>
             <div className="flex flex-col gap-1">
               <Label htmlFor="nouveauMotDePasse">Nouveau mot de passe</Label>
               <Input

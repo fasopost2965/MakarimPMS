@@ -5,7 +5,7 @@ Conditions vérifiables avant toute ouverture en production réelle (clients pay
 ## Critères bloquants (aucune exception sans acceptation formelle documentée)
 
 - [ ] **CH-001 livré** : une facture émise erronée peut être corrigée via un avoir, sans jamais modifier la facture d'origine.
-- [ ] **CH-002 livré** : `POST /auth/forgot-password` n'expose plus jamais de token dans sa réponse HTTP ; l'envoi passe par email.
+- [x] **CH-002 livré** : `POST /auth/forgot-password` n'expose plus jamais de token dans sa réponse HTTP ; l'envoi passe par email. *(Terminé — session courante, voir `docs/governance/REGISTRE_CHANTIERS.md`.)*
 - [ ] **CH-003 livré** : la réception peut saisir un `PoliceRecord` complet depuis l'interface, sans appel API manuel.
 - [ ] **CH-004 tranché** : soit le chiffrement de `Guest.pieceIdentite` est implémenté et vérifié, soit une acceptation de risque formelle est consignée dans `ECARTS_ASSUMES.md` avec date de réexamen.
 
