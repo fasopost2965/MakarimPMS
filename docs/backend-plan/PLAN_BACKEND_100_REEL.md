@@ -42,9 +42,7 @@ Chantiers : **CH-002** (reset password — terminé), **CH-004** (chiffrement PI
 **Comment on saura que c'est fini** : ✅ critères bloquants de `CRITERES_GO_LIVE.md` cochés pour CH-002 et CH-004.
 
 ### Domaine Conformité (`police`)
-Chantier : **CH-003** — mais c'est un chantier **frontend pur** du point de vue backend (l'API `POST /police/:stayId` est déjà fonctionnelle, confirmé Phase 6/8). Le backend n'a rien à modifier ici — ce chantier apparaît dans le plan frontend (`docs/frontend-plan/`), pas dans l'exécution backend. Il est mentionné ici uniquement pour que la trajectoire backend n'oublie pas qu'elle a déjà livré son côté du contrat.
-
-**Action backend résiduelle éventuelle** : vérifier qu'aucune information nécessaire au formulaire frontend ne manque à la réponse de `GET /reservations/:id/self-checkin-pending` — **à confirmer au moment du développement frontend**, pas une action à engager préventivement côté backend.
+Chantier : **CH-003 — terminé (session courante)** — confirmé chantier **frontend pur** du point de vue backend comme anticipé : l'API `POST /police/:stayId` n'a nécessité aucune modification. `GET /reservations/:id/self-checkin-pending` s'est révélé suffisant tel quel pour le pré-remplissage du formulaire frontend — l'action backend résiduelle envisagée ci-dessous n'a pas été nécessaire.
 
 ### Domaine Intégrité des données (`guests`, `rooms`, transverse Prisma)
 Chantiers : **CH-006** (soft-delete centralisé), **CH-010** (déduplication client), **CH-013** (enums morts), **CH-014** (historique `RoomStatusLog`), **CH-024** (contrainte `RoomNight`), **CH-025** (contraintes `CHECK`).

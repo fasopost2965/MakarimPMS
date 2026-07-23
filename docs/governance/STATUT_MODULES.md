@@ -19,7 +19,7 @@ Statut par module backend, croisé avec la présence d'une interface frontend et
 | `payments` | ⚠️ | ⚠️ (via checkin) | CH-012 | Remboursement d'acompte imputé non démarré (dépendance CH-001 levée) |
 | `dashboard` | ✅ | ✅ | — | — |
 | `audit` | ✅ | ❌ | CH-015 | Aucune UI de consultation |
-| `police` | ⚠️ | ❌ | **CH-003** | Aucune UI de saisie (obligation légale) |
+| `police` | ✅ | ✅ | — | **CH-003 terminé** — onglet dédié dans `StayDetailsDialog.tsx` |
 | `notifications` | ⚠️ | ❌ | CH-002 (extension), CH-008 | Backend fonctionnel, pas raccordé au reset password, pas d'UI de gestion |
 | `self-checkin` | ✅ | ❌ | CH-007 | Backend prêt, aucune UI staff |
 | `booking-engine` | ✅ | n/a | — | Façade publique pure, pas d'UI staff attendue |
@@ -32,8 +32,7 @@ Statut par module backend, croisé avec la présence d'une interface frontend et
 ## Synthèse
 
 - **21/21 modules** ont un backend fonctionnel au sens strict (répondent, testés en e2e pour la plupart).
-- **0/21 module** porte encore un chantier bloquant côté backend — `billing` (CH-001), `auth` (CH-002) et `guests` (CH-004, chiffrement `pieceIdentite`) sont désormais résolus. Reste un seul chantier bloquant, purement frontend (CH-003, UI registre de police).
-- **6/21 modules** n'ont aucune interface frontend (`audit`, `police`, `notifications`, `self-checkin`, `document-ocr`, `channel-manager`) — `booking-engine` est le 7e module sans UI staff mais c'est un choix de conception correct (façade publique).
-- **`police` est le seul module cumulant un écart backend/légal ET une absence totale de frontend** — c'est le point de convergence de criticité le plus élevé du statut des modules (cf. CH-003).
+- **0/21 module** porte encore un chantier bloquant, backend ou frontend — les 4 chantiers bloquants du registre (CH-001 à CH-004) sont désormais tous terminés (`billing`, `auth`, `guests`, `police`).
+- **5/21 modules** n'ont aucune interface frontend (`audit`, `notifications`, `self-checkin`, `document-ocr`, `channel-manager`) — `booking-engine` est le 6e module sans UI staff mais c'est un choix de conception correct (façade publique). `police` en est retiré (CH-003 terminé).
 
 *Mettre à jour ce tableau à chaque clôture de chantier du registre.*

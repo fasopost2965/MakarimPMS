@@ -23,25 +23,23 @@ PMS interne pour l'Hôtel Makarim (3 étoiles, 24 chambres, Tétouan) — pas de
 
 ## Ce qui ne l'est pas
 
-- **Registre légal de police** : l'obligation DGSN d'enregistrement des hébergés n'a aucune interface de saisie (CH-003).
 - **RBAC côté interface** : aucun rôle n'est reflété dans la navigation frontend — tout utilisateur voit tout.
-- **Six surfaces backend sans interface** : self-checkin (staff), police, notifications, document-ocr, channel-manager, audit.
+- **Cinq surfaces backend sans interface** : self-checkin (staff), notifications, document-ocr, channel-manager, audit.
 - **Blocage de check-out sur solde impayé** : aucune barrière, fuite de revenus possible.
 - **Facturation entreprise (city ledger)** : `Company` existe mais est totalement déconnectée du flux transactionnel.
 
-Résolu depuis (voir `REGISTRE_CHANTIERS.md` pour le détail de chaque implémentation) : correction de facture par avoir (CH-001), sécurité de la réinitialisation de mot de passe (CH-002), chiffrement au repos de `Guest.pieceIdentite` (CH-004).
+Résolu depuis (voir `REGISTRE_CHANTIERS.md` pour le détail de chaque implémentation) : correction de facture par avoir (CH-001), sécurité de la réinitialisation de mot de passe (CH-002), interface de saisie du registre de police (CH-003), chiffrement au repos de `Guest.pieceIdentite` (CH-004).
 
 ## Risques majeurs (voir `REGISTRE_RISQUES.md` pour le détail)
 
-1. Obligation légale de registre de police non tenable en usage réel du produit.
-2. Fuite de revenus par check-out non contrôlé.
-3. Contournement du blacklist par duplication de fiche client.
+1. Fuite de revenus par check-out non contrôlé.
+2. Contournement du blacklist par duplication de fiche client.
 
-Fermés depuis (voir `REGISTRE_RISQUES.md`) : prise de contrôle de compte via le token de reset exposé (R-01, CH-002), facture erronée non corrigible (R-02, CH-001), exposition de données d'identité en cas de compromission de la base (R-06, CH-004).
+Fermés depuis (voir `REGISTRE_RISQUES.md`) : prise de contrôle de compte via le token de reset exposé (R-01, CH-002), facture erronée non corrigible (R-02, CH-001), registre de police légal non tenable en usage réel (R-03, CH-003), exposition de données d'identité en cas de compromission de la base (R-06, CH-004).
 
 ## Conditions minimales pour une mise en production réelle
 
-Voir `CRITERES_GO_LIVE.md` pour la liste complète et vérifiable. En résumé : les 4 chantiers bloquants du registre (CH-001 à CH-004) sont désormais tous levés — CH-001, CH-002 et CH-004 livrés, CH-003 (UI registre de police) reste seul chantier bloquant ouvert avant toute ouverture en production réelle avec des clients payants.
+Voir `CRITERES_GO_LIVE.md` pour la liste complète et vérifiable. En résumé : les 4 chantiers bloquants du registre (CH-001 à CH-004) sont désormais **tous livrés** — plus aucun chantier bloquant ouvert avant une mise en production réelle du seul point de vue de ce registre (les critères importants/secondaires restent, eux, à traiter selon la feuille de route).
 
 ## Priorités de suite
 

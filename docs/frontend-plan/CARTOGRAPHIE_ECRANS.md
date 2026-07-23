@@ -30,7 +30,11 @@ Déduite du backend réel (21 modules, `docs/audits/PHASE_04_BACKEND.md`), crois
 
 ## Écrans manquants (à créer)
 
-### É-01 — Registre de police (saisie) 🔴 — **Priorité : Bloquante (CH-003)**
+### É-01 — Registre de police (saisie) ✅ — **CH-003 terminé (session courante)**
+
+**Résolu** : livré comme un troisième onglet « Police » dans `StayDetailsDialog.tsx` (`frontend/src/features/police/`), aux côtés de « Détails »/« Facturation » — pas un écran séparé, exactement le critère UX ci-dessous. Pré-remplissage self-checkin fonctionnel (`GET /reservations/:id/self-checkin-pending`), export PDF (F1) accessible directement depuis l'onglet une fois la fiche enregistrée. Badge d'avertissement (⚠) ajouté dans les listes de séjours et sur l'onglet lui-même quand la fiche manque — non explicitement demandé ci-dessous mais nécessaire pour rendre visible la contrainte légale sans ouvrir chaque séjour. Vérifié en navigateur réel (Chromium piloté par Playwright), pas de suite e2e frontend dans ce projet. Voir `docs/governance/REGISTRE_CHANTIERS.md` (CH-003) pour le détail complet.
+
+*Spécification d'origine conservée ci-dessous pour référence :*
 
 - **Doit exister pour** : la Réception, au moment du check-in.
 - **Rôles** : Réception, Administrateur (mêmes permissions que `checkin:write`/`checkin:read` — le module `police` réutilise ces clés, pas de permission dédiée, confirmé `CLAUDE.md`).

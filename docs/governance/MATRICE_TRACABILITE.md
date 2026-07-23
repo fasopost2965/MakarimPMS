@@ -20,8 +20,8 @@ Relie, pour chaque grand domaine fonctionnel, l'exigence métier au module, à l
 | Réinitialiser un mot de passe oublié en sécurité | `auth`, `notifications` | `POST /auth/forgot-password` | `docs/governance/REGISTRE_DECISIONS.md` (RD-004) | Phase 5 | **CH-002 — terminé** | ✅ (`auth.e2e-spec.ts`) | ✅ | ✅ |
 | Vérifier une permission RBAC à chaque requête sensible | transverse (`PermissionsGuard`) | tous les endpoints `@RequirePermission` | `docs/RBAC_MATRIX.md`, ADR-006 | Phase 5 | — | ✅ | — (serveur uniquement) | ✅ (serveur) |
 | Refléter les permissions réelles dans l'interface | frontend transverse | *(inexistant : pas de `GET /auth/me`)* | — | Phases 5, 8 | **CH-011** | — | ❌ | ❌ |
-| Enregistrer les personnes hébergées (registre légal) | `police` | `POST /police/:stayId` | — *(spec `modules/police.md` absente, cf. CH-018)* | Phases 2, 6, 8 | **CH-003** | ❓ | ❌ | ❌ |
-| Exporter le registre de police (obligation DGSN) | `reporting` | `GET /reporting/police-register` | — | Phase 8 | — | ❓ | ✅ | ⚠️ (export existe, saisie source absente) |
+| Enregistrer les personnes hébergées (registre légal) | `police` | `POST /police/:stayId` | — *(spec `modules/police.md` absente, cf. CH-018)* | Phases 2, 6, 8 | **CH-003 — terminé** | ❓ *(pas de suite e2e frontend dans ce projet, vérifié manuellement en navigateur réel)* | ✅ | ✅ |
+| Exporter le registre de police (obligation DGSN) | `reporting` | `GET /reporting/police-register` | — | Phase 8 | — | ❓ | ✅ | ✅ (export + saisie source désormais disponibles, CH-003) |
 | Générer un lien de self check-in | `self-checkin` | `POST /reservations/:id/self-checkin-link` | — | Phase 8 | **CH-007** | ❓ | ❌ | ❌ |
 | Notifier le client (email/SMS/WhatsApp) à des événements clés | `notifications` | `notify()`, `NotificationTemplate` | — | Phases 2, 5 | CH-002 (extension), CH-008 (UI) | ❓ | ❌ (gestion), n/a (déclenchement auto) | ⚠️ |
 | Importer une réservation OTA (channel manager) | `channel-manager` | webhook `POST /channel-manager/webhooks/:canal` | — | Phase 8 | **CH-009** | ❓ | ❌ | ⚠️ (backend prêt, config sans UI) |

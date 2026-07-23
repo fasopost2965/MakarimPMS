@@ -9,6 +9,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { BillingTabContent } from '@/features/billing/components/BillingTabContent';
+import { PoliceRecordForm } from '@/features/police/components/PoliceRecordForm';
 import type { Stay } from '../types';
 
 interface Props {
@@ -18,6 +19,7 @@ interface Props {
   checkingOut: boolean;
   error: string | null;
   soldeDu: string | null;
+  onPoliceRecordSaved?: () => void;
 }
 
 const STATUT_LABEL: Record<Stay['statut'], string> = {
@@ -33,6 +35,7 @@ export function StayDetailsDialog({
   checkingOut,
   error,
   soldeDu,
+  onPoliceRecordSaved,
 }: Props) {
   const [activeTab, setActiveTab] = useState('details');
 
@@ -79,6 +82,16 @@ export function StayDetailsDialog({
               >
                 Facturation
               </Button>
+              <Button
+                variant={activeTab === 'police' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setActiveTab('police')}
+              >
+                Police
+                {!stay.policeRecord && (
+                  <span className="text-amber-500 ml-1">⚠</span>
+                )}
+              </Button>
             </div>
 
             {activeTab === 'details' && (
@@ -113,6 +126,14 @@ export function StayDetailsDialog({
 
             {activeTab === 'facturation' && (
               <BillingTabContent stayId={stay.id} />
+            )}
+
+            {activeTab === 'police' && (
+              <PoliceRecordForm
+                stayId={stay.id}
+                reservationId={stay.reservationId}
+                onSaved={onPoliceRecordSaved}
+              />
             )}
 
             {error && <p className="text-destructive text-sm">{error}</p>}

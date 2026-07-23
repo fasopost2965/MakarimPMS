@@ -1,4 +1,5 @@
 import type { Guest, Reservation, Room } from '../reservations/types';
+import type { PoliceRecord } from '../police/types';
 
 export type StatutSejour = 'EN_COURS' | 'CHECKOUT' | 'ANNULE';
 export type TypeLigneFolio =
@@ -36,6 +37,10 @@ export interface Stay {
   dateCheckoutReelle: string | null;
   statut: StatutSejour;
   folios: Folio[];
+  // CH-003 — obligation légale DGSN, toujours inclus par le backend
+  // (STAY_INCLUDE), jamais un appel séparé nécessaire pour savoir si la
+  // fiche existe.
+  policeRecord: PoliceRecord | null;
   createdAt: string;
   updatedAt: string;
 }

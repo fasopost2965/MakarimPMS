@@ -49,6 +49,17 @@ export function CheckinPage() {
       setStaysEnCours(staysData);
       setDeparts(departsData);
       setRooms(roomsData);
+      // Garde le séjour actuellement ouvert dans le dialogue à jour (ex.
+      // badge "fiche police manquante" après enregistrement) sans
+      // dépendre de viewingStay ici — sinon l'identité de refetch changerait
+      // à chaque ouverture/fermeture du dialogue et redéclencherait l'effet
+      // de chargement initial.
+      setViewingStay((current) =>
+        current
+          ? ([...staysData, ...departsData].find((s) => s.id === current.id) ??
+            current)
+          : null,
+      );
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Erreur de chargement');
     } finally {
@@ -174,6 +185,14 @@ export function CheckinPage() {
                   <span>
                     {stay.guest.nom} {stay.guest.prenom} — chambre{' '}
                     {stay.room.numero}
+                    {!stay.policeRecord && (
+                      <span
+                        className="text-amber-600 ml-2 text-xs"
+                        title="Fiche de police (registre légal DGSN) non renseignée"
+                      >
+                        ⚠ Fiche police manquante
+                      </span>
+                    )}
                   </span>
                   <span className="text-muted-foreground text-xs">
                     Voir / check-out
@@ -200,6 +219,14 @@ export function CheckinPage() {
                   <span>
                     {stay.guest.nom} {stay.guest.prenom} — chambre{' '}
                     {stay.room.numero}
+                    {!stay.policeRecord && (
+                      <span
+                        className="text-amber-600 ml-2 text-xs"
+                        title="Fiche de police (registre légal DGSN) non renseignée"
+                      >
+                        ⚠ Fiche police manquante
+                      </span>
+                    )}
                   </span>
                   <span className="text-muted-foreground text-xs">
                     Départ prévu {stay.dateCheckoutPrevue.slice(0, 10)}
@@ -234,6 +261,7 @@ export function CheckinPage() {
         checkingOut={checkingOut}
         error={checkoutError}
         soldeDu={soldeDu}
+        onPoliceRecordSaved={refetch}
       />
     </div>
   );
