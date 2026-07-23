@@ -1,5 +1,14 @@
 # PMS Hôtel Makarim — Index de la Documentation d'Architecture
 
+> [!IMPORTANT]
+> **Post-audit (10 phases, code réel vérifié) — lire en priorité :**
+> - **État réel du projet et de ses écarts** : [`governance/ETAT_ACTUEL_PROJET.md`](./governance/ETAT_ACTUEL_PROJET.md)
+> - **Rapports d'audit complets** : [`audits/README.md`](./audits/README.md)
+> - **Chantiers actionnables issus de l'audit** : [`governance/REGISTRE_CHANTIERS.md`](./governance/REGISTRE_CHANTIERS.md)
+> - **Écarts confirmés entre CE document et le code réel** : [`governance/ECARTS_DOC_VS_CODE.md`](./governance/ECARTS_DOC_VS_CODE.md)
+>
+> Le reste de ce fichier (et le reste de `docs/` hors `audits/` et `governance/`) est la **spécification pré-implémentation** — utile pour l'intention d'origine et les décisions d'architecture (ADR), mais **mesurablement désynchronisée du code réel sur plusieurs points confirmés** (nombre de modules, hypothèses de schéma). En cas de contradiction entre ce document et un rapport d'audit, **le rapport d'audit fait foi**.
+
 Bienvenue dans le référentiel d'architecture du Property Management System (PMS) de l'Hôtel Makarim. Ce répertoire contient l'intégralité des spécifications fonctionnelles, techniques, d'ingénierie des données et d'exécution régissant la conception et le développement du système.
 
 > [!IMPORTANT]

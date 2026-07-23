@@ -1,0 +1,28 @@
+# Critères de stabilité long terme (horizon 3-5 ans) — Makarim PMS v1
+
+Ce document ne redéfinit pas l'architecture (`docs/SYSTEM_ARCHITECTURE.md`, ADR existants) ni les conventions de code (`CLAUDE.md`, déjà exhaustif et vérifié cohérent avec le code réel par l'audit, Phase 9). Il formule des **règles de maintien** dérivées des points forts que l'audit a identifiés comme la véritable force du projet — pour qu'elles restent vraies dans 3 à 5 ans plutôt que de s'éroder progressivement.
+
+## Ce que l'audit a confirmé comme le socle de stabilité du projet (à préserver activement)
+
+1. **Un seul chemin d'écriture par invariant critique.** Vérifié sans exception sur l'ensemble du backend (Phase 2, 4, 9). C'est la règle la plus structurante du projet — chaque nouveau champ métier sensible doit continuer à suivre ce patron (méthode canonique unique, journal dédié, réutilisée par tous les appelants). Une seule violation de cette règle suffit à réintroduire le risque de duplication que le reste du projet a évité jusqu'ici.
+2. **Documenter les écarts plutôt que les cacher.** Le motif le plus caractéristique identifié par l'audit (Phase 9, Phase 10) : chaque déviation majeure du code porte un commentaire l'expliquant. C'est ce qui a rendu cet audit possible en 10 phases sans devoir deviner les intentions. **Règle de maintien** : tout futur écart (raccourci, dette assumée, fonctionnalité commencée puis mise en pause) doit être commenté dans le code ET consigné dans `docs/governance/FONCTIONNALITES_INCOMPLETES.md` ou `ECARTS_ASSUMES.md` selon le cas — jamais laissé silencieux.
+3. **Frontières de module respectées par façade.** Aucun contournement détecté (Phase 2, 4, 9) — un module ne lit jamais directement les tables d'un autre domaine. À chaque nouveau module, vérifier `docs/DEPENDENCY_GRAPH.md` avant d'ajouter une dépendance croisée.
+4. **Discipline transactionnelle couplée à l'audit.** 16/28 services utilisent `$transaction`, toujours pour englober l'écriture métier et son `AuditService.writeLog()` — règle non négociable du projet (`CLAUDE.md` règle 5), à ne jamais assouplir même pour un chantier perçu comme mineur.
+
+## Ce que l'audit a identifié comme le risque principal pour la stabilité future
+
+**Le motif « intention commencée, jamais complétée » (Phase 9 §4, Phase 10).** Quatre cas confirmés (`CreditNote`, reset password, `StatutSejour.ANNULE`, `RoomStatusLog` non exposé) partagent la même origine : une fonctionnalité amorcée (schéma, commentaire, route partielle) puis mise en pause sans jamais être retirée ni terminée. Sur un horizon de 3 à 5 ans, avec plusieurs développeurs ou IA successifs, ce motif **grossit naturellement** si rien ne le contraint — chaque nouvelle fonctionnalité amorcée sans être menée à son point d'usage réel ajoute un cas de plus.
+
+**Règle de maintien proposée** : tout chantier qui pose un modèle Prisma, un enum, ou une route sans les relier immédiatement à un chemin d'écriture/lecture complet doit être signalé explicitement dans `docs/governance/FONCTIONNALITES_INCOMPLETES.md` **au moment où il est créé**, pas seulement découvert plus tard par un audit. C'est le changement de discipline le plus utile que cet audit puisse suggérer pour la stabilité à long terme — transformer une pratique de documentation *a posteriori* (ce qu'a fait cet audit) en pratique *au moment de l'écriture*.
+
+## Transmissibilité à un autre développeur ou une autre IA
+
+- **Point d'entrée unique à jour** : `docs/README.md` (bandeau ajouté) → `docs/governance/ETAT_ACTUEL_PROJET.md` → `docs/audits/README.md`. Un nouvel intervenant ne devrait jamais avoir à lire les 10 rapports d'audit en entier pour démarrer — l'index et l'état actuel du projet doivent suffire à une orientation initiale en quelques minutes (objectif explicite de cette structuration).
+- **Aucune information critique ne doit vivre uniquement dans une conversation ou une mémoire de session.** Tout constat, décision, ou arbitrage doit être écrit dans un des registres de `docs/governance/` — cohérent avec la nature même de cette structuration documentaire (transformer les constats d'audit, qui n'existaient qu'en conversation, en documents versionnés).
+- **Limite connue de cette structuration elle-même** : les rapports des Phases 1 et 2 de l'audit ont dû être reconstitués à partir d'un résumé de session plutôt que du texte verbatim (voir `docs/audits/PHASE_01_ARCHITECTURE_GENERALE.md`, en-tête). C'est un exemple concret du risque de perte de contexte que ce document même cherche à limiter pour l'avenir — **toute conversation produisant un constat factuel durable devrait être versée en document avant qu'une compaction de contexte ne survienne**, pas après.
+
+## Limites connues et acceptées (au sens de ce document — pas des chantiers)
+
+- Le projet reste **volontairement mono-hôtel** (pas de refonte multi-tenant envisagée) — confirmé cohérent avec `CLAUDE.md` et vérifié sans artefact contraire dans le code (Phase 1, 3). Ce n'est pas une limite à lever, c'est un choix de périmètre stable.
+- Le projet **teste ses services exclusivement en e2e**, jamais en unitaire avec mock (choix explicite, `CLAUDE.md`) — accepté comme méthode durable, avec la contrepartie assumée d'un feedback plus lent sur les branches d'erreur rares (voir `DETTE_TECHNIQUE.md` §3).
+- Le nommage `checkin` conservé pour le module `stay` (routes HTTP, permission) est un **écart de nommage assumé et documenté** (`CLAUDE.md`) — pas un chantier à corriger sans une PR dédiée qui traite RBAC + routes + frontend ensemble, exactement comme `CLAUDE.md` le précise déjà.
