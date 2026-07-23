@@ -19,7 +19,7 @@ import { me as fetchMe } from '@/features/auth/api';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { AppTopbar } from '@/components/layout/AppTopbar';
 import { NAV_ITEMS } from '@/components/layout/nav-items';
-import { onAuthFailure } from '@/lib/api-client';
+import { logoutRequest, onAuthFailure } from '@/lib/api-client';
 import { clearTokens, getAccessToken } from '@/lib/token-storage';
 
 export type Tab =
@@ -106,6 +106,10 @@ function App() {
   }
 
   function doLogout() {
+    // CH-026(f) — best-effort, ne bloque jamais la déconnexion locale (voir
+    // logoutRequest) : révoque le refresh token côté serveur en tâche de
+    // fond pendant que l'UI bascule immédiatement sur l'écran de connexion.
+    void logoutRequest();
     clearTokens();
     setIsAuthenticated(false);
     setAuthScreen('login');

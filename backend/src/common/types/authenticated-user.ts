@@ -17,4 +17,9 @@ export interface AuthenticatedUser {
   roleId: number;
   roleName: string;
   scope?: 'mobile-housekeeping';
+  // CH-026(f) — présent uniquement sur le payload signé d'un refresh token
+  // (jamais sur l'access token, qui reste stateless) : identifiant unique
+  // de la ligne RefreshToken correspondante, seul lien entre le JWT et son
+  // état de révocation en base.
+  jti?: string;
 }

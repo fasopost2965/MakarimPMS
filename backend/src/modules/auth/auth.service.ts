@@ -6,7 +6,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MailerService } from '../notifications/mailer.service';
 import { LoginDto } from './dto/login.dto';
@@ -14,6 +14,19 @@ import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 
 const RESET_TOKEN_TTL_MINUTES = 30;
 const BCRYPT_SALT_ROUNDS = 10;
+// CH-026(c) — verrouillage de compte : réutilise LoginLog (aucune migration,
+// la table existait déjà pour l'audit succès/échec, CLAUDE.md règle 4) plutôt
+// qu'un champ dédié type `lockedUntil`. Verrouillé si les LOCKOUT_THRESHOLD
+// tentatives les plus récentes dans la fenêtre glissante sont TOUTES des
+// échecs — un succès (ou une fenêtre qui expire) débloque naturellement,
+// sans tâche de fond ni cron (cohérent avec l'absence de cron dans ce
+// projet, CLAUDE.md). Compromis assumé (documenté en RD) : un verrouillage
+// révèle qu'un compte existe (message distinct de « identifiants
+// invalides ») — tradeoff connu et accepté de tout mécanisme de
+// verrouillage de compte (OWASP), impact limité pour un effectif de
+// quelques employés.
+const LOCKOUT_THRESHOLD = 5;
+const LOCKOUT_WINDOW_MINUTES = 15;
 
 @Injectable()
 export class AuthService {
@@ -35,6 +48,18 @@ export class AuthService {
       include: { role: true },
     });
 
+    if (user && (await this.isLockedOut(user.id))) {
+      // Tentative comptée comme un échec supplémentaire : un attaquant qui
+      // continue d'essayer pendant le verrouillage reste verrouillé en
+      // continu plutôt que de voir la fenêtre glissante expirer sous lui.
+      await this.prisma.loginLog.create({
+        data: { userId: user.id, succes: false, ip },
+      });
+      throw new UnauthorizedException(
+        `Compte temporairement verrouillé après ${LOCKOUT_THRESHOLD} échecs de connexion. Réessayez dans quelques minutes.`,
+      );
+    }
+
     const passwordValid = user
       ? await bcrypt.compare(dto.motDePasse, user.motDePasseHash)
       : false;
@@ -53,6 +78,25 @@ export class AuthService {
     });
 
     return user;
+  }
+
+  // Verrouillé si les LOCKOUT_THRESHOLD tentatives les plus récentes (dans
+  // la fenêtre glissante) sont toutes des échecs. Moins de THRESHOLD lignes
+  // dans la fenêtre, ou un succès parmi elles => pas verrouillé.
+  private async isLockedOut(userId: number): Promise<boolean> {
+    const windowStart = new Date(
+      Date.now() - LOCKOUT_WINDOW_MINUTES * 60 * 1000,
+    );
+    const recentLogs = await this.prisma.loginLog.findMany({
+      where: { userId, createdAt: { gte: windowStart } },
+      orderBy: { createdAt: 'desc' },
+      take: LOCKOUT_THRESHOLD,
+      select: { succes: true },
+    });
+    return (
+      recentLogs.length === LOCKOUT_THRESHOLD &&
+      recentLogs.every((log) => !log.succes)
+    );
   }
 
   // Connexion desktop : émet une paire access/refresh token complète.
@@ -100,6 +144,11 @@ export class AuthService {
     return { accessToken };
   }
 
+  // CH-026(f) — rotation à usage unique : un refresh token n'est valide que
+  // pour un seul appel, révoqué ici avant d'en émettre un nouveau. Un jeton
+  // volé et rejoué après que le titulaire légitime a déjà rafraîchi échoue
+  // désormais (auparavant, un JWT stateless restait valable jusqu'à
+  // expiration naturelle quel que soit le nombre de réutilisations).
   async refresh(refreshToken: string) {
     let payload: AuthenticatedUser;
     try {
@@ -107,6 +156,19 @@ export class AuthService {
         secret: this.config.getOrThrow<string>('JWT_REFRESH_SECRET'),
       });
     } catch {
+      throw new UnauthorizedException('Refresh token invalide ou expiré.');
+    }
+
+    // Filet de sécurité : un jeton signé avant le déploiement de CH-026(f)
+    // (donc sans jti) reste cryptographiquement valide jusqu'à son
+    // expiration naturelle mais n'a pas de ligne RefreshToken associée —
+    // rejeté explicitement plutôt que de planter sur `payload.jti: undefined`.
+    const stored = payload.jti
+      ? await this.prisma.refreshToken.findUnique({
+          where: { jti: payload.jti },
+        })
+      : null;
+    if (!stored || stored.revokedAt) {
       throw new UnauthorizedException('Refresh token invalide ou expiré.');
     }
 
@@ -118,11 +180,37 @@ export class AuthService {
       throw new UnauthorizedException('Utilisateur introuvable ou inactif.');
     }
 
+    await this.prisma.refreshToken.update({
+      where: { jti: stored.jti },
+      data: { revokedAt: new Date() },
+    });
+
     return this.issueTokens({
       sub: user.id,
       email: user.email,
       roleId: user.roleId,
       roleName: user.role.nom,
+    });
+  }
+
+  // Révocation explicite à la déconnexion — idempotent et tolérant (jeton
+  // déjà expiré/invalide/absent de la table) : un logout doit toujours
+  // réussir du point de vue de l'utilisateur, jamais bloquer sur un état de
+  // jeton déjà incohérent (updateMany plutôt que update : 0 ligne modifiée
+  // ne lève aucune erreur, contrairement à un update sur un jti inconnu).
+  async logout(refreshToken: string): Promise<void> {
+    let payload: AuthenticatedUser;
+    try {
+      payload = await this.jwt.verifyAsync<AuthenticatedUser>(refreshToken, {
+        secret: this.config.getOrThrow<string>('JWT_REFRESH_SECRET'),
+      });
+    } catch {
+      return;
+    }
+    if (!payload.jti) return;
+    await this.prisma.refreshToken.updateMany({
+      where: { jti: payload.jti, revokedAt: null },
+      data: { revokedAt: new Date() },
     });
   }
 
@@ -255,16 +343,25 @@ ${resetLink ? `<p>Ou cliquez sur ce lien pour préremplir le code : <a href="${r
       '7d',
     ) as unknown as number;
 
+    // jti uniquement sur le refresh token (CH-026(f)) — l'access token
+    // reste stateless, aucune ligne à créer pour lui.
+    const jti = randomUUID();
     const [accessToken, refreshToken] = await Promise.all([
       this.jwt.signAsync(payload, {
         secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET'),
         expiresIn: accessExpiresIn,
       }),
-      this.jwt.signAsync(payload, {
+      this.jwt.signAsync({ ...payload, jti } satisfies AuthenticatedUser, {
         secret: this.config.getOrThrow<string>('JWT_REFRESH_SECRET'),
         expiresIn: refreshExpiresIn,
       }),
     ]);
+
+    const { exp } = this.jwt.decode<{ exp: number }>(refreshToken);
+    await this.prisma.refreshToken.create({
+      data: { jti, userId: payload.sub, expiresAt: new Date(exp * 1000) },
+    });
+
     return { accessToken, refreshToken };
   }
 }

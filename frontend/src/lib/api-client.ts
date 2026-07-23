@@ -24,6 +24,7 @@ export function onAuthFailure(listener: AuthFailureListener) {
 const PUBLIC_AUTH_ENDPOINTS = [
   '/auth/login',
   '/auth/refresh',
+  '/auth/logout',
   '/auth/forgot-password',
   '/auth/reset-password',
   '/auth/roles-actifs',
@@ -104,6 +105,23 @@ export async function apiRequest<T>(
   // les appelants plutôt que contourné localement.
   const text = await res.text();
   return text.length === 0 ? (undefined as T) : (JSON.parse(text) as T);
+}
+
+// CH-026(f) — révoque le refresh token courant côté serveur avant de le
+// purger localement. Best-effort : une déconnexion doit toujours réussir
+// côté client même si l'appel réseau échoue (backend indisponible, jeton
+// déjà expiré) — AuthService.logout() est de toute façon idempotent.
+export async function logoutRequest(): Promise<void> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return;
+  try {
+    await apiRequest<void>('/auth/logout', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken }),
+    });
+  } catch {
+    // Ignoré volontairement — voir commentaire ci-dessus.
+  }
 }
 
 // Téléchargement de fichiers non-JSON (ex. exports CSV du module reporting)

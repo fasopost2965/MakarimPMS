@@ -15,6 +15,11 @@ const DEV_PASSWORD = 'Password123!';
 // réservation/tarification à chaque exécution — c'est un seed de dev, pas
 // une migration : ne jamais le lancer contre une base de production.
 async function main() {
+  // CH-026(f) — table ajoutée après ce bloc de nettoyage initial (dette
+  // technique #6, même pattern récurrent que ChannelRoomTypeMapping/
+  // SelfCheckinToken plus bas) : FK non-cascade vers User, doit être vidée
+  // avant user.deleteMany().
+  await prisma.refreshToken.deleteMany();
   await prisma.passwordResetToken.deleteMany();
   await prisma.loginLog.deleteMany();
   await prisma.user.deleteMany();

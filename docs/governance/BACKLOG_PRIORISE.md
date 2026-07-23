@@ -29,7 +29,7 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 16. CH-015 — Consultation `AuditLog` frontend
 17. CH-022 — UI document-ocr
 18. ~~CH-020~~ — ✅ **Fermé** (session courante). Numérotation facture — statu quo acté, aucun développement (RD-013, EA-003).
-19. CH-026 — Durcissement sécurité secondaire
+19. ⚙️ **CH-026** — **Partiellement terminé (5/6)** (session courante). Durcissement sécurité secondaire — voir `REGISTRE_CHANTIERS.md` pour le détail (helmet, comparaison à temps constant du secret webhook, verrouillage de compte, complexité mot de passe, rotation/révocation refresh token ; (e) cookie httpOnly explicitement différé, RD-016).
 20. ~~CH-021~~ — ✅ **Fermé** (session courante). City ledger / Company — dépriorisé formellement, écart assumé (RD-014, EA-001).
 21. ~~CH-023~~ — ✅ **Fermé** (session courante). Matérialisation financière des pénalités — reste hors PMS, écart assumé (RD-015, EA-002).
 22. CH-016 — Découpage `ReservationsService`

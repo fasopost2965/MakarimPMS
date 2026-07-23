@@ -16,7 +16,7 @@ Relie, pour chaque grand domaine fonctionnel, l'exigence métier au module, à l
 | Transitionner le statut d'une chambre selon une machine à états | `rooms`, `housekeeping` | `PATCH /rooms/:id/statut` | `docs/ADR-003-Room-State-Machine.md` | Phases 2, 7 | — | ✅ | ✅ | ✅ |
 | Consulter l'historique des transitions de chambre | `rooms` | *(inexistant)* | — | Phase 7 | **CH-014** | — | ❌ | ❌ |
 | Ouvrir/résoudre un ticket de maintenance avec blocage de chambre | `maintenance` | `POST /maintenance-tickets`, `PATCH /:id/resoudre` | `docs/modules/maintenance.md` | Phase 7 | — | ❓ *(à confirmer)* | ✅ | ✅ |
-| S'authentifier avec accès/refresh token | `auth` | `POST /auth/login`, `/refresh` | `docs/ADR-006-RBAC-Enforcement.md` | Phase 5 | CH-026(f) *(révocation, secondaire)* | ❓ | ✅ | ✅ |
+| S'authentifier avec accès/refresh token | `auth` | `POST /auth/login`, `/refresh`, `/logout` | `docs/ADR-006-RBAC-Enforcement.md`, `docs/governance/REGISTRE_DECISIONS.md` (RD-016) | Phase 5 | **CH-026(f) — terminé** *(rotation/révocation)* | ✅ (`auth.e2e-spec.ts`) | ✅ | ✅ |
 | Réinitialiser un mot de passe oublié en sécurité | `auth`, `notifications` | `POST /auth/forgot-password` | `docs/governance/REGISTRE_DECISIONS.md` (RD-004) | Phase 5 | **CH-002 — terminé** | ✅ (`auth.e2e-spec.ts`) | ✅ | ✅ |
 | Vérifier une permission RBAC à chaque requête sensible | transverse (`PermissionsGuard`) | tous les endpoints `@RequirePermission` | `docs/RBAC_MATRIX.md`, ADR-006 | Phase 5 | — | ✅ | — (serveur uniquement) | ✅ (serveur) |
 | Refléter les permissions réelles dans l'interface | frontend transverse | `GET /auth/me`, `AppSidebar` (filtrage `NAV_ITEMS`) | `docs/governance/REGISTRE_DECISIONS.md` (RD-009) | Phases 5, 8 | **CH-011 — terminé** | ✅ (`auth.e2e-spec.ts`) | ✅ | ✅ |
