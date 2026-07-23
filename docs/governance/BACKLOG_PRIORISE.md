@@ -8,7 +8,7 @@ Vue condensée et actionnable de `REGISTRE_CHANTIERS.md`, triée pour piloter l'
 Peuvent être menés en parallèle par des développeurs différents — aucune dépendance croisée entre eux à l'exception de CH-012 qui attend CH-001.
 
 1. **CH-002** — ✅ **Terminé** (session courante). Sécuriser le reset password *(le plus rapide, traité en premier pour fermer une faille active)* — voir `REGISTRE_CHANTIERS.md` pour le détail (l'implémentation a nécessité un ajustement frontend non anticipé dans la fiche initiale, traité dans le même chantier).
-2. **CH-001** — Implémenter CreditNote *(le plus structurant, débloque CH-012 et une partie de CH-023)*
+2. **CH-001** — ✅ **Terminé** (session courante). Implémenter CreditNote (avoir total) *(le plus structurant, débloque CH-012 et une partie de CH-023)* — voir `REGISTRE_CHANTIERS.md` pour le détail (garde de régénération de facture + correctif d'un bug latent de double-matérialisation de taxe, non anticipés dans la fiche initiale, traités dans le même chantier).
 3. **CH-003** — UI registre de police *(indépendant, purement frontend, peut démarrer immédiatement)*
 4. **CH-004** — Arbitrage + éventuelle implémentation du chiffrement PII *(commencer par l'arbitrage, qui ne coûte rien et débloque le reste)*
 
@@ -17,7 +17,7 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 6. **CH-011** — Gating RBAC frontend *(prérequis technique : route `GET /auth/me` à créer — le plus gros chantier de cette vague)*
 7. **CH-010** — Déduplication client
 8. **CH-006** — Centraliser soft-delete
-9. **CH-012** — Remboursement acompte imputé *(dès que CH-001 est livré)*
+9. **CH-012** — Remboursement acompte imputé *(débloqué — CH-001 est livré — non démarré)*
 10. **CH-007 / CH-008 / CH-009** — Interfaces frontend self-checkin / notifications / channel-manager *(indépendantes entre elles, à répartir selon la capacité disponible)*
 
 ### Vague 3 — Secondaires (dette technique, à intercaler entre les livraisons fonctionnelles)
@@ -39,7 +39,7 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 
 | Chantier | Arbitrage requis |
 |---|---|
-| CH-001 | Périmètre de l'avoir : total, partiel, impact sur les lignes de taxe déjà matérialisées ? |
+| ~~CH-001~~ | ✅ Tranché — avoir total uniquement, voir `REGISTRE_DECISIONS.md` (RD-005). |
 | CH-004 | Implémenter le chiffrement maintenant, ou accepter le risque formellement et reporter ? |
 | CH-005 | Blocage dur du checkout, ou avertissement avec confirmation ? |
 | CH-010 | Contrainte dure d'unicité, ou détection souple à la création ? |
@@ -49,4 +49,4 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 
 ## Statut de couverture
 
-Au moment de la création de ce backlog, tous les chantiers étaient au statut **à faire** (session Claude 1, documentation uniquement). **CH-002 est désormais terminé** (session de suite, développement effectif). Le suivi de statut se fait dans `REGISTRE_CHANTIERS.md` (champ *Statut* par fiche, section « Suivi d'avancement ») : mettre à jour ce champ, pas ce backlog, quand un chantier avance — ce document liste l'ordre recommandé, pas l'état courant en détail.
+Au moment de la création de ce backlog, tous les chantiers étaient au statut **à faire** (session Claude 1, documentation uniquement). **CH-002 et CH-001 sont désormais terminés** (session de suite, développement effectif). Le suivi de statut se fait dans `REGISTRE_CHANTIERS.md` (champ *Statut* par fiche, section « Suivi d'avancement ») : mettre à jour ce champ, pas ce backlog, quand un chantier avance — ce document liste l'ordre recommandé, pas l'état courant en détail.

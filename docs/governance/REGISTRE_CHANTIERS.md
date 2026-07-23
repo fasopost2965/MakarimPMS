@@ -23,17 +23,20 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 - **Impact sécurité** : Aucun direct.
 - **Impact conformité** : Élevé — une facture erronée non corrigible est un problème comptable/fiscal réel pour un établissement marocain assujetti à la TVA.
 - **Impact exploitation** : Élevé — la réception/comptabilité n'a aujourd'hui aucun outil pour ce cas, qui se produira nécessairement.
-- **Dépendances** : aucune dépendance entrante. CH-012 (remboursement d'acompte imputé) et une partie de CH-023 (matérialisation financière de pénalité) dépendent de celui-ci.
-- **Prérequis** : décision produit sur le périmètre exact de l'avoir (avoir total vs partiel ; un avoir peut-il aussi impacter les lignes de taxe déjà matérialisées ?) — **à trancher avant l'implémentation**, non déductible du code actuel.
-- **Livrable attendu** : `BillingService.createCreditNote(invoiceId, montant, motif, tx)` comme chemin d'écriture unique, route `POST /invoices/:id/credit-notes` (`billing:write`), écriture de `Invoice.statut = ANNULEE_PAR_AVOIR` si avoir total, audit transactionnel (motif ≥10 caractères, cohérent avec la discipline déjà en place ailleurs).
-- **Critères de validation** : (1) une facture EMISE peut recevoir un avoir sans que son `montantTotal`/lignes d'origine ne soient jamais réécrits (immuabilité préservée) ; (2) le solde du folio reflète l'avoir ; (3) `AuditLog` trace l'opération dans la même transaction ; (4) `GET /invoices/:id` inclut l'avoir dans sa réponse (la lecture existe déjà).
-- **Statut** : à faire
-- **Estimation de charge** : Moyenne (2–4 jours développeur, hors tests e2e) — *estimation à confirmer une fois le périmètre exact de l'avoir tranché*.
-- **Niveau de confiance de l'estimation** : moyen (dépend fortement de la décision de périmètre encore ouverte).
+- **Dépendances** : aucune dépendance entrante. CH-012 (remboursement d'acompte imputé) et une partie de CH-023 (matérialisation financière de pénalité) dépendent de celui-ci — **CH-012 est désormais techniquement débloqué** (voir sa fiche), mais n'a pas été démarré (hors périmètre de ce chantier, discipline de scope stricte).
+- **Prérequis** : *(tranché)* décision produit confirmée par l'utilisateur (`AskUserQuestion`) : **avoir total uniquement** — pas d'avoir partiel, les lignes de taxe déjà matérialisées ne sont jamais modifiées par un avoir (seul le document fiscal — la facture — est annulé, jamais les charges sous-jacentes du folio). Consigné dans `docs/governance/REGISTRE_DECISIONS.md` (RD-005).
+- **Livrable attendu** *(réalisé)* : `BillingService.createCreditNote(invoiceId, dto, userId)` comme chemin d'écriture unique (`backend/src/modules/billing/billing.service.ts`), route `POST /invoices/:id/credit-notes` (`billing:write`), `CreateCreditNoteDto` (motif obligatoire ≥10 caractères, pas de champ `montant` — toujours égal à `Invoice.montantTotal`), écriture de `Invoice.statut = ANNULEE_PAR_AVOIR`, audit transactionnel (`AuditAction.CREATE_CREDIT_NOTE`, nouvelle valeur d'enum ajoutée par migration Prisma).
+- **Écarts découverts et traités pendant l'implémentation (hors périmètre initial de la fiche, mais nécessaires à une clôture réelle)** :
+  1. **Régénération de facture après avoir** : la fiche initiale ne prévoyait pas explicitement qu'un avoir doive permettre d'émettre une facture corrigée sur le même folio. La garde de `generateInvoice()` (« un folio ne peut avoir qu'une seule facture ») a dû être changée de « `folio.invoices.length > 0` bloque pour toujours » à « bloque seulement s'il existe une facture **active** (`statut === 'EMISE'`) » — sinon un avoir total aurait rendu le folio définitivement infacturable, ce qui aurait contredit l'objectif même du chantier (« rendre possible la correction d'une facture émise »). Même changement appliqué à la garde de `excludeTaxes()`.
+  2. **Bug de double-matérialisation de taxe découvert par cette garde** : une fois la régénération autorisée, `generateInvoice()` re-matérialisait inconditionnellement les lignes `TAXE_SEJOUR` sur le folio — sur un deuxième appel (facture corrigée après avoir), cela aurait doublé la taxe de séjour déjà présente en base depuis la première génération. Corrigé par une garde `taxeDejaMaterialisee = folio.lignes.some(l => l.type === TypeLigneFolio.TAXE_SEJOUR)` : les taxes ne sont matérialisées qu'une seule fois par folio, quel que soit le nombre de générations de facture. **Preuve de rigueur sabotage/restore effectuée** (règle non négociable `CLAUDE.md`) : garde temporairement retirée, test relancé, échec confirmé avec les valeurs exactement prédites (574 MAD au lieu de 562 MAD, soit 12 MAD de taxe de séjour doublée sur un séjour de 2 nuits), garde restaurée, test revert au vert — commentaire dans `backend/test/billing.e2e-spec.ts`.
+- **Critères de validation** : (1) ✅ une facture EMISE reçoit un avoir sans que `montantTotal`/lignes d'origine ne soient jamais réécrits (vérifié : la facture d'origine est relue après l'avoir et comparée champ à champ) ; (2) ✅ `Invoice.statut` passe à `ANNULEE_PAR_AVOIR`, jamais les `FolioLine` sous-jacentes ; (3) ✅ `AuditLog` trace l'opération (`CREATE_CREDIT_NOTE`) dans la même transaction Prisma que la création du `CreditNote` et la mise à jour de la facture ; (4) ✅ un deuxième avoir sur une facture déjà annulée est rejeté (`ConflictException`) ; (5) ✅ une facture corrigée peut être régénérée sur le même folio après avoir, sans doubler la taxe de séjour déjà matérialisée ; (6) ✅ motif < 10 caractères rejeté (400, `ValidationPipe`) ; (7) ✅ facture inconnue rejetée (404).
+- **Statut** : **terminé**
+- **Estimation de charge** : réalisée en une session (~1 jour équivalent développeur, tests e2e inclus) — plus rapide que l'estimation initiale car le périmètre a été réduit à l'avoir total (l'estimation « moyenne 2–4 jours » incluait l'incertitude du partiel, écartée par l'arbitrage).
+- **Niveau de confiance de l'estimation** : élevé (a posteriori).
 - **Lien(s) audit** : Phase 6 (§3, §7), Phase 9 (§4), Phase 10 (Priorité bloquante #1).
-- **Éléments à tester** : e2e — création d'avoir sur facture émise, immuabilité de la facture d'origine, effet sur le solde, effet sur `GET /reporting/*` (grand livre).
-- **Documents liés** : `docs/ADR-002-Folio-Billing-Model.md`, `docs/ADR-004-Payment-Financial-Integrity.md` (à relire, un avoir touche directement l'invariant d'immuabilité qu'ADR-004 protège).
-- **Remarques** : chantier le plus cité transversalement dans l'audit (Phases 2, 3, 6, 9) — signal fort qu'il s'agit d'un manque structurel plutôt que d'un détail.
+- **Éléments testés** : `backend/test/billing.e2e-spec.ts`, nouveau bloc « Avoir total sur une facture (CreditNote) — CH-001 » (3 tests : motif trop court → 400 ; facture inconnue → 404 ; scénario complet — génération → blocage double-génération → création d'avoir → immuabilité de la facture d'origine vérifiée → blocage double-avoir → régénération de facture corrigée → absence de doublon de la ligne/du montant `TAXE_SEJOUR`, avec preuve sabotage/restore documentée en commentaire). Suite e2e complète rejouée : 111/113 tests verts, les 2 échecs restants confirmés **pré-existants et sans lien avec CH-001** (flake d'infrastructure `stock.e2e-spec.ts` dû à l'instabilité de Redis dans ce sandbox, prouvé par comparaison contrôlée `git stash`/`git stash pop` : échec identique avant et après les changements CH-001).
+- **Documents liés** : `docs/ADR-002-Folio-Billing-Model.md`, `docs/ADR-004-Payment-Financial-Integrity.md` (immuabilité de facture confirmée respectée — seul `statut` change, jamais `montantTotal`/`numero`/les lignes), `docs/governance/REGISTRE_DECISIONS.md` (RD-005).
+- **Remarques** : chantier le plus cité transversalement dans l'audit (Phases 2, 3, 6, 9) — signal fort qu'il s'agissait d'un manque structurel plutôt que d'un détail. L'implémentation a révélé deux conséquences en cascade (garde de régénération, bug de double-taxe) non anticipées par la fiche initiale — traitées avant clôture plutôt que découvertes plus tard en production, cohérent avec la discipline « documenter les écarts plutôt que les cacher ».
 
 ---
 
@@ -235,9 +238,9 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 - **Modules concernés** : `payments`, `billing` (dépend de CH-001).
 - **Priorité** : Important · **Criticité** : Modérée
 - **Impact métier** : Modéré · **Impact sécurité** : Aucun · **Impact conformité** : Faible · **Impact exploitation** : Modéré
-- **Dépendances** : **bloqué par CH-001** — ce chantier ne peut être clos qu'une fois l'avoir implémenté.
-- **Livrable attendu** : une fois CH-001 livré, brancher le remboursement d'un acompte imputé sur la création d'un avoir correspondant.
-- **Statut** : bloqué (dépendance CH-001) · **Estimation** : Faible une fois CH-001 fait (0,5 jour) · **Confiance** : élevée
+- **Dépendances** : *(débloqué)* CH-001 est terminé — `BillingService.createCreditNote()` existe désormais comme chemin d'écriture réutilisable. Ce chantier reste néanmoins **non démarré** : son implémentation n'a pas été demandée et est restée hors périmètre de CH-001 par discipline de scope stricte (« avoir total uniquement », rien côté `payments`).
+- **Livrable attendu** : brancher le remboursement d'un acompte imputé sur la création d'un avoir correspondant via `BillingService.createCreditNote()`.
+- **Statut** : à faire (dépendance CH-001 levée) · **Estimation** : Faible (0,5 jour) · **Confiance** : élevée
 - **Lien audit** : Phase 6 §4.
 
 ---
@@ -246,8 +249,8 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 
 ### CH-013 — Traiter les enums morts (`StatutSejour.ANNULE`, `StatutFacture.ANNULEE_PAR_AVOIR`)
 - **Source** : Phase 3 §5.2/§6, Phase 6 §3. **Priorité** : Secondaire · **Criticité** : Faible.
-- **Description** : deux valeurs d'enum jamais écrites en base. `ANNULEE_PAR_AVOIR` sera résolu naturellement par CH-001. `StatutSejour.ANNULE` reste à trancher indépendamment (implémenter le cas d'usage réel, ou retirer la valeur).
-- **Statut** : à faire · **Estimation** : Faible (quelques heures, hors CH-001) · **Confiance** : élevée.
+- **Description** : deux valeurs d'enum jamais écrites en base. `ANNULEE_PAR_AVOIR` **résolu par CH-001** (`BillingService.createCreditNote()` écrit désormais cette valeur). `StatutSejour.ANNULE` reste à trancher indépendamment (implémenter le cas d'usage réel, ou retirer la valeur).
+- **Statut** : partiellement résolu (`ANNULEE_PAR_AVOIR` ✅ via CH-001 ; `StatutSejour.ANNULE` toujours à faire) · **Estimation** : Faible (quelques heures, pour la partie restante) · **Confiance** : élevée.
 
 ### CH-014 — Route de consultation de `RoomStatusLog`
 - **Source** : Phase 7 §3, §5. **Priorité** : Secondaire · **Criticité** : Faible.
@@ -315,9 +318,9 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 
 | Priorité | Nombre de chantiers | Charge cumulée estimée (ordre de grandeur) | Terminés |
 |---|---|---|---|
-| Bloquant | 4 (CH-001 à CH-004) | ~7–11 jours développeur | 1 (CH-002) |
+| Bloquant | 4 (CH-001 à CH-004) | ~7–11 jours développeur | 2 (CH-001, CH-002) |
 | Important | 8 (CH-005 à CH-012) | ~11–16 jours développeur | 0 |
-| Secondaire | 14 (CH-013 à CH-026) | ~18–28 jours développeur (plusieurs sous conditions d'arbitrage) | 0 |
+| Secondaire | 14 (CH-013 à CH-026) | ~18–28 jours développeur (plusieurs sous conditions d'arbitrage) | 0 (1 partiel : CH-013) |
 
 *Ces charges sont des ordres de grandeur de développement pur (hors tests e2e étendus, hors stabilisation, hors documentation) — voir `docs/planning/ESTIMATION_CHARGE.md` pour l'estimation consolidée par scénario.*
 

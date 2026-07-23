@@ -15,6 +15,7 @@ import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { BillingService } from './billing.service';
 import { AddFolioLineDto } from './dto/add-folio-line.dto';
 import { ExcludeFolioTaxesDto } from './dto/exclude-folio-taxes.dto';
+import { CreateCreditNoteDto } from './dto/create-credit-note.dto';
 
 @ApiTags('billing')
 @ApiBearerAuth()
@@ -65,6 +66,22 @@ export class BillingController {
   @Get('invoices/:id')
   findInvoiceById(@Param('id', ParseIntPipe) id: number) {
     return this.billingService.findInvoiceById(id);
+  }
+
+  // CH-001 (docs/governance/REGISTRE_CHANTIERS.md) — avoir total : annule la
+  // facture (ANNULEE_PAR_AVOIR), jamais ses lignes/montants d'origine.
+  @RequirePermission('billing', 'write')
+  @ApiOperation({
+    summary:
+      'Avoir total sur une facture émise (motif obligatoire) — annule la facture, permet ensuite de régénérer une facture corrigée sur le même folio',
+  })
+  @Post('invoices/:id/credit-notes')
+  createCreditNote(
+    @Param('id', ParseIntPipe) invoiceId: number,
+    @Body() dto: CreateCreditNoteDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.billingService.createCreditNote(invoiceId, dto, user.sub);
   }
 
   @RequirePermission('billing', 'read')

@@ -4,7 +4,7 @@ Conditions vérifiables avant toute ouverture en production réelle (clients pay
 
 ## Critères bloquants (aucune exception sans acceptation formelle documentée)
 
-- [ ] **CH-001 livré** : une facture émise erronée peut être corrigée via un avoir, sans jamais modifier la facture d'origine.
+- [x] **CH-001 livré** : une facture émise erronée peut être corrigée via un avoir, sans jamais modifier la facture d'origine. *(Terminé — session courante, avoir total, voir `docs/governance/REGISTRE_CHANTIERS.md`.)*
 - [x] **CH-002 livré** : `POST /auth/forgot-password` n'expose plus jamais de token dans sa réponse HTTP ; l'envoi passe par email. *(Terminé — session courante, voir `docs/governance/REGISTRE_CHANTIERS.md`.)*
 - [ ] **CH-003 livré** : la réception peut saisir un `PoliceRecord` complet depuis l'interface, sans appel API manuel.
 - [ ] **CH-004 tranché** : soit le chiffrement de `Guest.pieceIdentite` est implémenté et vérifié, soit une acceptation de risque formelle est consignée dans `ECARTS_ASSUMES.md` avec date de réexamen.
@@ -24,7 +24,7 @@ Un chantier n'est **« terminé »** dans `REGISTRE_CHANTIERS.md` que si, cumula
 2. Les critères de validation (champ *Critères de validation* de la fiche) sont vérifiés — manuellement ou par test automatisé, selon ce que la fiche prévoit.
 3. Un test e2e couvre le scénario nominal si le chantier touche un flux métier critique (paiement, facturation, RBAC, check-in/out) — cohérent avec la politique du projet (`backend/test/*.e2e-spec.ts`, jamais de mock, vraie base MySQL).
 4. La documentation impactée est mise à jour (matrice de traçabilité, statut des modules, et tout ADR/spec de module concerné).
-5. Pour un chantier de sécurité ou de conformité (CH-002, CH-003, CH-004, CH-010), une vérification de non-régression sur le comportement adjacent est faite (ex. CH-002 ne doit pas casser le flux `reset-password` en aval, déjà fonctionnel).
+5. Pour un chantier de sécurité, de conformité ou touchant l'intégrité financière (CH-001, CH-002, CH-003, CH-004, CH-010), une vérification de non-régression sur le comportement adjacent est faite (ex. CH-002 ne doit pas casser le flux `reset-password` en aval, déjà fonctionnel ; CH-001 ne doit pas casser la génération de facture nominale ni ADR-004, vérifié par la suite e2e complète rejouée sans régression imputable au chantier).
 
 Un chantier ne doit **jamais** être marqué `terminé` sur la seule base d'un « le code compile » ou d'un « ça a l'air de marcher en local sans test » — cohérent avec l'exigence du projet de rigueur (voir `CLAUDE.md`, section Tests, exigence de preuve de sabotage/restore pour les règles non-négociables).
 

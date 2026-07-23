@@ -6,7 +6,7 @@ C'est le motif transversal le plus significatif identifié par l'audit (Phase 9 
 
 | Fonctionnalité | Trace de l'intention | État réel | Chantier |
 |---|---|---|---|
-| Correction de facture par avoir | Modèle `CreditNote` en schéma, relation incluse dans les lectures, `StatutFacture.ANNULEE_PAR_AVOIR`, 2 commentaires de code y renvoyant explicitement | Aucune écriture nulle part dans le code | CH-001 |
+| ~~Correction de facture par avoir~~ | Modèle `CreditNote` en schéma, relation incluse dans les lectures, `StatutFacture.ANNULEE_PAR_AVOIR`, 2 commentaires de code y renvoyant explicitement | **Résolu (CH-001, session courante)** — `BillingService.createCreditNote()` écrit désormais `CreditNote` et `Invoice.statut = ANNULEE_PAR_AVOIR` (avoir total, voir RD-005), et permet la régénération d'une facture corrigée sur le même folio. Retiré des fonctionnalités incomplètes. | CH-001 (terminé) |
 | ~~Réinitialisation de mot de passe par email~~ | Commentaire explicite dans `auth.service.ts` : « un e-mail réel remplacera cette exposition directe quand le module notifications sera livré » | **Résolu (CH-002, session courante)** — `forgotPassword()` envoie désormais l'email via `MailerService` (pas `NotificationsService.notify()`, structurellement scopé à `Guest` — voir RD-004). Retiré des fonctionnalités incomplètes. | CH-002 (terminé) |
 | Registre de police alimenté en continu | Route backend `POST /police/:stayId` fonctionnelle, export CSV fonctionnel côté reporting | Aucune saisie possible depuis l'interface — le registre reste vide en usage normal | CH-003 |
 | Chiffrement au repos des données d'identité | `docs/execution/GO_LIVE_CHECKLIST.md` exige `ENCRYPTION_KEY` ; commentaire dans `police-report.service.ts` reconnaissant l'absence | Aucune implémentation, variable absente de tout le code | CH-004 |
@@ -15,7 +15,7 @@ C'est le motif transversal le plus significatif identifié par l'audit (Phase 9 
 | Facturation entreprise / city ledger | Modèle `Company` avec `plafondCredit`, `conditionsPaiement` | Zéro FK vers `Reservation`/`Stay`/`Folio`/`Invoice` ; `plafondCredit` jamais vérifié | CH-021 |
 | Historique consultable des transitions de chambre | `RoomStatusLog` alimenté à chaque transition | Jamais lu par aucune route | CH-014 |
 | Journal d'audit transverse consultable côté interface | Module `audit` fonctionnel côté backend | Aucune UI de consultation | CH-015 |
-| Remboursement d'un acompte déjà imputé à un folio | Le code de `DepositsService.rembourser` référence explicitement « une note de crédit sur la facture » comme voie de recours | Cette voie n'existe pas (dépend de CH-001) — l'acompte reste bloqué | CH-012 |
+| Remboursement d'un acompte déjà imputé à un folio | Le code de `DepositsService.rembourser` référence explicitement « une note de crédit sur la facture » comme voie de recours | Cette voie existe désormais (`BillingService.createCreditNote()`, CH-001 terminé) mais n'est pas encore branchée dans `DepositsService.rembourser` — l'acompte reste bloqué jusqu'à l'implémentation de CH-012 | CH-012 (dépendance CH-001 levée, non démarré) |
 | Recouvrement tracé de la pénalité d'annulation/no-show | `Reservation.montantPenalite` calculé et figé | Jamais matérialisé en écriture financière, recouvrement entièrement hors système | CH-023 |
 
 ## Ce que ce registre implique pour la suite du développement

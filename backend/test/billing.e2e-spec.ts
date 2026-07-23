@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Prisma, StatutChambre, TypeLigneFolio } from '@prisma/client';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -19,6 +19,15 @@ describe('Billing Module (5.13)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api');
+    // CH-001 (docs/governance/REGISTRE_CHANTIERS.md) : ce fichier n'appliquait
+    // pas encore le ValidationPipe global (contrairement à main.ts en
+    // production et à auth.e2e-spec.ts) — nécessaire pour exercer réellement
+    // la contrainte @MinLength(10) sur CreateCreditNoteDto.motif. Sans effet
+    // sur les tests existants : AddFolioLineDto.montant est déjà envoyé sous
+    // forme de chaîne décimale conforme (@IsDecimal), rien à transformer.
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
     await app.init();
     prisma = moduleFixture.get<PrismaService>(PrismaService);
     const token = await loginAs(app.getHttpServer(), 'comptable');
@@ -217,6 +226,149 @@ describe('Billing Module (5.13)', () => {
       expect(addLineRes.body.type).toBe('EXTRA');
 
       // Nettoyer
+      await prisma.folioLine.deleteMany({ where: { folioId: folio.id } });
+      await prisma.folio.deleteMany({ where: { stayId: stay.id } });
+      await prisma.roomNight.deleteMany({ where: { stayId: stay.id } });
+      await prisma.stay.deleteMany({ where: { id: stay.id } });
+      await prisma.room.deleteMany({ where: { id: room.id } });
+      await prisma.roomType.deleteMany({ where: { id: roomType.id } });
+      await prisma.guest.deleteMany({ where: { id: guest.id } });
+    });
+  });
+
+  // CH-001 (docs/governance/REGISTRE_CHANTIERS.md) — avoir total uniquement
+  // (arbitrage confirmé). Vraie base MySQL, pas de mock.
+  describe('Avoir total sur une facture (CreditNote) — CH-001', () => {
+    it('rejette un motif trop court (< 10 caractères)', async () => {
+      const res = await client
+        .post('/api/invoices/999999/credit-notes')
+        .send({ motif: 'court' });
+      expect(res.status).toBe(400);
+    });
+
+    it('renvoie 404 pour une facture inexistante', async () => {
+      const res = await client
+        .post('/api/invoices/999999/credit-notes')
+        .send({ motif: 'Motif valide de plus de dix caractères' });
+      expect(res.status).toBe(404);
+    });
+
+    it('annule la facture sans toucher les FolioLine, bloque la double génération/le double avoir, et permet une régénération correcte sans doubler la taxe de séjour', async () => {
+      const ts = Date.now();
+      const roomType = await prisma.roomType.create({
+        data: {
+          nom: `TEST-BILLING-AVOIR-${ts}`,
+          prixBase: new Prisma.Decimal(500),
+          capacite: 2,
+        },
+      });
+      const room = await prisma.room.create({
+        data: {
+          numero: `TEST-BILLING-AVOIR-${ts}-101`,
+          roomTypeId: roomType.id,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+      const guest = await prisma.guest.create({
+        data: { nom: 'Bernard', prenom: 'Marc' },
+      });
+
+      // 2 nuits, capacité 2 : taxe de séjour = 3 MAD x 2 x 2 = 12 MAD
+      // (TaxRateConfig TAXE_SEJOUR, MONTANT_FIXE, taux=3, voir seed.ts) —
+      // valeur non nulle nécessaire pour que le test de non-duplication
+      // ci-dessous soit discriminant (un montant à 0 masquerait un doublon).
+      const dateCheckin = new Date();
+      const dateCheckoutPrevue = new Date(
+        dateCheckin.getTime() + 2 * 24 * 60 * 60 * 1000,
+      );
+      const stay = await prisma.stay.create({
+        data: {
+          roomId: room.id,
+          guestId: guest.id,
+          dateCheckin,
+          dateCheckoutPrevue,
+        },
+      });
+      const folio = await prisma.folio.create({
+        data: { stayId: stay.id, libelle: 'Folio principal' },
+      });
+      await prisma.folioLine.create({
+        data: {
+          folioId: folio.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: 'Hébergement — 2 nuits',
+          montant: new Prisma.Decimal(500),
+        },
+      });
+
+      // Génération initiale : HEBERGEMENT (500) + TVA 10% (50) + taxe de
+      // séjour (12) = 562.
+      const invoiceRes = await client
+        .post(`/api/invoices/generer?folioId=${folio.id}`)
+        .send({});
+      expect(invoiceRes.status).toBe(201);
+      expect(Number(invoiceRes.body.montantTotal)).toBe(562);
+      const invoiceId = invoiceRes.body.id as number;
+
+      const nbLignesTaxeApresGeneration = await prisma.folioLine.count({
+        where: { folioId: folio.id, type: TypeLigneFolio.TAXE_SEJOUR },
+      });
+      expect(nbLignesTaxeApresGeneration).toBe(1);
+
+      // Une facture ACTIVE bloque toute nouvelle génération sur ce folio.
+      const doubleGenRes = await client
+        .post(`/api/invoices/generer?folioId=${folio.id}`)
+        .send({});
+      expect(doubleGenRes.status).toBe(409);
+
+      // Avoir total.
+      const creditNoteRes = await client
+        .post(`/api/invoices/${invoiceId}/credit-notes`)
+        .send({
+          motif: 'Erreur de saisie sur le montant, correction nécessaire',
+        });
+      expect(creditNoteRes.status).toBe(201);
+      expect(Number(creditNoteRes.body.montant)).toBe(562);
+      expect(creditNoteRes.body.invoiceId).toBe(invoiceId);
+
+      // La facture d'origine reste immuable : montantTotal/numero inchangés
+      // (ADR-004), seul le statut change.
+      const invoiceApresAvoir = await prisma.invoice.findUniqueOrThrow({
+        where: { id: invoiceId },
+      });
+      expect(invoiceApresAvoir.statut).toBe('ANNULEE_PAR_AVOIR');
+      expect(Number(invoiceApresAvoir.montantTotal)).toBe(562);
+      expect(invoiceApresAvoir.numero).toBe(
+        (invoiceRes.body as { numero: string }).numero,
+      );
+
+      // Un deuxième avoir sur la même facture est refusé.
+      const doubleAvoirRes = await client
+        .post(`/api/invoices/${invoiceId}/credit-notes`)
+        .send({ motif: 'Deuxième tentative qui doit échouer' });
+      expect(doubleAvoirRes.status).toBe(409);
+
+      // Preuve de rigueur sabotage/restore : sans la garde ajoutée dans
+      // generateInvoice() (ne jamais réinjecter TAXE_SEJOUR si déjà
+      // matérialisée sur le folio), cette régénération aurait doublé la
+      // taxe de séjour (574 au lieu de 562, et 2 lignes TAXE_SEJOUR au lieu
+      // d'1) — vérifié en retirant temporairement la garde pendant le
+      // développement : le test échouait alors bien avec ces valeurs
+      // doublées, confirmant qu'il est discriminant.
+      const invoiceCorrigeeRes = await client
+        .post(`/api/invoices/generer?folioId=${folio.id}`)
+        .send({});
+      expect(invoiceCorrigeeRes.status).toBe(201);
+      expect(Number(invoiceCorrigeeRes.body.montantTotal)).toBe(562);
+
+      const nbLignesTaxeApresRegeneration = await prisma.folioLine.count({
+        where: { folioId: folio.id, type: TypeLigneFolio.TAXE_SEJOUR },
+      });
+      expect(nbLignesTaxeApresRegeneration).toBe(1);
+
+      // Nettoyer.
+      await prisma.creditNote.deleteMany({ where: { invoiceId } });
+      await prisma.invoice.deleteMany({ where: { folioId: folio.id } });
       await prisma.folioLine.deleteMany({ where: { folioId: folio.id } });
       await prisma.folio.deleteMany({ where: { stayId: stay.id } });
       await prisma.roomNight.deleteMany({ where: { stayId: stay.id } });
