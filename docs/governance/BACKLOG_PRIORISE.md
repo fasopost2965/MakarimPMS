@@ -14,7 +14,7 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 
 ### Vague 2 — Importants
 5. **CH-005** — ✅ **Terminé** (session courante). Blocage checkout solde impayé — voir `REGISTRE_CHANTIERS.md` pour le détail (blocage dur + échappatoire de check-out forcé réservée à `checkin:force-checkout`, RD-008).
-6. **CH-011** — Gating RBAC frontend *(prérequis technique : route `GET /auth/me` à créer — le plus gros chantier de cette vague)*
+6. **CH-011** — ✅ **Terminé** (session courante). Gating RBAC frontend (granularité onglet entier) — voir `REGISTRE_CHANTIERS.md` pour le détail (`GET /auth/me` + filtrage de `NAV_ITEMS`, RD-009 ; correctif connexe sur `lib/api-client.ts`, `/auth/me` n'est plus traité à tort comme public).
 7. **CH-010** — Déduplication client
 8. **CH-006** — Centraliser soft-delete
 9. **CH-012** — ✅ **Terminé** (session courante). Remboursement acompte imputé — voir `REGISTRE_CHANTIERS.md` pour le détail (l'avoir est un préalable au remboursement, pas une action déclenchée par la route elle-même, RD-007).
@@ -42,6 +42,7 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 | ~~CH-001~~ | ✅ Tranché — avoir total uniquement, voir `REGISTRE_DECISIONS.md` (RD-005). |
 | ~~CH-004~~ | ✅ Tranché — implémenter maintenant, voir `REGISTRE_DECISIONS.md` (RD-006). |
 | ~~CH-005~~ | ✅ Tranché — blocage dur + échappatoire de check-out forcé à permission dédiée, voir `REGISTRE_DECISIONS.md` (RD-008). |
+| ~~CH-011~~ | ✅ Tranché — granularité onglet entier, voir `REGISTRE_DECISIONS.md` (RD-009). *Absent par erreur de cette table lors d'une session précédente alors que la fiche détaillée (`REGISTRE_CHANTIERS.md`) portait bien ce prérequis — corrigé avant tout code, pas après.* |
 | CH-010 | Contrainte dure d'unicité, ou détection souple à la création ? |
 | CH-020 | La numérotation doit-elle réellement repartir de 1 chaque mois ? |
 | CH-021 | La facturation entreprise (city ledger) est-elle une priorité produit, ou un écart assumé ? |
@@ -49,4 +50,4 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 
 ## Statut de couverture
 
-Au moment de la création de ce backlog, tous les chantiers étaient au statut **à faire** (session Claude 1, documentation uniquement). **Les 4 chantiers bloquants (CH-001, CH-002, CH-003, CH-004) sont désormais tous terminés** (session de suite, développement effectif) — la Vague 1 du backlog est intégralement close. En Vague 2, CH-005 et CH-012 sont également terminés. Le suivi de statut se fait dans `REGISTRE_CHANTIERS.md` (champ *Statut* par fiche, section « Suivi d'avancement ») : mettre à jour ce champ, pas ce backlog, quand un chantier avance — ce document liste l'ordre recommandé, pas l'état courant en détail.
+Au moment de la création de ce backlog, tous les chantiers étaient au statut **à faire** (session Claude 1, documentation uniquement). **Les 4 chantiers bloquants (CH-001, CH-002, CH-003, CH-004) sont désormais tous terminés** (session de suite, développement effectif) — la Vague 1 du backlog est intégralement close. En Vague 2, CH-005, CH-011 et CH-012 sont également terminés. Le suivi de statut se fait dans `REGISTRE_CHANTIERS.md` (champ *Statut* par fiche, section « Suivi d'avancement ») : mettre à jour ce champ, pas ce backlog, quand un chantier avance — ce document liste l'ordre recommandé, pas l'état courant en détail.

@@ -18,7 +18,7 @@ Vue de couverture technique — pour chaque module backend, l'endpoint principal
 | `dashboard` | `GET /dashboard/*` | Tableau de bord | ✅ |
 | `audit` | `GET /audit-logs` *(route exacte à confirmer)* | *(É-06, à créer)* | 🔴 |
 | `auth` | `POST /auth/login`, `/refresh`, `/forgot-password`, `/reset-password`, `GET /roles-actifs` | Connexion, Mot de passe oublié | ✅ |
-| `auth` (identité courante) | *(inexistant — `GET /auth/me`, CH-011)* | *(prérequis transverse)* | 🔴 |
+| `auth` (identité courante) | `GET /auth/me` | Prérequis transverse — `AppSidebar` (gating RBAC, granularité onglet, RD-009) | ✅ |
 | `police` | `POST /police/:stayId`, `GET /police/:stayId/pdf` | *(É-01, à créer)* | 🔴 |
 | `notifications` | CRUD `NotificationTemplate`, lecture `NotificationLog` | *(É-03, à créer)* | 🔴 |
 | `self-checkin` | `GET/POST /self-checkin/:token` (public), `POST /reservations/:id/self-checkin-link`, `GET /self-checkin-pending` (staff) | *(É-02, à créer côté staff — le flux public n'a pas d'écran staff, c'est normal)* | 🔴 (staff) |
@@ -31,6 +31,6 @@ Vue de couverture technique — pour chaque module backend, l'endpoint principal
 
 ## Synthèse de couverture
 
-- **14/21 modules** ont une couverture frontend complète pour leurs endpoints staff connus.
-- **7 zones de couverture manquante** identifiées, correspondant exactement aux 6 écrans manquants de `CARTOGRAPHIE_ECRANS.md` + le prérequis transverse RBAC (CH-011) + le futur endpoint historique chambre (CH-014) + le futur endpoint avoir (CH-001, lui-même sans écran tant qu'il n'existe pas côté backend).
+- **15/21 modules** ont une couverture frontend complète pour leurs endpoints staff connus (le prérequis transverse RBAC, CH-011, est désormais résolu).
+- **6 zones de couverture manquante** restantes, correspondant aux 6 écrans manquants de `CARTOGRAPHIE_ECRANS.md` + le futur endpoint historique chambre (CH-014) + le futur endpoint avoir (CH-001, lui-même sans écran tant qu'il n'existe pas côté backend).
 - Aucune incohérence inverse trouvée (aucun écran frontend n'appelle un endpoint qui n'existe pas) — cohérent avec le constat de la Phase 8 : « zéro donnée mockée », le frontend existant est strictement aligné sur des endpoints réels.

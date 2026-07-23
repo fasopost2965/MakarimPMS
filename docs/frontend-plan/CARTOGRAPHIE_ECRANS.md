@@ -120,6 +120,6 @@ Déduite du backend réel (21 modules, `docs/audits/PHASE_04_BACKEND.md`), crois
 
 ## Écran transverse requis (indépendant d'un module métier) : gating RBAC
 
-**É-08 — Contexte d'identité et permissions (invisible, pas un écran mais un prérequis structurel)** 🔴 — **CH-011**
+**É-08 — Contexte d'identité et permissions (invisible, pas un écran mais un prérequis structurel)** ✅ **Résolu (CH-011, session courante)**
 
-Ce n'est pas un écran au sens de cette cartographie, mais un prérequis technique sans lequel aucun des masquages par rôle décrits ci-dessus (colonne « Rôles » de chaque écran) ne peut être réellement appliqué côté client. Voir `docs/frontend-plan/PLAN_DEVELOPPEMENT_FRONTEND.md` §RBAC pour le détail de mise en œuvre.
+Ce n'est pas un écran au sens de cette cartographie, mais un prérequis technique sans lequel aucun des masquages par rôle décrits ci-dessus (colonne « Rôles » de chaque écran) ne peut être réellement appliqué côté client. **Écart par rapport au plan initial** : l'arbitrage produit (RD-009, `docs/governance/REGISTRE_DECISIONS.md`) a retenu la granularité onglet entier uniquement — les masquages par rôle « colonne Rôles » décrits pour chaque écran ci-dessus ne sont donc couverts qu'au niveau de l'onglet dans son ensemble (l'écran apparaît ou pas dans la navigation), jamais au niveau d'une action individuelle à l'intérieur d'un écran partagé. Pas de `AuthContext` séparé non plus (voir `PLAN_DEVELOPPEMENT_FRONTEND.md` §RBAC pour le détail de l'implémentation réelle, différente du plan initial).

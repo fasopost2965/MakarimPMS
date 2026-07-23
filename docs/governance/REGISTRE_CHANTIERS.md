@@ -230,8 +230,9 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 - **Prérequis** : décision sur le niveau de granularité (masquer des onglets entiers vs masquer des actions individuelles).
 - **Livrable attendu** : nouvelle route backend `GET /auth/me` (rôle + permissions), contexte React `AuthContext`, filtrage de `NAV_ITEMS` par permission déclarée.
 - **Critères de validation** : un rôle sans permission `hr:*` ne voit plus l'onglet RH.
-- **Statut** : à faire · **Estimation** : Moyenne (2–3 jours, backend + frontend) · **Confiance** : moyenne
+- **Statut** : ✅ **Terminé** (session courante) · **Estimation** : Moyenne (2–3 jours, backend + frontend) · **Confiance** : moyenne
 - **Lien audit** : Phase 5 §2, §4 ; Phase 8 §3, §5.
+- **Résolution** : arbitrage produit tranché — granularité onglet entier uniquement (voir `REGISTRE_DECISIONS.md`, RD-009). `GET /auth/me` (AuthController/AuthService) renvoie `{ id, email, roleId, roleName, permissions: string[] }` (format `"module:action"`, requête `Permission` fraîche à chaque appel, jamais mise en cache dans le JWT — même garantie que `PermissionsGuard`). Côté frontend, pas de `AuthContext` séparé (sur-ingénierie pour un seul consommateur) : `App.tsx` porte l'état `permissions`, transmis en prop à `AppSidebar`, qui filtre `NAV_ITEMS` (nouveau champ `permission` par item — toujours la permission `:read` de l'écran, jamais une action d'écriture). Un onglet actif devenu invisible (permissions rechargées) bascule automatiquement sur le premier onglet accessible. Correctif connexe découvert en implémentant : `lib/api-client.ts` traitait tout `/auth/*` comme public (jamais de tentative de refresh sur 401) — plus vrai pour `GET /auth/me`, corrigé par une liste explicite d'endpoints publics plutôt qu'un préfixe. Tests : `backend/test/auth.e2e-spec.ts` (401 sans token, permissions exactes pour un rôle restreint, actions dédiées hors grille pour l'Administrateur, reflet immédiat d'un retrait de permission) ; vérification frontend manuelle réelle en navigateur (Chromium/Playwright, 4 rôles : Administrateur voit les 11 onglets, Gouvernante/Maintenance/RH ne voient que leurs onglets respectifs avec redirection automatique hors d'un onglet par défaut inaccessible).
 
 ---
 
@@ -329,7 +330,7 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 | Priorité | Nombre de chantiers | Charge cumulée estimée (ordre de grandeur) | Terminés |
 |---|---|---|---|
 | Bloquant | 4 (CH-001 à CH-004) | ~7–11 jours développeur | 4 (CH-001, CH-002, CH-003, CH-004) — tous terminés |
-| Important | 8 (CH-005 à CH-012) | ~11–16 jours développeur | 2 (CH-005, CH-012) |
+| Important | 8 (CH-005 à CH-012) | ~11–16 jours développeur | 3 (CH-005, CH-011, CH-012) |
 | Secondaire | 14 (CH-013 à CH-026) | ~18–28 jours développeur (plusieurs sous conditions d'arbitrage) | 0 (1 partiel : CH-013) |
 
 *Ces charges sont des ordres de grandeur de développement pur (hors tests e2e étendus, hors stabilisation, hors documentation) — voir `docs/planning/ESTIMATION_CHARGE.md` pour l'estimation consolidée par scénario.*
@@ -344,3 +345,4 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 | CH-003 | ✅ Terminé | Session courante | UI de saisie du registre de police (nouvel onglet « Police » dans StayDetailsDialog) — voir fiche ci-dessus. Les 4 chantiers bloquants du registre sont désormais tous terminés. |
 | CH-012 | ✅ Terminé | Session courante | Remboursement d'un acompte imputé — voir fiche ci-dessus (l'avoir est un préalable vérifié par lecture seule, pas une action déclenchée par la route, RD-007). |
 | CH-005 | ✅ Terminé | Session courante | Blocage dur du check-out sur solde impayé, avec échappatoire de check-out forcé réservée à checkin:force-checkout — voir fiche ci-dessus (RD-008). |
+| CH-011 | ✅ Terminé | Session courante | Gating RBAC frontend (granularité onglet entier) — GET /auth/me + filtrage de NAV_ITEMS, voir fiche ci-dessus (RD-009). |

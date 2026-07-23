@@ -20,7 +20,7 @@ Constat de départ (`docs/audits/PHASE_08_FRONTEND.md` §1) : `components/ui/` n
 ## Ce qui n'est PAS un manque à combler dans ce chantier
 
 - **Un routeur** (deep linking) : identifié comme manquant en Phase 8, mais c'est une décision d'architecture de navigation, pas un composant partagé — traité séparément dans `PLAN_DEVELOPPEMENT_FRONTEND.md` si retenu.
-- **Un state manager global** : la Phase 8/9 n'a identifié aucune duplication ni incohérence liée à l'absence de state manager — introduire Redux/Zustand n'est pas justifié par un constat d'audit, seul un contexte léger d'authentification (`AuthContext`, CH-011) est requis.
+- **Un state manager global** : la Phase 8/9 n'a identifié aucune duplication ni incohérence liée à l'absence de state manager — introduire Redux/Zustand n'est pas justifié par un constat d'audit. **CH-011 (terminé, session courante)** n'a finalement pas nécessité de `AuthContext` séparé non plus : un seul consommateur des permissions (`AppSidebar`) existait au moment de l'implémentation, l'état `permissions` vit directement dans `App.tsx` et lui est transmis en prop — cohérent avec l'absence de state manager global, un Context dédié aurait été une abstraction prématurée pour un seul consommateur (à réintroduire si un second consommateur apparaît).
 
 ## Ordre de construction recommandé
 

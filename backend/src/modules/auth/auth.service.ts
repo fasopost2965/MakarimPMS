@@ -204,6 +204,29 @@ ${resetLink ? `<p>Ou cliquez sur ce lien pour préremplir le code : <a href="${r
     return { message: 'Mot de passe mis à jour.' };
   }
 
+  // CH-011 — alimente le gating RBAC frontend : identité + permissions
+  // effectives de l'utilisateur courant, recalculées à chaque appel (même
+  // requête fraîche que PermissionsGuard, jamais mises en cache dans le
+  // JWT — retirer une permission à un rôle doit se refléter immédiatement
+  // ici aussi, pas seulement côté serveur). `sub`/`roleId`/`roleName`
+  // proviennent du payload JWT déjà décodé (CurrentUser) — seules les
+  // permissions nécessitent une lecture base.
+  async me(user: AuthenticatedUser) {
+    const permissions = await this.prisma.permission.findMany({
+      where: { roles: { some: { roleId: user.roleId } } },
+      select: { module: true, action: true },
+      orderBy: [{ module: 'asc' }, { action: 'asc' }],
+    });
+
+    return {
+      id: user.sub,
+      email: user.email,
+      roleId: user.roleId,
+      roleName: user.roleName,
+      permissions: permissions.map((p) => `${p.module}:${p.action}`),
+    };
+  }
+
   // Rôles considérés "actifs" pour la landing page : ceux ayant au moins une
   // permission accordée. Maintenance/RH existent déjà en base (seed) mais
   // n'apparaissent pas tant qu'aucune permission ne leur est attribuée —

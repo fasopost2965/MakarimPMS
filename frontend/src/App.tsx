@@ -14,8 +14,10 @@ import { StockPage } from '@/features/stock/pages/StockPage';
 import { ReportingPage } from '@/features/reporting/pages/ReportingPage';
 import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { ForgotPasswordPage } from '@/features/auth/pages/ForgotPasswordPage';
+import { me as fetchMe } from '@/features/auth/api';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { AppTopbar } from '@/components/layout/AppTopbar';
+import { NAV_ITEMS } from '@/components/layout/nav-items';
 import { onAuthFailure } from '@/lib/api-client';
 import { clearTokens, getAccessToken } from '@/lib/token-storage';
 
@@ -50,19 +52,63 @@ function App() {
   );
   const [authScreen, setAuthScreen] = useState<AuthScreen>('login');
   const [logoutGuardOpen, setLogoutGuardOpen] = useState(false);
+  // CH-011 — permissions effectives de l'utilisateur courant, `null` tant
+  // qu'elles n'ont pas encore été chargées (voir AppSidebar).
+  const [permissions, setPermissions] = useState<string[] | null>(null);
 
   useEffect(() => {
     onAuthFailure(() => {
       setIsAuthenticated(false);
       setAuthScreen('login');
+      setPermissions(null);
     });
   }, []);
+
+  // CH-011 — recharge les permissions à chaque (re)connexion. Pas de
+  // rafraîchissement périodique : un retrait de permission en cours de
+  // session ne se reflète qu'au prochain login, cohérent avec le caractère
+  // cosmétique/UX de ce chantier (le vrai contrôle reste PermissionsGuard,
+  // vérifié en base à chaque requête serveur, jamais affaibli par ce délai
+  // frontend).
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    fetchMe()
+      .then((user) => setPermissions(user.permissions))
+      .catch(() => setPermissions([]));
+  }, [isAuthenticated]);
+
+  // Si l'onglet actif devient invisible (permissions chargées, ex. rôle
+  // Gouvernante sans dashboard:read) bascule sur le premier onglet
+  // réellement accessible plutôt que de laisser un écran vide sans onglet
+  // actif dans la sidebar. Ajustement pendant le rendu (pas un useEffect) —
+  // pattern recommandé par React pour "adjuster un state à partir d'un
+  // autre state qui change" : évite un rendu intermédiaire avec l'ancien
+  // onglet actif inexistant dans une sidebar déjà filtrée.
+  const [permissionsAppliedTo, setPermissionsAppliedTo] = useState<
+    string[] | null
+  >(null);
+  if (permissions !== permissionsAppliedTo) {
+    setPermissionsAppliedTo(permissions);
+    if (permissions !== null) {
+      const activeItem = NAV_ITEMS.find((item) => item.tab === tab);
+      const activeVisible = activeItem
+        ? permissions.includes(activeItem.permission)
+        : false;
+      if (!activeVisible) {
+        const firstVisible = NAV_ITEMS.find((item) =>
+          permissions.includes(item.permission),
+        );
+        if (firstVisible) setTab(firstVisible.tab);
+      }
+    }
+  }
 
   function doLogout() {
     clearTokens();
     setIsAuthenticated(false);
     setAuthScreen('login');
     setLogoutGuardOpen(false);
+    setPermissions(null);
   }
 
   // BR-RH-004 (ADR-007) : une déconnexion pendant un service de pointage
@@ -103,6 +149,7 @@ function App() {
         onNavigate={setTab}
         collapsed={sidebarCollapsed}
         onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
+        permissions={permissions}
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <AppTopbar activeTab={tab} onLogout={handleLogout} />

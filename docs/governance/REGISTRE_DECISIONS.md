@@ -65,9 +65,18 @@ Décisions structurantes prises **pendant ou après l'audit** (distinct des ADR 
 - **Date** : session courante (CH-005).
 - **Décideur** : utilisateur (arbitrage produit explicite via deux `AskUserQuestion` successives — blocage dur vs avertissement, puis échappatoire de forçage oui/non — options recommandées sélectionnées dans les deux cas) ; le choix technique (flag sur la route existante plutôt que route séparée, vérification de permission dynamique dans le service) est une décision d'implémentation de Claude.
 
+### RD-009 — CH-011 : gating RBAC frontend à la granularité de l'onglet entier, pas de l'action individuelle
+
+- **Décision** : `AppSidebar` filtre `NAV_ITEMS` par permission déclarée (un item = un onglet = une permission `:read`) — aucun masquage d'action individuelle à l'intérieur d'un écran partagé (ex. pas de masquage conditionnel d'un bouton « rembourser » selon `payments:refund`).
+- **Raison** : l'utilisateur a explicitement tranché entre les deux niveaux de granularité proposés via `AskUserQuestion`, en faveur de l'onglet entier (option recommandée — c'est exactement le livrable déjà décrit par la fiche de chantier initiale, `GET /auth/me` + filtrage de `NAV_ITEMS`, avant même l'arbitrage). Ce prérequis de granularité, présent dans la fiche détaillée (`REGISTRE_CHANTIERS.md`) mais absent du tableau des arbitrages résumés (`BACKLOG_PRIORISE.md`), avait été manqué lors d'une première recommandation de priorisation — corrigé avant tout code, pas après (voir échange de la session courante).
+- **Alternatives considérées** : masquer aussi des actions individuelles à l'intérieur d'un écran partagé — rejeté par l'utilisateur, surface d'audit et de test bien plus large pour un chantier explicitement qualifié de « cosmétique/UX, pas une barrière de sécurité » par sa propre fiche (le vrai contrôle reste `PermissionsGuard` serveur, jamais affaibli par ce choix).
+- **Conséquence** : `NavItem` (`components/layout/nav-items.ts`) porte un champ `permission: string` par entrée, toujours la permission `:read` de l'écran correspondant. Un futur besoin de granularité fine (masquer une action précise) resterait un chantier distinct, pas une extension mécanique de celui-ci.
+- **Date** : session courante (CH-011).
+- **Décideur** : utilisateur (arbitrage produit explicite via `AskUserQuestion`, option « Onglets entiers uniquement (Recommandé) » sélectionnée).
+
 ## Décisions en attente (questions ouvertes de l'audit nécessitant un arbitrage humain)
 
-Voir `ECARTS_ASSUMES.md` §Candidats pour la liste des arbitrages produit encore ouverts (city ledger, multi-folio vs folio unique, numérotation de facture, matérialisation des pénalités — le périmètre de l'avoir, le chiffrement PII et le blocage du check-out sur solde impayé sont désormais tranchés, voir RD-005, RD-006 et RD-008). Ces questions ne sont **pas** tranchées ici — ce registre attend leur décision effective pour les consigner.
+Voir `ECARTS_ASSUMES.md` §Candidats pour la liste des arbitrages produit encore ouverts (city ledger, multi-folio vs folio unique, numérotation de facture, matérialisation des pénalités — le périmètre de l'avoir, le chiffrement PII, le blocage du check-out sur solde impayé et la granularité du gating RBAC frontend sont désormais tranchés, voir RD-005, RD-006, RD-008 et RD-009). Ces questions ne sont **pas** tranchées ici — ce registre attend leur décision effective pour les consigner.
 
 ## Gabarit pour une nouvelle décision
 
