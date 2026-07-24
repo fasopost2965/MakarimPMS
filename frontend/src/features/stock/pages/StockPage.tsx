@@ -18,8 +18,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsList, TabsPanel, TabsTrigger } from '@/components/ui/tabs';
 import { listMovements, listStockItems, replenishStock } from '../api';
 import type { StockItem, StockMovement } from '../types';
+
+type StockView = 'articles' | 'mouvements';
 
 // Inventaire (docs/modules/stock.md) : consultation des niveaux (avec badge
 // d'alerte sous seuil, BR-STK-002), réassort manuel, historique des
@@ -33,7 +36,7 @@ export function StockPage() {
   const [replenishingItem, setReplenishingItem] = useState<StockItem | null>(
     null,
   );
-  const [showMovements, setShowMovements] = useState(false);
+  const [view, setView] = useState<StockView>('articles');
 
   const refetch = useCallback(async () => {
     setLoading(true);
@@ -59,92 +62,99 @@ export function StockPage() {
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
-      <div className="flex items-center justify-between">
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setShowMovements((v) => !v)}
-        >
-          {showMovements ? 'Voir les articles' : 'Voir les mouvements'}
-        </Button>
-      </div>
-
       {loadError && <p className="text-destructive text-sm">{loadError}</p>}
 
       {loading ? (
         <p className="text-muted-foreground text-sm">Chargement…</p>
-      ) : showMovements ? (
-        movements.length === 0 ? (
-          <p className="text-muted-foreground text-sm">Aucun mouvement.</p>
-        ) : (
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Mouvement</TableHead>
-                  <TableHead className="text-right">Quantité</TableHead>
-                  <TableHead>Article</TableHead>
-                  <TableHead>Motif</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {movements.map((m) => (
-                  <TableRow key={m.id}>
-                    <TableCell className="text-muted-foreground whitespace-nowrap">
-                      {new Date(m.createdAt).toLocaleString('fr-FR')}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          m.typeMouvement === 'ENTREE' ? 'default' : 'secondary'
-                        }
-                      >
-                        {m.typeMouvement === 'ENTREE' ? 'Entrée' : 'Sortie'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {m.typeMouvement === 'ENTREE' ? '+' : '−'}
-                      {m.quantite}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      Article #{m.stockItemId}
-                    </TableCell>
-                    <TableCell>{m.motif}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )
       ) : (
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((item) => (
-            <div
-              key={item.id}
-              className="flex flex-col gap-2 rounded-md border p-3"
-            >
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">{item.libelle}</p>
-                {item.sousSeuilAlerte && (
-                  <Badge variant="destructive">Sous le seuil</Badge>
-                )}
-              </div>
-              <p className="text-muted-foreground text-xs">
-                {item.code} — {item.quantiteDisponible} {item.uniteMesure}{' '}
-                (seuil {item.seuilAlerte})
-              </p>
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-fit"
-                onClick={() => setReplenishingItem(item)}
-              >
-                Réassort
-              </Button>
+        <Tabs
+          value={view}
+          onValueChange={(v) => v && setView(v as StockView)}
+          className="flex flex-1 flex-col gap-4"
+        >
+          <TabsList className="w-fit">
+            <TabsTrigger value="articles">Articles</TabsTrigger>
+            <TabsTrigger value="mouvements">Mouvements</TabsTrigger>
+          </TabsList>
+
+          <TabsPanel value="articles">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {items.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex flex-col gap-2 rounded-md border p-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium">{item.libelle}</p>
+                    {item.sousSeuilAlerte && (
+                      <Badge variant="destructive">Sous le seuil</Badge>
+                    )}
+                  </div>
+                  <p className="text-muted-foreground text-xs">
+                    {item.code} — {item.quantiteDisponible} {item.uniteMesure}{' '}
+                    (seuil {item.seuilAlerte})
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-fit"
+                    onClick={() => setReplenishingItem(item)}
+                  >
+                    Réassort
+                  </Button>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </TabsPanel>
+
+          <TabsPanel value="mouvements">
+            {movements.length === 0 ? (
+              <p className="text-muted-foreground text-sm">Aucun mouvement.</p>
+            ) : (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Mouvement</TableHead>
+                      <TableHead className="text-right">Quantité</TableHead>
+                      <TableHead>Article</TableHead>
+                      <TableHead>Motif</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {movements.map((m) => (
+                      <TableRow key={m.id}>
+                        <TableCell className="text-muted-foreground whitespace-nowrap">
+                          {new Date(m.createdAt).toLocaleString('fr-FR')}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              m.typeMouvement === 'ENTREE'
+                                ? 'default'
+                                : 'secondary'
+                            }
+                          >
+                            {m.typeMouvement === 'ENTREE' ? 'Entrée' : 'Sortie'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          {m.typeMouvement === 'ENTREE' ? '+' : '−'}
+                          {m.quantite}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          Article #{m.stockItemId}
+                        </TableCell>
+                        <TableCell>{m.motif}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </TabsPanel>
+        </Tabs>
       )}
 
       <Dialog

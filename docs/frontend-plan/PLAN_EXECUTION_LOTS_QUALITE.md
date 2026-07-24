@@ -39,7 +39,7 @@ Détaille, pour chacun des 5 lots définis dans `docs/frontend-plan/LOTISSEMENT_
 
 ---
 
-## Lot B — Fondations transverses — ⚙️ En cours (B1/4 terminé)
+## Lot B — Fondations transverses — ⚙️ En cours (B1+B2/4 terminés)
 
 **Objectif** : rembourser la dette des composants partagés jamais construits (Lot 0 d'origine), chacun appliqué immédiatement à un écran réel existant.
 
@@ -78,6 +78,19 @@ Détaille, pour chacun des 5 lots définis dans `docs/frontend-plan/LOTISSEMENT_
 - `npm run build`/`lint`/`test` propres (20/20), aucune régression détectée en navigateur réel.
 - Écart par rapport au plan : aucun. `form.tsx` a été conçu volontairement sans dépendance à une lib de gestion de formulaire (pas de `react-hook-form`) — l'audit demandait des erreurs homogènes, pas un nouveau paradigme d'état ; chaque écran garde son `useState` local existant.
 - Reste à faire : B2 (`tabs`+`date-picker`), B3 (`toast`+`select` recherche), B4 (`file-upload`+`diff-viewer`).
+
+**Compte-rendu réel — sous-lot B2 (session courante)** :
+
+| Composant | Écran consommateur | Statut |
+|---|---|---|
+| `tabs` | `StockPage.tsx` (Articles/Mouvements) | ✅ Livré et vérifié en navigateur réel (clic + clavier) |
+| `date-picker` (`DateRangeField`) | `CreateSeasonRateForm` (`ParametersPage.tsx`) | ✅ Livré et vérifié en navigateur réel (période incohérente signalée) |
+
+- Objectif du sous-lot atteint : les deux composants restants de priorité Moyenne (`COMPOSANTS_PARTAGES_MANQUANTS.md`) sont livrés, chacun avec un consommateur réel.
+- Tests dédiés : `components/ui/tabs.test.tsx` (bascule de panneau, un seul monté à la fois), `components/ui/date-picker.test.tsx` (propagation des changements, erreur de période affichée/effacée).
+- `npm run build`/`lint`/`test` propres (23/23), aucune régression détectée en navigateur réel.
+- Écart par rapport au plan : `date-picker` a été livré comme `DateRangeField` (paire début/fin avec validation croisée) plutôt qu'un sélecteur de date isolé — un `<input type="date">` seul était déjà bien couvert par `Input`+`FormField` (B1) ; la dette réelle portait sur la duplication de la validation de période (début/fin), présente dans plusieurs écrans (`SeasonRate` ici, `RateRestriction`/`CancellationPolicy` non migrés, à faire au fil de l'eau).
+- Reste à faire : B3 (`toast`+`select` recherche), B4 (`file-upload`+`diff-viewer`).
 
 ---
 

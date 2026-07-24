@@ -15,7 +15,7 @@ Partitionne `CH-028` à `CH-035` + `CH-026(e)` (`docs/governance/REGISTRE_CHANTI
 - **Ordre interne recommandé** : CH-031 (0,5-1 j, rapide) → CH-028 (4-6 j, socle + premiers tests ciblés).
 - **Critère de « lot terminé »** : error boundary en place et prouvé par sabotage/restore ; `npm run test` existe et passe à 100 % sur au moins 3 parcours critiques (gating RBAC, refresh token, un flux financier) ; build/lint frontend propres ; aucune régression visuelle sur les écrans existants.
 
-## Lot B — Fondations transverses — ⚙️ En cours (B1/4 terminé, session courante)
+## Lot B — Fondations transverses — ⚙️ En cours (B1+B2/4 terminés, session courante)
 
 - **Chantiers inclus** : CH-032 (composants partagés — dette Lot 0).
 - **Critère de criticité** : dette structurelle qui grossit à chaque écran livré depuis 8 chantiers — pas un blocage immédiat, mais le fondement de tout ce qui suit (accessibilité, tests).
@@ -75,5 +75,14 @@ Chaque lot a un début et une fin visibles (critère de « lot terminé » ci-de
 - **Vérifié en navigateur réel avec des données réelles** (pas seulement en test unitaire) : table des mouvements de stock (40 lignes réelles) ; formulaire police d'un séjour réel — soumission vide → erreur affichée, saisie → erreur effacée, aucun appel serveur déclenché par une soumission invalide.
 - `npm run build`/`lint`/`test` propres (20/20 tests, +7 depuis le Lot A), aucune régression.
 - **Écart par rapport au plan initial** : aucun — sous-lot exécuté dans le périmètre prévu (table + form, priorité Haute de `COMPOSANTS_PARTAGES_MANQUANTS.md`).
-- **Reste à faire dans le Lot B** : sous-lots B2 (`tabs`+`date-picker`), B3 (`toast`+`select` recherche), B4 (`file-upload`+`diff-viewer`).
-- **Prochain sous-lot proposé** : B2, en attente de feu vert.
+- **Reste à faire dans le Lot B** : sous-lots B3 (`toast`+`select` recherche), B4 (`file-upload`+`diff-viewer`).
+
+## Compte-rendu — Lot B, sous-lot B2 (session courante)
+
+- **Composants livrés** : `tabs` (`components/ui/tabs.tsx`, wrapper `@base-ui/react/tabs`) et `date-picker` (`components/ui/date-picker.tsx`, `DateRangeField`), chacun appliqué immédiatement à un écran réel.
+- **Consommateurs réels** : `StockPage.tsx` (remplace le bouton unique dont le libellé changeait selon la vue active par deux vrais onglets « Articles »/« Mouvements », navigation clavier flèches gérée nativement par le primitif) ; `CreateSeasonRateForm` dans `ParametersPage.tsx` (grille tarifaire saisonnière — validation croisée début/fin, `canSubmit` bloque désormais aussi une période incohérente, pas seulement des champs vides).
+- **Vérifié en navigateur réel** : bascule d'onglet au clic et au clavier (flèche droite) sur Stock, un seul panneau monté à la fois ; formulaire de tarif saisonnier réel — période incohérente (fin avant début) correctement signalée.
+- `npm run build`/`lint`/`test` propres (23/23 tests, +3 depuis le sous-lot B1), aucune régression.
+- **Écart par rapport au plan initial** : aucun sur `tabs`. Sur `date-picker`, le composant livré est un `DateRangeField` (paire début/fin avec validation croisée) plutôt qu'un simple wrapper de date unique — un `<input type="date">` seul n'avait pas besoin d'un composant dédié (déjà bien géré par `Input`+`FormField` depuis B1) ; la vraie dette identifiée était la duplication de la logique de période (début/fin), pas la sélection d'une date isolée.
+- **Reste à faire dans le Lot B** : sous-lots B3 (`toast`+`select` recherche), B4 (`file-upload`+`diff-viewer`).
+- **Prochain sous-lot proposé** : B3, en attente de feu vert.
