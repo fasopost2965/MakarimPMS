@@ -18,7 +18,7 @@ Statut par module backend, croisé avec la présence d'une interface frontend et
 | `billing` | ✅ | ⚠️ (via checkin ; pas d'UI pour l'avoir) | — | **CH-001 terminé** — avoir total (`POST /invoices/:id/credit-notes`), régénération de facture corrigée possible sur le même folio |
 | `payments` | ✅ | ⚠️ (via checkin) | — | **CH-012 terminé** — remboursement d'acompte imputé fonctionnel (préalable : avoir sur toute facture active) |
 | `dashboard` | ✅ | ✅ | — | — |
-| `audit` | ✅ | ❌ | CH-015 | Aucune UI de consultation |
+| `audit` | ✅ | ✅ | — | **CH-015 terminé** — écran de consultation (`features/audit/`, onglet « Audit », `audit:read`) |
 | `police` | ✅ | ✅ | — | **CH-003 terminé** — onglet dédié dans `StayDetailsDialog.tsx` |
 | `notifications` | ⚠️ | ✅ | CH-002 (extension) | **CH-008 terminé** — onglet dédié `features/notifications/` (templates + journal) ; reste pas raccordé au reset password (écart antérieur, hors périmètre de CH-008) |
 | `self-checkin` | ✅ | ✅ | — | **CH-007 terminé** — `SelfCheckinPanel.tsx` sur le détail de réservation (génération/régénération de lien, statut d'attente) |

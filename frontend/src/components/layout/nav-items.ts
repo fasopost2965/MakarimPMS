@@ -3,6 +3,7 @@ import {
   Bell,
   Building2,
   CalendarRange,
+  History,
   LayoutDashboard,
   LogIn,
   Package,
@@ -89,5 +90,11 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Notifications',
     icon: Bell,
     permission: 'notifications:read',
+  },
+  {
+    tab: 'audit',
+    label: 'Audit',
+    icon: History,
+    permission: 'audit:read',
   },
 ];

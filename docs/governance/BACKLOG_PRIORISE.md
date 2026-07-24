@@ -26,7 +26,7 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 13. ~~CH-014~~ — ✅ **Terminé** (session courante). Consultation `RoomStatusLog` — voir `REGISTRE_CHANTIERS.md` pour le détail (`GET /rooms/:id/historique-statuts`, `RoomHistoryDialog.tsx`).
 14. CH-018 — Resynchronisation documentation modules
 15. CH-024 / CH-025 — Contraintes DB additionnelles
-16. CH-015 — Consultation `AuditLog` frontend
+16. ~~CH-015~~ — ✅ **Terminé** (session courante). Consultation `AuditLog` frontend — voir `REGISTRE_CHANTIERS.md` pour le détail (backend déjà complet, nouvel écran `features/audit/`).
 17. CH-022 — UI document-ocr
 18. ~~CH-020~~ — ✅ **Fermé** (session courante). Numérotation facture — statu quo acté, aucun développement (RD-013, EA-003).
 19. ⚙️ **CH-026** — **Partiellement terminé (5/6)** (session courante). Durcissement sécurité secondaire — voir `REGISTRE_CHANTIERS.md` pour le détail (helmet, comparaison à temps constant du secret webhook, verrouillage de compte, complexité mot de passe, rotation/révocation refresh token ; (e) cookie httpOnly explicitement différé, RD-016).
