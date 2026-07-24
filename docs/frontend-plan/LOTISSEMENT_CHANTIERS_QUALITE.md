@@ -6,7 +6,7 @@ Partitionne `CH-028` à `CH-035` + `CH-026(e)` (`docs/governance/REGISTRE_CHANTI
 
 ---
 
-## Lot A — Qualité critique
+## Lot A — Qualité critique — ✅ Terminé (session courante)
 
 - **Chantiers inclus** : CH-031 (error boundary transverse), CH-028 (socle de tests Vitest + Testing Library).
 - **Critère de criticité** : les deux seuls chantiers de toute la vague dont l'absence peut transformer un incident mineur en interruption de service totale ou en régression silencieuse — sécurité/stabilité prioritaires sur tout le reste.
@@ -57,7 +57,14 @@ Partitionne `CH-028` à `CH-035` + `CH-026(e)` (`docs/governance/REGISTRE_CHANTI
 ## Ordre d'exécution recommandé entre lots
 
 ```
-Lot A (qualité critique) → Lot B (fondations) → Lot C (UX/a11y) → Lot D (performance/sécurité) → Lot E (finition)
+Lot A (qualité critique) ✅ → Lot B (fondations) → Lot C (UX/a11y) → Lot D (performance/sécurité) → Lot E (finition)
 ```
 
-Chaque lot a un début et une fin visibles (critère de « lot terminé » ci-dessus) et se clôture par un compte-rendu avant de démarrer le suivant — format détaillé dans `docs/frontend-plan/PLAN_EXECUTION_LOTS_QUALITE.md`. Aucun lot ne démarre sans feu vert explicite de l'utilisateur, y compris le premier (Lot A) — cohérent avec `docs/governance/REGISTRE_DECISIONS.md` (RD-020).
+Chaque lot a un début et une fin visibles (critère de « lot terminé » ci-dessus) et se clôture par un compte-rendu avant de démarrer le suivant — format détaillé dans `docs/frontend-plan/PLAN_EXECUTION_LOTS_QUALITE.md`. Aucun lot ne démarre sans feu vert explicite de l'utilisateur — cohérent avec `docs/governance/REGISTRE_DECISIONS.md` (RD-020).
+
+## Compte-rendu — Lot A (session courante)
+
+- **Critère de « lot terminé » vérifié** : error boundary en place et prouvé par sabotage/restore ✅ (en navigateur réel, pas seulement en test unitaire) ; `npm run test` existe et passe à 100 % sur 4 parcours critiques (gating RBAC, refresh token/corps vide, upload multipart, affichage financier) ✅ ; build/lint frontend propres ✅ ; aucune régression visuelle sur les écrans existants ✅.
+- **Détail complet** : `docs/governance/REGISTRE_CHANTIERS.md`, fiches CH-031 et CH-028 (section « Résolution »).
+- **Écart par rapport au plan initial** : aucun — le lot a été exécuté exactement dans le périmètre et l'ordre interne prévus (CH-031 puis CH-028).
+- **Prochain lot proposé** : Lot B (composants partagés), en attente de feu vert.

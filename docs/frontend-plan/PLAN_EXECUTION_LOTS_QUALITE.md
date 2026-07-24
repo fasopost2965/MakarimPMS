@@ -4,7 +4,7 @@ Détaille, pour chacun des 5 lots définis dans `docs/frontend-plan/LOTISSEMENT_
 
 ---
 
-## Lot A — Qualité critique
+## Lot A — Qualité critique — ✅ Terminé (session courante)
 
 **Objectif** : empêcher qu'une erreur de rendu isolée n'interrompe tout le service, et poser un socle de test automatisé reproductible sur les parcours à risque financier/RBAC.
 
@@ -28,6 +28,14 @@ Détaille, pour chacun des 5 lots définis dans `docs/frontend-plan/LOTISSEMENT_
 - Vérification manuelle en navigateur réel que la navigation entre onglets existants n'est pas affectée.
 
 **Format de compte-rendu attendu** : même structure que les fiches de `REGISTRE_CHANTIERS.md` (Résolution, Critères de validation vérifiés un par un, Éléments testés, Documents liés) pour chaque chantier du lot, plus un court résumé de lot en tête (objectif atteint, écarts découverts s'il y en a, statut des deux fiches mis à jour dans `REGISTRE_CHANTIERS.md`/`BACKLOG_PRIORISE.md`).
+
+**Compte-rendu réel (session courante)** :
+- Objectif atteint : `ErrorBoundary` livré et intégré (`App.tsx`, `resetKey={tab}`) ; socle Vitest + Testing Library livré (`vitest.config.ts`, `src/test/setup.ts`, script `npm run test`).
+- 4 tests ciblés livrés, tous verts (13 assertions) : `components/ErrorBoundary.test.tsx`, `components/layout/AppSidebar.test.tsx`, `lib/api-client.test.ts`, `features/billing/components/BillingTabContent.test.tsx` — voir le détail dans `REGISTRE_CHANTIERS.md` (CH-028, CH-031).
+- Preuve sabotage/restore réalisée **en navigateur réel** (Playwright, pas seulement en test unitaire) : `throw` temporaire dans `StockPage.tsx`, crash confirmé confiné (fallback affiché, sidebar/navigation vers les autres onglets fonctionnelles, bouton de retour opérationnel), sabotage retiré, comportement normal revérifié (`git status` confirmant un fichier identique à l'original après restauration).
+- `npm run build`/`lint`/`test` propres, aucune régression détectée.
+- Aucun écart par rapport au plan de ce lot — périmètre et ordre interne (CH-031 puis CH-028) respectés tels que prévus.
+- Statuts mis à jour dans `REGISTRE_CHANTIERS.md` (fiches CH-031/CH-028), `BACKLOG_PRIORISE.md` (Vague 4) et `REGISTRE_RISQUES.md` (R-13 fermé, R-15 réduit).
 
 ---
 
