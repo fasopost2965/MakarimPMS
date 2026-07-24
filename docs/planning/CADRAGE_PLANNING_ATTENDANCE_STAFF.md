@@ -1,6 +1,6 @@
 # Note de cadrage — Personnel, Planning des shifts & Pointage (Planning & Attendance)
 
-*Statut : brouillon de cadrage, non implémenté. Élargit et remplace le périmètre de `CADRAGE_SESSION_TRAVAIL_STAFF.md` (conservé pour référence, notamment §7/§9 de ce document qui en reprennent directement le contenu déjà validé côté conception). À valider avant tout code (arbitrages en section 11).*
+*Statut : **brainstorming en pause** — cadrage exploratoire, non arbitré, non implémenté. Élargit et remplace le périmètre de `CADRAGE_SESSION_TRAVAIL_STAFF.md` (conservé pour référence, notamment §7/§9 de ce document qui en reprennent directement le contenu déjà validé côté conception). Mis volontairement de côté le temps de finaliser les chantiers déjà identifiés par l'audit (`docs/governance/`) — à reprendre lors d'une session dédiée, une fois les arbitrages de la section 11 tranchés. Ne bloque et ne conditionne aucun des chantiers en cours.*
 
 ## 0. Constat préalable — existant / à étendre / à créer
 
