@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -52,6 +52,27 @@ const EMPTY_FORM: FormState = {
   villeDestination: '',
 };
 
+type FieldErrors = Partial<Record<keyof FormState, string>>;
+
+const REQUIRED_FIELD_LABEL: Record<string, string> = {
+  numeroPiece: 'Le numéro de pièce',
+  typePiece: 'Le type de pièce',
+  nationalite: 'La nationalité',
+  dateNaissance: 'La date de naissance',
+};
+
+function validateForm(form: FormState): FieldErrors {
+  const errors: FieldErrors = {};
+  for (const field of Object.keys(
+    REQUIRED_FIELD_LABEL,
+  ) as (keyof FormState)[]) {
+    if (!form[field]) {
+      errors[field] = `${REQUIRED_FIELD_LABEL[field]} est obligatoire.`;
+    }
+  }
+  return errors;
+}
+
 function formFromRecord(record: PoliceRecord): FormState {
   return {
     numeroPiece: record.numeroPiece,
@@ -80,10 +101,25 @@ export function PoliceRecordForm({ stayId, reservationId, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+
+  function updateField<K extends keyof FormState>(
+    field: K,
+    value: FormState[K],
+  ) {
+    setForm((f) => ({ ...f, [field]: value }));
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setFieldErrors({});
     try {
       const existing = await getPoliceRecord(stayId);
       if (existing) {
@@ -130,12 +166,9 @@ export function PoliceRecordForm({ stayId, reservationId, onSaved }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (
-      !form.numeroPiece ||
-      !form.typePiece ||
-      !form.nationalite ||
-      !form.dateNaissance
-    ) {
+    const errors = validateForm(form);
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
       return;
     }
     setSaving(true);
@@ -143,7 +176,10 @@ export function PoliceRecordForm({ stayId, reservationId, onSaved }: Props) {
     try {
       const saved = await upsertPoliceRecord(stayId, {
         numeroPiece: form.numeroPiece,
-        typePiece: form.typePiece,
+        // validateForm() ci-dessus garantit déjà typePiece non vide (sinon
+        // early return) — TS ne peut pas suivre cette garantie à travers
+        // l'appel de fonction, d'où le cast plutôt qu'un vrai risque runtime.
+        typePiece: form.typePiece as TypePiece,
         nationalite: form.nationalite,
         dateNaissance: form.dateNaissance,
         paysProvenance: form.paysProvenance || undefined,
@@ -193,33 +229,49 @@ export function PoliceRecordForm({ stayId, reservationId, onSaved }: Props) {
         </p>
       )}
 
-      <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
+      <form className="flex flex-col gap-3" onSubmit={handleSubmit} noValidate>
         <div className="grid grid-cols-2 gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="numeroPiece">Numéro de pièce</Label>
+          <FormField
+            id="numeroPiece"
+            label="Numéro de pièce"
+            required
+            error={fieldErrors.numeroPiece}
+          >
             <Input
               id="numeroPiece"
               value={form.numeroPiece}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, numeroPiece: e.target.value }))
+              onChange={(e) => updateField('numeroPiece', e.target.value)}
+              aria-invalid={Boolean(fieldErrors.numeroPiece)}
+              aria-describedby={
+                fieldErrors.numeroPiece ? 'numeroPiece-error' : undefined
               }
-              required
             />
-          </div>
+          </FormField>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="typePiece">Type de pièce</Label>
+          <FormField
+            id="typePiece"
+            label="Type de pièce"
+            required
+            error={fieldErrors.typePiece}
+          >
             <Select
               value={form.typePiece}
               onValueChange={(v) =>
-                setForm((f) => ({ ...f, typePiece: (v as TypePiece) ?? '' }))
+                updateField('typePiece', (v as TypePiece) ?? '')
               }
               items={Object.entries(TYPE_PIECE_LABEL).map(([value, label]) => ({
                 value,
                 label,
               }))}
             >
-              <SelectTrigger id="typePiece" className="w-full">
+              <SelectTrigger
+                id="typePiece"
+                className="w-full"
+                aria-invalid={Boolean(fieldErrors.typePiece)}
+                aria-describedby={
+                  fieldErrors.typePiece ? 'typePiece-error' : undefined
+                }
+              >
                 <SelectValue placeholder="Choisir un type" />
               </SelectTrigger>
               <SelectContent>
@@ -230,91 +282,80 @@ export function PoliceRecordForm({ stayId, reservationId, onSaved }: Props) {
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </FormField>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="nationalite">Nationalité</Label>
+          <FormField
+            id="nationalite"
+            label="Nationalité"
+            required
+            error={fieldErrors.nationalite}
+          >
             <Input
               id="nationalite"
               value={form.nationalite}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, nationalite: e.target.value }))
+              onChange={(e) => updateField('nationalite', e.target.value)}
+              aria-invalid={Boolean(fieldErrors.nationalite)}
+              aria-describedby={
+                fieldErrors.nationalite ? 'nationalite-error' : undefined
               }
-              required
             />
-          </div>
+          </FormField>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="dateNaissance">Date de naissance</Label>
+          <FormField
+            id="dateNaissance"
+            label="Date de naissance"
+            required
+            error={fieldErrors.dateNaissance}
+          >
             <Input
               id="dateNaissance"
               type="date"
               value={form.dateNaissance}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, dateNaissance: e.target.value }))
+              onChange={(e) => updateField('dateNaissance', e.target.value)}
+              aria-invalid={Boolean(fieldErrors.dateNaissance)}
+              aria-describedby={
+                fieldErrors.dateNaissance ? 'dateNaissance-error' : undefined
               }
-              required
             />
-          </div>
+          </FormField>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="paysProvenance">Pays de provenance</Label>
+          <FormField id="paysProvenance" label="Pays de provenance">
             <Input
               id="paysProvenance"
               value={form.paysProvenance}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, paysProvenance: e.target.value }))
-              }
+              onChange={(e) => updateField('paysProvenance', e.target.value)}
             />
-          </div>
+          </FormField>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="villeProvenance">Ville de provenance</Label>
+          <FormField id="villeProvenance" label="Ville de provenance">
             <Input
               id="villeProvenance"
               value={form.villeProvenance}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, villeProvenance: e.target.value }))
-              }
+              onChange={(e) => updateField('villeProvenance', e.target.value)}
             />
-          </div>
+          </FormField>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="paysDestination">Pays de destination</Label>
+          <FormField id="paysDestination" label="Pays de destination">
             <Input
               id="paysDestination"
               value={form.paysDestination}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, paysDestination: e.target.value }))
-              }
+              onChange={(e) => updateField('paysDestination', e.target.value)}
             />
-          </div>
+          </FormField>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="villeDestination">Ville de destination</Label>
+          <FormField id="villeDestination" label="Ville de destination">
             <Input
               id="villeDestination"
               value={form.villeDestination}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, villeDestination: e.target.value }))
-              }
+              onChange={(e) => updateField('villeDestination', e.target.value)}
             />
-          </div>
+          </FormField>
         </div>
 
         {error && <p className="text-destructive text-sm">{error}</p>}
 
         <div className="flex items-center gap-2">
-          <Button
-            type="submit"
-            disabled={
-              saving ||
-              !form.numeroPiece ||
-              !form.typePiece ||
-              !form.nationalite ||
-              !form.dateNaissance
-            }
-          >
+          <Button type="submit" disabled={saving}>
             {saving
               ? 'Enregistrement…'
               : record

@@ -39,7 +39,7 @@ Détaille, pour chacun des 5 lots définis dans `docs/frontend-plan/LOTISSEMENT_
 
 ---
 
-## Lot B — Fondations transverses
+## Lot B — Fondations transverses — ⚙️ En cours (B1/4 terminé)
 
 **Objectif** : rembourser la dette des composants partagés jamais construits (Lot 0 d'origine), chacun appliqué immédiatement à un écran réel existant.
 
@@ -65,6 +65,19 @@ Détaille, pour chacun des 5 lots définis dans `docs/frontend-plan/LOTISSEMENT_
 - Build/lint frontend propres après chaque sous-lot.
 
 **Format de compte-rendu attendu** : idem Lot A, plus un tableau récapitulatif « composant → écran consommateur → statut » prouvant qu'aucun composant n'est resté sans consommateur réel (règle déjà actée dans `PLAN_DEVELOPPEMENT_FRONTEND.md` §5) — un tableau par sous-lot (B1 à B4) ou un tableau consolidé si le lot est mené d'un seul tenant.
+
+**Compte-rendu réel — sous-lot B1 (session courante)** :
+
+| Composant | Écran consommateur | Statut |
+|---|---|---|
+| `table` | `StockPage.tsx` (vue mouvements) | ✅ Livré et vérifié en navigateur réel (40 lignes réelles) |
+| `form` (`FormField`) | `PoliceRecordForm.tsx` (8 champs) | ✅ Livré et vérifié en navigateur réel (erreur par champ, effacement à la saisie) |
+
+- Objectif du sous-lot atteint : les deux composants de priorité Haute (`COMPOSANTS_PARTAGES_MANQUANTS.md`) sont livrés, chacun avec un consommateur réel, aucun construit en isolation.
+- Tests dédiés : `components/ui/table.test.tsx`, `components/ui/form.test.tsx` (rendu, association label/contrôle, priorité erreur/aide) + `features/police/components/PoliceRecordForm.test.tsx` (régression réelle : erreurs de champ homogènes, effacement individuel, aucun appel API sur soumission invalide).
+- `npm run build`/`lint`/`test` propres (20/20), aucune régression détectée en navigateur réel.
+- Écart par rapport au plan : aucun. `form.tsx` a été conçu volontairement sans dépendance à une lib de gestion de formulaire (pas de `react-hook-form`) — l'audit demandait des erreurs homogènes, pas un nouveau paradigme d'état ; chaque écran garde son `useState` local existant.
+- Reste à faire : B2 (`tabs`+`date-picker`), B3 (`toast`+`select` recherche), B4 (`file-upload`+`diff-viewer`).
 
 ---
 

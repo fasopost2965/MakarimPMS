@@ -15,7 +15,7 @@ Partitionne `CH-028` à `CH-035` + `CH-026(e)` (`docs/governance/REGISTRE_CHANTI
 - **Ordre interne recommandé** : CH-031 (0,5-1 j, rapide) → CH-028 (4-6 j, socle + premiers tests ciblés).
 - **Critère de « lot terminé »** : error boundary en place et prouvé par sabotage/restore ; `npm run test` existe et passe à 100 % sur au moins 3 parcours critiques (gating RBAC, refresh token, un flux financier) ; build/lint frontend propres ; aucune régression visuelle sur les écrans existants.
 
-## Lot B — Fondations transverses
+## Lot B — Fondations transverses — ⚙️ En cours (B1/4 terminé, session courante)
 
 - **Chantiers inclus** : CH-032 (composants partagés — dette Lot 0).
 - **Critère de criticité** : dette structurelle qui grossit à chaque écran livré depuis 8 chantiers — pas un blocage immédiat, mais le fondement de tout ce qui suit (accessibilité, tests).
@@ -67,4 +67,13 @@ Chaque lot a un début et une fin visibles (critère de « lot terminé » ci-de
 - **Critère de « lot terminé » vérifié** : error boundary en place et prouvé par sabotage/restore ✅ (en navigateur réel, pas seulement en test unitaire) ; `npm run test` existe et passe à 100 % sur 4 parcours critiques (gating RBAC, refresh token/corps vide, upload multipart, affichage financier) ✅ ; build/lint frontend propres ✅ ; aucune régression visuelle sur les écrans existants ✅.
 - **Détail complet** : `docs/governance/REGISTRE_CHANTIERS.md`, fiches CH-031 et CH-028 (section « Résolution »).
 - **Écart par rapport au plan initial** : aucun — le lot a été exécuté exactement dans le périmètre et l'ordre interne prévus (CH-031 puis CH-028).
-- **Prochain lot proposé** : Lot B (composants partagés), en attente de feu vert.
+
+## Compte-rendu — Lot B, sous-lot B1 (session courante)
+
+- **Composants livrés** : `table` (`components/ui/table.tsx`) et `form`/`FormField` (`components/ui/form.tsx`), chacun appliqué immédiatement à un écran réel — critère de « composant sans consommateur réel interdit » respecté.
+- **Consommateurs réels** : `StockPage.tsx` (vue « mouvements » — remplace des `<div>` alignées manuellement par une table sémantique, colonnes Date/Mouvement/Quantité/Article/Motif) ; `PoliceRecordForm.tsx` (8 champs, CH-003 — remplace un bouton simplement désactivé sans explication par une erreur par champ manquant, affichée à la tentative de soumission et effacée individuellement à la saisie).
+- **Vérifié en navigateur réel avec des données réelles** (pas seulement en test unitaire) : table des mouvements de stock (40 lignes réelles) ; formulaire police d'un séjour réel — soumission vide → erreur affichée, saisie → erreur effacée, aucun appel serveur déclenché par une soumission invalide.
+- `npm run build`/`lint`/`test` propres (20/20 tests, +7 depuis le Lot A), aucune régression.
+- **Écart par rapport au plan initial** : aucun — sous-lot exécuté dans le périmètre prévu (table + form, priorité Haute de `COMPOSANTS_PARTAGES_MANQUANTS.md`).
+- **Reste à faire dans le Lot B** : sous-lots B2 (`tabs`+`date-picker`), B3 (`toast`+`select` recherche), B4 (`file-upload`+`diff-viewer`).
+- **Prochain sous-lot proposé** : B2, en attente de feu vert.
