@@ -135,4 +135,8 @@ Les deux chantiers du lot sont livrés et vérifiés en conditions réelles. Dé
 - **Écart par rapport au plan initial** : aucun.
 - **Reste dans le Lot D** : CH-026(e) — le chantier le plus risqué de toute la vague, nécessite une note de conception CSRF/CORS écrite avant tout code.
 
-**Prochaine étape proposée** : CH-026(e) — je vais d'abord rédiger la note de conception (protection CSRF, révision du carve-out CORS) et vous la présenter avant d'écrire la moindre ligne de code, conformément au prérequis posé pour ce chantier.
+## Compte-rendu — Lot D, note de conception CH-026(e) (session courante)
+
+Note de conception rédigée : `docs/security/CH-026E_NOTE_CONCEPTION_COOKIES_HTTPONLY.md` — aucun code modifié, document seul. Conception retenue en résumé : cookies `httpOnly`/`SameSite=Lax` pour access + refresh token (tous deux opaques au JS, confirmé qu'aucun code frontend ne décode le JWT) ; protection CSRF par double-submit cookie (`makarim_csrf_token` lisible en JS, comparé à un en-tête `X-CSRF-Token` par un nouveau `CsrfGuard`, qui s'efface pour les requêtes Bearer — F9 mobile) ; carve-out CORS F4/F6 vérifié sans modification requise. Détail complet, alternatives rejetées, plan d'implémentation backend/frontend, stratégie de test (avec preuve sabotage/restore CSRF) et risques résiduels (contrainte de domaine partagé, session existante interrompue au déploiement) dans la note elle-même.
+
+**En attente de confirmation avant le premier commit de code** — chantier le plus risqué de toute la vague Phase 11 (touche l'authentification de bout en bout).
