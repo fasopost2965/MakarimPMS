@@ -19,6 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsList, TabsPanel, TabsTrigger } from '@/components/ui/tabs';
+import { toastManager } from '@/components/ui/toast';
 import { listMovements, listStockItems, replenishStock } from '../api';
 import type { StockItem, StockMovement } from '../types';
 
@@ -204,6 +205,14 @@ function ReplenishForm({ item, onClose, onDone }: ReplenishFormProps) {
         quantite: Number(quantite),
         motif,
         referenceFournisseur: referenceFournisseur || undefined,
+      });
+      // CH-032 (Lot B3) — auparavant silencieux (le dialogue se fermait
+      // sans confirmation) ; EXIGENCES_UX.md : « une confirmation dit ce
+      // qui s'est passé ».
+      toastManager.add({
+        title: 'Réassort enregistré',
+        description: `+${quantite} ${item.uniteMesure} — ${item.libelle}`,
+        type: 'success',
       });
       onDone();
     } catch (err) {

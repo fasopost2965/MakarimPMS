@@ -39,7 +39,7 @@ Détaille, pour chacun des 5 lots définis dans `docs/frontend-plan/LOTISSEMENT_
 
 ---
 
-## Lot B — Fondations transverses — ⚙️ En cours (B1+B2/4 terminés)
+## Lot B — Fondations transverses — ⚙️ En cours (B1+B2+B3/4 terminés)
 
 **Objectif** : rembourser la dette des composants partagés jamais construits (Lot 0 d'origine), chacun appliqué immédiatement à un écran réel existant.
 
@@ -91,6 +91,19 @@ Détaille, pour chacun des 5 lots définis dans `docs/frontend-plan/LOTISSEMENT_
 - `npm run build`/`lint`/`test` propres (23/23), aucune régression détectée en navigateur réel.
 - Écart par rapport au plan : `date-picker` a été livré comme `DateRangeField` (paire début/fin avec validation croisée) plutôt qu'un sélecteur de date isolé — un `<input type="date">` seul était déjà bien couvert par `Input`+`FormField` (B1) ; la dette réelle portait sur la duplication de la validation de période (début/fin), présente dans plusieurs écrans (`SeasonRate` ici, `RateRestriction`/`CancellationPolicy` non migrés, à faire au fil de l'eau).
 - Reste à faire : B3 (`toast`+`select` recherche), B4 (`file-upload`+`diff-viewer`).
+
+**Compte-rendu réel — sous-lot B3 (session courante)** :
+
+| Composant | Écran consommateur | Statut |
+|---|---|---|
+| `select-search` (`SelectSearch`) | Sélecteur de chambre de `WalkinCheckinDialog.tsx` | ✅ Livré et vérifié en navigateur réel (filtrage + sélection) |
+| `toast` (`toastManager`/`Toaster`) | Confirmation de réassort (`StockPage.tsx`, `ReplenishForm`) | ✅ Livré et vérifié en navigateur réel (réassort réel → toast affiché) |
+
+- Objectif du sous-lot atteint : les deux derniers composants de priorité Moyenne (`COMPOSANTS_PARTAGES_MANQUANTS.md`) sont livrés, chacun avec un consommateur réel — `select-search` sur une liste réellement longue (24 chambres), `toast` sur une action jusqu'ici silencieuse.
+- Tests dédiés : `components/ui/select-search.test.tsx` (affichage du libellé sélectionné, filtrage + sélection réelle), `components/ui/toast.test.tsx` (3 tests : ajout, fermeture programmatique, fermeture via le bouton après survol de la pile — comportement `aria-hidden` du primitif tant que la pile n'est pas survolée, découvert en écrivant le test).
+- `npm run build`/`lint`/`test` propres (28/28), aucune régression détectée en navigateur réel.
+- Écart par rapport au plan : `<Toaster />` n'est montée que dans la branche authentifiée d'`App.tsx` (pas sur les écrans de connexion) — aucun besoin actuel de toast avant authentification.
+- Reste à faire : B4 (`file-upload`+`diff-viewer`), dernier sous-lot du Lot B.
 
 ---
 

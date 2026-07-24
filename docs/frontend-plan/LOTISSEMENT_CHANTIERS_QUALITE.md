@@ -15,7 +15,7 @@ Partitionne `CH-028` à `CH-035` + `CH-026(e)` (`docs/governance/REGISTRE_CHANTI
 - **Ordre interne recommandé** : CH-031 (0,5-1 j, rapide) → CH-028 (4-6 j, socle + premiers tests ciblés).
 - **Critère de « lot terminé »** : error boundary en place et prouvé par sabotage/restore ; `npm run test` existe et passe à 100 % sur au moins 3 parcours critiques (gating RBAC, refresh token, un flux financier) ; build/lint frontend propres ; aucune régression visuelle sur les écrans existants.
 
-## Lot B — Fondations transverses — ⚙️ En cours (B1+B2/4 terminés, session courante)
+## Lot B — Fondations transverses — ⚙️ En cours (B1+B2+B3/4 terminés, session courante)
 
 - **Chantiers inclus** : CH-032 (composants partagés — dette Lot 0).
 - **Critère de criticité** : dette structurelle qui grossit à chaque écran livré depuis 8 chantiers — pas un blocage immédiat, mais le fondement de tout ce qui suit (accessibilité, tests).
@@ -84,5 +84,14 @@ Chaque lot a un début et une fin visibles (critère de « lot terminé » ci-de
 - **Vérifié en navigateur réel** : bascule d'onglet au clic et au clavier (flèche droite) sur Stock, un seul panneau monté à la fois ; formulaire de tarif saisonnier réel — période incohérente (fin avant début) correctement signalée.
 - `npm run build`/`lint`/`test` propres (23/23 tests, +3 depuis le sous-lot B1), aucune régression.
 - **Écart par rapport au plan initial** : aucun sur `tabs`. Sur `date-picker`, le composant livré est un `DateRangeField` (paire début/fin avec validation croisée) plutôt qu'un simple wrapper de date unique — un `<input type="date">` seul n'avait pas besoin d'un composant dédié (déjà bien géré par `Input`+`FormField` depuis B1) ; la vraie dette identifiée était la duplication de la logique de période (début/fin), pas la sélection d'une date isolée.
-- **Reste à faire dans le Lot B** : sous-lots B3 (`toast`+`select` recherche), B4 (`file-upload`+`diff-viewer`).
-- **Prochain sous-lot proposé** : B3, en attente de feu vert.
+- **Reste à faire dans le Lot B** : sous-lot B4 (`file-upload`+`diff-viewer`).
+
+## Compte-rendu — Lot B, sous-lot B3 (session courante)
+
+- **Composants livrés** : `select-search` (`components/ui/select-search.tsx`, `SelectSearch`, wrapper `@base-ui/react/combobox`) et `toast` (`components/ui/toast.tsx`, `toastManager` singleton + `<Toaster />`).
+- **Consommateurs réels** : sélecteur de chambre de `WalkinCheckinDialog.tsx` (jusqu'à 24 chambres, remplace le `Select` simple existant par un champ filtrable) ; confirmation de réassort dans `StockPage.tsx` (`ReplenishForm`) — action auparavant silencieuse (fermeture du dialogue sans confirmation), contraire à la règle déjà posée dans `EXIGENCES_UX.md` (« une confirmation dit ce qui s'est passé »).
+- **Vérifié en navigateur réel** : recherche "1" dans le sélecteur de chambre filtre correctement la liste et remplit le champ à la sélection ; réassort de stock réel affiche le toast « Réassort enregistré ».
+- `npm run build`/`lint`/`test` propres (28/28 tests, +5 depuis B2), aucune régression.
+- **Écart par rapport au plan initial** : aucun. `<Toaster />` est montée une seule fois dans `App.tsx` (uniquement dans la branche authentifiée) — les écrans de connexion n'ont pour l'instant aucun besoin de toast, cohérent avec l'unique consommateur actuel.
+- **Reste à faire dans le Lot B** : sous-lot B4 (`file-upload`+`diff-viewer`).
+- **Prochain sous-lot proposé** : B4 (dernier du Lot B), en attente de feu vert.

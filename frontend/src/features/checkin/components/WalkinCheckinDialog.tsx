@@ -9,13 +9,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { SelectSearch } from '@/components/ui/select-search';
 import { GuestPicker } from '@/features/guests/components/GuestPicker';
 import type { GuestSelection } from '@/features/guests/components/GuestPicker';
 import type { Room } from '../../reservations/types';
@@ -90,25 +84,17 @@ function WalkinForm({
       >
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="room">Chambre</Label>
-          <Select
+          <SelectSearch
+            id="room"
             value={roomId}
-            onValueChange={(v) => setRoomId(v ?? '')}
+            onValueChange={setRoomId}
+            placeholder="Chercher une chambre (numéro, type)…"
+            emptyMessage="Aucune chambre ne correspond."
             items={rooms.map((room) => ({
               value: String(room.id),
               label: `${room.numero} — ${room.roomType.nom}`,
             }))}
-          >
-            <SelectTrigger id="room" className="w-full">
-              <SelectValue placeholder="Choisir une chambre" />
-            </SelectTrigger>
-            <SelectContent>
-              {rooms.map((room) => (
-                <SelectItem key={room.id} value={String(room.id)}>
-                  {room.numero} — {room.roomType.nom}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
         </div>
 
         <div className="flex flex-col gap-1.5">

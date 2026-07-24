@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { Toaster } from '@/components/ui/toast';
 import { ReservationsCalendarPage } from '@/features/reservations/pages/ReservationsCalendarPage';
 import { CheckinPage } from '@/features/checkin/pages/CheckinPage';
 import { HousekeepingPage } from '@/features/housekeeping/pages/HousekeepingPage';
@@ -188,6 +189,7 @@ function App() {
           </ErrorBoundary>
         </div>
       </div>
+      <Toaster />
       <LogoutGuardDialog
         open={logoutGuardOpen}
         onCancel={() => setLogoutGuardOpen(false)}
