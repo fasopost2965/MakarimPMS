@@ -19,10 +19,10 @@ Ce document isole la dette **structurelle** (comment le code est construit) de l
 **Pourquoi c'est fragile** : une régression dans une branche d'erreur peu fréquente (mais réelle) d'un service ne sera détectée que si un scénario e2e existant la traverse — sinon, jamais avant la production. C'est un choix assumé et documenté (`CLAUDE.md` : « toujours contre une vraie base MySQL, jamais de mock »), pas un oubli, mais cela reste une dette de vitesse de feedback qui grossit avec chaque nouveau service.
 **Chantier** : CH-017 (à traiter comme une pratique continue, pas un chantier ponctuel).
 
-### 4. Collision de nom de fichier `room-transitions.ts` (Phase 9 §2)
-**Nature** : deux fichiers de noms identiques dans deux modules différents (`rooms/utils/` et `housekeeping/utils/`), contenus non dupliqués mais ambigus à la première lecture.
-**Pourquoi c'est fragile** : risque de confusion pour un nouveau développeur ou une IA qui chercherait « la » matrice de transition et tomberait sur le mauvais fichier.
-**Chantier** : CH-019 (quasi gratuit à corriger).
+### 4. ~~Collision de nom de fichier `room-transitions.ts`~~ (Phase 9 §2) — **Résolu (CH-019, session courante)**
+**Nature d'origine** : deux fichiers de noms identiques dans deux modules différents (`rooms/utils/` et `housekeeping/utils/`), contenus non dupliqués mais ambigus à la première lecture.
+**Résolution** : `housekeeping/utils/room-transitions.ts` renommé en `housekeeping/utils/manual-status-targets.ts` (nom déjà proposé par la fiche d'origine) — `rooms/utils/room-transitions.ts` (matrice `ROOM_TRANSITIONS`/`canTransition`, propriété exclusive du module `rooms`) reste inchangé sous son nom d'origine, la collision n'existe donc plus.
+**Chantier** : CH-019 (terminé).
 
 ### 5. ~~`PrismaService` minimal sans point d'extension~~ (Phase 4 §1) — **Résolu (CH-004 + CH-006)**
 **Nature d'origine** : à l'origine, une classe `extends PrismaClient` sans `$use()`/`$extends()`.

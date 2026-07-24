@@ -21,7 +21,7 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 10. **CH-007** — ✅ **Terminé** (session courante). Interface frontend self-checkin (staff) — voir `REGISTRE_CHANTIERS.md` pour le détail (`SelfCheckinPanel.tsx`, corrige au passage un bug latent de `lib/api-client.ts` et la dette technique #6 de `seed.ts`). **CH-009** — ✅ **Terminé** (session courante). Interface frontend channel-manager (mappings OTA) — voir `REGISTRE_CHANTIERS.md` pour le détail (4e onglet `ParametersPage.tsx`, vérifié par un appel webhook réel bout-en-bout). **CH-008** — ✅ **Terminé** (session courante). Interface frontend notifications (templates/journal) — voir `REGISTRE_CHANTIERS.md` pour le détail (nouvel onglet dédié `features/notifications/`, preuve RBAC serveur 403 réelle)
 
 ### Vague 3 — Secondaires (dette technique, à intercaler entre les livraisons fonctionnelles)
-11. CH-019 — Renommage `room-transitions.ts` *(quasi gratuit, à faire dès qu'un développeur touche ce module)*
+11. ~~CH-019~~ — ✅ **Terminé** (session courante). Renommage `housekeeping/utils/room-transitions.ts` → `manual-status-targets.ts` — voir `REGISTRE_CHANTIERS.md` pour le détail (deux imports mis à jour, aucune logique modifiée).
 12. ~~CH-013~~ — ✅ **Terminé** (session courante). Enum mort `StatutSejour.ANNULE` retiré — voir `REGISTRE_CHANTIERS.md` (RD-012).
 13. ~~CH-014~~ — ✅ **Terminé** (session courante). Consultation `RoomStatusLog` — voir `REGISTRE_CHANTIERS.md` pour le détail (`GET /rooms/:id/historique-statuts`, `RoomHistoryDialog.tsx`).
 14. CH-018 — Resynchronisation documentation modules
