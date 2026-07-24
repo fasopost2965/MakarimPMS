@@ -360,6 +360,14 @@ model ReservationDeposit {
 // par une réservation est rattachée au séjour (stayId) au moment du
 // check-in sans être recréée (même ligne, même contrainte d'unicité) ; une
 // nuit issue d'un check-in walk-in n'a jamais de reservationId.
+// CH-024 (docs/governance/REGISTRE_CHANTIERS.md) : `reservationId IS NOT
+// NULL OR stayId IS NOT NULL` (jamais les deux nulles) reste un invariant
+// purement applicatif, jamais les deux nulles en pratique (3 sites de
+// création + 1 mise à jour audités, aucun ne produit ce cas) — PAS porté
+// par une contrainte CHECK MySQL : `onDelete: Cascade` sur les deux FK
+// ci-dessous rend toute expression CHECK les référençant rejetée par
+// MySQL 8 (erreur 3823, restriction documentée). Voir la fiche CH-024
+// pour le détail et les options non retenues (retirer CASCADE, trigger).
 model RoomNight {
   id            Int          @id @default(autoincrement())
   roomId        Int
