@@ -34,7 +34,7 @@ Partitionne `CH-028` à `CH-035` + `CH-026(e)` (`docs/governance/REGISTRE_CHANTI
 - **Ordre interne recommandé** : CH-034 (décision, quasi instantané) → CH-029 (2-3 j).
 - **Critère de « lot terminé »** : la décision CH-034 est tranchée et tracée (RD dédiée), développement associé livré si l'option « investir » est retenue ; plugin `jsx-a11y` actif sans violation bloquante ; les 3 parcours prioritaires (check-in, housekeeping, facturation) validés utilisables intégralement au clavier.
 
-## Lot D — Performance / sécurité
+## Lot D — Performance / sécurité — 🔄 En cours (CH-030 terminé, session courante)
 
 - **Chantiers inclus** : CH-030 (code splitting), CH-026(e) (tokens `localStorage` → cookie `httpOnly`).
 - **Critère de criticité** : réduisent un risque (sécurité) ou un coût (temps de chargement) sans changer ce que l'utilisateur voit — traités une fois la base (tests, composants) stabilisée.
@@ -127,4 +127,12 @@ Les 7 composants prévus par `docs/frontend-plan/COMPOSANTS_PARTAGES_MANQUANTS.m
 
 Les deux chantiers du lot sont livrés et vérifiés en conditions réelles. Détail complet et bilan : `docs/governance/REGISTRE_CHANTIERS.md` (fiches CH-034, CH-029).
 
-**Prochain lot proposé** : Lot D — performance/sécurité (CH-030, code splitting par onglet ; CH-026(e), migration des tokens JWT vers un cookie `httpOnly` — le chantier le plus risqué de toute la vague, nécessite une note de conception CSRF/CORS avant tout code). En attente de votre feu vert.
+## Compte-rendu — Lot D, CH-030 (session courante)
+
+- **Livrable** : les 13 pages de premier niveau rendues depuis `App.tsx` (hors `LoginPage`/`ForgotPasswordPage`) converties en `React.lazy` + `Suspense` (fallback « Chargement… », conforme `EXIGENCES_UX.md`, à l'intérieur de l'`ErrorBoundary` CH-031). Chunk principal réduit de 571 kB à 237 kB (gzip 170 kB → 75 kB).
+- **Vérifié en navigateur réel** (Playwright, onglet réseau intercepté, données seedées réelles) : 9/9 assertions — modules non visités jamais téléchargés, module demandé exactement à la navigation, pas de re-téléchargement à une revisite, contenu réel affiché sans écran blanc.
+- `npm run build`/`lint`/`test` propres (45/45 tests, aucune régression).
+- **Écart par rapport au plan initial** : aucun.
+- **Reste dans le Lot D** : CH-026(e) — le chantier le plus risqué de toute la vague, nécessite une note de conception CSRF/CORS écrite avant tout code.
+
+**Prochaine étape proposée** : CH-026(e) — je vais d'abord rédiger la note de conception (protection CSRF, révision du carve-out CORS) et vous la présenter avant d'écrire la moindre ligne de code, conformément au prérequis posé pour ce chantier.

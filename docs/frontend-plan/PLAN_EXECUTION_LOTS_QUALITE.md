@@ -203,6 +203,18 @@ Vérification : 45/45 tests Vitest (+3), build/lint propres, 10/10 assertions Pl
 
 **Format de compte-rendu attendu** : idem Lot A ; pour CH-026(e) spécifiquement, la note de conception CSRF/CORS doit être annexée ou renvoyée en tête du compte-rendu, avant le détail d'implémentation.
 
+**Compte-rendu réel — CH-030 (session courante)** :
+
+| Élément | Détail |
+|---|---|
+| Découpage | 13 pages de premier niveau converties en `React.lazy`+`Suspense` (`App.tsx`), `LoginPage`/`ForgotPasswordPage` restent statiques |
+| Chunk principal | 571 kB → 237 kB (gzip 170 kB → 75 kB) |
+| État de chargement | `<p>Chargement…</p>`, conforme `EXIGENCES_UX.md` (jamais d'écran blanc) |
+
+Vérification : `npm run build` confirme des chunks séparés par écran ; 9/9 assertions Playwright réelles sur l'onglet réseau (modules non visités jamais téléchargés, téléchargement exact à la navigation, pas de re-téléchargement à une revisite) ; build/lint/test propres (45/45). Détail complet : `docs/governance/REGISTRE_CHANTIERS.md` (fiche CH-030).
+
+**Reste dans le Lot D** : CH-026(e) — note de conception CSRF/CORS à rédiger et présenter avant tout code, conformément au prérequis de la fiche.
+
 ---
 
 ## Lot E — Finition produit
