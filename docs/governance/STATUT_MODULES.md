@@ -8,11 +8,11 @@ Statut par module backend, croisé avec la présence d'une interface frontend et
 | Module | Backend | Frontend | Chantiers ouverts | Remarque |
 |---|---|---|---|---|
 | `auth` | ✅ | ✅ | CH-026(e) | CH-002 (reset password non sécurisé) **terminé**, **CH-011 terminé** (`GET /auth/me` alimente désormais le gating RBAC frontend transverse, voir `AppSidebar`), **CH-026(a)(b)(c)(d)(f) terminés** (helmet, comparaison à temps constant du secret webhook, verrouillage de compte, complexité mot de passe, rotation/révocation refresh token) — seul CH-026(e) (cookie httpOnly) reste explicitement différé, RD-016 |
-| `rooms` | ✅ | ⚠️ (via housekeeping) | CH-014 | Historique de statut jamais consultable |
+| `rooms` | ✅ | ✅ (via housekeeping) | — | **CH-014 terminé** — historique de statut consultable (`GET /rooms/:id/historique-statuts`, `RoomHistoryDialog.tsx`) |
 | `parameters` | ✅ | ✅ | — | — |
 | `reservations` | ⚠️ | ✅ | CH-016 | Service le plus volumineux, dette de découpage |
 | `stay` | ✅ | ✅ (`checkin/`) | — | **CH-005 terminé** — checkout bloqué sur solde impayé (`ConflictException`), check-out forcé réservé à `checkin:force-checkout` |
-| `housekeeping` | ✅ | ✅ | CH-014 | — |
+| `housekeeping` | ✅ | ✅ | — | — |
 | `maintenance` | ✅ | ✅ | — | — |
 | `guests` (+ `companies`) | ⚠️ | ✅ | CH-021 | **CH-010 terminé** — contrainte dure sur `pieceIdentite` (index aveugle) + détection souple email/téléphone ; `Company` reste déconnectée (CH-021, dépriorisé formellement, EA-001) |
 | `billing` | ✅ | ⚠️ (via checkin ; pas d'UI pour l'avoir) | — | **CH-001 terminé** — avoir total (`POST /invoices/:id/credit-notes`), régénération de facture corrigée possible sur le même folio |

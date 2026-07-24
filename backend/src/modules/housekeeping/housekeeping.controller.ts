@@ -26,6 +26,17 @@ export class HousekeepingController {
     return this.housekeepingService.findAllRooms();
   }
 
+  // CH-014 (docs/governance/REGISTRE_CHANTIERS.md) — RoomStatusLog était
+  // peuplée à chaque transition mais jamais lue par aucune route.
+  @RequirePermission('housekeeping', 'read')
+  @ApiOperation({
+    summary: "Historique des changements de statut d'une chambre",
+  })
+  @Get('rooms/:id/historique-statuts')
+  historiqueStatuts(@Param('id', ParseIntPipe) id: number) {
+    return this.housekeepingService.findStatusHistory(id);
+  }
+
   @RequirePermission('housekeeping', 'write')
   @ApiOperation({ summary: "Change manuellement le statut d'une chambre" })
   @Patch('rooms/:id/statut')

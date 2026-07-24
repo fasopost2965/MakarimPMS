@@ -94,4 +94,16 @@ export class RoomsService {
     }
     return room;
   }
+
+  // CH-014 (docs/governance/REGISTRE_CHANTIERS.md) — RoomStatusLog était
+  // peuplé à chaque transitionRoom() mais jamais lu par aucune route.
+  // Lecture seule, RoomsService reste l'unique propriétaire de cette table.
+  async findStatusHistory(roomId: number, tx?: Prisma.TransactionClient) {
+    const client = tx ?? this.prisma;
+    await this.findByIdOrThrow(roomId, tx);
+    return client.roomStatusLog.findMany({
+      where: { roomId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
 }

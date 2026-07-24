@@ -26,6 +26,15 @@ export class HousekeepingService {
     return this.roomsService.findAllWithType();
   }
 
+  // CH-014 — façade de lecture seule vers RoomStatusLog (propriété exclusive
+  // de RoomsService) : le contrôleur HTTP reste sur HousekeepingController
+  // (écart documenté CLAUDE.md — pas de rooms:read dédié tant qu'aucune
+  // route de configuration de chambre n'existe), donc cette route passe par
+  // le même service que GET /rooms et PATCH /rooms/:id/statut.
+  findStatusHistory(roomId: number) {
+    return this.roomsService.findStatusHistory(roomId);
+  }
+
   // Point de vigilance non négociable : une chambre OCCUPEE ou DEPART_PREVU
   // (un séjour y est toujours en cours dans les deux cas) ne doit jamais
   // pouvoir être modifiée par un changement manuel — seul le check-out
