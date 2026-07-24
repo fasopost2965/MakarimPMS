@@ -35,6 +35,18 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 22. CH-016 — Découpage `ReservationsService`
 23. CH-017 — Couverture de tests unitaires *(pratique continue, pas un chantier ponctuel — voir `CRITERES_GO_LIVE.md`)*
 
+### Chantiers cadrés en attente de priorisation (hors ordre d'exécution ci-dessus)
+
+Ces chantiers ne sont **pas** issus de l'audit initial (Phases 1-9) — ils naissent d'un cadrage produit distinct, validé en principe par l'utilisateur, mais dont le timing d'insertion dans la file de développement a été explicitement laissé ouvert. Ne pas les commencer sans confirmation explicite de timing.
+
+- **CH-027** — Personnel, Planning des shifts & Pointage (« Planning & Attendance ») — cadrage `docs/planning/CADRAGE_PLANNING_ATTENDANCE_STAFF.md`, validé en principe (`REGISTRE_DECISIONS.md`, RD-017), fiche complète dans `REGISTRE_CHANTIERS.md`. Découpage en 8 sous-lots (A. modèle de données → H. reporting), ~11–13,5 j développeur seul (~15,5–19,5 j combiné avec le socle portail de connexion `CADRAGE_SESSION_TRAVAIL_STAFF.md`, lui aussi cadré mais non planifié). Proposition d'ordre si retenu, une fois le reste du backlog Vague 3 clos ou en parallèle sur un autre développeur (aucune dépendance croisée avec CH-018/019/022/024/025) :
+  1. **Lot B — provisioning composite** (`User`+`Employee` en un geste) : débloque le vrai chaînon manquant du référentiel personnel (aujourd'hui, ajouter un employé réel nécessite un accès base directe) — le plus autonome et le plus immédiatement utile, indépendant du reste.
+  2. **Lot A + C — modèle `ShiftPlan` + CRUD backend planning** : dépend des arbitrages encore ouverts (`CADRAGE_PLANNING_ATTENDANCE_STAFF.md` §13.3 — confirmation employé, granularité RBAC).
+  3. **Lot D + E — écrans référentiel enrichi + agenda planning** : le plus volumineux (2,5–3 j pour l'agenda seul), à ne démarrer qu'une fois B/C stabilisés.
+  4. **Lot F + G — rapprochement prévu/réel + enrichissement du portail de pointage** : dépend de C, peut être livré après E sans bloquer le reste.
+  5. **Lot H — résumé reporting attendance** : dépend de F, peut suivre en dernier (`GET /hr/attendance-summary`, pas `reporting`, voir `docs/modules/reporting.md` §16).
+  Ne pas insérer ce chantier dans l'ordre d'exécution numéroté ci-dessus tant que l'utilisateur n'a pas explicitement arbitré son timing par rapport au reste du backlog.
+
 ## Arbitrages produit à obtenir avant développement (ne pas coder avant tranché)
 
 | Chantier | Arbitrage requis |

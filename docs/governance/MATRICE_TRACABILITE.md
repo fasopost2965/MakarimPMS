@@ -29,6 +29,7 @@ Relie, pour chaque grand domaine fonctionnel, l'exigence métier au module, à l
 | Empêcher la duplication de fiche client (contournement blacklist) | `guests` | `POST`/`PATCH /guests`, `POST /checkin/walk-in` (contrainte `pieceIdentiteHash`) ; `GET /guests/check-duplicate` (souple) | `docs/governance/REGISTRE_DECISIONS.md` (RD-011) | Phase 3 | **CH-010 — terminé** | ✅ (`guests.e2e-spec.ts`) | n/a (transparent, extension Prisma) | ✅ |
 | Filtrer systématiquement les lignes soft-deleted | transverse (Prisma) | `backend/src/prisma/soft-delete.extension.ts` (`$extends`, `$allModels`) | `docs/ADR-005-Audit-Soft-Delete.md`, `docs/governance/REGISTRE_DECISIONS.md` (RD-010) | Phases 3, 4, 9 | **CH-006 — terminé** | ✅ (`soft-delete.e2e-spec.ts`) | n/a | ✅ (top-level ; limite documentée sur les lectures imbriquées via `include`) |
 | Consulter le journal d'audit transverse | `audit` | `GET /audit-logs` | `docs/modules/audit.md` | Phase 8 | **CH-015 — terminé** | ✅ (`audit.e2e-spec.ts`) | ✅ (`features/audit/`) | ✅ |
+| Planifier à l'avance les shifts du personnel et rapprocher prévu/réel | `hr` | *(à créer)* `ShiftPlan`, `GET /hr/attendance-summary` | `docs/planning/CADRAGE_PLANNING_ATTENDANCE_STAFF.md` (cadrage, pas une spec de module validée) | *(hors audit initial — cadrage produit dédié)* | **CH-027 — cadré, non planifié** (RD-017) | ❌ *(non implémenté)* | ❌ *(non implémenté)* | ❌ *(BR-RH-002 du cahier des charges d'origine, jamais construit — voir `DATA_DICTIONARY.md`)* |
 
 ---
 

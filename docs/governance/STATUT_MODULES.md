@@ -25,7 +25,7 @@ Statut par module backend, croisé avec la présence d'une interface frontend et
 | `booking-engine` | ✅ | n/a | — | Façade publique pure, pas d'UI staff attendue |
 | `document-ocr` | ✅ | ❌ | CH-022 | Backend prêt, aucune UI |
 | `reporting` | ✅ | ✅ | — | Export CSV du registre de police fonctionnel (mais dépend de CH-003 pour avoir des données à exporter) |
-| `hr` | ✅ | ✅ | — | — |
+| `hr` | ✅ | ✅ | CH-027 (cadré, non planifié) | Référentiel personnel/planning/pointage étendu cadré (`docs/planning/CADRAGE_PLANNING_ATTENDANCE_STAFF.md`, RD-017) : provisioning `User`+`Employee`, `ShiftPlan` (planning prévisionnel, `BR-RH-002` jamais implémenté), rapprochement prévu/réel — validé en principe, timing non tranché, aucun code écrit |
 | `stock` | ✅ | ✅ | — | — |
 | `channel-manager` | ✅ | ✅ | — | **CH-009 terminé** — 4e onglet « Channel Manager » dans `ParametersPage.tsx` (CRUD des mappings type de chambre ↔ canal externe) |
 

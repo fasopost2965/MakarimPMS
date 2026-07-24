@@ -1,6 +1,6 @@
 # Note de cadrage — Personnel, Planning des shifts & Pointage (Planning & Attendance)
 
-*Statut : **brainstorming en pause** — cadrage exploratoire, non arbitré, non implémenté. Élargit et remplace le périmètre de `CADRAGE_SESSION_TRAVAIL_STAFF.md` (conservé pour référence, notamment §7/§9 de ce document qui en reprennent directement le contenu déjà validé côté conception). Mis volontairement de côté le temps de finaliser les chantiers déjà identifiés par l'audit (`docs/governance/`) — à reprendre lors d'une session dédiée, une fois les arbitrages de la section 11 tranchés. Ne bloque et ne conditionne aucun des chantiers en cours.*
+*Statut : **cadrage validé en principe, non implémenté** — chantier de suivi [`CH-027`](/docs/governance/REGISTRE_CHANTIERS.md) (`REGISTRE_CHANTIERS.md`). L'utilisateur a tranché la majorité des arbitrages de la section 11 (voir §13 « Arbitrages tranchés » ci-dessous et [`RD-017`](/docs/governance/REGISTRE_DECISIONS.md)) ; quelques points ponctuels restent ouverts (§13, deuxième tableau) sans remettre en cause le principe général. Élargit et remplace le périmètre de `CADRAGE_SESSION_TRAVAIL_STAFF.md` (conservé pour référence, notamment §7/§9 de ce document qui en reprennent directement le contenu déjà validé côté conception). **Le code n'a volontairement pas démarré** : le timing d'insertion dans la file de développement reste à discuter avec l'utilisateur (dépend des chantiers déjà ouverts/planifiés — voir `docs/governance/BACKLOG_PRIORISE.md`, section « Chantiers cadrés en attente de priorisation »). Ne bloque et ne conditionne aucun des chantiers en cours.*
 
 ## 0. Constat préalable — existant / à étendre / à créer
 
@@ -209,6 +209,44 @@ Repris et complétés par rapport au cadrage précédent (les 6 arbitrages de `C
 *« Simple prolongement du module `hr` existant, ou sous-module dédié “Planning & Attendance” ? »*
 
 **Recommandation : un sous-domaine interne au module `hr` (`hr/shift-plans/*`), pas un nouveau module de premier niveau.** `ShiftPlan` dépend structurellement d'`Employee` (déjà dans `hr`), le pointage réel avec lequel il se compare est déjà dans `hr` (ADR-007), et la charte de dépendances du projet (`docs/DEPENDENCY_GRAPH.md`) n'a pas de précédent de module scindé pour une simple raison de taille fonctionnelle — `guests`/`companies` et `stay`/`checkin` restent délibérément regroupés dans des cas similaires. Un nouveau module top-level ajouterait une frontière RBAC et une charge de coordination sans bénéfice réel pour un hôtel de cette taille — cohérent avec la contrainte explicite *« pas un ERP RH géant »*.
+
+## 13. Arbitrages tranchés (session courante) et points encore ouverts
+
+Voir `REGISTRE_DECISIONS.md` (RD-017) pour la version consignée formellement de ce qui suit.
+
+### 13.1 Tranchés — le principe du cadrage est validé sur ces points
+
+| # (§11) | Point | Décision |
+|---|---|---|
+| §11.5 | Provisioning composite | Confirmé prioritaire : un seul geste crée `User` + `Employee` (§5). |
+| — | `Employee.userId` obligatoire | Confirmé : pas de personnel « fantôme » sans compte PMS, aucun changement par rapport à l'existant (§2). |
+| §11.1 | Enum `Poste` | Introduit tel que proposé (MATIN/SOIR/NUIT/AUTRE) — indication par défaut pour préremplir le planning, **jamais** une contrainte dure empêchant un employé de travailler exceptionnellement sur un autre poste. |
+| — | `Employee.telephone` | Confirmé — pour joindre le staff au sujet du planning. |
+| — | Séparation `ShiftPlan` (prévu) / `TimeShift` (réel) | Confirmée telle que proposée (§2, §4) — le rapprochement (§8) reste un calcul de lecture, jamais une fusion ou une table matérialisée. |
+| §11.4 (partiel) | Module | Confirmé : le domaine reste `hr`, découpage interne `hr/employees`, `hr/attendance`, `hr/shift-plans`, `hr/payroll` (§3) retenu tel quel comme organisation de code. |
+| — | Reporting | Confirmé dans le principe (résumé attendance : heures prévues vs réelles, absences/retards/anomalies, lecture seule) — **mais l'implantation proposée en §3/§9 (`GET /reporting/attendance-summary`, sous le module `reporting`) est en conflit avec une règle déjà gelée** (voir §13.2 ci-dessous, point bloquant nouvellement identifié).
+
+### 13.2 Point bloquant nouvellement identifié en relisant la doc gelée (pas un des 7 arbitrages listés en §11 d'origine)
+
+**Conflit de dépendance `reporting` → `hr`.** `docs/modules/reporting.md` §11 (« Dépendances interdites ») est explicite et déjà gelé : *« `hr` : Le module de reporting hôtelier n'accède pas aux fiches de paie ou au pointage des équipiers de ménage. Justification : Ségrégation absolue des données d'exploitation commerciale et de la confidentialité de la paie RH. »* — la RBAC de `reporting` (`reporting:read`, réservé à Administrateur/Comptable, cf. `reporting.md` §7) est en outre disjointe de celle de `hr` (`hr:read`/`hr:write`, réservée à Administrateur/RH). Proposer `GET /reporting/attendance-summary` violerait donc directement cette frontière gelée. Trois options concrètes :
+
+1. **(Recommandée)** Garder la façade côté `hr` — par exemple `GET /hr/attendance-summary` (`hr:read`) plutôt que sous `reporting`. Respecte `reporting.md` §11 sans y toucher, cohérent avec le fait que seuls Administrateur/RH ont légitimement besoin de ce résumé (un Comptable n'a pas de raison métier de voir qui est en retard). Coût : zéro changement sur un document déjà gelé.
+2. Amender `docs/modules/reporting.md` §11 pour ajouter une dérogation documentée (même famille que le carve-out déjà accepté pour `housekeeping` → `reservations`/`stay` en lecture seule, `CLAUDE.md` §Architecture backend) — nécessiterait une nouvelle exception explicite au référentiel gelé, avec la justification correspondante, avant tout code.
+3. Dupliquer le calcul dans les deux modules (un exposé `hr:read` pour RH/Admin, un second exposé `reporting:read` pour Comptable/Admin, tous deux appelant la même fonction utilitaire pure sans dépendance de module à module) — évite le conflit de dépendance mais ajoute une route et une décision RBAC supplémentaires pour un besoin non exprimé (aucune demande de visibilité côté Comptable dans le brief).
+
+Sans arbitrage explicite de l'utilisateur, l'option 1 est celle retenue par défaut si ce sous-lot (H, §12) est un jour entrepris — elle ne casse aucune règle déjà gelée et couvre le besoin exprimé (visibilité manager/RH).
+
+### 13.3 Encore ouverts (§11 d'origine, non tranchés par l'utilisateur cette session)
+
+Ces points ne bloquent pas le principe général déjà validé, mais bloquent le premier commit de code des sous-lots qu'ils concernent (C, E, F selon le point) :
+
+| # | Point | Options concrètes |
+|---|---|---|
+| §11.2 | `StatutShiftPlan.CONFIRME` (accusé de réception employé) | (a) Retenir dès la v1 (ajoute un geste employé, cohérent avec §7 portail de pointage) · (b) Différer en v2, planning simplement « publié » sans acquittement (plus simple, suffisant pour un effectif de cette taille) |
+| §11.3 | Échange de shift self-service (BR-RH-002 d'origine) | (a) v1 = création/modification par un manager uniquement (option par défaut du cadrage) · (b) v1 inclut un flux `echangeDemande`/validation manager dès le départ (charge notable en plus, cf. estimation §12) |
+| §11.4 (RBAC fine) | `hr:planning:write` distinct de `hr:write` (paie) | (a) Rester sur `hr:read`/`hr:write` unique pour cette v1 (RH/Administrateur seuls à publier un planning) · (b) Introduire une permission dédiée `hr:planning:write` pour permettre à un responsable Housekeeping de planifier son équipe sans accès à la paie |
+| §11.6 | `User.nom` unique vs `nom`/`prenom` séparés | (a) Conserver `nom` unique, convention de saisie « Nom Prénom » (zéro migration, zéro impact sur l'existant) · (b) Migrer en deux champs (formulaire plus propre, mais impacte tous les affichages existants du projet) |
+| §11.7 | Tolérance de « conformité » (§8) | Paramètre opérationnel simple, non structurant — 15 minutes proposé par défaut, ajustable sans redéveloppement (constante de configuration, pas un arbitrage de conception) |
 
 ---
 
