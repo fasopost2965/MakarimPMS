@@ -1,6 +1,6 @@
 # Registre des chantiers — Makarim PMS v1 (post-audit)
 
-Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audits/`) en chantier actionnable. **Aucun chantier ici ne provient d'une invention** : chaque fiche cite sa phase source. Un chantier sans preuve auditée n'est pas dans ce registre.
+Ce registre transforme chaque constat factuel des 11 phases d'audit (`docs/audits/` — Phases 1-10 : complétude fonctionnelle ; Phase 11 : qualité/fiabilité frontend post-couverture) en chantier actionnable. **Aucun chantier ici ne provient d'une invention** : chaque fiche cite sa phase source. Un chantier sans preuve auditée n'est pas dans ce registre.
 
 **Convention d'identifiant** : `CH-0XX`. **Convention de statut** : `à faire` / `en cours` / `bloqué` / `terminé` / `reporté (assumé)` / `abandonné (assumé)`. Un chantier passé `reporté` ou `abandonné` doit avoir sa justification consignée dans `docs/governance/ECARTS_ASSUMES.md`, jamais silencieusement retiré de ce registre.
 
@@ -366,6 +366,7 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 - **Résolution (d)** : `ResetPasswordDto.nouveauMotDePasse` exige désormais au moins une minuscule, une majuscule et un chiffre (`@Matches`), en plus du `@MinLength(8)` déjà en place.
 - **Résolution (f)** : nouvelle table `RefreshToken` (`jti`, `userId`, `expiresAt`, `revokedAt`) — l'access token reste entièrement stateless (aucune lecture base sur son chemin de vérification), seul le refresh token embarque désormais un `jti` unique. `AuthService.refresh()` révoque systématiquement l'ancien jeton avant d'émettre le nouveau (rotation à usage unique — un refresh token volé et rejoué après que le titulaire légitime a déjà rafraîchi échoue désormais, alors qu'un JWT stateless restait valable jusqu'à expiration naturelle quel que soit le nombre de réutilisations). Nouvelle route `POST /auth/logout` (idempotente, tolérante à un jeton déjà invalide) révoque explicitement le jeton courant ; câblée dans `App.tsx` (`doLogout()`, best-effort, ne bloque jamais la déconnexion locale).
 - **Report explicite (e)** : non implémenté cette itération — refonte architecturale plus large que les autres sous-points (bascule de tout le flux d'authentification de `localStorage`+`Authorization: Bearer` vers un cookie `httpOnly`/`SameSite`), qui nécessiterait de concevoir une protection CSRF (absente aujourd'hui, non nécessaire tant que l'auth ne repose pas sur un cookie envoyé automatiquement par le navigateur) et de revoir le carve-out CORS documenté pour F4/F6 (`main.ts`, origine réfléchie + `credentials:false` sur les routes publiques). Le commentaire déjà présent dans `frontend/src/lib/token-storage.ts` anticipait explicitement ce report (« évolution vers des cookies httpOnly pourra être envisagée plus tard sans changer l'API de ce module »). Scindé en un sous-chantier propre CH-026(e) si repris — voir `REGISTRE_DECISIONS.md` (RD-016).
+- **Reconfirmé et enrichi par l'audit Phase 11** (`docs/audits/PHASE_11_FRONTEND_QUALITE.md` §4.3) : ce sous-point (e) est le même chantier que celui identifié indépendamment par l'audit qualité frontend sous l'angle « stockage des tokens JWT en `localStorage` » — pas un nouveau chantier, volontairement pas dupliqué sous un nouvel identifiant (voir la section « Chantiers frontend — issus de l'audit qualité (Phase 11) » ci-dessous, qui renvoie ici plutôt que de recréer une fiche). L'audit Phase 11 ajoute un élément factuel neuf par rapport à RD-016 : **les deux jetons** (access et refresh) sont exposés en `localStorage`, pas seulement l'un des deux — un vol par XSS donne donc une session persistante volée (refresh incluse), pas seulement 15 minutes d'access token.
 - **Éléments testés** : `backend/test/auth.e2e-spec.ts` (rotation/réutilisation refusée, logout idempotent, verrouillage après 5 échecs y compris mot de passe correct, levée automatique du verrouillage par recul artificiel des horodatages, complexité de mot de passe sans consommer le jeton, en-tête `x-content-type-options` posé par helmet) ; nouveau `backend/test/channel-manager-webhook.e2e-spec.ts` (garde webhook seule — aucune suite e2e n'existait jusqu'ici pour ce module, gap pré-existant comblé uniquement pour la garde modifiée par (b), pas une reprise complète). Suite complète rejouée : 139/139 e2e, 32/32 unitaires, aucune régression.
 - **Documents liés** : `docs/governance/REGISTRE_DECISIONS.md` (RD-016).
 
@@ -382,6 +383,161 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 
 ---
 
+## Chantiers frontend — issus de l'audit qualité (Phase 11)
+
+Contrairement aux chantiers CH-001 à CH-026 (issus des Phases 1-10, constat de complétude fonctionnelle), les fiches suivantes proviennent de `docs/audits/PHASE_11_FRONTEND_QUALITE.md` — un audit distinct, mené *après* que la quasi-totalité des écrans manquants de la Phase 8 ont été livrés, portant sur la qualité structurelle et non fonctionnelle du frontend (tests, accessibilité, sécurité du stockage client, résilience, performance de chargement, dette sur les fondations transverses). **Aucun code n'a été écrit pour ces chantiers à la date de leur versement** — conformément à la demande explicite de l'utilisateur (« ne code rien à ce stade, remets d'abord la documentation et la gouvernance frontend à niveau »), seule la documentation/gouvernance est produite ici ; l'exécution attend un feu vert explicite, chantier par chantier ou par lot, comme pour CH-027.
+
+### CH-028 — Socle de tests automatisés frontend
+
+- **Source** : `docs/audits/PHASE_11_FRONTEND_QUALITE.md` §4.1
+- **Description factuelle** : `find frontend/src -iname "*.test.*" -o -iname "*.spec.*"` → 0 résultat. `frontend/package.json` ne déclare aucune dépendance de test (ni Vitest, ni Testing Library, ni Playwright en CI). Toute vérification de chantier frontend cette session (CH-003, CH-007 à CH-009, CH-011, CH-014, CH-015, CH-022) a été manuelle, en navigateur réel, non reproductible automatiquement.
+- **Pourquoi ce chantier existe** : sur un PMS hôtelier où un bug de check-in/facturation/RBAC a un impact financier ou légal direct, l'absence de toute garantie automatisée côté frontend est le plus gros écart de discipline par rapport au backend (`CLAUDE.md` : « toujours contre une vraie base MySQL, jamais de mock » — discipline non négociable côté backend, totalement absente côté frontend).
+- **Modules concernés** : transverse (tout `frontend/src/features/*`), en priorité les parcours à risque financier/légal (check-in/checkout, facturation, RBAC).
+- **Priorité** : Important · **Criticité** : Élevée (et croissante avec chaque nouvel écran livré sans test)
+- **Impact métier** : Élevé (une régression sur un parcours de facturation/check-out ne serait détectée qu'en usage réel) · **Impact sécurité** : Modéré (une régression sur le gating RBAC frontend passerait inaperçue) · **Impact conformité** : Faible direct · **Impact exploitation** : Élevé (chaque nouvel écran augmente la surface non couverte)
+- **Dépendances** : aucune technique. Bénéficie de CH-032 (composants partagés) une fois construits — plus simple de tester des composants génériques que des primitives ad hoc dupliquées.
+- **Prérequis** : choix d'outillage (Vitest + Testing Library, cohérent avec l'écosystème Vite déjà en place, pas de nouveau bundler à introduire) — pas d'arbitrage produit, décision technique.
+- **Livrable attendu** : socle Vitest + React Testing Library installé et configuré ; couverture initiale ciblée sur les parcours critiques (gating RBAC — `AppSidebar`/`NAV_ITEMS`, flux d'authentification/refresh token — `lib/api-client.ts`, au moins un flux métier financier) plutôt qu'une couverture exhaustive immédiate.
+- **Critères de validation** : (1) `npm run test` (nouveau script) exécute la suite en CI-compatible (pas de dépendance à un navigateur réel) ; (2) au moins un test couvre une régression déjà rencontrée cette session (ex. le bug latent de `lib/api-client.ts` sur un corps de réponse vide, CH-007) pour prouver la valeur du socle sur un cas réel, pas seulement un test de démonstration.
+- **Statut** : à faire
+- **Estimation de charge** : Moyenne-Élevée (4-6 jours pour le socle + une première couverture significative — pratique continue au-delà, à l'image de CH-017 côté backend, pas un chantier ponctuel clos une fois pour toutes).
+- **Niveau de confiance de l'estimation** : moyenne (dépend de la profondeur de couverture visée, à cadrer avec l'utilisateur avant de démarrer).
+- **Lien(s) audit** : Phase 11 §4.1.
+- **Documents liés** : `CLAUDE.md` (section Tests, à étendre côté frontend le cas échéant), `docs/governance/REGISTRE_RISQUES.md` (R-15).
+
+---
+
+### CH-029 — Accessibilité (a11y) frontend
+
+- **Source** : `docs/audits/PHASE_11_FRONTEND_QUALITE.md` §4.2
+- **Description factuelle** : 2 fichiers `.tsx` sur 38 utilisent un attribut `aria-*`, 0 fichier utilise `role=`, aucun plugin ESLint `jsx-a11y` configuré. Aucune gestion de focus documentée sur `components/ui/dialog.tsx` (le composant le plus réutilisé de l'application, présent dans la quasi-totalité des écrans).
+- **Pourquoi ce chantier existe** : outil utilisé quotidiennement par plusieurs rôles (réception, gouvernante, comptable...), potentiellement au clavier sous pression au comptoir — un déficit d'accessibilité dégrade un usage réel, pas seulement une case de conformité.
+- **Modules concernés** : transverse, en priorité `components/ui/dialog.tsx` (composant partagé le plus réutilisé) puis chaque feature au fil de l'eau.
+- **Priorité** : Important · **Criticité** : Modérée
+- **Impact métier** : Modéré · **Impact sécurité** : Aucun · **Impact conformité** : Faible (aucune obligation légale marocaine spécifique identifiée pour ce périmètre) · **Impact exploitation** : Modéré à élevé (usage clavier intensif au comptoir)
+- **Dépendances** : aucune technique. Se combine naturellement avec CH-032 (composants partagés) — corriger l'accessibilité une fois dans un composant `dialog`/`form` générique plutôt que dans chaque écran individuellement.
+- **Livrable attendu** : plugin ESLint `jsx-a11y` activé (détection continue) ; gestion de focus (trap + restauration) sur `components/ui/dialog.tsx` ; attributs `aria-label`/`aria-describedby` sur les contrôles interactifs sans texte visible ; audit manuel de navigation clavier sur au moins les 3 parcours les plus fréquents (check-in, housekeeping, facturation).
+- **Critères de validation** : (1) `eslint-plugin-jsx-a11y` ne signale plus de violation bloquante sur les fichiers touchés ; (2) un dialogue ouvert piège le focus et le restaure à la fermeture, vérifié manuellement ; (3) les 3 parcours prioritaires sont utilisables intégralement au clavier, vérifié manuellement en navigateur réel (pas de suite automatisée d'accessibilité dans le périmètre initial).
+- **Statut** : à faire
+- **Estimation de charge** : Moyenne (2-3 jours pour le socle + les 3 parcours prioritaires — pratique à étendre progressivement aux écrans restants).
+- **Niveau de confiance de l'estimation** : moyenne.
+- **Lien(s) audit** : Phase 11 §4.2.
+- **Documents liés** : `docs/frontend-plan/EXIGENCES_UX.md` (à étendre avec une règle d'accessibilité explicite, absente de la version actuelle).
+
+---
+
+### CH-030 — Découpage de bundle (code splitting) par onglet
+
+- **Source** : `docs/audits/PHASE_11_FRONTEND_QUALITE.md` §4.4
+- **Description factuelle** : `App.tsx` importe les 18 features en top-level, `grep -r "React.lazy\|lazy(" frontend/src` → 0 résultat. Un utilisateur qui n'a accès qu'à une poignée d'onglets télécharge quand même le JavaScript des 18 modules au premier chargement.
+- **Pourquoi ce chantier existe** : coût de temps de chargement initial réel sur une connexion hôtelière modeste, pour une application qui n'a aucune contrainte technique de routeur empêchant un découpage par onglet (absence de routeur déjà actée comme un choix d'architecture, `PHASE_08_FRONTEND.md` — ne bloque pas `React.lazy`, qui fonctionne indépendamment de tout routeur).
+- **Modules concernés** : transverse (`App.tsx`, tous les `features/*/pages/*Page.tsx`).
+- **Priorité** : Secondaire · **Criticité** : Faible à modérée (dépend de la qualité réelle de la connexion réseau à l'hôtel, non mesurée)
+- **Impact métier** : Faible direct · **Impact sécurité** : Aucun · **Impact conformité** : Aucun · **Impact exploitation** : Modéré (temps de chargement perçu, surtout au premier login de la journée)
+- **Dépendances** : aucune.
+- **Livrable attendu** : chaque page de premier niveau (`features/*/pages/*Page.tsx` rendue depuis `App.tsx`) chargée via `React.lazy` + `Suspense`, avec un état de chargement cohérent avec le pattern existant (`EXIGENCES_UX.md` : jamais d'écran blanc).
+- **Critères de validation** : (1) `npm run build` produit des chunks séparés par onglet (vérifiable dans la sortie Vite) ; (2) un utilisateur avec un sous-ensemble de permissions ne télécharge plus le JS des onglets auxquels il n'a pas accès (vérifiable via l'onglet réseau du navigateur) ; (3) aucune régression sur le comportement de navigation existant.
+- **Statut** : à faire
+- **Estimation de charge** : Faible (1 jour).
+- **Niveau de confiance de l'estimation** : élevée.
+- **Lien(s) audit** : Phase 11 §4.4.
+
+---
+
+### CH-031 — Error boundary transverse
+
+- **Source** : `docs/audits/PHASE_11_FRONTEND_QUALITE.md` §4.5 (premier point du Lot 0 du plan d'origine, jamais livré)
+- **Description factuelle** : `grep -r ErrorBoundary frontend/src` → zéro résultat. Une exception de rendu React dans n'importe quel écran fait planter toute l'application (écran blanc complet), pas seulement l'onglet concerné.
+- **Pourquoi ce chantier existe** : pour un outil de réception utilisé en continu, un crash total sur une erreur de rendu isolée (potentiellement dans un seul écran secondaire) est disproportionné par rapport au risque réel — et c'était déjà identifié comme prérequis du Lot 0 avant même le premier écran livré (`PLAN_DEVELOPPEMENT_FRONTEND.md`).
+- **Modules concernés** : transverse (`App.tsx`, un seul composant à ajouter, qui enveloppe le rendu conditionnel par onglet).
+- **Priorité** : Important · **Criticité** : Modérée à élevée (l'application entière est aujourd'hui aussi fragile que son écran le plus fragile)
+- **Impact métier** : Modéré à élevé (interruption totale de service pour tous les rôles, y compris ceux dont l'écran actif n'est pas en cause si l'erreur survient dans un composant partagé) · **Impact sécurité** : Aucun · **Impact conformité** : Aucun · **Impact exploitation** : Élevé
+- **Dépendances** : aucune. Le plus rapide à livrer de tous les chantiers de cette section — recommandé en premier (voir `BACKLOG_PRIORISE.md`, Vague 4).
+- **Livrable attendu** : composant `ErrorBoundary` partagé (`components/`), enveloppant au minimum le rendu par onglet dans `App.tsx` — un crash dans un onglet affiche un message d'erreur récupérable (pattern déjà établi par `EXIGENCES_UX.md` : jamais d'écran blanc, jamais de jargon technique) plutôt que de faire tomber toute l'application ; bouton de retour au tableau de bord.
+- **Critères de validation** : (1) une erreur de rendu provoquée volontairement dans un écran secondaire n'empêche plus la navigation vers les autres onglets (preuve sabotage/restore : provoquer l'erreur, confirmer le crash total actuel, ajouter le composant, reconfirmer le confinement) ; (2) le message affiché respecte `EXIGENCES_UX.md` (pas de stack trace exposée à l'utilisateur final).
+- **Statut** : à faire
+- **Estimation de charge** : Faible (0,5-1 jour).
+- **Niveau de confiance de l'estimation** : élevée.
+- **Lien(s) audit** : Phase 11 §4.5.
+- **Documents liés** : `docs/frontend-plan/PLAN_DEVELOPPEMENT_FRONTEND.md` (Lot 0 d'origine).
+
+---
+
+### CH-032 — Composants partagés jamais construits (dette Lot 0)
+
+- **Source** : `docs/audits/PHASE_11_FRONTEND_QUALITE.md` §2 ; `docs/frontend-plan/COMPOSANTS_PARTAGES_MANQUANTS.md`
+- **Description factuelle** : `frontend/src/components/ui/` contient exactement 6 primitives (`badge`, `button`, `dialog`, `input`, `label`, `select`) — inchangé depuis la Phase 8, malgré 8 écrans construits depuis. Chaque chantier a contourné le besoin avec des primitives ad hoc : `<pre>{JSON.stringify(...)}</pre>` pour le diff avant/après de CH-015, `<input type="file">` natif sans zone de dépôt pour CH-022, onglets simulés par `useState` + boutons dans `StockPage.tsx`.
+- **Pourquoi ce chantier existe** : le plan d'origine était explicite sur le coût de ce report (« le construire en dernier obligerait à retoucher tous les écrans déjà livrés »). Ce coût s'est confirmé exactement comme anticipé — 8 écrans ont chacun réinventé une solution ad hoc plutôt que de consommer un composant partagé, dette qui continuera de s'accumuler à chaque nouvel écran tant qu'elle n'est pas remboursée une fois.
+- **Modules concernés** : transverse (`components/ui/`), consommé en priorité par les écrans déjà livrés qui en ont le plus besoin (`AuditPage` pour `diff-viewer`, `DocumentOcrPage` pour `file-upload`, `StockPage` pour `tabs`, tout formulaire multi-champs pour `form`).
+- **Priorité** : Important · **Criticité** : Modérée (dette structurelle, pas un blocage fonctionnel immédiat)
+- **Impact métier** : Faible direct · **Impact sécurité** : Aucun · **Impact conformité** : Aucun · **Impact exploitation** : Modéré (chaque futur écran continue de payer le coût de l'absence de socle)
+- **Dépendances** : aucune dépendance entrante bloquante. CH-028 (tests) et CH-029 (a11y) bénéficient tous deux d'un socle de composants partagés (plus simple de tester/rendre accessible un composant générique que N primitives dupliquées) — ordre recommandé : composants d'abord, ou en parallèle.
+- **Livrable attendu** (découpable en sous-lots indépendants, par priorité reprise de `COMPOSANTS_PARTAGES_MANQUANTS.md`) : `table` (remplace les listes ad hoc existantes) ; `form` structuré (validation, erreurs de champ homogènes) ; `date-picker` ; `tabs` (remplace le pattern `useState` de `StockPage.tsx`) ; `toast` ; `file-upload` (avec zone de dépôt, remplace l'`<input>` natif de CH-022) ; `diff-viewer` (remplace le `<pre>` de CH-015).
+- **Critères de validation** : chaque composant livré est immédiatement appliqué à au moins un écran réel existant (cohérent avec la règle déjà énoncée dans `PLAN_DEVELOPPEMENT_FRONTEND.md` §5 : « ne pas construire un composant en isolation sans l'appliquer immédiatement ») — pas de composant livré sans consommateur réel dans le même chantier.
+- **Statut** : à faire
+- **Estimation de charge** : Élevée (5-8 jours cumulés pour l'ensemble des 7 composants — décomposable en sous-lots livrables indépendamment, `table`/`form` en premier vu leur priorité Haute dans le document source).
+- **Niveau de confiance de l'estimation** : moyenne (dépend du nombre de sous-lots effectivement retenus).
+- **Lien(s) audit** : Phase 11 §2 ; `docs/frontend-plan/COMPOSANTS_PARTAGES_MANQUANTS.md`.
+- **Documents liés** : `docs/frontend-plan/PLAN_DEVELOPPEMENT_FRONTEND.md` (Lot 0 d'origine).
+
+---
+
+### CH-033 — Branding et finitions d'identité visuelle
+
+- **Source** : `docs/audits/PHASE_11_FRONTEND_QUALITE.md` §4.6
+- **Description factuelle** : `index.html` porte encore `<title>frontend</title>` (valeur par défaut Vite) et `<html lang="en">` alors que 100 % de l'interface est en français ; `public/favicon.svg` est le logo générique du template shadcn/vite, sans rapport avec l'hôtel ; le logo officiel fourni par l'utilisateur (`frontend/src/assets/brand/logo-makarim-source.jpg`) est stocké mais non câblé nulle part (ni titre, ni favicon, ni sidebar — toujours le badge « M » générique).
+- **Pourquoi ce chantier existe** : finition produit visible en permanence (onglet navigateur, sidebar) pour un outil qui porte le nom et l'image de l'hôtel — écart cosmétique mais notable, déjà identifié par l'utilisateur lui-même comme un travail à faire « plus tard » au moment de fournir le logo.
+- **Modules concernés** : `index.html`, `public/favicon.*`, `components/layout/AppSidebar.tsx` (badge « M »), potentiellement `police/utils/police-record.pdf.ts` et un futur module facturation (en-tête de documents PDF, déjà noté dans `frontend/src/assets/brand/README.md`).
+- **Priorité** : Secondaire · **Criticité** : Faible
+- **Impact métier** : Faible · **Impact sécurité** : Aucun · **Impact conformité** : Aucun · **Impact exploitation** : Faible (perception/qualité perçue)
+- **Dépendances** : le logo source (JPEG, fond blanc) devra probablement être retravaillé (fond transparent, déclinaisons SVG/PNG à plusieurs tailles) avant intégration réelle — déjà noté dans `assets/brand/README.md`. **Prérequis** : l'utilisateur a explicitement indiqué vouloir traiter ce sujet plus tard — ne pas démarrer sans confirmation de timing, même si l'effort est faible.
+- **Livrable attendu** : `<title>Makarim PMS</title>`, `<html lang="fr">`, favicon dérivé du logo réel, remplacement du badge « M » de `AppSidebar` par le logo (version compacte pour l'état replié).
+- **Critères de validation** : cohérence visuelle vérifiée en navigateur réel (onglet, sidebar repliée/dépliée), aucune régression sur le contraste/lisibilité du logo sur fond clair et sombre si un mode sombre existe.
+- **Statut** : à faire *(non prioritaire par choix explicite de l'utilisateur — voir Dépendances)*
+- **Estimation de charge** : Faible à moyenne (0,5-2 jours selon si une déclinaison SVG propre du logo est nécessaire).
+- **Niveau de confiance de l'estimation** : élevée pour le câblage, faible pour le travail graphique du logo lui-même (hors compétence de génération d'image de cette session).
+- **Lien(s) audit** : Phase 11 §4.6.
+- **Documents liés** : `frontend/src/assets/brand/README.md`.
+
+---
+
+### CH-034 — Trancher explicitement la portée responsive/mobile du frontend admin
+
+- **Source** : `docs/audits/PHASE_11_FRONTEND_QUALITE.md` §4.7
+- **Description factuelle** : 9 fichiers `.tsx` sur 38 utilisent un préfixe responsive Tailwind (`sm:`/`md:`/`lg:`). `AppSidebar` a des largeurs fixes en pixels (`w-60`/`w-16`), aucun mode replié en dessous d'un seuil d'écran. Aucun document n'énonce explicitement ce choix.
+- **Pourquoi ce chantier existe** : ce n'est pas nécessairement un manque à combler — c'est d'abord une **décision produit non prise** : soit acter formellement que ce frontend admin est desktop-only (cohérent avec F9, qui a son propre client mobile séparé pour le housekeeping), soit décider qu'un usage tablette/mobile ponctuel (ex. un responsable consultant le dashboard depuis son téléphone) doit être supporté, auquel cas un travail réel de responsive est nécessaire.
+- **Modules concernés** : transverse si la décision est « oui, investir » (`AppSidebar`, `AppTopbar`, chaque écran dense en colonnes).
+- **Priorité** : Secondaire · **Criticité** : Faible
+- **Impact métier** : Faible à modéré (selon la décision) · **Impact sécurité** : Aucun · **Impact conformité** : Aucun · **Impact exploitation** : Faible aujourd'hui (aucun usage mobile signalé), potentiellement modéré si un besoin réel émerge
+- **Dépendances** : aucune technique. **Prérequis** : arbitrage produit explicite (`AskUserQuestion` recommandé avant tout développement) — desktop-only assumé (documenter le choix, coût nul) vs. investissement responsive réel (coût réel, à chiffrer une fois le périmètre connu).
+- **Livrable attendu** : selon l'arbitrage — soit une simple ligne actée dans `docs/frontend-plan/EXIGENCES_UX.md` (« desktop-only, choix assumé »), soit un travail de responsive sur les écrans les plus consultés (dashboard en priorité).
+- **Critères de validation** : la décision elle-même est documentée et traçable (`REGISTRE_DECISIONS.md`) avant tout code, quel que soit le sens retenu.
+- **Statut** : à faire *(bloqué sur arbitrage produit, pas sur du travail technique)*
+- **Estimation de charge** : Nulle pour la décision elle-même ; Modérée (2-3 jours) si l'option « investir » est retenue, limitée au dashboard et aux écrans les plus consultés.
+- **Niveau de confiance de l'estimation** : élevée pour l'option « assumé », faible pour l'option « investir » (périmètre non cadré).
+- **Lien(s) audit** : Phase 11 §4.7.
+
+---
+
+### CH-035 — Resynchronisation de la documentation frontend (`MATRICE_MODULE_API_ECRAN.md`)
+
+- **Source** : `docs/audits/PHASE_11_FRONTEND_QUALITE.md` §3, §4.8
+- **Description factuelle** : `docs/frontend-plan/MATRICE_MODULE_API_ECRAN.md` affichait encore 6 lignes 🔴 (police, audit, self-checkin staff, notifications, document-ocr, channel-manager) au moment de cet audit, alors que les six écrans correspondants sont ✅ depuis les chantiers CH-003/007/008/009/015/022 (session précédente) — personne n'avait remis ce document à jour après leur clôture, contrairement à `docs/governance/STATUT_MODULES.md`/`MATRICE_TRACABILITE.md`, qui portent une note explicite « à mettre à jour à chaque clôture de chantier ».
+- **Pourquoi ce chantier existe** : un document de gouvernance désynchronisé du code réel reproduit exactement le problème que l'ensemble de ce référentiel `docs/` a été construit pour éliminer (`docs/governance/REGISTRE_DECISIONS.md`, RD-001 : « `docs/` existant se présente comme la source de vérité normative [...] mais l'audit a confirmé qu'elle est mesurablement désynchronisée du code réel »).
+- **Modules concernés** : `docs/frontend-plan/MATRICE_MODULE_API_ECRAN.md` uniquement.
+- **Priorité** : Secondaire · **Criticité** : Faible
+- **Impact métier** : Aucun · **Impact sécurité** : Aucun · **Impact conformité** : Aucun · **Impact exploitation** : Faible (risque de décision basée sur une information périmée)
+- **Dépendances** : aucune.
+- **Livrable attendu** : les 6 lignes corrigées de 🔴 à ✅, synthèse de couverture recalculée (21/21 modules avec interface staff attendue, `booking-engine` restant `n/a` par conception).
+- **Critères de validation** : chaque ligne corrigée cite le chantier qui l'a close.
+- **Statut** : ✅ **Terminé** (session courante — corrigé directement dans le cadre de cette même session de documentation, pas laissé comme un chantier séparé à exécuter plus tard)
+- **Estimation de charge** : Faible (moins de 0,5 jour — réalisée en quelques minutes).
+- **Niveau de confiance de l'estimation** : élevée (a posteriori).
+- **Lien(s) audit** : Phase 11 §3, §4.8.
+- **Résolution** : `docs/frontend-plan/MATRICE_MODULE_API_ECRAN.md` corrigé (voir historique git) — les 6 lignes obsolètes sont désormais ✅, chacune citant le chantier de clôture correspondant.
+
+---
+
 ## Résumé quantitatif
 
 | Priorité | Nombre de chantiers | Charge cumulée estimée (ordre de grandeur) | Terminés |
@@ -390,6 +546,7 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 | Important | 8 (CH-005 à CH-012) | ~11–16 jours développeur | 8 (CH-005, CH-006, CH-007, CH-008, CH-009, CH-010, CH-011, CH-012) — tous terminés |
 | Secondaire | 14 (CH-013 à CH-026) | ~18–28 jours développeur (plusieurs sous conditions d'arbitrage) | 11 (CH-013, CH-014, CH-015, CH-018, CH-019, CH-020, CH-021, CH-022, CH-023, CH-024, CH-025 — CH-020/021/023/024 fermés sans changement de code : écarts assumés, statu quo actés, ou blocage technique MySQL vérifié pour CH-024) + 1 partiel (CH-026, 5/6 sous-points, voir fiche) |
 | Hors audit — cadré, non planifié | 1 (CH-027) | ~11–13,5 jours développeur (~15,5–19,5 j combiné avec le socle portail de connexion) | 0 — cadrage validé en principe (RD-017), timing d'insertion dans le backlog volontairement pas encore tranché |
+| Frontend — audit qualité (Phase 11) | 8 (CH-028 à CH-035) | ~14–22 jours développeur (dont ~5-8 j pour CH-032 seul) | 1 (CH-035, resync documentaire — corrigé dans la même session que son versement) — les 7 autres à faire, aucun code écrit, en attente de priorisation explicite |
 
 *Ces charges sont des ordres de grandeur de développement pur (hors tests e2e étendus, hors stabilisation, hors documentation) — voir `docs/planning/ESTIMATION_CHARGE.md` pour l'estimation consolidée par scénario.*
 
@@ -422,3 +579,11 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 | CH-024 | ✅ Fermé | Session courante | Exclusivité `RoomNight` — l'audit suggérait un XOR strict, mais `StayService.checkin()` fait légitimement cohabiter `reservationId`+`stayId` après un check-in réservé ; même la moitié valide de l'invariant (jamais les deux nulles) est techniquement bloquée en `CHECK` MySQL par `onDelete: Cascade` (erreur 3823) — fermé sans code, invariant vérifié par audit exhaustif des 4 sites d'écriture, voir fiche ci-dessus (RD-019). |
 | CH-025 | ✅ Terminé | Session courante | 4 contraintes `CHECK` MySQL en défense en profondeur (`Reservation.dateDepart > dateArrivee`, `Payment.montant > 0`, `FolioLine.montant >= 0`, `TimeShiftSegment.fin >= debut`) — voir fiche ci-dessus pour l'écart avec la formulation initiale de l'audit et la régression détectée/corrigée sur `billing.e2e-spec.ts` (`> 0` trop strict pour `FolioLine`) avant clôture. |
 | CH-027 | 🗒️ Cadré (non planifié) | Session courante | Personnel/Planning/Attendance — cadrage `docs/planning/CADRAGE_PLANNING_ATTENDANCE_STAFF.md` validé en principe par l'utilisateur (RD-017), documentation intégrée à la gouvernance (cette fiche, `hr.md` §17, `reporting.md` §16, `MATRICE_TRACABILITE.md`). Aucun code écrit — timing d'insertion dans le backlog volontairement laissé ouvert, voir `BACKLOG_PRIORISE.md`. |
+| CH-028 | 📋 À faire | Session courante | Socle de tests automatisés frontend (Vitest + Testing Library) — issu de l'audit qualité Phase 11, aucun code écrit, en attente de priorisation. |
+| CH-029 | 📋 À faire | Session courante | Accessibilité (a11y) frontend — plugin `jsx-a11y`, gestion de focus sur `dialog`, 3 parcours prioritaires au clavier — issu de la Phase 11. |
+| CH-030 | 📋 À faire | Session courante | Découpage de bundle (code splitting) par onglet via `React.lazy` — issu de la Phase 11. |
+| CH-031 | 📋 À faire | Session courante | Error boundary transverse — premier point du Lot 0 jamais livré, issu de la Phase 11. Le plus rapide à livrer de la série. |
+| CH-032 | 📋 À faire | Session courante | Composants partagés jamais construits (`table`/`form`/`date-picker`/`tabs`/`toast`/`file-upload`/`diff-viewer`) — dette Lot 0 non résorbée, issu de la Phase 11. |
+| CH-033 | 📋 À faire | Session courante | Branding et finitions d'identité visuelle (titre, favicon, `lang`, logo sidebar) — non prioritaire par choix explicite de l'utilisateur, issu de la Phase 11. |
+| CH-034 | 📋 À faire (arbitrage requis) | Session courante | Trancher explicitement la portée responsive/mobile du frontend admin — bloqué sur décision produit, pas sur du travail technique, issu de la Phase 11. |
+| CH-035 | ✅ Terminé | Session courante | Resynchronisation de `MATRICE_MODULE_API_ECRAN.md` (6 lignes obsolètes corrigées) — corrigé dans la même session que son versement, issu de la Phase 11. |

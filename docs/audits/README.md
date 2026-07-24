@@ -22,6 +22,7 @@ Cet index recense les 10 phases de l'audit technique complet mené sur le code r
 | 8 | Frontend | Architecture React, navigation, pages, état, RBAC client | 6,5/10 | 6 modules backend sans UI (dont police, légalement critique) ; aucun deep linking | [PHASE_08_FRONTEND.md](./PHASE_08_FRONTEND.md) |
 | 9 | Qualité du code | Cohérence, duplication, taille des fichiers, transactions, dette | 7,5/10 | `ReservationsService` surchargé ; motif récurrent d'intentions inachevées | [PHASE_09_QUALITE_CODE.md](./PHASE_09_QUALITE_CODE.md) |
 | 10 | Synthèse et roadmap | Consolidation transversale, priorités, recommandation finale | 7/10 (moyenne pondérée) | Synthèse des risques ci-dessus | [PHASE_10_SYNTHESE_ROADMAP.md](./PHASE_10_SYNTHESE_ROADMAP.md) |
+| 11 | Qualité et fiabilité du frontend (post-couverture fonctionnelle) | Tests, accessibilité, sécurité du stockage token, résilience aux erreurs de rendu, performance de chargement, dette sur les composants partagés (Lot 0), branding/finition, responsive | 6,5/10 | Zéro test automatisé ; zéro error boundary ; tokens JWT en `localStorage` ; zéro code splitting | [PHASE_11_FRONTEND_QUALITE.md](./PHASE_11_FRONTEND_QUALITE.md) |
 
 ---
 
@@ -35,14 +36,15 @@ Cet index recense les 10 phases de l'audit technique complet mené sur le code r
 - La discipline de chemin d'écriture unique par champ sensible — Phases 2, 4, 9.
 
 **Ce qui ne l'est pas / ce qui manque** (voir `docs/governance/REGISTRE_CHANTIERS.md` pour le détail actionnable) :
-- Correction de facture (`CreditNote`) — inexistante, Phase 6.
-- Sécurité de la réinitialisation de mot de passe — token exposé en clair, Phase 5.
-- Saisie du registre de police — aucune UI, Phases 6/8.
-- Chiffrement au repos des données d'identité — jamais implémenté malgré exigence documentée, Phase 5.
-- RBAC côté frontend — inexistant, Phases 5/8.
-- Six modules backend sans interface frontend (self-checkin, police, notifications, document-ocr, channel-manager, audit) — Phase 8.
+- Correction de facture (`CreditNote`) — inexistante, Phase 6. *(Résolu depuis, CH-001.)*
+- Sécurité de la réinitialisation de mot de passe — token exposé en clair, Phase 5. *(Résolu depuis, CH-002.)*
+- Saisie du registre de police — aucune UI, Phases 6/8. *(Résolu depuis, CH-003.)*
+- Chiffrement au repos des données d'identité — jamais implémenté malgré exigence documentée, Phase 5. *(Résolu depuis, CH-004.)*
+- RBAC côté frontend — inexistant, Phases 5/8. *(Résolu depuis, granularité onglet, CH-011.)*
+- Six modules backend sans interface frontend (self-checkin, police, notifications, document-ocr, channel-manager, audit) — Phase 8. *(Résolu depuis — CH-003/007/008/009/015/022.)*
+- Zéro test automatisé frontend, accessibilité quasi nulle, tokens JWT en `localStorage`, zéro code splitting, zéro error boundary, dette non résorbée sur les composants partagés — Phase 11 (nouveaux angles morts, non couverts par la Phase 8).
 
-**Ce qui doit être traité en premier** : les 4 chantiers bloquants listés dans `docs/audits/PHASE_10_SYNTHESE_ROADMAP.md` (§ Priorités de suite) et repris avec fiche complète dans `docs/governance/REGISTRE_CHANTIERS.md`.
+**Ce qui doit être traité en premier** : les 4 chantiers bloquants listés dans `docs/audits/PHASE_10_SYNTHESE_ROADMAP.md` (§ Priorités de suite) — tous désormais terminés — et repris avec fiche complète dans `docs/governance/REGISTRE_CHANTIERS.md`. Pour la qualité/fiabilité frontend (Phase 11), voir la section « Chantiers frontend — issus de l'audit qualité (Phase 11) » du même registre (CH-028 à CH-035).
 
 ---
 

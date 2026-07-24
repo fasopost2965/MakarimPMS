@@ -40,6 +40,30 @@ Ce document isole la dette **structurelle** (comment le code est construit) de l
 **Découvert en** : session CH-025 (contraintes CHECK), en isolant une régression suspecte sur la suite complète — confirmé sans lien avec CH-025 (le domaine `stock` ne partage aucun code avec `Reservation`/`Payment`/`FolioLine`/`TimeShiftSegment`, touchés par CH-025 ; 4 exécutions isolées consécutives passent, y compris avec les changements CH-025 présents).
 **Chantier** : non attribué — pas assez de priorité justifiée pour un chantier dédié dans l'immédiat (un seul test, sur un module secondaire, sans impact fonctionnel). À corriger à l'occasion d'un prochain passage sur le module `stock`/`housekeeping` (élargir la fenêtre de `attendreCondition` ou fiabiliser le signal de fin de traitement asynchrone).
 
+### 8. Fondations transverses frontend jamais construites (Lot 0) — Phase 11 §2
+
+**Nature** : `docs/frontend-plan/PLAN_DEVELOPPEMENT_FRONTEND.md` prévoyait un « Lot 0 » (composant `error-boundary`, `AuthContext`, composants `form`/`date-picker`) construit *avant* les écrans, précisément pour éviter d'avoir à retoucher chaque écran après coup. 8 écrans ont depuis été livrés (CH-003/007/008/009/011/014/015/022) en contournant systématiquement ce manque avec des primitives ad hoc plutôt qu'en le comblant.
+**Pourquoi c'est fragile** : le coût que le plan d'origine cherchait explicitement à éviter s'est matérialisé exactement comme anticipé — chaque nouvel écran continue de payer individuellement l'absence de socle plutôt que de le consommer, et la dette grossit à chaque livraison plutôt que de se stabiliser.
+**Chantiers** : CH-031 (error boundary), CH-032 (composants partagés).
+
+### 9. Zéro test automatisé frontend — Phase 11 §4.1
+
+**Nature** : `frontend/package.json` ne déclare aucune dépendance de test (pas de Vitest, pas de Testing Library). Toute vérification de chantier frontend cette session a été manuelle, en navigateur réel, non reproductible en CI.
+**Pourquoi c'est fragile** : symétrique de la zone de fragilité n°3 ci-dessus côté backend (absence de tests unitaires de service), mais plus large — côté backend, la couverture e2e réelle contre MySQL compense partiellement l'absence de tests unitaires ; côté frontend, il n'existe **aucune** couche de test, e2e ou unitaire, automatisée.
+**Chantier** : CH-028.
+
+### 10. Absence d'isolation aux erreurs de rendu (error boundary) — Phase 11 §4.5
+
+**Nature** : `grep -r ErrorBoundary frontend/src` → zéro résultat. Une exception de rendu React dans n'importe quel écran secondaire fait planter l'application entière.
+**Pourquoi c'est fragile** : la robustesse perçue du frontend est aujourd'hui égale à celle de son écran le plus fragile, pas à la moyenne de ses écrans — un seul composant mal isolé peut interrompre le service pour tous les rôles simultanément.
+**Chantier** : CH-031.
+
+### 11. Bundle frontend non segmenté (absence de code splitting) — Phase 11 §4.4
+
+**Nature** : `App.tsx` importe les 18 features en top-level, aucun `React.lazy` nulle part dans le code.
+**Pourquoi c'est fragile** : chaque nouvel écran alourdit le chargement initial de *tous* les utilisateurs, y compris ceux qui n'y ont jamais accès (RBAC frontend filtre l'affichage, pas le téléchargement) — la dette grossit mécaniquement à chaque chantier fonctionnel livré, sans qu'aucun signal ne le rende visible avant que le temps de chargement ne devienne gênant en usage réel.
+**Chantier** : CH-030.
+
 ## Zones explicitement vérifiées comme SANS dette structurelle significative
 
 Pour éviter de laisser croire que tout le projet est fragile — ces points ont été activement vérifiés et confirmés sains :
