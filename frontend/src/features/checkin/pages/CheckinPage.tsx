@@ -177,26 +177,28 @@ export function CheckinPage() {
             )}
             <ul className="flex flex-col gap-2">
               {departs.map((stay) => (
-                <li
-                  key={stay.id}
-                  className="border-l-warning bg-background hover:border-primary/50 flex cursor-pointer items-center justify-between rounded-md border border-l-4 p-2 text-sm transition-colors"
-                  onClick={() => openStay(stay)}
-                >
-                  <span>
-                    {stay.guest.nom} {stay.guest.prenom} — chambre{' '}
-                    {stay.room.numero}
-                    {!stay.policeRecord && (
-                      <span
-                        className="text-amber-600 ml-2 text-xs"
-                        title="Fiche de police (registre légal DGSN) non renseignée"
-                      >
-                        ⚠ Fiche police manquante
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-muted-foreground text-xs">
-                    Voir / check-out
-                  </span>
+                <li key={stay.id}>
+                  <button
+                    type="button"
+                    className="border-l-warning bg-background hover:border-primary/50 flex w-full cursor-pointer items-center justify-between rounded-md border border-l-4 p-2 text-left text-sm transition-colors"
+                    onClick={() => openStay(stay)}
+                  >
+                    <span>
+                      {stay.guest.nom} {stay.guest.prenom} — chambre{' '}
+                      {stay.room.numero}
+                      {!stay.policeRecord && (
+                        <span
+                          className="text-amber-600 ml-2 text-xs"
+                          title="Fiche de police (registre légal DGSN) non renseignée"
+                        >
+                          ⚠ Fiche police manquante
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-muted-foreground text-xs">
+                      Voir / check-out
+                    </span>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -211,26 +213,28 @@ export function CheckinPage() {
             )}
             <ul className="grid gap-2 md:grid-cols-2">
               {staysEnCours.map((stay) => (
-                <li
-                  key={stay.id}
-                  className="border-l-success bg-background hover:border-primary/50 flex cursor-pointer items-center justify-between rounded-md border border-l-4 p-2 text-sm transition-colors"
-                  onClick={() => openStay(stay)}
-                >
-                  <span>
-                    {stay.guest.nom} {stay.guest.prenom} — chambre{' '}
-                    {stay.room.numero}
-                    {!stay.policeRecord && (
-                      <span
-                        className="text-amber-600 ml-2 text-xs"
-                        title="Fiche de police (registre légal DGSN) non renseignée"
-                      >
-                        ⚠ Fiche police manquante
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-muted-foreground text-xs">
-                    Départ prévu {stay.dateCheckoutPrevue.slice(0, 10)}
-                  </span>
+                <li key={stay.id}>
+                  <button
+                    type="button"
+                    className="border-l-success bg-background hover:border-primary/50 flex w-full cursor-pointer items-center justify-between rounded-md border border-l-4 p-2 text-left text-sm transition-colors"
+                    onClick={() => openStay(stay)}
+                  >
+                    <span>
+                      {stay.guest.nom} {stay.guest.prenom} — chambre{' '}
+                      {stay.room.numero}
+                      {!stay.policeRecord && (
+                        <span
+                          className="text-amber-600 ml-2 text-xs"
+                          title="Fiche de police (registre légal DGSN) non renseignée"
+                        >
+                          ⚠ Fiche police manquante
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-muted-foreground text-xs">
+                      Départ prévu {stay.dateCheckoutPrevue.slice(0, 10)}
+                    </span>
+                  </button>
                 </li>
               ))}
             </ul>

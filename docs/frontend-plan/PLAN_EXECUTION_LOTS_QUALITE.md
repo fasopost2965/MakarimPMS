@@ -158,7 +158,25 @@ Décision : `AskUserQuestion` posée en ouverture de lot, comme prévu. Réponse
 
 Vérification : 42/42 tests Vitest (+7 depuis Lot B), build/lint propres, 14/14 assertions Playwright réelles (mobile 375×812 + desktop 1440×900 — backdrop, `Escape`, fermeture auto à la navigation, bascule `collapsed` desktop non régressée). Détail complet : `docs/governance/REGISTRE_CHANTIERS.md` (fiche CH-034), `docs/frontend-plan/LOTISSEMENT_CHANTIERS_QUALITE.md`.
 
-**Reste dans le Lot C** : CH-029 (accessibilité), en attente de feu vert.
+**Compte-rendu réel — CH-029 (session courante) — Lot C clos** :
+
+`eslint-plugin-jsx-a11y` activé et fonctionnel (9 violations réelles détectées et corrigées, transverses au projet, pas seulement dans les 3 parcours prioritaires). Focus trap/restauration sur `dialog.tsx` : découvert déjà fourni par `@base-ui/react/dialog` (`FloatingFocusManager`), prouvé par 3 tests plutôt que reconstruit.
+
+| Composant / écran | Correction | Statut |
+|---|---|---|
+| `label.tsx` | Règle désactivée pour ce wrapper générique (justifiée) | ✅ |
+| `CompaniesPage.tsx`, `GuestPicker.tsx` | `<Label>` sans contrôle → texte simple | ✅ |
+| `AuditPage.tsx` ×2, `DocumentOcrPage.tsx` | `<Label htmlFor>`+`<Select id>` reliés | ✅ |
+| `CheckinPage.tsx` (départs, séjours en cours) | `<li onClick>` → `<li><button>` | ✅ |
+| `DashboardPage.tsx` (`KpiCard`) | `onKeyDown` Entrée/Espace ajouté | ✅ |
+| `ReservationsCalendarPage.tsx` (`ReservationBar`) | Clavier-opérable (role/tabIndex/onKeyDown) | ✅ |
+| `ReservationsCalendarPage.tsx` (cellule glisser-sélection) | Désactivation ciblée documentée, hors périmètre | 📋 documenté |
+| `dialog.tsx` | Focus trap/restauration prouvés (3 tests) | ✅ (déjà fourni) |
+| `StayDetailsDialog.tsx` (bascule Détails/Facturation/Police) | Clavier-opérable nativement, sémantique ARIA tab non migrée | 📋 documenté, hors périmètre |
+
+Vérification : 45/45 tests Vitest (+3), build/lint propres, 10/10 assertions Playwright réelles sur les 3 parcours prioritaires (check-in : dialogue/focus/bascule/fermeture/SelectSearch au clavier ; housekeeping : Select de statut au clavier). Détail complet : `docs/governance/REGISTRE_CHANTIERS.md` (fiche CH-029), `docs/frontend-plan/LOTISSEMENT_CHANTIERS_QUALITE.md`.
+
+**Lot C intégralement clos** (CH-034 + CH-029). Prochain lot proposé : Lot D (performance/sécurité), en attente de feu vert.
 
 ---
 

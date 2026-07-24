@@ -25,7 +25,7 @@ Partitionne `CH-028` à `CH-035` + `CH-026(e)` (`docs/governance/REGISTRE_CHANTI
 - **Ordre interne recommandé** : B1 → B2 → B3 → B4, chaque sous-lot livrable et vérifiable indépendamment (un sous-lot peut s'étaler sur sa propre session si besoin).
 - **Critère de « lot terminé »** : les 7 composants existent dans `components/ui/` ET chacun est réellement consommé par au moins un écran existant (aucun composant construit « en isolation » sans consommateur réel — règle déjà actée dans `PLAN_DEVELOPPEMENT_FRONTEND.md` §5).
 
-## Lot C — UX / accessibilité — 🔄 En cours (CH-034 terminé, session courante)
+## Lot C — UX / accessibilité — ✅ Terminé (CH-034 + CH-029, session courante)
 
 - **Chantiers inclus** : CH-034 (arbitrage responsive/mobile), CH-029 (accessibilité a11y).
 - **Critère de criticité** : impact direct sur l'usage quotidien réel (clavier, écran) plutôt que sur la robustesse technique pure — after Lot A/B pour éviter de corriger deux fois le même composant.
@@ -114,4 +114,17 @@ Les 7 composants prévus par `docs/frontend-plan/COMPOSANTS_PARTAGES_MANQUANTS.m
 - **Écart par rapport au plan initial** : aucun — périmètre exactement celui annoncé par la fiche CH-034 (`AppSidebar.tsx`, `AppTopbar.tsx`, écrans les plus consultés — dashboard n'a in fine rien nécessité).
 - **Reste à faire dans le Lot C** : CH-029 (accessibilité — plugin `jsx-a11y`, focus trap/restoration sur `components/ui/dialog.tsx`, 3 parcours clavier prioritaires check-in/housekeeping/facturation).
 
-**Prochaine étape proposée** : CH-029 (accessibilité), en attente de feu vert.
+## Compte-rendu — Lot C, CH-029 (session courante) — dernier chantier du lot, Lot C clos
+
+- **Plugin `eslint-plugin-jsx-a11y`** activé (`jsxA11y.flatConfigs.recommended`) — installé via `--legacy-peer-deps` (la version publiée n'a pas encore de peer range ESLint 10), fonctionnement réel vérifié (9 violations détectées au premier lint, pas un plugin inerte). Effet de bord découvert et corrigé : `--legacy-peer-deps` avait désinstallé `@testing-library/dom` (peer auto-installé de `@testing-library/react`), cassant `tsc -b` sur tous les fichiers de test — corrigé en le déclarant explicitement en devDependency.
+- **9 violations réelles corrigées**, transverses (pas limitées aux 3 parcours prioritaires — lint doit rester globalement propre) : `label.tsx` (règle désactivée pour ce seul wrapper générique, association vérifiée à chaque site d'appel) ; 2 `<Label>` sans contrôle converties en texte simple (`CompaniesPage.tsx`, `GuestPicker.tsx`) ; 3 `<Label>`+`<Select>` reliés par `htmlFor`/`id` (`AuditPage.tsx` ×2, `DocumentOcrPage.tsx`) ; 2 `<li onClick>` restructurées en `<li><button>` (`CheckinPage.tsx`) ; `KpiCard` (`DashboardPage.tsx`) — `onKeyDown` ajouté à un `role="button"` déjà présent mais sans clavier ; `ReservationBar` (`ReservationsCalendarPage.tsx`) rendue clavier-opérable, la cellule de grille à glisser-sélectionner a reçu une désactivation ciblée documentée (vrai geste souris sans équivalent clavier simple, chantier de conception à part, hors périmètre).
+- **Focus trap/restauration sur `dialog.tsx`** : découverte que `@base-ui/react/dialog` fournit déjà ce comportement nativement (`FloatingFocusManager`, floating-ui, mode modal) — vérifié en lisant le code source du primitif, pas supposé. 3 nouveaux tests Vitest (`dialog.test.tsx`) le prouvent plutôt que d'ajouter du code inutile.
+- **Vérifié en navigateur réel** (Playwright, données seedées réelles) sur les 3 parcours prioritaires : check-in (dialogue de séjour ouvert/focus/basculé/fermé au clavier, `SelectSearch` du walk-in filtré au clavier), housekeeping (`Select` de statut ouvert/fermé au clavier). 10/10 assertions.
+- `npm run build`/`lint`/`test` propres (45/45 tests, +3 depuis CH-034).
+- **Constat documenté, non corrigé ici** : `StayDetailsDialog.tsx` bascule Détails/Facturation/Police avec de simples `<Button>` plutôt que le composant `Tabs` du Lot B2 — déjà clavier-opérable nativement mais sans sémantique ARIA `tablist`/`tab`. Migration non effectuée (élargirait CH-029 à une reprise de composant déjà couverte par CH-032, clos) — dette notée pour un futur passage.
+
+## Lot C clos — CH-034 + CH-029 terminés
+
+Les deux chantiers du lot sont livrés et vérifiés en conditions réelles. Détail complet et bilan : `docs/governance/REGISTRE_CHANTIERS.md` (fiches CH-034, CH-029).
+
+**Prochain lot proposé** : Lot D — performance/sécurité (CH-030, code splitting par onglet ; CH-026(e), migration des tokens JWT vers un cookie `httpOnly` — le chantier le plus risqué de toute la vague, nécessite une note de conception CSRF/CORS avant tout code). En attente de votre feu vert.

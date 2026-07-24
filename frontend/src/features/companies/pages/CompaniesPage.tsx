@@ -264,7 +264,9 @@ function CompanyDetail({ company, onCompanyUpdated }: CompanyDetailProps) {
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label>Compte courant</Label>
+          {/* Pas de <Label> : rien à associer, ce n'est pas un contrôle de
+              formulaire (jsx-a11y/label-has-associated-control, CH-029). */}
+          <p className="text-sm leading-none font-medium">Compte courant</p>
           <p className="text-muted-foreground text-sm">
             0,00 MAD — aucun mouvement enregistré. Le rattachement des séjours
             et factures aux comptes entreprise sera ajouté dans un module futur.

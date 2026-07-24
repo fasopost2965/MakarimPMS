@@ -131,7 +131,7 @@ export function AuditPage() {
 
       <div className="grid grid-cols-2 gap-3 rounded-md border p-4 sm:grid-cols-3 lg:grid-cols-5">
         <div className="flex flex-col gap-1.5">
-          <Label>Entité</Label>
+          <Label htmlFor="audit-entite">Entité</Label>
           <Select
             value={entite}
             onValueChange={(v) => v && setEntite(v)}
@@ -140,7 +140,7 @@ export function AuditPage() {
               ...ENTITES.map((e) => ({ value: e, label: e })),
             ]}
           >
-            <SelectTrigger size="sm">
+            <SelectTrigger id="audit-entite" size="sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -155,7 +155,7 @@ export function AuditPage() {
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <Label>Action</Label>
+          <Label htmlFor="audit-action">Action</Label>
           <Select
             value={action}
             onValueChange={(v) => v && setAction(v)}
@@ -164,7 +164,7 @@ export function AuditPage() {
               ...ACTIONS.map((a) => ({ value: a, label: a })),
             ]}
           >
-            <SelectTrigger size="sm">
+            <SelectTrigger id="audit-action" size="sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

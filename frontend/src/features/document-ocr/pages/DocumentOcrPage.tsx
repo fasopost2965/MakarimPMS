@@ -89,7 +89,7 @@ export function DocumentOcrPage() {
         </FormField>
 
         <div className="flex flex-col gap-1.5">
-          <Label>Type de document</Label>
+          <Label htmlFor="ocr-type-document">Type de document</Label>
           <Select
             value={typeDocument}
             onValueChange={(v) => v && setTypeDocument(v)}
@@ -99,7 +99,7 @@ export function DocumentOcrPage() {
               { value: 'PASSEPORT', label: 'Passeport' },
             ]}
           >
-            <SelectTrigger size="sm" className="w-48">
+            <SelectTrigger id="ocr-type-document" size="sm" className="w-48">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

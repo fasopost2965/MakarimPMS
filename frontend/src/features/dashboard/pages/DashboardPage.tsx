@@ -24,6 +24,16 @@ function KpiCard({ label, value, hint, onClick, accent }: KpiCardProps) {
         clickable ? 'hover:border-primary/40 cursor-pointer' : ''
       }`}
       onClick={onClick}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onClick?.();
+              }
+            }
+          : undefined
+      }
       role={clickable ? 'button' : undefined}
       tabIndex={clickable ? 0 : undefined}
     >

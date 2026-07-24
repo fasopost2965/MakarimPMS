@@ -99,7 +99,9 @@ export function GuestPicker({ onChange }: GuestPickerProps) {
   if (selected) {
     return (
       <div className="flex flex-col gap-1.5">
-        <Label>Client</Label>
+        {/* Pas de <Label> : rien à associer, ce n'est pas un contrôle de
+            formulaire (jsx-a11y/label-has-associated-control, CH-029). */}
+        <p className="text-sm leading-none font-medium">Client</p>
         <div className="flex items-center justify-between gap-2 rounded-md border p-2">
           <div>
             <p className="text-sm font-medium">
