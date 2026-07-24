@@ -2,6 +2,8 @@
 
 *Statut : brouillon de cadrage, non implémenté. À valider avant tout code (arbitrages en section 11).*
 
+*Élargi depuis par `CADRAGE_PLANNING_ATTENDANCE_STAFF.md` (référentiel personnel, planning prévisionnel des shifts, rapprochement prévu/réel) — ce document reste la référence pour le portail de connexion lui-même (§7 à §9 ci-dessous), repris tel quel dans le document élargi.*
+
 ## 0. Constat préalable — ce qui existe déjà
 
 **Avant de concevoir quoi que ce soit de nouveau, il faut acter un fait central : ~70 % de ce qui est demandé existe déjà**, sous la forme d'ADR-007 (« Time Shift & Attendance State Machine », statut *Validé*, 2026-07-19) et de son implémentation dans le module `hr` :
