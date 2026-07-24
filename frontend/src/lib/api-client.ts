@@ -66,10 +66,16 @@ export async function apiRequest<T>(
   const isAuthEndpoint = PUBLIC_AUTH_ENDPOINTS.includes(path);
   const accessToken = getAccessToken();
 
+  // CH-022 : un corps FormData (upload multipart, document-ocr) ne doit
+  // jamais recevoir un Content-Type imposé manuellement — fetch calcule
+  // lui-même l'en-tête exact (avec la boundary) à partir du FormData. Fixer
+  // 'application/json' ici casserait silencieusement tout upload de fichier.
+  const isFormData = init?.body instanceof FormData;
+
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...init?.headers,
     },

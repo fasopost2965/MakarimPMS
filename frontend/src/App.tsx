@@ -14,6 +14,7 @@ import { StockPage } from '@/features/stock/pages/StockPage';
 import { ReportingPage } from '@/features/reporting/pages/ReportingPage';
 import { NotificationsPage } from '@/features/notifications/pages/NotificationsPage';
 import { AuditPage } from '@/features/audit/pages/AuditPage';
+import { DocumentOcrPage } from '@/features/document-ocr/pages/DocumentOcrPage';
 import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { ForgotPasswordPage } from '@/features/auth/pages/ForgotPasswordPage';
 import { me as fetchMe } from '@/features/auth/api';
@@ -36,7 +37,8 @@ export type Tab =
   | 'stock'
   | 'reporting'
   | 'notifications'
-  | 'audit';
+  | 'audit'
+  | 'document-ocr';
 type AuthScreen = 'login' | 'forgot-password';
 
 // Coquille applicative : sidebar repliable (navigation principale) + topbar
@@ -175,6 +177,7 @@ function App() {
           {tab === 'reporting' && <ReportingPage />}
           {tab === 'notifications' && <NotificationsPage />}
           {tab === 'audit' && <AuditPage />}
+          {tab === 'document-ocr' && <DocumentOcrPage />}
         </div>
       </div>
       <LogoutGuardDialog
