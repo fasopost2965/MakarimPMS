@@ -285,7 +285,9 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 
 ### CH-015 — Interface (ou a minima route) de consultation de `AuditLog`
 - **Source** : Phase 8 §2 (module `audit` sans écran). **Priorité** : Secondaire · **Criticité** : Faible-Modérée (utile en cas de litige/contrôle).
-- **Statut** : à faire · **Estimation** : Moyenne (1–2 jours) · **Confiance** : moyenne (le module `audit` backend expose-t-il déjà une route de lecture suffisante ? — **à confirmer**, `audit.controller.ts` fait 34 lignes selon Phase 4, probablement déjà lisible ; le manque identifié est côté frontend uniquement).
+- **Statut** : ✅ **Terminé** (session courante) · **Estimation** : Moyenne (1–2 jours) → réalisée en une fraction de l'estimation initiale, confirmant l'hypothèse de la fiche · **Confiance** : élevée (a posteriori).
+- **Résolution** : confirmé que `GET /audit-logs` (`AuditController`, `audit:read`, filtrable par `entite`/`userId`/`action`/`du`/`au`) était déjà complet et fonctionnel — seul le frontend manquait entièrement. Nouveau feature `frontend/src/features/audit/` (formulaire de filtres + liste de résultats, détail avant/après dépliable pour chaque entrée), nouvel onglet « Audit » dans `AppSidebar` (`audit:read`, réservé à l'Administrateur en l'état actuel du seed — aucun autre rôle n'a cette permission). Aucun changement backend.
+- **Éléments testés** : suite e2e existante (`audit.e2e-spec.ts`, backend inchangé) rejouée sans régression — 142/142 e2e, build+lint propres des deux côtés.
 
 ### CH-016 — Réévaluer le découpage de `ReservationsService`
 - **Source** : Phase 9 §2, §5. **Priorité** : Secondaire · **Criticité** : Faible (dette, pas un bug).
@@ -355,7 +357,7 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 |---|---|---|---|
 | Bloquant | 4 (CH-001 à CH-004) | ~7–11 jours développeur | 4 (CH-001, CH-002, CH-003, CH-004) — tous terminés |
 | Important | 8 (CH-005 à CH-012) | ~11–16 jours développeur | 8 (CH-005, CH-006, CH-007, CH-008, CH-009, CH-010, CH-011, CH-012) — tous terminés |
-| Secondaire | 14 (CH-013 à CH-026) | ~18–28 jours développeur (plusieurs sous conditions d'arbitrage) | 5 (CH-013, CH-014, CH-020, CH-021, CH-023 — CH-020/021/023 fermés sans développement, écarts assumés ou statu quo actés) + 1 partiel (CH-026, 5/6 sous-points, voir fiche) |
+| Secondaire | 14 (CH-013 à CH-026) | ~18–28 jours développeur (plusieurs sous conditions d'arbitrage) | 6 (CH-013, CH-014, CH-015, CH-020, CH-021, CH-023 — CH-020/021/023 fermés sans développement, écarts assumés ou statu quo actés) + 1 partiel (CH-026, 5/6 sous-points, voir fiche) |
 
 *Ces charges sont des ordres de grandeur de développement pur (hors tests e2e étendus, hors stabilisation, hors documentation) — voir `docs/planning/ESTIMATION_CHARGE.md` pour l'estimation consolidée par scénario.*
 
@@ -381,3 +383,4 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 | CH-023 | ✅ Fermé | Session courante | Recouvrement pénalité annulation/no-show — reste hors PMS par choix, écart assumé (RD-015, EA-002). |
 | CH-026 | ⚙️ Partiel (5/6) | Session courante | Durcissement sécurité : helmet, comparaison à temps constant du secret webhook, verrouillage de compte, complexité mot de passe, rotation/révocation refresh token — voir fiche ci-dessus. (e) cookie httpOnly explicitement différé (refonte plus large, CSRF à concevoir), RD-016. |
 | CH-014 | ✅ Terminé | Session courante | Consultation `RoomStatusLog` — `GET /rooms/:id/historique-statuts` (`RoomsService.findStatusHistory`, `housekeeping:read`) + `RoomHistoryDialog.tsx` côté frontend, voir fiche ci-dessus. Résout aussi le 4e des « quatre cas confirmés » de `CRITERES_STABILITE_LONG_TERME.md`. |
+| CH-015 | ✅ Terminé | Session courante | Consultation `AuditLog` — backend déjà complet (`GET /audit-logs`), nouvel écran frontend `features/audit/` (filtres + détail avant/après), nouvel onglet « Audit », voir fiche ci-dessus. |

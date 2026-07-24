@@ -28,7 +28,7 @@ Relie, pour chaque grand domaine fonctionnel, l'exigence métier au module, à l
 | Chiffrer les données d'identité au repos | `guests` | *(transparent, extension Prisma — pas de nouvel endpoint)* | `docs/execution/GO_LIVE_CHECKLIST.md`, `docs/governance/REGISTRE_DECISIONS.md` (RD-006) | Phase 5 | **CH-004 — terminé** | ✅ (`field-encryption.spec.ts`, `guests.e2e-spec.ts`) | n/a (transparent) | ✅ |
 | Empêcher la duplication de fiche client (contournement blacklist) | `guests` | `POST`/`PATCH /guests`, `POST /checkin/walk-in` (contrainte `pieceIdentiteHash`) ; `GET /guests/check-duplicate` (souple) | `docs/governance/REGISTRE_DECISIONS.md` (RD-011) | Phase 3 | **CH-010 — terminé** | ✅ (`guests.e2e-spec.ts`) | n/a (transparent, extension Prisma) | ✅ |
 | Filtrer systématiquement les lignes soft-deleted | transverse (Prisma) | `backend/src/prisma/soft-delete.extension.ts` (`$extends`, `$allModels`) | `docs/ADR-005-Audit-Soft-Delete.md`, `docs/governance/REGISTRE_DECISIONS.md` (RD-010) | Phases 3, 4, 9 | **CH-006 — terminé** | ✅ (`soft-delete.e2e-spec.ts`) | n/a | ✅ (top-level ; limite documentée sur les lectures imbriquées via `include`) |
-| Consulter le journal d'audit transverse | `audit` | `GET /audit-logs` *(existence exacte de la route à confirmer)* | `docs/modules/audit.md` | Phase 8 | **CH-015** | ❓ | ❌ | ⚠️ |
+| Consulter le journal d'audit transverse | `audit` | `GET /audit-logs` | `docs/modules/audit.md` | Phase 8 | **CH-015 — terminé** | ✅ (`audit.e2e-spec.ts`) | ✅ (`features/audit/`) | ✅ |
 
 ---
 

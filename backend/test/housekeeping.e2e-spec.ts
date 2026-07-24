@@ -207,7 +207,10 @@ describe('Housekeeping — statuts de chambre (e2e)', () => {
     });
 
     it('exige housekeeping:read (403 pour un rôle sans cette permission)', async () => {
-      const maintenanceToken = await loginAs(app.getHttpServer(), 'maintenance');
+      const maintenanceToken = await loginAs(
+        app.getHttpServer(),
+        'maintenance',
+      );
       const maintenanceClient = authedRequest(
         app.getHttpServer(),
         maintenanceToken,
