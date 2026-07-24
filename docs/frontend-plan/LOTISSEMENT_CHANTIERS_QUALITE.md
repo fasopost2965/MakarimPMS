@@ -15,7 +15,7 @@ Partitionne `CH-028` à `CH-035` + `CH-026(e)` (`docs/governance/REGISTRE_CHANTI
 - **Ordre interne recommandé** : CH-031 (0,5-1 j, rapide) → CH-028 (4-6 j, socle + premiers tests ciblés).
 - **Critère de « lot terminé »** : error boundary en place et prouvé par sabotage/restore ; `npm run test` existe et passe à 100 % sur au moins 3 parcours critiques (gating RBAC, refresh token, un flux financier) ; build/lint frontend propres ; aucune régression visuelle sur les écrans existants.
 
-## Lot B — Fondations transverses — ⚙️ En cours (B1+B2+B3/4 terminés, session courante)
+## Lot B — Fondations transverses — ✅ Terminé (4/4 sous-lots, session courante)
 
 - **Chantiers inclus** : CH-032 (composants partagés — dette Lot 0).
 - **Critère de criticité** : dette structurelle qui grossit à chaque écran livré depuis 8 chantiers — pas un blocage immédiat, mais le fondement de tout ce qui suit (accessibilité, tests).
@@ -93,5 +93,16 @@ Chaque lot a un début et une fin visibles (critère de « lot terminé » ci-de
 - **Vérifié en navigateur réel** : recherche "1" dans le sélecteur de chambre filtre correctement la liste et remplit le champ à la sélection ; réassort de stock réel affiche le toast « Réassort enregistré ».
 - `npm run build`/`lint`/`test` propres (28/28 tests, +5 depuis B2), aucune régression.
 - **Écart par rapport au plan initial** : aucun. `<Toaster />` est montée une seule fois dans `App.tsx` (uniquement dans la branche authentifiée) — les écrans de connexion n'ont pour l'instant aucun besoin de toast, cohérent avec l'unique consommateur actuel.
-- **Reste à faire dans le Lot B** : sous-lot B4 (`file-upload`+`diff-viewer`).
-- **Prochain sous-lot proposé** : B4 (dernier du Lot B), en attente de feu vert.
+## Compte-rendu — Lot B, sous-lot B4 (session courante) — dernier sous-lot, Lot B clos
+
+- **Composants livrés** : `diff-viewer` (`components/ui/diff-viewer.tsx`, `DiffViewer`) et `file-upload` (`components/ui/file-upload.tsx`, `FileUpload`).
+- **Consommateurs réels** : `AuditPage.tsx` (remplace deux blocs `<pre>` JSON bruts indépendants par une vraie table de comparaison champ par champ, réutilise `components/ui/table.tsx` de B1) ; `DocumentOcrPage.tsx` (remplace l'`<input type="file">` natif par une zone de glisser-déposer réelle, enveloppée dans `FormField` de B1).
+- **Vérifié en navigateur réel** : table Champ/Avant/Après affichée correctement sur une vraie entrée d'audit (1681 entrées avec détail disponible en base) ; sélection de fichier par clic **et** par glisser-déposer réel (événement `drop` avec un vrai `DataTransfer`/`File`) toutes deux fonctionnelles sur document-ocr.
+- `npm run build`/`lint`/`test` propres (35/35 tests, +7 depuis B3), aucune régression.
+- **Écart par rapport au plan initial** : aucun.
+
+## CH-032 clos — Lot B terminé
+
+Les 7 composants prévus par `docs/frontend-plan/COMPOSANTS_PARTAGES_MANQUANTS.md` sont livrés, chacun avec au moins un consommateur réel vérifié en navigateur : `table`, `form`/`FormField`, `date-picker`/`DateRangeField`, `tabs`, `select-search`/`SelectSearch`, `toast`/`toastManager`, `diff-viewer`/`DiffViewer`, `file-upload`/`FileUpload`. La dette structurelle identifiée en Phase 11 §2 (huit écrans ayant chacun contourné l'absence de ces composants avec des primitives ad hoc) est résorbée à la source — les futurs écrans consomment désormais un socle réel plutôt que de le recontourner.
+
+**Prochain lot proposé** : Lot C (UX/accessibilité — CH-034 arbitrage responsive puis CH-029 a11y), en attente de feu vert.

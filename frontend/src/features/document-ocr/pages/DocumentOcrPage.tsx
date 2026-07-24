@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { FileUpload } from '@/components/ui/file-upload';
+import { FormField } from '@/components/ui/form';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -37,8 +38,7 @@ export function DocumentOcrPage() {
   const [error, setError] = useState<string | null>(null);
   const [showBrut, setShowBrut] = useState(false);
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0] ?? null;
+  function handleFileChange(f: File | null) {
     setFichier(f);
     setResult(null);
     setError(null);
@@ -74,15 +74,19 @@ export function DocumentOcrPage() {
       </p>
 
       <div className="flex flex-wrap items-end gap-3 rounded-md border p-4">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="ocr-fichier">Photo (JPEG/PNG/WebP, 8 Mo max)</Label>
-          <Input
+        <FormField
+          id="ocr-fichier"
+          label="Photo"
+          hint="JPEG/PNG/WebP, 8 Mo max — glissez ou cliquez"
+          className="min-w-64"
+        >
+          <FileUpload
             id="ocr-fichier"
-            type="file"
             accept="image/jpeg,image/png,image/webp"
+            value={fichier}
             onChange={handleFileChange}
           />
-        </div>
+        </FormField>
 
         <div className="flex flex-col gap-1.5">
           <Label>Type de document</Label>

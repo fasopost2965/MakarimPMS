@@ -39,7 +39,7 @@ Détaille, pour chacun des 5 lots définis dans `docs/frontend-plan/LOTISSEMENT_
 
 ---
 
-## Lot B — Fondations transverses — ⚙️ En cours (B1+B2+B3/4 terminés)
+## Lot B — Fondations transverses — ✅ Terminé (4/4 sous-lots)
 
 **Objectif** : rembourser la dette des composants partagés jamais construits (Lot 0 d'origine), chacun appliqué immédiatement à un écran réel existant.
 
@@ -104,6 +104,20 @@ Détaille, pour chacun des 5 lots définis dans `docs/frontend-plan/LOTISSEMENT_
 - `npm run build`/`lint`/`test` propres (28/28), aucune régression détectée en navigateur réel.
 - Écart par rapport au plan : `<Toaster />` n'est montée que dans la branche authentifiée d'`App.tsx` (pas sur les écrans de connexion) — aucun besoin actuel de toast avant authentification.
 - Reste à faire : B4 (`file-upload`+`diff-viewer`), dernier sous-lot du Lot B.
+
+**Compte-rendu réel — sous-lot B4 (session courante) — dernier sous-lot, Lot B clos** :
+
+| Composant | Écran consommateur | Statut |
+|---|---|---|
+| `diff-viewer` (`DiffViewer`) | `AuditPage.tsx` (détail avant/après) | ✅ Livré et vérifié en navigateur réel (vraie entrée d'audit) |
+| `file-upload` (`FileUpload`) | `DocumentOcrPage.tsx` | ✅ Livré et vérifié en navigateur réel (clic + glisser-déposer réel) |
+
+- Objectif du sous-lot atteint : les deux derniers composants sont livrés, chacun avec un consommateur réel — `DiffViewer` remplace un affichage qui n'était pas réellement un « diff » (deux blocs JSON indépendants), `FileUpload` ajoute le glisser-déposer jamais câblé pour le seul upload du projet.
+- Tests dédiés : `components/ui/diff-viewer.test.tsx` (3 tests), `components/ui/file-upload.test.tsx` (4 tests, dont la sélection via un événement `drop` simulé).
+- `npm run build`/`lint`/`test` propres (35/35), aucune régression détectée en navigateur réel.
+- Écart par rapport au plan : aucun.
+
+**CH-032 clos — Lot B terminé (4/4 sous-lots, 7/7 composants).** Détail complet et bilan : `docs/frontend-plan/LOTISSEMENT_CHANTIERS_QUALITE.md` et `docs/governance/REGISTRE_CHANTIERS.md` (fiche CH-032). Prochain lot proposé : Lot C (UX/accessibilité).
 
 ---
 

@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { DiffViewer } from '@/components/ui/diff-viewer';
 import { searchAuditLogs } from '../api';
 import type { AuditAction, AuditEntity, AuditLogEntry } from '../types';
 
@@ -267,24 +268,11 @@ export function AuditPage() {
                 </Button>
               )}
               {expandedId === entry.id && (
-                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <div>
-                    <p className="text-muted-foreground text-xs font-medium">
-                      Avant
-                    </p>
-                    <pre className="bg-muted overflow-x-auto rounded p-2 text-xs">
-                      {JSON.stringify(entry.oldValue, null, 2) ?? '—'}
-                    </pre>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs font-medium">
-                      Après
-                    </p>
-                    <pre className="bg-muted overflow-x-auto rounded p-2 text-xs">
-                      {JSON.stringify(entry.newValue, null, 2) ?? '—'}
-                    </pre>
-                  </div>
-                </div>
+                <DiffViewer
+                  before={entry.oldValue}
+                  after={entry.newValue}
+                  className="mt-2"
+                />
               )}
             </div>
           ))}
