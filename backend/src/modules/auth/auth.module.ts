@@ -4,6 +4,7 @@ import { PassportModule } from '@nestjs/passport';
 import { ConfigModule } from '@nestjs/config';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { AuthCookieService } from './auth-cookie.service';
 import { JwtAccessStrategy } from './strategies/jwt-access.strategy';
 import { NotificationsModule } from '../notifications/notifications.module';
 
@@ -20,7 +21,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     NotificationsModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtAccessStrategy],
+  providers: [AuthService, AuthCookieService, JwtAccessStrategy],
   // F9 — AuthService.loginMobile() réutilisé par
   // MobileHousekeepingController (module housekeeping) pour émettre le
   // jeton mobile à portée réduite via le même chemin d'authentification

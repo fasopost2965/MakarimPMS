@@ -86,7 +86,11 @@ import { AppSidebar } from '@/components/layout/AppSidebar';
 import { AppTopbar } from '@/components/layout/AppTopbar';
 import { NAV_ITEMS } from '@/components/layout/nav-items';
 import { logoutRequest, onAuthFailure } from '@/lib/api-client';
-import { clearTokens, getAccessToken } from '@/lib/token-storage';
+import {
+  clearLoggedInHint,
+  hasLoggedInHint,
+  setCsrfToken,
+} from '@/lib/token-storage';
 
 export type Tab =
   | 'dashboard'
@@ -118,12 +122,16 @@ function App() {
   // uniquement) — voir AppSidebar.tsx pour le détail de la séparation des
   // deux concepts.
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  // Présence d'un access token = hypothèse d'authentification optimiste ; si
-  // le token est en réalité expiré/invalide, le premier appel API échouera
-  // en 401, déclenchera une tentative de refresh (voir lib/api-client.ts),
-  // et onAuthFailure() nous ramènera ici si le refresh échoue aussi.
-  const [isAuthenticated, setIsAuthenticated] = useState(
-    () => getAccessToken() !== null,
+  // CH-026(e) — les jetons vivent dans des cookies httpOnly, invisibles au
+  // JS : hasLoggedInHint() est un simple indicateur non sensible (jamais
+  // une décision de sécurité) pour l'hypothèse d'authentification
+  // optimiste au premier rendu, évitant un flash de l'écran de connexion.
+  // Si la session est en réalité expirée/invalide, le premier appel API
+  // échouera en 401, déclenchera une tentative de refresh (voir
+  // lib/api-client.ts), et onAuthFailure() nous ramènera ici si le refresh
+  // échoue aussi.
+  const [isAuthenticated, setIsAuthenticated] = useState(() =>
+    hasLoggedInHint(),
   );
   const [authScreen, setAuthScreen] = useState<AuthScreen>('login');
   const [logoutGuardOpen, setLogoutGuardOpen] = useState(false);
@@ -133,6 +141,8 @@ function App() {
 
   useEffect(() => {
     onAuthFailure(() => {
+      clearLoggedInHint();
+      setCsrfToken(null);
       setIsAuthenticated(false);
       setAuthScreen('login');
       setPermissions(null);
@@ -148,7 +158,14 @@ function App() {
   useEffect(() => {
     if (!isAuthenticated) return;
     fetchMe()
-      .then((user) => setPermissions(user.permissions))
+      .then((user) => {
+        // CH-026(e) — seul moyen de récupérer le jeton CSRF après un
+        // rechargement de page (perdu avec le contexte JS précédent, voir
+        // lib/token-storage.ts) ; sans lui, la première requête mutante
+        // après un F5 échouerait à tort en 403.
+        setCsrfToken(user.csrfToken);
+        setPermissions(user.permissions);
+      })
       .catch(() => setPermissions([]));
   }, [isAuthenticated]);
 
@@ -183,7 +200,8 @@ function App() {
     // logoutRequest) : révoque le refresh token côté serveur en tâche de
     // fond pendant que l'UI bascule immédiatement sur l'écran de connexion.
     void logoutRequest();
-    clearTokens();
+    clearLoggedInHint();
+    setCsrfToken(null);
     setIsAuthenticated(false);
     setAuthScreen('login');
     setLogoutGuardOpen(false);

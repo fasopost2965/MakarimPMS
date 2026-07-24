@@ -34,7 +34,7 @@ Partitionne `CH-028` à `CH-035` + `CH-026(e)` (`docs/governance/REGISTRE_CHANTI
 - **Ordre interne recommandé** : CH-034 (décision, quasi instantané) → CH-029 (2-3 j).
 - **Critère de « lot terminé »** : la décision CH-034 est tranchée et tracée (RD dédiée), développement associé livré si l'option « investir » est retenue ; plugin `jsx-a11y` actif sans violation bloquante ; les 3 parcours prioritaires (check-in, housekeeping, facturation) validés utilisables intégralement au clavier.
 
-## Lot D — Performance / sécurité — 🔄 En cours (CH-030 terminé, session courante)
+## Lot D — Performance / sécurité — ✅ Clos (CH-030 + CH-026(e), session courante)
 
 - **Chantiers inclus** : CH-030 (code splitting), CH-026(e) (tokens `localStorage` → cookie `httpOnly`).
 - **Critère de criticité** : réduisent un risque (sécurité) ou un coût (temps de chargement) sans changer ce que l'utilisateur voit — traités une fois la base (tests, composants) stabilisée.
@@ -57,7 +57,7 @@ Partitionne `CH-028` à `CH-035` + `CH-026(e)` (`docs/governance/REGISTRE_CHANTI
 ## Ordre d'exécution recommandé entre lots
 
 ```
-Lot A (qualité critique) ✅ → Lot B (fondations) → Lot C (UX/a11y) → Lot D (performance/sécurité) → Lot E (finition)
+Lot A (qualité critique) ✅ → Lot B (fondations) ✅ → Lot C (UX/a11y) ✅ → Lot D (performance/sécurité) ✅ → Lot E (finition)
 ```
 
 Chaque lot a un début et une fin visibles (critère de « lot terminé » ci-dessus) et se clôture par un compte-rendu avant de démarrer le suivant — format détaillé dans `docs/frontend-plan/PLAN_EXECUTION_LOTS_QUALITE.md`. Aucun lot ne démarre sans feu vert explicite de l'utilisateur — cohérent avec `docs/governance/REGISTRE_DECISIONS.md` (RD-020).
@@ -140,3 +140,15 @@ Les deux chantiers du lot sont livrés et vérifiés en conditions réelles. Dé
 Note de conception rédigée : `docs/security/CH-026E_NOTE_CONCEPTION_COOKIES_HTTPONLY.md` — aucun code modifié, document seul. Conception retenue en résumé : cookies `httpOnly`/`SameSite=Lax` pour access + refresh token (tous deux opaques au JS, confirmé qu'aucun code frontend ne décode le JWT) ; protection CSRF par double-submit cookie (`makarim_csrf_token` lisible en JS, comparé à un en-tête `X-CSRF-Token` par un nouveau `CsrfGuard`, qui s'efface pour les requêtes Bearer — F9 mobile) ; carve-out CORS F4/F6 vérifié sans modification requise. Détail complet, alternatives rejetées, plan d'implémentation backend/frontend, stratégie de test (avec preuve sabotage/restore CSRF) et risques résiduels (contrainte de domaine partagé, session existante interrompue au déploiement) dans la note elle-même.
 
 **En attente de confirmation avant le premier commit de code** — chantier le plus risqué de toute la vague Phase 11 (touche l'authentification de bout en bout).
+
+## Compte-rendu — Lot D, CH-026(e) implémenté (session courante, feu vert reçu)
+
+- **Livrable** : backend (`AuthCookieService`, `cookie-parser`, double extracteur JWT, `CsrfGuard` global) + frontend (`lib/token-storage.ts`, `lib/api-client.ts`, `App.tsx`, `LoginPage.tsx`) conformes à la note de conception.
+- **Bug réel détecté par la vérification navigateur** (pas un faux positif) : le plan supposait `document.cookie` lisible côté frontend pour le jeton CSRF — impossible dès que frontend/backend sont deux origines distinctes (vrai en dev comme en prod pour ce projet). `POST /auth/logout` échouait à tort en `403` avant correctif.
+- **Correctif** (§9 de la note de conception, RD-023) : le jeton CSRF transite en plus dans le corps JSON de `login`/`refresh`/`me`, gardé en mémoire JS (jamais `localStorage`). Ne revient pas sur la décision de ne jamais élargir l'attribut `Domain` des cookies (RD-022).
+- **Vérifié en navigateur réel** (Playwright, données seedées réelles) : login pose les 3 cookies avec les bons attributs ; requête mutante sans/avec en-tête CSRF invalide → 403 ; avec en-tête correct → succès ; rechargement de page suivi d'une déconnexion → succès (canal de récupération `/auth/me`) ; déconnexion efface les 3 cookies.
+- **Preuve sabotage/restore CSRF** : `CsrfGuard` retiré temporairement des `APP_GUARD`, confirmé que les tests « rejette » passaient alors à tort, restauré, reconfirmé.
+- `npm run build`/`lint`/`test`/`test:e2e` propres : 158/158 e2e backend (22/23 fichiers ; `stock.e2e-spec.ts` flaky pré-existant sans lien, `DETTE_TECHNIQUE.md` point 7, repasse au vert en isolation), 32/32 unitaires backend, 48/48 unitaires frontend.
+- Détail complet : `docs/governance/REGISTRE_CHANTIERS.md` (fiche CH-026), `docs/governance/REGISTRE_DECISIONS.md` (RD-022, RD-023), `docs/security/CH-026E_NOTE_CONCEPTION_COOKIES_HTTPONLY.md` (§9).
+
+**Lot D intégralement clos.**

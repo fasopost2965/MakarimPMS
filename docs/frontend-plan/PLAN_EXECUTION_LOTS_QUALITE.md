@@ -213,7 +213,19 @@ Vérification : 45/45 tests Vitest (+3), build/lint propres, 10/10 assertions Pl
 
 Vérification : `npm run build` confirme des chunks séparés par écran ; 9/9 assertions Playwright réelles sur l'onglet réseau (modules non visités jamais téléchargés, téléchargement exact à la navigation, pas de re-téléchargement à une revisite) ; build/lint/test propres (45/45). Détail complet : `docs/governance/REGISTRE_CHANTIERS.md` (fiche CH-030).
 
-**Reste dans le Lot D** : CH-026(e) — note de conception CSRF/CORS à rédiger et présenter avant tout code, conformément au prérequis de la fiche.
+**Compte-rendu réel — CH-026(e) (session courante)** :
+
+| Élément | Détail |
+|---|---|
+| Note de conception | `docs/security/CH-026E_NOTE_CONCEPTION_COOKIES_HTTPONLY.md` — rédigée, approuvée en principe (RD-022) avant tout code, puis amendée (§9) après un correctif découvert en vérification live |
+| Transport des jetons | `makarim_access_token`/`makarim_refresh_token` (`httpOnly`, `SameSite=Lax`, `Path` distincts) posés/effacés par `AuthCookieService` (seul point d'écriture) |
+| CSRF | Double-submit cookie (`makarim_csrf_token`, non `httpOnly`) + `CsrfGuard` global, s'efface pour les requêtes Bearer (F9 mobile non concerné) |
+| Bug détecté en vérification live | `document.cookie` ne peut pas lire un cookie posé par une autre origine (frontend/backend distincts, dev **et** prod) — `POST /auth/logout` échouait à tort en 403 avant correctif |
+| Correctif | Le jeton CSRF transite aussi dans le corps JSON de `login`/`refresh`/`me`, gardé en mémoire JS côté frontend (jamais `localStorage`) — RD-023, §9 de la note de conception |
+
+Vérification : suite e2e backend complète rejouée après correctif — 158/158 (22/23 fichiers, `stock.e2e-spec.ts` flaky pré-existant sans lien, `DETTE_TECHNIQUE.md` point 7, repasse au vert en isolation), 32/32 unitaires backend, 48/48 unitaires frontend, build/lint backend+frontend propres ; preuve sabotage/restore CSRF (`CsrfGuard` retiré temporairement, tests « rejette » confirmés faussement verts, restauré) ; vérification navigateur réelle (Playwright) : login pose les 3 cookies avec les bons attributs, requête mutante sans/avec CSRF invalide → 403, avec CSRF correct → succès, rechargement de page suivi d'une déconnexion → succès (canal de récupération `/auth/me`), déconnexion efface les 3 cookies. Détail complet : `docs/governance/REGISTRE_CHANTIERS.md` (fiche CH-026), `docs/governance/REGISTRE_DECISIONS.md` (RD-022, RD-023).
+
+**Lot D intégralement clos** (CH-030 + CH-026(e)). Prochain lot : Lot E (CH-033, branding), dépriorisé par l'utilisateur, bloqué sur un asset graphique non fourni — pas de reprise sans demande explicite.
 
 ---
 

@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./token-storage', () => ({
-  getAccessToken: vi.fn(() => 'access-token'),
-  getRefreshToken: vi.fn(() => 'refresh-token'),
-  setTokens: vi.fn(),
-  clearTokens: vi.fn(),
+  getCsrfToken: vi.fn(() => 'csrf-token'),
+  setCsrfToken: vi.fn(),
+  setLoggedInHint: vi.fn(),
+  clearLoggedInHint: vi.fn(),
+  hasLoggedInHint: vi.fn(() => true),
 }));
 
 import { apiRequest } from './api-client';
@@ -71,5 +72,33 @@ describe('apiRequest — CH-022 : upload multipart (FormData)', () => {
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     const headers = init.headers as Record<string, string>;
     expect(headers['Content-Type']).toBe('application/json');
+  });
+});
+
+describe('apiRequest — CH-026(e) : cookies httpOnly + double-submit CSRF', () => {
+  it('envoie toujours credentials: "include" (cookies httpOnly cross-origin)', async () => {
+    const fetchMock = mockFetchOnce({ status: 200, body: {} });
+    await apiRequest('/guests/1');
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.credentials).toBe('include');
+  });
+
+  it("ajoute l'en-tête X-CSRF-Token sur une requête mutante (POST)", async () => {
+    const fetchMock = mockFetchOnce({ status: 201, body: {} });
+    await apiRequest('/guests', { method: 'POST', body: JSON.stringify({}) });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers['X-CSRF-Token']).toBe('csrf-token');
+  });
+
+  it("n'ajoute jamais l'en-tête X-CSRF-Token sur une requête en lecture (GET)", async () => {
+    const fetchMock = mockFetchOnce({ status: 200, body: {} });
+    await apiRequest('/guests/1');
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers['X-CSRF-Token']).toBeUndefined();
   });
 });
