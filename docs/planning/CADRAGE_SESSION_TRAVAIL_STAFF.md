@@ -1,6 +1,8 @@
 # Note de cadrage — Session de travail staff (extension d'ADR-007)
 
-*Statut : brouillon de cadrage, non implémenté. À valider avant tout code (arbitrages en section 11).*
+*Statut : **brainstorming en pause** — cadrage exploratoire, non arbitré, non implémenté. Mis volontairement de côté le temps de finaliser les chantiers déjà identifiés par l'audit (`docs/governance/`) — à reprendre lors d'une session dédiée. Ne bloque et ne conditionne aucun des chantiers en cours.*
+
+*Élargi depuis par `CADRAGE_PLANNING_ATTENDANCE_STAFF.md` (référentiel personnel, planning prévisionnel des shifts, rapprochement prévu/réel) — ce document reste la référence pour le portail de connexion lui-même (§7 à §9 ci-dessous), repris tel quel dans le document élargi.*
 
 ## 0. Constat préalable — ce qui existe déjà
 
