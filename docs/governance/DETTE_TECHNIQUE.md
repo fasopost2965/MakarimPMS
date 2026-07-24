@@ -34,6 +34,12 @@ Ce document isole la dette **structurelle** (comment le code est construit) de l
 **Résolution** : ajout de `channelReservationImport.deleteMany()` et `selfCheckinToken.deleteMany()` avant `reservation.deleteMany()`, et de `stockMovement.deleteMany()` + `stockItem.deleteMany()` avant `room.deleteMany()` (FK non-cascade sur `roomId`/`stockItemId`), dans le bon ordre de dépendance. `npx prisma db seed` retesté avec succès juste après.
 **Chantier** : CH-007 (correctif embarqué, hors périmètre initial de la fiche mais bloquant sa propre vérification).
 
+### 7. `stock.e2e-spec.ts` — flaky sous charge de suite complète (découvert en session, CH-025, non lié à un audit formel)
+**Nature** : le scénario « décompte 1 unité par occupant théorique pour chaque article kitAccueil » (BR-STK-001) compare `quantiteDisponible` avant/après une transition `EN_NETTOYAGE → LIBRE_PROPRE`, avec `attendreCondition(mouvementSortieExiste(...))` en polling avant de relire « après ». Passe systématiquement en isolation (vérifié 4 fois consécutives), mais échoue de façon intermittente (delta observé = 0 unité consommée au lieu de `CAPACITE`) quand `npm run test:e2e` exécute les 22 suites e2e à la suite — la fenêtre de polling semble insuffisante sous la charge CPU/E-S accrue d'une exécution complète.
+**Pourquoi c'est fragile** : un flaky test non identifié comme tel peut soit masquer une vraie régression future (ignoré par réflexe), soit bloquer à tort un pipeline CI sain — l'un et l'autre coûtent du temps de diagnostic.
+**Découvert en** : session CH-025 (contraintes CHECK), en isolant une régression suspecte sur la suite complète — confirmé sans lien avec CH-025 (le domaine `stock` ne partage aucun code avec `Reservation`/`Payment`/`FolioLine`/`TimeShiftSegment`, touchés par CH-025 ; 4 exécutions isolées consécutives passent, y compris avec les changements CH-025 présents).
+**Chantier** : non attribué — pas assez de priorité justifiée pour un chantier dédié dans l'immédiat (un seul test, sur un module secondaire, sans impact fonctionnel). À corriger à l'occasion d'un prochain passage sur le module `stock`/`housekeeping` (élargir la fenêtre de `attendreCondition` ou fiabiliser le signal de fin de traitement asynchrone).
+
 ## Zones explicitement vérifiées comme SANS dette structurelle significative
 
 Pour éviter de laisser croire que tout le projet est fragile — ces points ont été activement vérifiés et confirmés sains :

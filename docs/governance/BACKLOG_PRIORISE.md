@@ -25,7 +25,7 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 12. ~~CH-013~~ — ✅ **Terminé** (session courante). Enum mort `StatutSejour.ANNULE` retiré — voir `REGISTRE_CHANTIERS.md` (RD-012).
 13. ~~CH-014~~ — ✅ **Terminé** (session courante). Consultation `RoomStatusLog` — voir `REGISTRE_CHANTIERS.md` pour le détail (`GET /rooms/:id/historique-statuts`, `RoomHistoryDialog.tsx`).
 14. CH-018 — Resynchronisation documentation modules
-15. CH-024 / CH-025 — Contraintes DB additionnelles
+15. CH-024 — Contrainte d'exclusivité `RoomNight` (à faire). ~~CH-025~~ — ✅ **Terminé** (session courante). 4 contraintes `CHECK` MySQL (dates, montants) — voir `REGISTRE_CHANTIERS.md` pour le détail (écart avec la formulation initiale de l'audit sur `FolioLine`, régression détectée/corrigée sur `billing.e2e-spec.ts` avant clôture).
 16. ~~CH-015~~ — ✅ **Terminé** (session courante). Consultation `AuditLog` frontend — voir `REGISTRE_CHANTIERS.md` pour le détail (backend déjà complet, nouvel écran `features/audit/`).
 17. CH-022 — UI document-ocr
 18. ~~CH-020~~ — ✅ **Fermé** (session courante). Numérotation facture — statu quo acté, aucun développement (RD-013, EA-003).
