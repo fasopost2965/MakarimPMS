@@ -1,6 +1,6 @@
 import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { StatutChambre } from '@prisma/client';
-import { MANUAL_TARGETS } from '../utils/room-transitions';
+import { MANUAL_TARGETS } from '../utils/manual-status-targets';
 
 // F9 — DTO plat dédié à l'app mobile housekeeping (roomId reste un
 // paramètre d'URL, comme partout ailleurs dans l'API, pour rester cohérent

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DateRangeField } from '@/components/ui/date-picker';
 import {
   Dialog,
   DialogContent,
@@ -529,6 +530,7 @@ function CreateSeasonRateForm({
     libelle &&
     dateDebut &&
     dateFin &&
+    dateFin >= dateDebut &&
     prixNuit &&
     motif.length >= 10;
 
@@ -587,28 +589,14 @@ function CreateSeasonRateForm({
           />
         </div>
 
-        <div className="flex gap-2">
-          <div className="flex flex-1 flex-col gap-1.5">
-            <Label htmlFor="dateDebut">Début</Label>
-            <Input
-              id="dateDebut"
-              type="date"
-              value={dateDebut}
-              onChange={(e) => setDateDebut(e.target.value)}
-              required
-            />
-          </div>
-          <div className="flex flex-1 flex-col gap-1.5">
-            <Label htmlFor="dateFin">Fin</Label>
-            <Input
-              id="dateFin"
-              type="date"
-              value={dateFin}
-              onChange={(e) => setDateFin(e.target.value)}
-              required
-            />
-          </div>
-        </div>
+        <DateRangeField
+          idPrefix="season-rate"
+          startValue={dateDebut}
+          endValue={dateFin}
+          onStartChange={setDateDebut}
+          onEndChange={setDateFin}
+          required
+        />
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="prixNuit">Prix par nuit (MAD)</Label>

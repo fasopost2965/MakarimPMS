@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { TypePiece } from '@prisma/client';
 import { createWorker, type Worker } from 'tesseract.js';
 import * as path from 'path';
@@ -42,6 +47,17 @@ export class DocumentOcrService implements OnModuleDestroy {
         // tesseract.js sans cacheMethod explicite — constaté : un fichier
         // eng.traineddata de 22 Mo apparaissait à la racine de backend/).
         cacheMethod: 'none',
+        // Sans errorHandler explicite, createWorker.js (tesseract.js)
+        // relève la promesse du job en échec (catchable) MAIS lève aussi,
+        // en parallèle, une exception synchrone non catchable dans son
+        // propre gestionnaire de message ("throw Error(data)") — un fichier
+        // corrompu/illisible faisait alors planter tout le process Node,
+        // pas seulement la requête HTTP en cours (constaté en vérifiant
+        // cet écran en navigateur réel avant de considérer CH-022 terminé).
+        // errorHandler défini = cette seconde branche ne s'exécute jamais.
+        errorHandler: (err) => {
+          this.logger.warn(`Erreur worker Tesseract (job individuel) : ${err}`);
+        },
       });
     }
     return this.workerPromise;
@@ -49,9 +65,22 @@ export class DocumentOcrService implements OnModuleDestroy {
 
   async scan(buffer: Buffer, typeDocumentAttendu?: TypePiece) {
     const worker = await this.getWorker();
-    const {
-      data: { text: texteBrutOcr },
-    } = await worker.recognize(buffer);
+    let texteBrutOcr: string;
+    try {
+      const result = await worker.recognize(buffer);
+      texteBrutOcr = result.data.text;
+    } catch (error) {
+      // Le worker peut rester dans un état incertain après un job en échec
+      // (image corrompue/illisible) — on force la recréation d'un worker
+      // propre au prochain appel plutôt que de risquer de faire échouer
+      // silencieusement tous les scans suivants sur un worker "empoisonné".
+      this.workerPromise = null;
+      void worker.terminate().catch(() => undefined);
+      this.logger.warn(`Échec de lecture OCR : ${error}`);
+      throw new BadRequestException(
+        "Image illisible par le moteur OCR — vérifiez qu'il s'agit bien d'une photo valide (JPEG/PNG/WebP non corrompue) et réessayez.",
+      );
+    }
 
     const mrz = parseMrzFromText(texteBrutOcr);
 

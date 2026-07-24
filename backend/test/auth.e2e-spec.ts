@@ -1,17 +1,21 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ThrottlerStorage } from '@nestjs/throttler';
 import type { ThrottlerStorageRecord } from '@nestjs/throttler/dist/throttler-storage-record.interface';
 import * as bcrypt from 'bcrypt';
+import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/prisma/prisma.service';
 import { MailerService } from './../src/modules/notifications/mailer.service';
-import { authedRequest, loginAs, SEED_USERS } from './helpers/auth';
+import {
+  authedRequest,
+  extractCookieValue,
+  loginAs,
+  SEED_USERS,
+} from './helpers/auth';
 
 // Stockage de secours jamais bloquant, en remplacement du
 // ThrottlerStorageService en mémoire par défaut — voir commentaire dans
@@ -70,6 +74,14 @@ describe('Auth — JWT, rôles et permissions (e2e)', () => {
     // ne reproduit le bootstrap de main.ts à l'identique. Corrigé ici
     // seulement, où le test l'exige, pas généralisé aux 20 autres fichiers.
     app.use(helmet());
+    // CH-026(e) — cookie-parser n'est monté que dans main.ts (bootstrap
+    // manuel, jamais via un provider Nest), même gap de fidélité que helmet
+    // ci-dessus : sans lui, req.cookies reste undefined et tous les tests
+    // qui dépendent des cookies d'authentification échouent en 401/204 au
+    // lieu du comportement attendu (constaté en le retirant temporairement
+    // pendant le développement de ce fichier — les tests CSRF passaient à
+    // tort à 204 au lieu de 403, faute de req.cookies pour les lire).
+    app.use(cookieParser());
     app.useGlobalPipes(
       new ValidationPipe({ whitelist: true, transform: true }),
     );
@@ -129,15 +141,61 @@ describe('Auth — JWT, rôles et permissions (e2e)', () => {
   });
 
   describe('Connexion (POST /auth/login)', () => {
-    it('renvoie un access token et un refresh token pour des identifiants valides', async () => {
+    // CH-026(e) — les jetons ne sont plus renvoyés dans le corps de la
+    // réponse (docs/security/CH-026E_NOTE_CONCEPTION_COOKIES_HTTPONLY.md) :
+    // posés comme cookies httpOnly (access/refresh) + un cookie CSRF non
+    // httpOnly, tous trois SameSite=Lax.
+    it('pose les cookies access/refresh (httpOnly) et CSRF (non httpOnly) pour des identifiants valides', async () => {
       const res = await request(server()).post('/api/auth/login').send({
         email: SEED_USERS.admin,
         motDePasse: 'Password123!',
       });
       expect(res.status).toBe(201);
-      expect(res.body).toHaveProperty('accessToken');
-      expect(res.body).toHaveProperty('refreshToken');
-      expect(typeof res.body.accessToken).toBe('string');
+      expect(res.body).not.toHaveProperty('accessToken');
+      expect(res.body).not.toHaveProperty('refreshToken');
+
+      const setCookie = res.headers['set-cookie'] as string[];
+      const access = setCookie.find((c) =>
+        c.startsWith('makarim_access_token='),
+      );
+      const refresh = setCookie.find((c) =>
+        c.startsWith('makarim_refresh_token='),
+      );
+      const csrf = setCookie.find((c) => c.startsWith('makarim_csrf_token='));
+
+      expect(access).toBeDefined();
+      expect(access).toMatch(/HttpOnly/i);
+      expect(access).toMatch(/SameSite=Lax/i);
+      expect(refresh).toBeDefined();
+      expect(refresh).toMatch(/HttpOnly/i);
+      expect(csrf).toBeDefined();
+      // Seul cookie des trois volontairement lisible en JS (double-submit
+      // CSRF, §2.2 de la note de conception) — jamais HttpOnly.
+      expect(csrf).not.toMatch(/HttpOnly/i);
+
+      // §9 de la note de conception (correctif post-vérification live) :
+      // frontend et backend étant deux origines distinctes, document.cookie
+      // ne peut structurellement jamais voir ce cookie côté frontend — sa
+      // valeur doit donc aussi transiter dans le corps JSON, identique à
+      // celle posée dans le cookie.
+      const csrfCookieValue = csrf!.split(';')[0].split('=')[1];
+      expect((res.body as { csrfToken: string }).csrfToken).toBe(
+        csrfCookieValue,
+      );
+    });
+
+    it('le cookie access token émis fonctionne bien sur une route protégée', async () => {
+      const agent = request.agent(server());
+      const login = await agent.post('/api/auth/login').send({
+        email: SEED_USERS.admin,
+        motDePasse: 'Password123!',
+      });
+      expect(login.status).toBe(201);
+
+      // request.agent() persiste les cookies reçus et les rejoue
+      // automatiquement — comportement réaliste d'un navigateur.
+      const res = await agent.get('/api/dashboard/resume');
+      expect(res.status).toBe(200);
     });
 
     it('renvoie 401 pour un mot de passe incorrect, et journalise la tentative en échec', async () => {
@@ -170,24 +228,51 @@ describe('Auth — JWT, rôles et permissions (e2e)', () => {
   });
 
   describe('Rafraîchissement (POST /auth/refresh)', () => {
+    // CH-026(e) — le refresh token part désormais via le cookie httpOnly
+    // makarim_refresh_token, plus dans le corps de la requête. Injection
+    // manuelle du cookie (.set('Cookie', ...)) plutôt qu'un agent complet :
+    // ces tests exercent la sémantique de refresh elle-même, pas
+    // l'enchaînement réaliste navigateur (voir describe CSRF plus bas pour
+    // ce dernier).
     it('émet un nouveau access token à partir d’un refresh token valide', async () => {
       const login = await request(server()).post('/api/auth/login').send({
         email: SEED_USERS.reception,
         motDePasse: 'Password123!',
       });
-      const { refreshToken } = login.body as { refreshToken: string };
+      const refreshToken = extractCookieValue(
+        login.headers['set-cookie'] as string[],
+        'makarim_refresh_token',
+      );
+      const loginCsrfToken = extractCookieValue(
+        login.headers['set-cookie'] as string[],
+        'makarim_csrf_token',
+      );
 
       const refreshed = await request(server())
         .post('/api/auth/refresh')
-        .send({ refreshToken });
+        .set('Cookie', `makarim_refresh_token=${refreshToken}`);
       expect(refreshed.status).toBe(201);
-      expect(refreshed.body).toHaveProperty('accessToken');
-
-      // Le nouveau token fonctionne bien sur une route protégée.
-      const client = authedRequest(
-        server(),
-        (refreshed.body as { accessToken: string }).accessToken,
+      const newAccessToken = extractCookieValue(
+        refreshed.headers['set-cookie'] as string[],
+        'makarim_access_token',
       );
+
+      // §9 de la note de conception — le cookie CSRF est régénéré à chaque
+      // refresh (AuthCookieService.setAuthCookies) : la nouvelle valeur doit
+      // à la fois différer de celle du login et correspondre au corps JSON
+      // (canal de récupération pour le frontend, cross-origine).
+      const newCsrfCookieValue = extractCookieValue(
+        refreshed.headers['set-cookie'] as string[],
+        'makarim_csrf_token',
+      );
+      expect(newCsrfCookieValue).not.toBe(loginCsrfToken);
+      expect((refreshed.body as { csrfToken: string }).csrfToken).toBe(
+        newCsrfCookieValue,
+      );
+
+      // Le nouveau token fonctionne bien sur une route protégée (via
+      // Authorization: Bearer — double extracteur, voir JwtAccessStrategy).
+      const client = authedRequest(server(), newAccessToken);
       const res = await client.get('/api/reservations/arrivees-du-jour');
       expect(res.status).toBe(200);
     });
@@ -195,7 +280,12 @@ describe('Auth — JWT, rôles et permissions (e2e)', () => {
     it('renvoie 401 pour un refresh token invalide', async () => {
       const res = await request(server())
         .post('/api/auth/refresh')
-        .send({ refreshToken: 'jeton-invalide' });
+        .set('Cookie', 'makarim_refresh_token=jeton-invalide');
+      expect(res.status).toBe(401);
+    });
+
+    it('renvoie 401 quand le cookie de refresh est absent', async () => {
+      const res = await request(server()).post('/api/auth/refresh');
       expect(res.status).toBe(401);
     });
 
@@ -204,11 +294,14 @@ describe('Auth — JWT, rôles et permissions (e2e)', () => {
         email: SEED_USERS.reception,
         motDePasse: 'Password123!',
       });
-      const { accessToken } = login.body as { accessToken: string };
+      const accessToken = extractCookieValue(
+        login.headers['set-cookie'] as string[],
+        'makarim_access_token',
+      );
 
       const refreshed = await request(server())
         .post('/api/auth/refresh')
-        .send({ refreshToken: accessToken });
+        .set('Cookie', `makarim_refresh_token=${accessToken}`);
       expect(refreshed.status).toBe(401);
     });
   });
@@ -451,13 +544,14 @@ describe('Auth — JWT, rôles et permissions (e2e)', () => {
         email: SEED_USERS.reception,
         motDePasse: 'Password123!',
       });
-      const { refreshToken: original } = login.body as {
-        refreshToken: string;
-      };
+      const original = extractCookieValue(
+        login.headers['set-cookie'] as string[],
+        'makarim_refresh_token',
+      );
 
       const first = await request(server())
         .post('/api/auth/refresh')
-        .send({ refreshToken: original });
+        .set('Cookie', `makarim_refresh_token=${original}`);
       expect(first.status).toBe(201);
 
       // Le jeton d'origine, désormais révoqué, ne peut plus être rejoué —
@@ -466,16 +560,17 @@ describe('Auth — JWT, rôles et permissions (e2e)', () => {
       // que soit le nombre de réutilisations).
       const replay = await request(server())
         .post('/api/auth/refresh')
-        .send({ refreshToken: original });
+        .set('Cookie', `makarim_refresh_token=${original}`);
       expect(replay.status).toBe(401);
 
       // Le nouveau jeton émis par le premier refresh, lui, reste valide.
-      const { refreshToken: rotated } = first.body as {
-        refreshToken: string;
-      };
+      const rotated = extractCookieValue(
+        first.headers['set-cookie'] as string[],
+        'makarim_refresh_token',
+      );
       const second = await request(server())
         .post('/api/auth/refresh')
-        .send({ refreshToken: rotated });
+        .set('Cookie', `makarim_refresh_token=${rotated}`);
       expect(second.status).toBe(201);
     });
 
@@ -484,16 +579,19 @@ describe('Auth — JWT, rôles et permissions (e2e)', () => {
         email: SEED_USERS.comptable,
         motDePasse: 'Password123!',
       });
-      const { refreshToken } = login.body as { refreshToken: string };
+      const refreshToken = extractCookieValue(
+        login.headers['set-cookie'] as string[],
+        'makarim_refresh_token',
+      );
 
       const logout = await request(server())
         .post('/api/auth/logout')
-        .send({ refreshToken });
+        .set('Cookie', `makarim_refresh_token=${refreshToken}`);
       expect(logout.status).toBe(204);
 
       const refreshed = await request(server())
         .post('/api/auth/refresh')
-        .send({ refreshToken });
+        .set('Cookie', `makarim_refresh_token=${refreshToken}`);
       expect(refreshed.status).toBe(401);
     });
 
@@ -502,25 +600,170 @@ describe('Auth — JWT, rôles et permissions (e2e)', () => {
         email: SEED_USERS.comptable,
         motDePasse: 'Password123!',
       });
-      const { refreshToken } = login.body as { refreshToken: string };
+      const refreshToken = extractCookieValue(
+        login.headers['set-cookie'] as string[],
+        'makarim_refresh_token',
+      );
 
       const first = await request(server())
         .post('/api/auth/logout')
-        .send({ refreshToken });
+        .set('Cookie', `makarim_refresh_token=${refreshToken}`);
       expect(first.status).toBe(204);
 
       // Rejouer le logout sur un jeton déjà révoqué ne doit jamais planter
       // (updateMany, pas update — voir AuthService.logout).
       const second = await request(server())
         .post('/api/auth/logout')
-        .send({ refreshToken });
+        .set('Cookie', `makarim_refresh_token=${refreshToken}`);
       expect(second.status).toBe(204);
 
       const invalid = await request(server())
         .post('/api/auth/logout')
-        .send({ refreshToken: 'jeton-completement-invalide' });
+        .set('Cookie', 'makarim_refresh_token=jeton-completement-invalide');
       expect(invalid.status).toBe(204);
+
+      // Cookie totalement absent — logout doit rester 204 (une déconnexion
+      // doit toujours réussir côté client, AuthController.logout).
+      const absent = await request(server()).post('/api/auth/logout');
+      expect(absent.status).toBe(204);
     });
+
+    it('POST /auth/logout efface bien les 3 cookies côté réponse (Set-Cookie avec expiration passée)', async () => {
+      const login = await request(server()).post('/api/auth/login').send({
+        email: SEED_USERS.comptable,
+        motDePasse: 'Password123!',
+      });
+      const refreshToken = extractCookieValue(
+        login.headers['set-cookie'] as string[],
+        'makarim_refresh_token',
+      );
+
+      const logout = await request(server())
+        .post('/api/auth/logout')
+        .set('Cookie', `makarim_refresh_token=${refreshToken}`);
+      expect(logout.status).toBe(204);
+
+      const cleared = logout.headers['set-cookie'] as string[];
+      for (const name of [
+        'makarim_access_token',
+        'makarim_refresh_token',
+        'makarim_csrf_token',
+      ]) {
+        const cookie = cleared.find((c) => c.startsWith(`${name}=`));
+        expect(cookie).toBeDefined();
+        // express.clearCookie() pose une date d'expiration passée
+        // (Expires=Thu, 01 Jan 1970...) plutôt qu'une simple absence.
+        expect(cookie).toMatch(/Expires=Thu, 01 Jan 1970/i);
+      }
+    });
+  });
+
+  // CH-026(e) (docs/security/CH-026E_NOTE_CONCEPTION_COOKIES_HTTPONLY.md
+  // §2.2) — protection CSRF par double-submit cookie. request.agent()
+  // reproduit un vrai navigateur (persiste et rejoue automatiquement les 3
+  // cookies posés au login), c'est le seul describe de ce fichier qui
+  // exerce le flux réaliste de bout en bout plutôt que des cookies injectés
+  // manuellement.
+  describe('Protection CSRF — double-submit cookie (CH-026(e))', () => {
+    it('rejette une requête mutante authentifiée par cookie sans en-tête X-CSRF-Token', async () => {
+      const agent = request.agent(server());
+      await agent.post('/api/auth/login').send({
+        email: SEED_USERS.comptable,
+        motDePasse: 'Password123!',
+      });
+
+      // POST /auth/logout : mutante (révoque le refresh token), le cookie
+      // access est présent (session active) — CsrfGuard doit s'appliquer.
+      const res = await agent.post('/api/auth/logout');
+      expect(res.status).toBe(403);
+    });
+
+    it('rejette une requête mutante avec un en-tête X-CSRF-Token qui ne correspond pas au cookie', async () => {
+      const agent = request.agent(server());
+      await agent.post('/api/auth/login').send({
+        email: SEED_USERS.comptable,
+        motDePasse: 'Password123!',
+      });
+
+      const res = await agent
+        .post('/api/auth/logout')
+        .set('X-CSRF-Token', 'valeur-qui-ne-correspond-a-rien');
+      expect(res.status).toBe(403);
+    });
+
+    it("accepte une requête mutante quand l'en-tête X-CSRF-Token correspond au cookie", async () => {
+      const agent = request.agent(server());
+      const login = await agent.post('/api/auth/login').send({
+        email: SEED_USERS.comptable,
+        motDePasse: 'Password123!',
+      });
+      const csrfToken = extractCookieValue(
+        login.headers['set-cookie'] as string[],
+        'makarim_csrf_token',
+      );
+
+      const res = await agent
+        .post('/api/auth/logout')
+        .set('X-CSRF-Token', csrfToken);
+      expect(res.status).toBe(204);
+    });
+
+    it("s'efface pour une requête authentifiée par Authorization: Bearer plutôt que par cookie (F9 mobile, non concerné)", async () => {
+      // Pas d'agent ici : requête isolée, seul le Bearer porte
+      // l'authentification, aucun cookie makarim_access_token n'est envoyé
+      // — CsrfGuard doit laisser passer sans exiger d'en-tête CSRF.
+      const token = await loginAs(server(), 'comptable');
+      const res = await request(server())
+        .post('/api/auth/logout')
+        .set('Authorization', `Bearer ${token}`);
+      // 204 (pas 403) : la requête n'est pas bloquée par CsrfGuard. logout()
+      // ne lit de toute façon le refresh token que depuis le cookie — sans
+      // cookie refresh, rien n'est révoqué, mais la route reste accessible.
+      expect(res.status).toBe(204);
+    });
+
+    it('les routes en lecture (GET) restent accessibles sans en-tête CSRF, même avec un cookie de session actif', async () => {
+      const agent = request.agent(server());
+      await agent.post('/api/auth/login').send({
+        email: SEED_USERS.comptable,
+        motDePasse: 'Password123!',
+      });
+
+      const res = await agent.get('/api/auth/me');
+      expect(res.status).toBe(200);
+    });
+
+    // §9 de la note de conception (correctif post-vérification live
+    // navigateur) : document.cookie ne peut structurellement jamais voir le
+    // cookie CSRF côté frontend (autre origine que l'API) — GET /auth/me
+    // est le canal de récupération après un rechargement de page (mémoire
+    // JS perdue). Vérifie que la valeur renvoyée dans le corps correspond
+    // bien au cookie effectivement posé, pas une valeur arbitraire.
+    it('GET /auth/me renvoie le jeton CSRF courant dans le corps, identique au cookie posé au login', async () => {
+      const agent = request.agent(server());
+      const login = await agent.post('/api/auth/login').send({
+        email: SEED_USERS.comptable,
+        motDePasse: 'Password123!',
+      });
+      const csrfCookieValue = extractCookieValue(
+        login.headers['set-cookie'] as string[],
+        'makarim_csrf_token',
+      );
+
+      const res = await agent.get('/api/auth/me');
+      expect(res.status).toBe(200);
+      expect((res.body as { csrfToken: string }).csrfToken).toBe(
+        csrfCookieValue,
+      );
+    });
+
+    // Preuve de rigueur sabotage/restore (CLAUDE.md §Tests, non-négociable
+    // pour toute règle de sécurité) : CsrfGuard temporairement retiré des
+    // APP_GUARD dans app.module.ts pendant le développement de ce test —
+    // les 2 tests "rejette..." ci-dessus passaient alors à 204 au lieu du
+    // 403 attendu (la garde ne faisait plus rien), confirmant qu'ils
+    // discriminent bien la présence réelle du guard. CsrfGuard restauré,
+    // suite complète rejouée verte avant ce commit.
   });
 
   // CH-026(c) — verrouillage de compte après échecs répétés. Utilisateur

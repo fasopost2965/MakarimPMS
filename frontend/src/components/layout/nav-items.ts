@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   LogIn,
   Package,
+  ScanLine,
   Settings,
   Sparkles,
   UserRound,
@@ -70,6 +71,17 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Entreprises',
     icon: Building2,
     permission: 'guests:read',
+  },
+  {
+    tab: 'document-ocr',
+    label: "Scan pièce d'identité",
+    icon: ScanLine,
+    // CH-022 — exception à la convention ":read" ci-dessus : ce module
+    // n'a aucune route de lecture, sa seule route (POST /document-ocr/scan)
+    // exige guests:write (préremplissage de fiche client, docs/modules/
+    // document-ocr.md §7) — gater sur guests:read masquerait l'onglet à
+    // exactement les rôles qui peuvent l'utiliser.
+    permission: 'guests:write',
   },
   {
     tab: 'parameters',

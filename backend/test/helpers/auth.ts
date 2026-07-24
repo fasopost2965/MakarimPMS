@@ -15,6 +15,25 @@ export const SEED_USERS = {
   rh: 'rh@makarim.test',
 } as const;
 
+// CH-026(e) — POST /auth/login ne renvoie plus les jetons dans le corps de
+// la réponse (docs/security/CH-026E_NOTE_CONCEPTION_COOKIES_HTTPONLY.md) :
+// extrait la valeur du cookie httpOnly makarim_access_token depuis l'en-tête
+// Set-Cookie plutôt que res.body.accessToken. JwtAccessStrategy accepte
+// toujours Authorization: Bearer en parallèle (double extracteur) — les
+// centaines d'appels e2e existants via authedRequest() restent inchangés.
+export function extractCookieValue(
+  setCookieHeaders: string[] | undefined,
+  name: string,
+): string {
+  const header = setCookieHeaders?.find((c) => c.startsWith(`${name}=`));
+  if (!header) {
+    throw new Error(
+      `Cookie "${name}" absent de la réponse de connexion (Set-Cookie: ${JSON.stringify(setCookieHeaders)}).`,
+    );
+  }
+  return header.split(';', 1)[0].slice(name.length + 1);
+}
+
 // Connecte un utilisateur de seed et renvoie son access token — chaque
 // suite e2e appelle ceci dans beforeAll pour obtenir un token avant
 // d'exercer les routes protégées (JwtAuthGuard + PermissionsGuard sont
@@ -32,7 +51,10 @@ export async function loginAs(
       `Échec de connexion du compte de seed "${role}" (statut ${res.status}) : ${JSON.stringify(res.body)}`,
     );
   }
-  return (res.body as { accessToken: string }).accessToken;
+  return extractCookieValue(
+    res.headers['set-cookie'] as string[] | undefined,
+    'makarim_access_token',
+  );
 }
 
 // Wrapper supertest qui attache automatiquement l'en-tête Authorization —

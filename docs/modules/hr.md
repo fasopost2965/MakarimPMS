@@ -130,6 +130,7 @@ Le cycle d'activité du shift de présence est régi par `StatutTimeShift` :
 
 ## 17. Fonctionnalités prévues ultérieurement
 * **Phase 3 :** Intégration de verrous biométriques ou de géolocalisation sécurisée des mobiles d'équipiers d'étages et de maintenance pour valider physiquement la présence dans les murs de l'établissement au moment du pointage.
+* **Planning & Attendance (`CH-027`, cadré, non implémenté) :** extension du référentiel personnel (`Employee.poste`/`Employee.telephone`, provisioning composite `User`+`Employee` en un seul geste — aucune route ne permet aujourd'hui de créer un `User`) et nouvelle entité `ShiftPlan` (planning prévisionnel, réalise `BR-RH-002` jamais implémenté jusqu'ici) rapprochée en lecture seule avec `TimeShift`/`TimeShiftSegment` (pointage réel, déjà couvert par ADR-007) pour un résumé attendance manager (`GET /hr/attendance-summary` — volontairement **pas** sous `reporting`, voir `docs/modules/reporting.md` §16 pour la justification). Découpage interne proposé : `hr/employees.*`, `hr/attendance.*` (inchangé), `hr/shift-plans.*` (nouveau), `hr/payroll.*` (inchangé) — pas de nouveau module de premier niveau. Cadrage complet : `docs/planning/CADRAGE_PLANNING_ATTENDANCE_STAFF.md`, arbitrages tranchés : `docs/governance/REGISTRE_DECISIONS.md` (RD-017).
 
 ---
 

@@ -89,3 +89,53 @@ Lot 0 (fondations)
    │
    └──► Lot 7 (financier, dépend du backend CH-001/CH-005 — parallèle possible dès que le backend livre)
 ```
+
+---
+
+## 7. Plan révisé post-audit qualité (Phase 11, chantiers CH-028 à CH-035)
+
+Les Lots 0-7 ci-dessus couvraient la **complétude fonctionnelle** (un écran existe-t-il pour chaque endpoint métier ?) — ils sont aujourd'hui presque intégralement livrés (seul le Lot 7, financier, reste bloqué sur le backend). `docs/audits/PHASE_11_FRONTEND_QUALITE.md` a examiné un axe différent, jamais couvert par ce plan d'origine : la **qualité structurelle** de ce qui est déjà livré — tests, accessibilité, sécurité du stockage client, résilience aux erreurs, performance de chargement, dette sur les fondations transverses du Lot 0 lui-même. Ce plan révisé organise cette deuxième couche en 5 catégories, distinctes des lots fonctionnels ci-dessus — **aucun code n'est écrit tant que chaque catégorie (ou chantier) n'a pas reçu un feu vert explicite**, cohérent avec RD-020 (`docs/governance/REGISTRE_DECISIONS.md`).
+
+### A. Qualité critique (fiabilité — ne doit jamais casser en production)
+
+- **CH-031 — Error boundary transverse.** Le plus rapide, aucune dépendance : un crash de rendu isolé ne doit plus jamais faire tomber toute l'application.
+- **CH-028 — Socle de tests automatisés (Vitest + Testing Library).** Le plus structurant de cette catégorie — chaque chantier suivant, dans n'importe quelle catégorie, devient plus sûr à livrer une fois ce socle posé.
+
+**Pourquoi en premier** : ce sont les deux seuls chantiers de cette section dont l'absence peut transformer un incident mineur (un écran secondaire buggé, une régression non détectée) en interruption de service ou en erreur silencieuse en production — cohérent avec le traitement prioritaire donné aux chantiers de criticité équivalente côté backend (CH-001 à CH-004).
+
+### B. Fondations transverses (design system, gouvernance documentaire)
+
+- **CH-032 — Composants partagés (`table`, `form`, `date-picker`, `tabs`, `toast`, `file-upload`, `diff-viewer`).** La dette Lot 0 jamais résorbée, reprise ici avec le même principe que l'original : chaque composant livré est immédiatement appliqué à un écran réel existant, pas construit en isolation.
+- **CH-035 — Resynchronisation documentaire.** Déjà ✅ terminé dans le cadre du versement de cet audit (`MATRICE_MODULE_API_ECRAN.md` corrigée) — cité ici pour mémoire, ne nécessite aucune action supplémentaire.
+
+**Pourquoi en second** : consommé par presque toutes les catégories suivantes (l'accessibilité se corrige plus simplement dans un composant générique que dans huit écrans indépendamment ; les tests de CH-028 sont plus simples à écrire contre des composants stables).
+
+### C. Amélioration UX / accessibilité
+
+- **CH-029 — Accessibilité (a11y).** Plugin `jsx-a11y`, gestion de focus sur `dialog`, 3 parcours prioritaires validés au clavier.
+- **CH-034 — Arbitrage responsive/mobile.** D'abord une décision produit (coût nul) à trancher explicitement — développement conditionnel seulement si l'option « investir » est retenue.
+
+**Pourquoi ici** : ces deux chantiers touchent à l'expérience réelle des utilisateurs (clavier, écran) plutôt qu'à la robustesse technique pure — viennent après les fondations (catégorie B) pour éviter de corriger deux fois le même composant.
+
+### D. Performance / sécurité
+
+- **CH-026(e) — Migration des tokens vers un cookie `httpOnly`/`SameSite`** *(chantier déjà existant, enrichi par la Phase 11 — voir `REGISTRE_CHANTIERS.md`, fiche CH-026, pas de nouvel identifiant)*. Refonte la plus large de tout ce plan révisé (CSRF à concevoir, carve-out CORS F4/F6 à revoir) — à mener une fois CH-028 posé, pour vérifier la non-régression du flux d'authentification par une suite automatisée.
+- **CH-030 — Code splitting par onglet (`React.lazy`).** Gain rapide et indépendant, insérable à tout moment sans attendre le reste de cette catégorie.
+
+**Pourquoi ici** : contrairement aux catégories A-C, ces deux chantiers ne changent rien à ce que l'utilisateur voit — ils réduisent un risque (sécurité) ou un coût (temps de chargement) sans toucher à la surface fonctionnelle, cohérent avec un traitement en fin de plan une fois la base (tests, composants) stabilisée.
+
+### E. Finition produit
+
+- **CH-033 — Branding et finitions d'identité visuelle** (titre d'onglet, favicon, `lang`, logo dans `AppSidebar`). Volontairement en dernier — non prioritaire par choix explicite de l'utilisateur, et dépend d'un travail graphique sur le logo source (fond transparent, déclinaisons) hors du périmètre de génération de cette session.
+
+### Ordre d'exécution recommandé (vue consolidée)
+
+```
+A. Qualité critique       : CH-031 (error boundary) → CH-028 (tests)
+B. Fondations transverses : CH-032 (composants partagés) — CH-035 déjà clos
+C. UX / accessibilité     : CH-034 (arbitrage responsive, décision seule) → CH-029 (a11y, avec/après CH-032)
+D. Performance / sécurité : CH-030 (code splitting, indépendant) → CH-026(e) (tokens, après CH-028)
+E. Finition produit       : CH-033 (branding) — en dernier, dépend d'un arbitrage de timing utilisateur
+```
+
+Détail chantier par chantier (source, criticité, impacts, dépendances, critères de validation, effort estimé) : `docs/governance/REGISTRE_CHANTIERS.md`, section « Chantiers frontend — issus de l'audit qualité (Phase 11) ». Ordre d'exécution avec justification par chantier : `docs/governance/BACKLOG_PRIORISE.md`, Vague 4. **Partitionnement en lots exécutables (A-E) et plan d'exécution détaillé (périmètre technique, risques, stratégie de test, format de compte-rendu par lot)** : `docs/frontend-plan/LOTISSEMENT_CHANTIERS_QUALITE.md` et `docs/frontend-plan/PLAN_EXECUTION_LOTS_QUALITE.md` — ces deux documents sont la référence opérationnelle pour l'exécution, cette section 7 reste la vue de synthèse.

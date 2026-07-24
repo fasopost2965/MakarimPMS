@@ -31,6 +31,7 @@ import { DocumentOcrModule } from './modules/document-ocr/document-ocr.module';
 import { ChannelManagerModule } from './modules/channel-manager/channel-manager.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
+import { CsrfGuard } from './common/guards/csrf.guard';
 
 @Module({
   imports: [
@@ -106,10 +107,13 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     // si la requête est authentifiée (protège aussi les routes @Public()
     // comme /auth/login), puis JwtAuthGuard authentifie (peuple req.user ou
     // laisse passer les routes @Public()), puis PermissionsGuard vérifie
-    // l'autorisation.
+    // l'autorisation, puis CsrfGuard (CH-026(e)) — dernier, car il n'a
+    // besoin de rien de plus que req.cookies/req.headers, indépendant du
+    // résultat des guards précédents.
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
+    { provide: APP_GUARD, useClass: CsrfGuard },
   ],
 })
 export class AppModule {}

@@ -1,27 +1,96 @@
-import { useEffect, useState } from 'react';
-import { ReservationsCalendarPage } from '@/features/reservations/pages/ReservationsCalendarPage';
-import { CheckinPage } from '@/features/checkin/pages/CheckinPage';
-import { HousekeepingPage } from '@/features/housekeeping/pages/HousekeepingPage';
-import { DashboardPage } from '@/features/dashboard/pages/DashboardPage';
-import { MaintenancePage } from '@/features/maintenance/pages/MaintenancePage';
-import { GuestsPage } from '@/features/guests/pages/GuestsPage';
-import { CompaniesPage } from '@/features/companies/pages/CompaniesPage';
-import { ParametersPage } from '@/features/parameters/pages/ParametersPage';
-import { HrPage } from '@/features/hr/pages/HrPage';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { Toaster } from '@/components/ui/toast';
 import { LogoutGuardDialog } from '@/features/hr/components/LogoutGuardDialog';
 import { statutCourant } from '@/features/hr/api';
-import { StockPage } from '@/features/stock/pages/StockPage';
-import { ReportingPage } from '@/features/reporting/pages/ReportingPage';
-import { NotificationsPage } from '@/features/notifications/pages/NotificationsPage';
-import { AuditPage } from '@/features/audit/pages/AuditPage';
 import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { ForgotPasswordPage } from '@/features/auth/pages/ForgotPasswordPage';
 import { me as fetchMe } from '@/features/auth/api';
+
+// CH-030 (docs/audits/PHASE_11_FRONTEND_QUALITE.md §4.4) — chaque page de
+// premier niveau chargée à la demande plutôt qu'au premier login : un rôle
+// qui n'a accès qu'à une poignée d'onglets ne télécharge plus le JS des
+// modules auxquels il n'a pas accès (vérifiable dans l'onglet réseau du
+// navigateur). LoginPage/ForgotPasswordPage restent en import statique —
+// nécessaires immédiatement, avant toute authentification, aucun gain à les
+// découper.
+const ReservationsCalendarPage = lazy(() =>
+  import('@/features/reservations/pages/ReservationsCalendarPage').then(
+    (m) => ({ default: m.ReservationsCalendarPage }),
+  ),
+);
+const CheckinPage = lazy(() =>
+  import('@/features/checkin/pages/CheckinPage').then((m) => ({
+    default: m.CheckinPage,
+  })),
+);
+const HousekeepingPage = lazy(() =>
+  import('@/features/housekeeping/pages/HousekeepingPage').then((m) => ({
+    default: m.HousekeepingPage,
+  })),
+);
+const DashboardPage = lazy(() =>
+  import('@/features/dashboard/pages/DashboardPage').then((m) => ({
+    default: m.DashboardPage,
+  })),
+);
+const MaintenancePage = lazy(() =>
+  import('@/features/maintenance/pages/MaintenancePage').then((m) => ({
+    default: m.MaintenancePage,
+  })),
+);
+const GuestsPage = lazy(() =>
+  import('@/features/guests/pages/GuestsPage').then((m) => ({
+    default: m.GuestsPage,
+  })),
+);
+const CompaniesPage = lazy(() =>
+  import('@/features/companies/pages/CompaniesPage').then((m) => ({
+    default: m.CompaniesPage,
+  })),
+);
+const ParametersPage = lazy(() =>
+  import('@/features/parameters/pages/ParametersPage').then((m) => ({
+    default: m.ParametersPage,
+  })),
+);
+const HrPage = lazy(() =>
+  import('@/features/hr/pages/HrPage').then((m) => ({ default: m.HrPage })),
+);
+const StockPage = lazy(() =>
+  import('@/features/stock/pages/StockPage').then((m) => ({
+    default: m.StockPage,
+  })),
+);
+const ReportingPage = lazy(() =>
+  import('@/features/reporting/pages/ReportingPage').then((m) => ({
+    default: m.ReportingPage,
+  })),
+);
+const NotificationsPage = lazy(() =>
+  import('@/features/notifications/pages/NotificationsPage').then((m) => ({
+    default: m.NotificationsPage,
+  })),
+);
+const AuditPage = lazy(() =>
+  import('@/features/audit/pages/AuditPage').then((m) => ({
+    default: m.AuditPage,
+  })),
+);
+const DocumentOcrPage = lazy(() =>
+  import('@/features/document-ocr/pages/DocumentOcrPage').then((m) => ({
+    default: m.DocumentOcrPage,
+  })),
+);
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { AppTopbar } from '@/components/layout/AppTopbar';
 import { NAV_ITEMS } from '@/components/layout/nav-items';
 import { logoutRequest, onAuthFailure } from '@/lib/api-client';
-import { clearTokens, getAccessToken } from '@/lib/token-storage';
+import {
+  clearLoggedInHint,
+  hasLoggedInHint,
+  setCsrfToken,
+} from '@/lib/token-storage';
 
 export type Tab =
   | 'dashboard'
@@ -36,7 +105,8 @@ export type Tab =
   | 'stock'
   | 'reporting'
   | 'notifications'
-  | 'audit';
+  | 'audit'
+  | 'document-ocr';
 type AuthScreen = 'login' | 'forgot-password';
 
 // Coquille applicative : sidebar repliable (navigation principale) + topbar
@@ -47,12 +117,21 @@ type AuthScreen = 'login' | 'forgot-password';
 function App() {
   const [tab, setTab] = useState<Tab>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  // Présence d'un access token = hypothèse d'authentification optimiste ; si
-  // le token est en réalité expiré/invalide, le premier appel API échouera
-  // en 401, déclenchera une tentative de refresh (voir lib/api-client.ts),
-  // et onAuthFailure() nous ramènera ici si le refresh échoue aussi.
-  const [isAuthenticated, setIsAuthenticated] = useState(
-    () => getAccessToken() !== null,
+  // CH-034 — tiroir de navigation mobile (docs/audits/PHASE_11_FRONTEND_QUALITE.md
+  // §4.7), distinct de `sidebarCollapsed` (mode icônes seules, desktop
+  // uniquement) — voir AppSidebar.tsx pour le détail de la séparation des
+  // deux concepts.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // CH-026(e) — les jetons vivent dans des cookies httpOnly, invisibles au
+  // JS : hasLoggedInHint() est un simple indicateur non sensible (jamais
+  // une décision de sécurité) pour l'hypothèse d'authentification
+  // optimiste au premier rendu, évitant un flash de l'écran de connexion.
+  // Si la session est en réalité expirée/invalide, le premier appel API
+  // échouera en 401, déclenchera une tentative de refresh (voir
+  // lib/api-client.ts), et onAuthFailure() nous ramènera ici si le refresh
+  // échoue aussi.
+  const [isAuthenticated, setIsAuthenticated] = useState(() =>
+    hasLoggedInHint(),
   );
   const [authScreen, setAuthScreen] = useState<AuthScreen>('login');
   const [logoutGuardOpen, setLogoutGuardOpen] = useState(false);
@@ -62,6 +141,8 @@ function App() {
 
   useEffect(() => {
     onAuthFailure(() => {
+      clearLoggedInHint();
+      setCsrfToken(null);
       setIsAuthenticated(false);
       setAuthScreen('login');
       setPermissions(null);
@@ -77,7 +158,14 @@ function App() {
   useEffect(() => {
     if (!isAuthenticated) return;
     fetchMe()
-      .then((user) => setPermissions(user.permissions))
+      .then((user) => {
+        // CH-026(e) — seul moyen de récupérer le jeton CSRF après un
+        // rechargement de page (perdu avec le contexte JS précédent, voir
+        // lib/token-storage.ts) ; sans lui, la première requête mutante
+        // après un F5 échouerait à tort en 403.
+        setCsrfToken(user.csrfToken);
+        setPermissions(user.permissions);
+      })
       .catch(() => setPermissions([]));
   }, [isAuthenticated]);
 
@@ -112,7 +200,8 @@ function App() {
     // logoutRequest) : révoque le refresh token côté serveur en tâche de
     // fond pendant que l'UI bascule immédiatement sur l'écran de connexion.
     void logoutRequest();
-    clearTokens();
+    clearLoggedInHint();
+    setCsrfToken(null);
     setIsAuthenticated(false);
     setAuthScreen('login');
     setLogoutGuardOpen(false);
@@ -157,26 +246,52 @@ function App() {
         onNavigate={setTab}
         collapsed={sidebarCollapsed}
         onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
+        mobileOpen={mobileNavOpen}
+        onMobileClose={() => setMobileNavOpen(false)}
         permissions={permissions}
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        <AppTopbar activeTab={tab} onLogout={handleLogout} />
+        <AppTopbar
+          activeTab={tab}
+          onLogout={handleLogout}
+          onOpenMobileNav={() => setMobileNavOpen(true)}
+        />
         <div className="flex-1 overflow-auto">
-          {tab === 'dashboard' && <DashboardPage onNavigate={setTab} />}
-          {tab === 'reservations' && <ReservationsCalendarPage />}
-          {tab === 'checkin' && <CheckinPage />}
-          {tab === 'housekeeping' && <HousekeepingPage />}
-          {tab === 'maintenance' && <MaintenancePage />}
-          {tab === 'guests' && <GuestsPage />}
-          {tab === 'companies' && <CompaniesPage />}
-          {tab === 'parameters' && <ParametersPage />}
-          {tab === 'hr' && <HrPage />}
-          {tab === 'stock' && <StockPage />}
-          {tab === 'reporting' && <ReportingPage />}
-          {tab === 'notifications' && <NotificationsPage />}
-          {tab === 'audit' && <AuditPage />}
+          {/* CH-031 — une erreur de rendu dans l'onglet actif ne doit plus
+              jamais faire tomber toute l'application (docs/audits/
+              PHASE_11_FRONTEND_QUALITE.md §4.5). resetKey=tab : changer
+              d'onglet réarme automatiquement la limite, même sans passer
+              par le bouton « Revenir au tableau de bord ». */}
+          <ErrorBoundary resetKey={tab} onReset={() => setTab('dashboard')}>
+            {/* CH-030 — état de chargement explicite pendant le
+                téléchargement du chunk de l'onglet (EXIGENCES_UX.md :
+                jamais un écran blanc), même patron textuel que les états
+                `loading` déjà en place dans chaque écran (ex.
+                HousekeepingPage). */}
+            <Suspense
+              fallback={
+                <p className="text-muted-foreground p-6 text-sm">Chargement…</p>
+              }
+            >
+              {tab === 'dashboard' && <DashboardPage onNavigate={setTab} />}
+              {tab === 'reservations' && <ReservationsCalendarPage />}
+              {tab === 'checkin' && <CheckinPage />}
+              {tab === 'housekeeping' && <HousekeepingPage />}
+              {tab === 'maintenance' && <MaintenancePage />}
+              {tab === 'guests' && <GuestsPage />}
+              {tab === 'companies' && <CompaniesPage />}
+              {tab === 'parameters' && <ParametersPage />}
+              {tab === 'hr' && <HrPage />}
+              {tab === 'stock' && <StockPage />}
+              {tab === 'reporting' && <ReportingPage />}
+              {tab === 'notifications' && <NotificationsPage />}
+              {tab === 'audit' && <AuditPage />}
+              {tab === 'document-ocr' && <DocumentOcrPage />}
+            </Suspense>
+          </ErrorBoundary>
         </div>
       </div>
+      <Toaster />
       <LogoutGuardDialog
         open={logoutGuardOpen}
         onCancel={() => setLogoutGuardOpen(false)}

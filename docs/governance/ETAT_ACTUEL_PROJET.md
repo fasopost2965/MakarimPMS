@@ -30,7 +30,7 @@ Résolu depuis (voir `REGISTRE_CHANTIERS.md` pour le détail de chaque implémen
 
 ## Risques majeurs (voir `REGISTRE_RISQUES.md` pour le détail)
 
-Aucun risque majeur ouvert au sens de ce registre — le dernier restant (R-05, contournement du blacklist par duplication de fiche client) est fermé depuis CH-010 (session courante).
+Aucun risque majeur ouvert au sens fonctionnel de ce registre — le dernier restant (R-05, contournement du blacklist par duplication de fiche client) est fermé depuis CH-010 (session courante). **Trois nouveaux risques structurels frontend** (R-13 crash total sans error boundary, R-14 vol de session via `localStorage`, R-15 régression silencieuse faute de tests) ont été identifiés par l'audit Phase 11 (`docs/audits/PHASE_11_FRONTEND_QUALITE.md`) — distincts des risques fonctionnels ci-dessus, ils portent sur la fiabilité/qualité structurelle du frontend une fois sa couverture d'écrans jugée quasi complète, pas sur une fonctionnalité manquante.
 
 Fermés depuis (voir `REGISTRE_RISQUES.md`) : prise de contrôle de compte via le token de reset exposé (R-01, CH-002), facture erronée non corrigible (R-02, CH-001), registre de police légal non tenable en usage réel (R-03, CH-003), fuite de revenus par check-out non contrôlé (R-04, CH-005), contournement du blacklist par duplication de fiche client (R-05, CH-010 — contrainte dure sur `pieceIdentite` via index aveugle, détection souple email/téléphone), exposition de données d'identité en cas de compromission de la base (R-06, CH-004), acompte imputé sans chemin de remboursement (R-08, CH-012).
 
@@ -44,4 +44,6 @@ Voir `BACKLOG_PRIORISE.md` pour l'ordre d'exécution recommandé, et `../backend
 
 ## Note globale issue de l'audit
 
-**7/10** — architecture et discipline d'écriture nettement au-dessus de la moyenne pour un projet de cette taille ; complétude fonctionnelle de la chaîne financière et de la sécurité périphérique en retrait par rapport à cette qualité de base. Voir `docs/audits/PHASE_10_SYNTHESE_ROADMAP.md` pour le détail du raisonnement.
+**7/10** (Phases 1-10, complétude fonctionnelle) — architecture et discipline d'écriture nettement au-dessus de la moyenne pour un projet de cette taille ; complétude fonctionnelle de la chaîne financière et de la sécurité périphérique en retrait par rapport à cette qualité de base. Voir `docs/audits/PHASE_10_SYNTHESE_ROADMAP.md` pour le détail du raisonnement.
+
+**6,5/10** (Phase 11, qualité/fiabilité frontend, audit distinct mené après la clôture de la quasi-totalité des écrans manquants) — la couverture fonctionnelle du frontend est aujourd'hui bonne, mais cinq lacunes structurelles non examinées par l'audit d'origine (zéro test automatisé, accessibilité quasi nulle, tokens JWT en `localStorage`, absence de code splitting, absence d'error boundary) pèsent sur la fiabilité en usage réel. Voir `docs/audits/PHASE_11_FRONTEND_QUALITE.md`. Chantiers dérivés documentés (CH-028 à CH-035, `REGISTRE_CHANTIERS.md`) — **aucun code écrit à ce stade**, exécution en attente d'un feu vert explicite (RD-020).

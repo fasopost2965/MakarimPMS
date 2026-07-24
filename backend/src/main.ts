@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import type { CorsOptionsDelegate } from '@nestjs/common/interfaces/external/cors-options.interface';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import type { IncomingMessage } from 'http';
+import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
@@ -41,6 +42,10 @@ async function bootstrap() {
         process.env.NODE_ENV === 'production' ? undefined : false,
     }),
   );
+  // CH-026(e) — requis pour lire les cookies httpOnly d'authentification
+  // (JwtAccessStrategy, AuthController.refresh/logout) et le cookie CSRF
+  // non httpOnly (CsrfGuard) via req.cookies.
+  app.use(cookieParser());
   app.setGlobalPrefix('api');
   // Carve-out CORS pour les surfaces publiques (F4 Booking Engine,
   // F6 self check-in, BR-RES-004) : elles n'utilisent ni cookies ni

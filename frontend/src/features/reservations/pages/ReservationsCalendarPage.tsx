@@ -298,6 +298,19 @@ export function ReservationsCalendarPage() {
                         toISODate(day);
 
                     return (
+                      // jsx-a11y/no-static-element-interactions désactivé
+                      // volontairement (CH-029) : cette cellule ne porte
+                      // qu'un geste souris de glisser-sélection multi-case
+                      // (mousedown+mouseenter pour créer, dragover/drop pour
+                      // déplacer une réservation existante) sans équivalent
+                      // clavier discret aujourd'hui — un simple role="button"
+                      // + Entrée/Espace ne remplacerait pas une sélection de
+                      // plage. Rendre ce parcours clavier-opérable est un
+                      // vrai chantier de conception (navigation case par
+                      // case, extension au clavier, confirmation), pas un
+                      // correctif de lint — hors périmètre de CH-029, à
+                      // planifier séparément si un besoin réel émerge.
+                      // eslint-disable-next-line jsx-a11y/no-static-element-interactions
                       <div
                         key={dayIndex}
                         className="relative border-b border-l"
@@ -412,10 +425,18 @@ function ReservationBar({
   return (
     <div
       draggable
+      role="button"
+      tabIndex={0}
       onDragStart={(e) =>
         e.dataTransfer.setData('text/plain', String(reservation.id))
       }
       onClick={onView}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onView();
+        }
+      }}
       className={`bg-primary text-primary-foreground absolute inset-y-0.5 left-0.5 z-10 flex cursor-grab items-center justify-between gap-1 truncate rounded px-2 text-xs active:cursor-grabbing ${disablePointerEvents ? 'pointer-events-none' : ''}`}
       style={{ width: `calc(${span * 100}% - 4px)` }}
       title={`${reservation.guest.nom} ${reservation.guest.prenom} — ${reservation.dateArrivee.slice(0, 10)} → ${reservation.dateDepart.slice(0, 10)} — ${reservation.prixTotalFinal} DH${reservation.ajustementManuel ? ' (ajusté)' : ''}`}

@@ -1,9 +1,4 @@
-import {
-  clearTokens,
-  getAccessToken,
-  getRefreshToken,
-  setTokens,
-} from './token-storage';
+import { clearLoggedInHint, getCsrfToken, setCsrfToken } from './token-storage';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 
@@ -16,11 +11,11 @@ export function onAuthFailure(listener: AuthFailureListener) {
   authFailureListener = listener;
 }
 
-// CH-011 : GET /auth/me exige un Bearer (contrairement au reste du module
-// auth) — un préfixe "/auth/" générique traiterait à tort son 401 comme un
-// mauvais mot de passe et ne tenterait jamais de refresh. Liste explicite
-// plutôt qu'un préfixe, pour ne plus jamais avoir ce même angle mort si une
-// future route non publique s'ajoute sous /auth/.
+// CH-011 : GET /auth/me exige un Bearer/cookie (contrairement au reste du
+// module auth) — un préfixe "/auth/" générique traiterait à tort son 401
+// comme un mauvais mot de passe et ne tenterait jamais de refresh. Liste
+// explicite plutôt qu'un préfixe, pour ne plus jamais avoir ce même angle
+// mort si une future route non publique s'ajoute sous /auth/.
 const PUBLIC_AUTH_ENDPOINTS = [
   '/auth/login',
   '/auth/refresh',
@@ -30,27 +25,44 @@ const PUBLIC_AUTH_ENDPOINTS = [
   '/auth/roles-actifs',
 ];
 
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+// CH-026(e) (docs/security/CH-026E_NOTE_CONCEPTION_COOKIES_HTTPONLY.md §2.2)
+// — double-submit CSRF : l'en-tête X-CSRF-Token n'est requis (et n'a de
+// sens) que sur les requêtes mutantes, jamais sur un GET par convention de
+// ce projet (aucune route de lecture n'a d'effet de bord, cf. module
+// reporting strictement read-only).
+function needsCsrfHeader(method: string | undefined): boolean {
+  return !SAFE_METHODS.has((method ?? 'GET').toUpperCase());
+}
+
 // Mutualise les tentatives de refresh concurrentes (plusieurs requêtes en
 // 401 en même temps) pour n'appeler /auth/refresh qu'une seule fois.
-let refreshPromise: Promise<string | null> | null = null;
+let refreshPromise: Promise<boolean> | null = null;
 
-async function refreshAccessToken(): Promise<string | null> {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) return null;
-
+// CH-026(e) — le refresh token part désormais via son propre cookie httpOnly
+// (credentials: 'include'), plus dans le corps de la requête ; la réponse
+// pose directement les nouveaux cookies (access/refresh/CSRF) via
+// Set-Cookie, rien à réécrire côté client pour ceux-là — le navigateur s'en
+// charge lui-même. Le cookie CSRF est en revanche régénéré à chaque refresh
+// (AuthCookieService.setAuthCookies) : sa nouvelle valeur doit être captée
+// depuis le corps JSON (jamais lisible via document.cookie, cross-origine —
+// voir lib/token-storage.ts) et remplacer l'ancienne en mémoire, sous peine
+// de renvoyer un en-tête X-CSRF-Token périmé sur la requête suivante.
+async function refreshAccessToken(): Promise<boolean> {
   const res = await fetch(`${API_URL}/auth/refresh`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refreshToken }),
+    credentials: 'include',
+    headers: needsCsrfHeader('POST')
+      ? { 'X-CSRF-Token': getCsrfToken() ?? '' }
+      : {},
   });
-  if (!res.ok) return null;
-
-  const body = (await res.json()) as {
-    accessToken: string;
-    refreshToken: string;
-  };
-  setTokens(body.accessToken, body.refreshToken);
-  return body.accessToken;
+  if (!res.ok) return false;
+  const body = (await res.json().catch(() => null)) as {
+    csrfToken?: string;
+  } | null;
+  if (body?.csrfToken) setCsrfToken(body.csrfToken);
+  return true;
 }
 
 export async function apiRequest<T>(
@@ -64,13 +76,25 @@ export async function apiRequest<T>(
   // remonter telle quelle. GET /auth/me n'en fait pas partie (CH-011) : un
   // 401 dessus peut légitimement venir d'un access token expiré.
   const isAuthEndpoint = PUBLIC_AUTH_ENDPOINTS.includes(path);
-  const accessToken = getAccessToken();
+
+  // CH-022 : un corps FormData (upload multipart, document-ocr) ne doit
+  // jamais recevoir un Content-Type imposé manuellement — fetch calcule
+  // lui-même l'en-tête exact (avec la boundary) à partir du FormData. Fixer
+  // 'application/json' ici casserait silencieusement tout upload de fichier.
+  const isFormData = init?.body instanceof FormData;
 
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
+    // CH-026(e) — les cookies d'authentification httpOnly ne partent que si
+    // le navigateur y est explicitement autorisé sur une requête
+    // cross-origin (frontend et backend sur des origines distinctes en dev
+    // comme en prod, voir docs/operations/CH-026E_DEPLOIEMENT_DOMAINE.md).
+    credentials: 'include',
     headers: {
-      'Content-Type': 'application/json',
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+      ...(needsCsrfHeader(init?.method)
+        ? { 'X-CSRF-Token': getCsrfToken() ?? '' }
+        : {}),
       ...init?.headers,
     },
   });
@@ -79,11 +103,11 @@ export async function apiRequest<T>(
     refreshPromise ??= refreshAccessToken().finally(() => {
       refreshPromise = null;
     });
-    const newToken = await refreshPromise;
-    if (newToken) {
+    const refreshed = await refreshPromise;
+    if (refreshed) {
       return apiRequest<T>(path, init, true);
     }
-    clearTokens();
+    clearLoggedInHint();
     authFailureListener?.();
     throw new Error('Session expirée, veuillez vous reconnecter.');
   }
@@ -107,35 +131,29 @@ export async function apiRequest<T>(
   return text.length === 0 ? (undefined as T) : (JSON.parse(text) as T);
 }
 
-// CH-026(f) — révoque le refresh token courant côté serveur avant de le
-// purger localement. Best-effort : une déconnexion doit toujours réussir
-// côté client même si l'appel réseau échoue (backend indisponible, jeton
-// déjà expiré) — AuthService.logout() est de toute façon idempotent.
+// CH-026(f) — révoque le refresh token courant côté serveur avant que
+// l'App n'efface l'indicateur de connexion local. Best-effort : une
+// déconnexion doit toujours réussir côté client même si l'appel réseau
+// échoue (backend indisponible, jeton déjà expiré) — AuthService.logout()
+// est de toute façon idempotent. CH-026(e) : le refresh token part via son
+// propre cookie httpOnly, plus par un corps de requête explicite.
 export async function logoutRequest(): Promise<void> {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) return;
   try {
-    await apiRequest<void>('/auth/logout', {
-      method: 'POST',
-      body: JSON.stringify({ refreshToken }),
-    });
+    await apiRequest<void>('/auth/logout', { method: 'POST' });
   } catch {
     // Ignoré volontairement — voir commentaire ci-dessus.
   }
 }
 
 // Téléchargement de fichiers non-JSON (ex. exports CSV du module reporting)
-// nécessitant l'en-tête d'authentification — un simple <a href> ne peut pas
-// porter l'Authorization Bearer, donc on fetch en blob et on déclenche le
-// téléchargement navigateur nous-mêmes.
+// — un simple <a href> ne peut pas porter les cookies d'authentification
+// httpOnly sur une requête cross-origin sans credentials explicites, donc
+// on fetch en blob et on déclenche le téléchargement navigateur nous-mêmes.
 export async function apiRequestBlob(
   path: string,
   filename: string,
 ): Promise<void> {
-  const accessToken = getAccessToken();
-  const res = await fetch(`${API_URL}${path}`, {
-    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-  });
+  const res = await fetch(`${API_URL}${path}`, { credentials: 'include' });
 
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as {

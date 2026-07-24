@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { login, rolesActifs } from '../api';
-import { setTokens } from '@/lib/token-storage';
+import { setCsrfToken, setLoggedInHint } from '@/lib/token-storage';
 import type { RoleActif } from '../types';
 
 interface Props {
@@ -42,8 +42,9 @@ export function LoginPage({ onLoginSuccess, onForgotPassword }: Props) {
     setError(null);
     setSubmitting(true);
     try {
-      const { accessToken, refreshToken } = await login(email, motDePasse);
-      setTokens(accessToken, refreshToken);
+      const { csrfToken } = await login(email, motDePasse);
+      setCsrfToken(csrfToken);
+      setLoggedInHint();
       onLoginSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur de connexion');
