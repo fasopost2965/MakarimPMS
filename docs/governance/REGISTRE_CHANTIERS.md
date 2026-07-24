@@ -385,6 +385,8 @@ Ce registre transforme chaque constat factuel des 11 phases d'audit (`docs/audit
 
 ## Chantiers frontend — issus de l'audit qualité (Phase 11)
 
+**Exécution organisée en 5 lots (A à E)**, chacun limité en périmètre et exécutable en 1-2 sessions — voir `docs/frontend-plan/LOTISSEMENT_CHANTIERS_QUALITE.md` (quels chantiers → quel lot → quel ordre) et `docs/frontend-plan/PLAN_EXECUTION_LOTS_QUALITE.md` (objectif, périmètre technique, risques, stratégie de test et format de compte-rendu par lot). Ne pas exécuter un chantier de cette section hors du cadre de son lot sans relire ces deux documents.
+
 Contrairement aux chantiers CH-001 à CH-026 (issus des Phases 1-10, constat de complétude fonctionnelle), les fiches suivantes proviennent de `docs/audits/PHASE_11_FRONTEND_QUALITE.md` — un audit distinct, mené *après* que la quasi-totalité des écrans manquants de la Phase 8 ont été livrés, portant sur la qualité structurelle et non fonctionnelle du frontend (tests, accessibilité, sécurité du stockage client, résilience, performance de chargement, dette sur les fondations transverses). **Aucun code n'a été écrit pour ces chantiers à la date de leur versement** — conformément à la demande explicite de l'utilisateur (« ne code rien à ce stade, remets d'abord la documentation et la gouvernance frontend à niveau »), seule la documentation/gouvernance est produite ici ; l'exécution attend un feu vert explicite, chantier par chantier ou par lot, comme pour CH-027.
 
 ### CH-028 — Socle de tests automatisés frontend
