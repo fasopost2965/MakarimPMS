@@ -71,6 +71,17 @@ export class AuthCookieService {
     // (voir commentaire de classe ci-dessus) : la même valeur lui est
     // transmise une fois dans le corps JSON par l'appelant, à renvoyer
     // ensuite dans l'en-tête X-CSRF-Token sur toute requête mutante.
+    //
+    // `httpOnly: false` volontaire malgré le nom "csrf_token" : un scanner
+    // statique (CodeQL, CWE-1004 "Sensitive cookie without 'HttpOnly'
+    // flag") peut signaler cette ligne en confondant ce jeton avec un jeton
+    // de session — mais le pattern double-submit CSRF exige précisément
+    // qu'il soit lisible/rejouable côté client (c'est sa seule fonction :
+    // prouver que l'appelant a pu lire une réponse same-origin). Sans le
+    // cookie de session httpOnly correspondant (makarim_access_token), sa
+    // valeur seule ne permet d'usurper aucune session — même raisonnement
+    // que le faux positif déjà documenté/dismissé pour l'alerte CodeQL #4
+    // (DocumentOcrPage.tsx).
     const csrfToken = randomBytes(32).toString('hex');
     res.cookie(CSRF_TOKEN_COOKIE, csrfToken, {
       httpOnly: false,
