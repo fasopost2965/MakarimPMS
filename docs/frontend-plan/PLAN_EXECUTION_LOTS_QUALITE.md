@@ -145,6 +145,21 @@ Détaille, pour chacun des 5 lots définis dans `docs/frontend-plan/LOTISSEMENT_
 
 **Format de compte-rendu attendu** : idem Lot A, avec en tête la trace explicite de la décision CH-034 (renvoi vers la `RD` correspondante dans `REGISTRE_DECISIONS.md`) avant le détail du travail CH-029.
 
+**Compte-rendu réel — CH-034 (session courante)** :
+
+Décision : `AskUserQuestion` posée en ouverture de lot, comme prévu. Réponse : **« Investir dans le responsive »** (option non recommandée par défaut). Tracée dans `REGISTRE_DECISIONS.md`, RD-021.
+
+| Composant | Écran/consommateur | Statut |
+|---|---|---|
+| Tiroir mobile (`AppSidebar.tsx`) | Navigation principale, sous le seuil `md` | ✅ |
+| Bouton hamburger (`AppTopbar.tsx`) | Ouverture du tiroir, sous `md` | ✅ |
+| Câblage `mobileNavOpen` (`App.tsx`) | État partagé sidebar/topbar | ✅ |
+| Dashboard (`DashboardPage.tsx`) | Aucune modification nécessaire — grille KPI déjà adaptative | n/a |
+
+Vérification : 42/42 tests Vitest (+7 depuis Lot B), build/lint propres, 14/14 assertions Playwright réelles (mobile 375×812 + desktop 1440×900 — backdrop, `Escape`, fermeture auto à la navigation, bascule `collapsed` desktop non régressée). Détail complet : `docs/governance/REGISTRE_CHANTIERS.md` (fiche CH-034), `docs/frontend-plan/LOTISSEMENT_CHANTIERS_QUALITE.md`.
+
+**Reste dans le Lot C** : CH-029 (accessibilité), en attente de feu vert.
+
 ---
 
 ## Lot D — Performance / sécurité

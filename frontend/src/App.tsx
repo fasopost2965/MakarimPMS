@@ -51,6 +51,11 @@ type AuthScreen = 'login' | 'forgot-password';
 function App() {
   const [tab, setTab] = useState<Tab>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // CH-034 — tiroir de navigation mobile (docs/audits/PHASE_11_FRONTEND_QUALITE.md
+  // §4.7), distinct de `sidebarCollapsed` (mode icônes seules, desktop
+  // uniquement) — voir AppSidebar.tsx pour le détail de la séparation des
+  // deux concepts.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   // Présence d'un access token = hypothèse d'authentification optimiste ; si
   // le token est en réalité expiré/invalide, le premier appel API échouera
   // en 401, déclenchera une tentative de refresh (voir lib/api-client.ts),
@@ -161,10 +166,16 @@ function App() {
         onNavigate={setTab}
         collapsed={sidebarCollapsed}
         onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
+        mobileOpen={mobileNavOpen}
+        onMobileClose={() => setMobileNavOpen(false)}
         permissions={permissions}
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        <AppTopbar activeTab={tab} onLogout={handleLogout} />
+        <AppTopbar
+          activeTab={tab}
+          onLogout={handleLogout}
+          onOpenMobileNav={() => setMobileNavOpen(true)}
+        />
         <div className="flex-1 overflow-auto">
           {/* CH-031 — une erreur de rendu dans l'onglet actif ne doit plus
               jamais faire tomber toute l'application (docs/audits/

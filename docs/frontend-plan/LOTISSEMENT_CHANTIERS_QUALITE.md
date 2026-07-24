@@ -25,7 +25,7 @@ Partitionne `CH-028` à `CH-035` + `CH-026(e)` (`docs/governance/REGISTRE_CHANTI
 - **Ordre interne recommandé** : B1 → B2 → B3 → B4, chaque sous-lot livrable et vérifiable indépendamment (un sous-lot peut s'étaler sur sa propre session si besoin).
 - **Critère de « lot terminé »** : les 7 composants existent dans `components/ui/` ET chacun est réellement consommé par au moins un écran existant (aucun composant construit « en isolation » sans consommateur réel — règle déjà actée dans `PLAN_DEVELOPPEMENT_FRONTEND.md` §5).
 
-## Lot C — UX / accessibilité
+## Lot C — UX / accessibilité — 🔄 En cours (CH-034 terminé, session courante)
 
 - **Chantiers inclus** : CH-034 (arbitrage responsive/mobile), CH-029 (accessibilité a11y).
 - **Critère de criticité** : impact direct sur l'usage quotidien réel (clavier, écran) plutôt que sur la robustesse technique pure — after Lot A/B pour éviter de corriger deux fois le même composant.
@@ -105,4 +105,13 @@ Chaque lot a un début et une fin visibles (critère de « lot terminé » ci-de
 
 Les 7 composants prévus par `docs/frontend-plan/COMPOSANTS_PARTAGES_MANQUANTS.md` sont livrés, chacun avec au moins un consommateur réel vérifié en navigateur : `table`, `form`/`FormField`, `date-picker`/`DateRangeField`, `tabs`, `select-search`/`SelectSearch`, `toast`/`toastManager`, `diff-viewer`/`DiffViewer`, `file-upload`/`FileUpload`. La dette structurelle identifiée en Phase 11 §2 (huit écrans ayant chacun contourné l'absence de ces composants avec des primitives ad hoc) est résorbée à la source — les futurs écrans consomment désormais un socle réel plutôt que de le recontourner.
 
-**Prochain lot proposé** : Lot C (UX/accessibilité — CH-034 arbitrage responsive puis CH-029 a11y), en attente de feu vert.
+## Compte-rendu — Lot C, CH-034 (session courante)
+
+- **Arbitrage produit** : posé via `AskUserQuestion` en ouverture du lot comme prévu — l'utilisateur a choisi **« Investir dans le responsive »**, contre l'option par défaut recommandée « Desktop-only assumé » (décision tracée : `REGISTRE_DECISIONS.md`, RD-021).
+- **Composants/écrans livrés** : `AppSidebar.tsx` (tiroir mobile superposé sous `md` — backdrop, fermeture `Escape`, fermeture auto au clic nav, libellés toujours complets en mode tiroir) et `AppTopbar.tsx` (bouton hamburger, visible seulement sous `md`) ; câblage `mobileNavOpen` dans `App.tsx`. `DashboardPage.tsx` n'a nécessité aucune modification — sa grille KPI était déjà adaptative (`grid gap-3 sm:grid-cols-2 lg:grid-cols-3`), le vrai blocage structurel était la sidebar à largeur fixe toujours affichée.
+- **Vérifié en navigateur réel** (Playwright, données seedées réelles, connexion `admin@makarim.test`), deux viewports : mobile (375×812) — sidebar hors écran par défaut, hamburger visible, tiroir s'ouvre avec libellés complets, backdrop visible/cliquable, `Escape` ferme, clic nav navigue et ferme ; desktop (1440×900) — hamburger invisible, sidebar statique, bascule `collapsed` intacte, aucun backdrop. 14/14 assertions.
+- `npm run build`/`lint`/`test` propres (42/42 tests, +7 depuis la clôture du Lot B).
+- **Écart par rapport au plan initial** : aucun — périmètre exactement celui annoncé par la fiche CH-034 (`AppSidebar.tsx`, `AppTopbar.tsx`, écrans les plus consultés — dashboard n'a in fine rien nécessité).
+- **Reste à faire dans le Lot C** : CH-029 (accessibilité — plugin `jsx-a11y`, focus trap/restoration sur `components/ui/dialog.tsx`, 3 parcours clavier prioritaires check-in/housekeeping/facturation).
+
+**Prochaine étape proposée** : CH-029 (accessibilité), en attente de feu vert.
