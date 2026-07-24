@@ -118,6 +118,13 @@ export function DocumentOcrPage() {
       {error && <p className="text-destructive text-sm">{error}</p>}
 
       {previewUrl && (
+        // previewUrl vient exclusivement de URL.createObjectURL(fichier)
+        // (ligne 46) — une URL blob:<origine>/<uuid> générée par le
+        // navigateur, jamais dérivée du contenu ni du nom du fichier choisi.
+        // Un scanner statique (CodeQL, "DOM text reinterpreted as HTML")
+        // peut signaler ce flux en confondant l'objet File lu depuis
+        // l'<input type="file"> avec du texte DOM attaquant-contrôlé — mais
+        // aucune chaîne issue du fichier n'atteint jamais cet attribut.
         <img
           src={previewUrl}
           alt="Aperçu du document"
