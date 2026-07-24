@@ -114,6 +114,7 @@ Le module de reporting n'implémente pas de machine à états ; il compile et pr
 
 ## 16. Dette technique connue
 * **Seuils de recommandation tarifaire (F3) fixes, non configurables :** `GET /reporting/yield-forecast` classe le taux d'occupation prévisionnel selon deux seuils codés en dur (`reporting/utils/yield-recommendation.util.ts` : ≥80% → HAUSSE +15%, <40% → BAISSE -10%, sinon MAINTIEN) plutôt que des valeurs administrables via `parameters`. Choix délibéré : le cahier des charges ne demande qu'une recommandation consultative (jamais une écriture sur `SeasonRate`, INV-REP-001 reste respecté), un module de configuration des seuils serait une extension distincte hors périmètre de cette itération.
+* **Résumé attendance (Planning & Attendance, `CH-027`, cadré, non implémenté) volontairement exclu de ce module.** Le cadrage `docs/planning/CADRAGE_PLANNING_ATTENDANCE_STAFF.md` proposait initialement `GET /reporting/attendance-summary` ; corrigé avant tout code (`REGISTRE_DECISIONS.md`, RD-017) car cela violerait §11 ci-dessus (dépendance interdite vers `hr`) — la façade reste côté `hr` (`GET /hr/attendance-summary`, `hr:read`, Administrateur/RH), pas ici. Documenté ici pour éviter qu'une future itération ne réintroduise cette dépendance par inadvertance.
 
 ---
 

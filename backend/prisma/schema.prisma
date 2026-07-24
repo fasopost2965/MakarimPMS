@@ -265,6 +265,9 @@ model CompanyContact {
   email     String?
 }
 
+// CH-025 : `dateDepart > dateArrivee` porté aussi par une contrainte CHECK
+// MySQL (migration `20260724063000_ch025_check_constraints`, non
+// représentable ici — Prisma n'a pas d'attribut `@check`).
 model Reservation {
   id                   Int                       @id @default(autoincrement())
   canal                CanalReservation          @default(DIRECT)
@@ -357,6 +360,14 @@ model ReservationDeposit {
 // par une réservation est rattachée au séjour (stayId) au moment du
 // check-in sans être recréée (même ligne, même contrainte d'unicité) ; une
 // nuit issue d'un check-in walk-in n'a jamais de reservationId.
+// CH-024 (docs/governance/REGISTRE_CHANTIERS.md) : `reservationId IS NOT
+// NULL OR stayId IS NOT NULL` (jamais les deux nulles) reste un invariant
+// purement applicatif, jamais les deux nulles en pratique (3 sites de
+// création + 1 mise à jour audités, aucun ne produit ce cas) — PAS porté
+// par une contrainte CHECK MySQL : `onDelete: Cascade` sur les deux FK
+// ci-dessous rend toute expression CHECK les référençant rejetée par
+// MySQL 8 (erreur 3823, restriction documentée). Voir la fiche CH-024
+// pour le détail et les options non retenues (retirer CASCADE, trigger).
 model RoomNight {
   id            Int          @id @default(autoincrement())
   roomId        Int
@@ -480,6 +491,12 @@ model Folio {
   createdAt     DateTime             @default(now())
 }
 
+// CH-025 : `montant >= 0` (jamais négatif, toujours — voir
+// stay/utils/solde.ts pour le traitement en débit des lignes PAIEMENT via
+// `type`, pas via le signe stocké) porté aussi par une contrainte CHECK
+// MySQL (migration `20260724063000_ch025_check_constraints`, non
+// représentable ici). `>= 0` et non `> 0` : un montant nul est un cas réel
+// (ex. ligne TAXE_SEJOUR calculée sur 0 nuit facturable).
 model FolioLine {
   id              Int            @id @default(autoincrement())
   folioId         Int
@@ -607,6 +624,10 @@ enum MoyenPaiement {
   ACOMPTE
 }
 
+// CH-025 : `montant > 0` porté aussi par une contrainte CHECK MySQL
+// (migration `20260724063000_ch025_check_constraints`, non représentable
+// ici — `CreatePaymentDto` n'a aujourd'hui aucune validation de
+// positivité côté DTO, gap réel comblé pour l'instant uniquement en base).
 model Payment {
   id             Int           @id @default(autoincrement())
   // Cible d'imputation créditrice (docs/modules/payments.md §4) — toujours
@@ -857,6 +878,11 @@ model TimeShift {
 // travaillées est strictement la somme des segments TRAVAIL, jamais un
 // simple delta startedAt/endedAt du TimeShift parent (qui inclurait les
 // pauses).
+// CH-025 : `fin IS NULL OR fin >= debut` porté aussi par une contrainte
+// CHECK MySQL (migration `20260724063000_ch025_check_constraints`, non
+// représentable ici — `AttendanceService.ajusterSegment` ne validait
+// jusqu'ici aucune cohérence entre nouveauDebut/nouvelleFin, gap réel
+// comblé pour l'instant uniquement en base).
 model TimeShiftSegment {
   id          Int         @id @default(autoincrement())
   timeShiftId Int

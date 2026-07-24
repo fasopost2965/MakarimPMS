@@ -10,6 +10,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { listMovements, listStockItems, replenishStock } from '../api';
 import type { StockItem, StockMovement } from '../types';
 
@@ -66,29 +74,49 @@ export function StockPage() {
       {loading ? (
         <p className="text-muted-foreground text-sm">Chargement…</p>
       ) : showMovements ? (
-        <div className="flex flex-col gap-2">
-          {movements.length === 0 ? (
-            <p className="text-muted-foreground text-sm">Aucun mouvement.</p>
-          ) : (
-            movements.map((m) => (
-              <div
-                key={m.id}
-                className="flex items-center justify-between rounded-md border p-3 text-sm"
-              >
-                <div>
-                  <p>
-                    {m.typeMouvement === 'ENTREE' ? '+ ' : '− '}
-                    {m.quantite} — article #{m.stockItemId}
-                  </p>
-                  <p className="text-muted-foreground text-xs">{m.motif}</p>
-                </div>
-                <span className="text-muted-foreground text-xs">
-                  {new Date(m.createdAt).toLocaleString('fr-FR')}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
+        movements.length === 0 ? (
+          <p className="text-muted-foreground text-sm">Aucun mouvement.</p>
+        ) : (
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Mouvement</TableHead>
+                  <TableHead className="text-right">Quantité</TableHead>
+                  <TableHead>Article</TableHead>
+                  <TableHead>Motif</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {movements.map((m) => (
+                  <TableRow key={m.id}>
+                    <TableCell className="text-muted-foreground whitespace-nowrap">
+                      {new Date(m.createdAt).toLocaleString('fr-FR')}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          m.typeMouvement === 'ENTREE' ? 'default' : 'secondary'
+                        }
+                      >
+                        {m.typeMouvement === 'ENTREE' ? 'Entrée' : 'Sortie'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {m.typeMouvement === 'ENTREE' ? '+' : '−'}
+                      {m.quantite}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      Article #{m.stockItemId}
+                    </TableCell>
+                    <TableCell>{m.motif}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )
       ) : (
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((item) => (

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ReservationsCalendarPage } from '@/features/reservations/pages/ReservationsCalendarPage';
 import { CheckinPage } from '@/features/checkin/pages/CheckinPage';
 import { HousekeepingPage } from '@/features/housekeeping/pages/HousekeepingPage';
@@ -14,6 +15,7 @@ import { StockPage } from '@/features/stock/pages/StockPage';
 import { ReportingPage } from '@/features/reporting/pages/ReportingPage';
 import { NotificationsPage } from '@/features/notifications/pages/NotificationsPage';
 import { AuditPage } from '@/features/audit/pages/AuditPage';
+import { DocumentOcrPage } from '@/features/document-ocr/pages/DocumentOcrPage';
 import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { ForgotPasswordPage } from '@/features/auth/pages/ForgotPasswordPage';
 import { me as fetchMe } from '@/features/auth/api';
@@ -36,7 +38,8 @@ export type Tab =
   | 'stock'
   | 'reporting'
   | 'notifications'
-  | 'audit';
+  | 'audit'
+  | 'document-ocr';
 type AuthScreen = 'login' | 'forgot-password';
 
 // Coquille applicative : sidebar repliable (navigation principale) + topbar
@@ -162,19 +165,27 @@ function App() {
       <div className="flex min-w-0 flex-1 flex-col">
         <AppTopbar activeTab={tab} onLogout={handleLogout} />
         <div className="flex-1 overflow-auto">
-          {tab === 'dashboard' && <DashboardPage onNavigate={setTab} />}
-          {tab === 'reservations' && <ReservationsCalendarPage />}
-          {tab === 'checkin' && <CheckinPage />}
-          {tab === 'housekeeping' && <HousekeepingPage />}
-          {tab === 'maintenance' && <MaintenancePage />}
-          {tab === 'guests' && <GuestsPage />}
-          {tab === 'companies' && <CompaniesPage />}
-          {tab === 'parameters' && <ParametersPage />}
-          {tab === 'hr' && <HrPage />}
-          {tab === 'stock' && <StockPage />}
-          {tab === 'reporting' && <ReportingPage />}
-          {tab === 'notifications' && <NotificationsPage />}
-          {tab === 'audit' && <AuditPage />}
+          {/* CH-031 — une erreur de rendu dans l'onglet actif ne doit plus
+              jamais faire tomber toute l'application (docs/audits/
+              PHASE_11_FRONTEND_QUALITE.md §4.5). resetKey=tab : changer
+              d'onglet réarme automatiquement la limite, même sans passer
+              par le bouton « Revenir au tableau de bord ». */}
+          <ErrorBoundary resetKey={tab} onReset={() => setTab('dashboard')}>
+            {tab === 'dashboard' && <DashboardPage onNavigate={setTab} />}
+            {tab === 'reservations' && <ReservationsCalendarPage />}
+            {tab === 'checkin' && <CheckinPage />}
+            {tab === 'housekeeping' && <HousekeepingPage />}
+            {tab === 'maintenance' && <MaintenancePage />}
+            {tab === 'guests' && <GuestsPage />}
+            {tab === 'companies' && <CompaniesPage />}
+            {tab === 'parameters' && <ParametersPage />}
+            {tab === 'hr' && <HrPage />}
+            {tab === 'stock' && <StockPage />}
+            {tab === 'reporting' && <ReportingPage />}
+            {tab === 'notifications' && <NotificationsPage />}
+            {tab === 'audit' && <AuditPage />}
+            {tab === 'document-ocr' && <DocumentOcrPage />}
+          </ErrorBoundary>
         </div>
       </div>
       <LogoutGuardDialog
