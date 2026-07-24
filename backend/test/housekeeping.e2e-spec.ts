@@ -164,4 +164,58 @@ describe('Housekeeping — statuts de chambre (e2e)', () => {
       expect((allowed.body as RoomResponse).statut).toBe('LIBRE_PROPRE');
     },
   );
+
+  // CH-014 (docs/governance/REGISTRE_CHANTIERS.md) — RoomStatusLog était
+  // peuplée à chaque transition mais jamais lue par aucune route avant ce
+  // chantier.
+  describe('GET /rooms/:id/historique-statuts (CH-014)', () => {
+    it('renvoie les transitions les plus récentes en premier, avec ancien/nouveau statut', async () => {
+      const toMaintenance = await client
+        .patch(`/api/rooms/${roomId}/statut`)
+        .send({ statut: 'EN_MAINTENANCE' });
+      expect(toMaintenance.status).toBe(200);
+
+      const backToClean = await client
+        .patch(`/api/rooms/${roomId}/statut`)
+        .send({ statut: 'LIBRE_PROPRE' });
+      expect(backToClean.status).toBe(200);
+
+      const res = await client.get(`/api/rooms/${roomId}/historique-statuts`);
+      expect(res.status).toBe(200);
+      const entries = res.body as {
+        id: number;
+        roomId: number;
+        ancienStatut: string;
+        nouveauStatut: string;
+        createdAt: string;
+      }[];
+      expect(entries.length).toBeGreaterThanOrEqual(2);
+      expect(entries.every((e) => e.roomId === roomId)).toBe(true);
+
+      // Le plus récent en premier (LIBRE_PROPRE ← EN_MAINTENANCE), avant
+      // l'entrée du passage en EN_MAINTENANCE juste précédente.
+      expect(entries[0].ancienStatut).toBe('EN_MAINTENANCE');
+      expect(entries[0].nouveauStatut).toBe('LIBRE_PROPRE');
+      expect(entries[1].nouveauStatut).toBe('EN_MAINTENANCE');
+      const dates = entries.map((e) => new Date(e.createdAt).getTime());
+      expect(dates).toEqual([...dates].sort((a, b) => b - a));
+    });
+
+    it('renvoie 404 pour une chambre inexistante', async () => {
+      const res = await client.get('/api/rooms/999999999/historique-statuts');
+      expect(res.status).toBe(404);
+    });
+
+    it('exige housekeeping:read (403 pour un rôle sans cette permission)', async () => {
+      const maintenanceToken = await loginAs(app.getHttpServer(), 'maintenance');
+      const maintenanceClient = authedRequest(
+        app.getHttpServer(),
+        maintenanceToken,
+      );
+      const res = await maintenanceClient.get(
+        `/api/rooms/${roomId}/historique-statuts`,
+      );
+      expect(res.status).toBe(403);
+    });
+  });
 });

@@ -23,7 +23,7 @@ Peuvent être menés en parallèle par des développeurs différents — aucune 
 ### Vague 3 — Secondaires (dette technique, à intercaler entre les livraisons fonctionnelles)
 11. CH-019 — Renommage `room-transitions.ts` *(quasi gratuit, à faire dès qu'un développeur touche ce module)*
 12. ~~CH-013~~ — ✅ **Terminé** (session courante). Enum mort `StatutSejour.ANNULE` retiré — voir `REGISTRE_CHANTIERS.md` (RD-012).
-13. CH-014 — Consultation `RoomStatusLog`
+13. ~~CH-014~~ — ✅ **Terminé** (session courante). Consultation `RoomStatusLog` — voir `REGISTRE_CHANTIERS.md` pour le détail (`GET /rooms/:id/historique-statuts`, `RoomHistoryDialog.tsx`).
 14. CH-018 — Resynchronisation documentation modules
 15. CH-024 / CH-025 — Contraintes DB additionnelles
 16. CH-015 — Consultation `AuditLog` frontend

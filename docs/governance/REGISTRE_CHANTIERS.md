@@ -279,7 +279,9 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 - **Source** : Phase 7 §3, §5. **Priorité** : Secondaire · **Criticité** : Faible.
 - **Description** : table peuplée à chaque transition, jamais lue par aucune route.
 - **Livrable attendu** : `GET /rooms/:id/historique-statuts` (`housekeeping:read` ou `rooms:read` selon la matrice RBAC en vigueur).
-- **Statut** : à faire · **Estimation** : Faible (0,5–1 jour) · **Confiance** : élevée.
+- **Statut** : ✅ **Terminé** (session courante) · **Estimation** : Faible (0,5–1 jour) · **Confiance** : élevée (a posteriori).
+- **Résolution** : `RoomsService.findStatusHistory()` (nouvelle méthode, `RoomsService` reste l'unique propriétaire de `RoomStatusLog`, aucune lecture Prisma directe ailleurs) exposée via `HousekeepingController` sous `housekeeping:read` — écart RBAC déjà documenté (pas de `rooms:read` dédié tant qu'aucune route de configuration de chambre n'existe, cf. plus haut dans ce fichier). Frontend : bouton « Historique » sur chaque carte de `HousekeepingPage.tsx`, ouvrant `RoomHistoryDialog.tsx` (nouveau composant, purement consultatif). Vérifié en e2e : ordre décroissant par date, filtrage par chambre, 404 sur chambre inexistante, 403 pour un rôle sans `housekeeping:read` (Maintenance).
+- **Éléments testés** : `backend/test/housekeeping.e2e-spec.ts` (+3 scénarios). Suite complète rejouée : 142/142 e2e, 32/32 unitaires, aucune régression.
 
 ### CH-015 — Interface (ou a minima route) de consultation de `AuditLog`
 - **Source** : Phase 8 §2 (module `audit` sans écran). **Priorité** : Secondaire · **Criticité** : Faible-Modérée (utile en cas de litige/contrôle).
@@ -353,7 +355,7 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 |---|---|---|---|
 | Bloquant | 4 (CH-001 à CH-004) | ~7–11 jours développeur | 4 (CH-001, CH-002, CH-003, CH-004) — tous terminés |
 | Important | 8 (CH-005 à CH-012) | ~11–16 jours développeur | 8 (CH-005, CH-006, CH-007, CH-008, CH-009, CH-010, CH-011, CH-012) — tous terminés |
-| Secondaire | 14 (CH-013 à CH-026) | ~18–28 jours développeur (plusieurs sous conditions d'arbitrage) | 4 (CH-013, CH-020, CH-021, CH-023 — les trois derniers fermés sans développement, écarts assumés ou statu quo actés) + 1 partiel (CH-026, 5/6 sous-points, voir fiche) |
+| Secondaire | 14 (CH-013 à CH-026) | ~18–28 jours développeur (plusieurs sous conditions d'arbitrage) | 5 (CH-013, CH-014, CH-020, CH-021, CH-023 — CH-020/021/023 fermés sans développement, écarts assumés ou statu quo actés) + 1 partiel (CH-026, 5/6 sous-points, voir fiche) |
 
 *Ces charges sont des ordres de grandeur de développement pur (hors tests e2e étendus, hors stabilisation, hors documentation) — voir `docs/planning/ESTIMATION_CHARGE.md` pour l'estimation consolidée par scénario.*
 
@@ -378,3 +380,4 @@ Ce registre transforme chaque constat factuel des 10 phases d'audit (`docs/audit
 | CH-021 | ✅ Fermé | Session courante | City ledger / `Company` — dépriorisé formellement, écart assumé (RD-014, EA-001). |
 | CH-023 | ✅ Fermé | Session courante | Recouvrement pénalité annulation/no-show — reste hors PMS par choix, écart assumé (RD-015, EA-002). |
 | CH-026 | ⚙️ Partiel (5/6) | Session courante | Durcissement sécurité : helmet, comparaison à temps constant du secret webhook, verrouillage de compte, complexité mot de passe, rotation/révocation refresh token — voir fiche ci-dessus. (e) cookie httpOnly explicitement différé (refonte plus large, CSRF à concevoir), RD-016. |
+| CH-014 | ✅ Terminé | Session courante | Consultation `RoomStatusLog` — `GET /rooms/:id/historique-statuts` (`RoomsService.findStatusHistory`, `housekeeping:read`) + `RoomHistoryDialog.tsx` côté frontend, voir fiche ci-dessus. Résout aussi le 4e des « quatre cas confirmés » de `CRITERES_STABILITE_LONG_TERME.md`. |

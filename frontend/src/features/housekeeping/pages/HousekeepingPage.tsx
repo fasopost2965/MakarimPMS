@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
@@ -8,6 +9,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { listRooms, updateRoomStatus } from '../api';
+import { RoomHistoryDialog } from '../components/RoomHistoryDialog';
 import type { Room, StatutChambre } from '../../reservations/types';
 
 // Machine à états complète (cahier des charges §5.6, Phase 2) : ces quatre
@@ -72,6 +74,7 @@ export function HousekeepingPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [updatingRoomId, setUpdatingRoomId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [historyRoom, setHistoryRoom] = useState<Room | null>(null);
 
   const refetch = useCallback(async () => {
     setLoading(true);
@@ -133,6 +136,15 @@ export function HousekeepingPage() {
                 >
                   {STATUT_LABEL[room.statut]}
                 </Badge>
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="mt-1 h-auto p-0 text-xs"
+                  onClick={() => setHistoryRoom(room)}
+                >
+                  Historique
+                </Button>
               </div>
 
               {NON_MODIFIABLE_MANUELLEMENT[room.statut] ? (
@@ -167,6 +179,12 @@ export function HousekeepingPage() {
           ))}
         </div>
       )}
+
+      <RoomHistoryDialog
+        roomId={historyRoom?.id ?? null}
+        roomNumero={historyRoom?.numero ?? null}
+        onClose={() => setHistoryRoom(null)}
+      />
     </div>
   );
 }
