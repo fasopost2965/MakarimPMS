@@ -1,0 +1,1221 @@
+// Schéma Prisma — PMS Hôtel Makarim
+// Voir docs/plan-execution-claude-code.md §3 pour le schéma cible complet.
+// Construit module par module (note d'implémentation §3) : ce fichier ne
+// contient que ce qui est nécessaire aux modules déjà livrés.
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ------------------------------------------------------------------
+// 5.4 — Réservations
+// ------------------------------------------------------------------
+
+// BOOKING_COM posé dès une itération antérieure mais jamais câblé — F10
+// (module channel-manager) l'active pour la première fois et ajoute
+// EXPEDIA/AIRBNB, extension additive et non destructive.
+enum CanalReservation {
+  WALK_IN
+  DIRECT
+  BOOKING_COM
+  EXPEDIA
+  AIRBNB
+}
+
+enum StatutReservation {
+  CONFIRMEE
+  ANNULEE
+  NO_SHOW
+  TRANSFORMEE_EN_SEJOUR
+}
+
+enum TypePolitiqueAnnulation {
+  FLEXIBLE
+  MODEREE
+  NON_REMBOURSABLE
+}
+
+// BR-RES-006 — barème de pénalité selon le délai entre l'annulation et la
+// date d'arrivée prévue. Propriété du module reservations (pas parameters :
+// à la différence de TaxRateConfig/SeasonRate, consommés par plusieurs
+// modules, une politique d'annulation ne concerne que le cycle de vie de la
+// réservation — même logique de propriété que Company dans guests).
+model CancellationPolicy {
+  id                            Int                     @id @default(autoincrement())
+  nom                           String                  @unique
+  type                          TypePolitiqueAnnulation
+  // Annulation gratuite si dateArrivee - maintenant >= delaiFrancHeures.
+  delaiFrancHeures              Int
+  // Pourcentage de Reservation.prixTotalFinal retenu si l'annulation
+  // intervient hors délai franc.
+  pourcentagePenaliteAnnulation Decimal                 @db.Decimal(5, 2)
+  // Pourcentage retenu en cas de non-présentation (généralement plus élevé,
+  // souvent 100 — aucun délai franc ne s'applique au no-show).
+  pourcentagePenaliteNoShow     Decimal                 @db.Decimal(5, 2)
+  actif                         Boolean                 @default(true)
+  createdAt                     DateTime                @default(now())
+  reservations                  Reservation[]
+}
+
+enum StatutChambre {
+  LIBRE_PROPRE
+  RESERVEE
+  OCCUPEE
+  DEPART_PREVU
+  A_NETTOYER
+  EN_NETTOYAGE
+  EN_MAINTENANCE
+}
+
+enum FormuleHebergement {
+  ROOM_ONLY
+  BED_AND_BREAKFAST
+  HALF_BOARD
+  FULL_BOARD
+}
+
+model RoomType {
+  id                      Int                      @id @default(autoincrement())
+  nom                     String
+  prixBase                Decimal                  @db.Decimal(10, 2)
+  capacite                Int
+  // Priorité 3 (formules d'hébergement) : prix par personne et par nuit de
+  // chaque supplément repas, jamais codé en dur dans le calcul (même
+  // discipline que prixBase/SeasonRate). prixPensionComplete s'ajoute aux
+  // deux champs explicitement demandés — sans lui, FULL_BOARD n'aurait
+  // aucun tarif propre et se retrouverait facturé au prix de HALF_BOARD,
+  // un bug silencieux pire que l'ajout d'une colonne supplémentaire
+  // (nullable/valeur par défaut, non destructif).
+  prixPetitDejeuner       Decimal                  @default(0) @db.Decimal(10, 2)
+  prixDemiPension         Decimal                  @default(0) @db.Decimal(10, 2)
+  prixPensionComplete     Decimal                  @default(0) @db.Decimal(10, 2)
+  rooms                   Room[]
+  seasonRates             SeasonRate[]
+  rateRestrictions        RateRestriction[]
+  channelRoomTypeMappings ChannelRoomTypeMapping[]
+}
+
+// Grille tarifaire saisonnière (cahier des charges §5.1/§5.4) — configurable
+// via le module 5.1, jamais de tarif codé en dur dans le calcul (voir
+// ReservationsService.calculatePrixTotal). Une plage [dateDebut, dateFin]
+// (bornes incluses) par libellé et par type de chambre.
+model SeasonRate {
+  id         Int      @id @default(autoincrement())
+  roomTypeId Int
+  roomType   RoomType @relation(fields: [roomTypeId], references: [id])
+  libelle    String
+  dateDebut  DateTime @db.Date
+  dateFin    DateTime @db.Date
+  prixNuit   Decimal  @db.Decimal(10, 2)
+
+  @@unique([roomTypeId, libelle])
+}
+
+// Restrictions tarifaires (min stay / stop sale) par type de chambre et
+// plage de dates — même convention que SeasonRate (une ligne par type de
+// chambre, chevauchements autorisés contrairement à SeasonRate : plusieurs
+// restrictions peuvent légitimement se superposer, ex. un min-stay de
+// bassefond couvrant tout l'été et un stop-sale ponctuel pour un événement
+// privé de 3 jours — la règle la plus restrictive s'applique, voir
+// ReservationsService.create()/utils/rate-restrictions.ts).
+model RateRestriction {
+  id           Int      @id @default(autoincrement())
+  roomTypeId   Int
+  roomType     RoomType @relation(fields: [roomTypeId], references: [id])
+  dateDebut    DateTime @db.Date
+  dateFin      DateTime @db.Date
+  // null = aucune contrainte de durée minimale sur cette période.
+  minStayNuits Int?
+  // true = vente bloquée pour toute nuit de cette période, quelle que soit
+  // la durée du séjour demandé.
+  stopSale     Boolean  @default(false)
+  // Étiquette descriptive libre (ex. "Aïd al-Kabir"), jamais le motif
+  // d'audit — même distinction que SeasonRate.libelle vs le `motif` (≥10
+  // caractères) exigé par les DTO create/update/delete de ce service.
+  libelle      String?
+  actif        Boolean  @default(true)
+  createdAt    DateTime @default(now())
+}
+
+model Room {
+  id                 Int                 @id @default(autoincrement())
+  numero             String              @unique
+  roomTypeId         Int
+  roomType           RoomType            @relation(fields: [roomTypeId], references: [id])
+  statut             StatutChambre       @default(LIBRE_PROPRE)
+  reservations       Reservation[]
+  nights             RoomNight[]
+  stays              Stay[]
+  statusLogs         RoomStatusLog[]
+  maintenanceTickets MaintenanceTicket[]
+  stockMovements     StockMovement[]
+  // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
+  deletedAt          DateTime?
+
+  @@index([deletedAt])
+}
+
+// Traçabilité des transitions de Room.statut (cahier des charges §5.6 Phase 2,
+// CLAUDE.md règle 4 : les opérations sensibles laissent une trace d'audit).
+// Alimenté exclusivement par HousekeepingService.transitionRoom — le seul
+// chemin d'écriture de Room.statut dans toute l'application.
+model RoomStatusLog {
+  id            Int           @id @default(autoincrement())
+  roomId        Int
+  room          Room          @relation(fields: [roomId], references: [id])
+  ancienStatut  StatutChambre
+  nouveauStatut StatutChambre
+  motif         String?
+  userId        Int?
+  createdAt     DateTime      @default(now())
+}
+
+enum CategorieClient {
+  STANDARD
+  VIP
+  ENTREPRISE
+  AGENCE
+  BLACKLIST
+}
+
+// Fiche client (cahier des charges §5.7, CRM). pieceIdentite reste optionnel
+// (ne casse pas les flux réservations/checkin existants qui ne l'exigent
+// pas) ; nationalite/preferences sont nouveaux ("champs prêts pour
+// l'obligation de registre des personnes hébergées").
+model Guest {
+  id                        Int                @id @default(autoincrement())
+  nom                       String
+  prenom                    String
+  pieceIdentite             String?
+  // CH-010 (docs/governance/REGISTRE_DECISIONS.md, RD-011) — index aveugle :
+  // HMAC-SHA256 déterministe de pieceIdentite en clair, jamais exposé à
+  // l'API (voir prisma.module.ts, `omit` global). pieceIdentite lui-même
+  // reste chiffré de façon non-déterministe (IV aléatoire, CH-004) et ne
+  // peut donc jamais porter directement une contrainte @@unique — cette
+  // colonne est le seul point d'application réelle de la déduplication
+  // "contrainte dure" décidée pour CH-010.
+  pieceIdentiteHash         String?            @unique
+  nationalite               String?
+  telephone                 String?
+  email                     String?
+  categorie                 CategorieClient    @default(STANDARD)
+  preferences               String?
+  // F7 — opt-out simple (pas de granularité par type d'évènement en v1) :
+  // false désactive tout envoi (confirmation, rappel J-1, post-séjour) pour
+  // ce client. Défaut true = comportement actuel inchangé pour les clients
+  // existants.
+  consentementNotifications Boolean            @default(true)
+  reservations              Reservation[]
+  stays                     Stay[]
+  categoryLogs              GuestCategoryLog[]
+  policeRecords             PoliceRecord[]
+  notificationLogs          NotificationLog[]
+  createdAt                 DateTime           @default(now())
+  // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
+  deletedAt                 DateTime?
+
+  @@index([deletedAt])
+}
+
+// Trace d'audit dédiée aux changements de catégorie (CLAUDE.md règle 4 :
+// blacklister un client est une opération sensible). Mirror du pattern déjà
+// établi par RoomStatusLog (housekeeping) — alimenté exclusivement par
+// GuestsService.updateCategorie, jamais d'écriture directe de Guest.categorie
+// ailleurs.
+model GuestCategoryLog {
+  id                Int             @id @default(autoincrement())
+  guestId           Int
+  guest             Guest           @relation(fields: [guestId], references: [id])
+  ancienneCategorie CategorieClient
+  nouvelleCategorie CategorieClient
+  motif             String
+  userId            Int?
+  createdAt         DateTime        @default(now())
+}
+
+// Annuaire des comptes entreprise (City Ledger, cahier des charges §5.7 /
+// §6.2 "Comptes entreprise"). Volontairement autonome pour cette itération :
+// aucune FK companyId sur Reservation/Stay/Folio/Invoice — le rattachement
+// réel d'un séjour/d'une facture à une société (et donc un vrai compte
+// courant avec mouvements) reste un module futur non spécifié dans le
+// cahier des charges. plafondCredit est affiché tel quel côté frontend,
+// jamais utilisé pour calculer une remise ou une commission (section 2.1).
+model Company {
+  id                 Int              @id @default(autoincrement())
+  raisonSociale      String
+  ice                String?
+  conditionsPaiement String?
+  plafondCredit      Decimal?         @db.Decimal(10, 2)
+  contacts           CompanyContact[]
+  createdAt          DateTime         @default(now())
+}
+
+model CompanyContact {
+  id        Int     @id @default(autoincrement())
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+  nom       String
+  role      String?
+  telephone String?
+  email     String?
+}
+
+// CH-025 : `dateDepart > dateArrivee` porté aussi par une contrainte CHECK
+// MySQL (migration `20260724063000_ch025_check_constraints`, non
+// représentable ici — Prisma n'a pas d'attribut `@check`).
+model Reservation {
+  id                   Int                       @id @default(autoincrement())
+  canal                CanalReservation          @default(DIRECT)
+  guestId              Int
+  guest                Guest                     @relation(fields: [guestId], references: [id])
+  roomId               Int
+  room                 Room                      @relation(fields: [roomId], references: [id])
+  dateArrivee          DateTime                  @db.Date
+  dateDepart           DateTime                  @db.Date
+  statut               StatutReservation         @default(CONFIRMEE)
+  sourceBrute          String?
+  // Tarification saisonnière (cahier des charges §5.1/§5.4). Le défaut à 0
+  // n'existe que pour la migration (colonnes non-nullables sur une table
+  // pouvant déjà contenir des lignes) — le service calcule et renseigne
+  // toujours ces valeurs explicitement à la création.
+  prixTotalCalcule     Decimal                   @default(0) @db.Decimal(10, 2)
+  prixTotalFinal       Decimal                   @default(0) @db.Decimal(10, 2)
+  ajustementManuel     Boolean                   @default(false)
+  motifAjustement      String?
+  // Priorité 3 — intégrée au calcul de prixTotalCalcule/prixTotalFinal
+  // (ReservationsService.calculatePrixTotal) dès la création.
+  formule              FormuleHebergement        @default(BED_AND_BREAKFAST)
+  // BR-RES-006 — politique d'annulation rattachée à la réservation
+  // (optionnelle : une réservation sans politique n'est jamais pénalisée).
+  cancellationPolicyId Int?
+  cancellationPolicy   CancellationPolicy?       @relation(fields: [cancellationPolicyId], references: [id])
+  // Montant de pénalité réellement appliqué, figé au moment de
+  // l'annulation/no-show (ReservationsService.remove/markNoShow) — jamais
+  // recalculé après coup si le barème de la politique change ensuite (même
+  // principe que prixTotalCalcule/prixTotalFinal : on gèle ce qui a été
+  // décidé, pas une valeur dérivée à la volée).
+  montantPenalite      Decimal?                  @db.Decimal(10, 2)
+  nights               RoomNight[]
+  stay                 Stay?
+  deposits             ReservationDeposit[]
+  notificationLogs     NotificationLog[]
+  selfCheckinToken     SelfCheckinToken?
+  channelImport        ChannelReservationImport?
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  // Soft delete (ADR-005 §3.1) — toujours null pour l'instant, aucun code
+  // n'écrit ce champ cette itération (colonne posée en avance de la
+  // fonctionnalité qui l'exploitera réellement).
+  deletedAt            DateTime?
+
+  @@index([deletedAt])
+}
+
+enum StatutAcompte {
+  EN_ATTENTE
+  ENCAISSE
+  IMPUTE
+  REMBOURSE
+}
+
+// Acompte versé à la réservation, avant même l'existence d'un séjour/folio
+// (client direct ou Booking.com). Imputé automatiquement au folio principal
+// lors du check-in (StayService.checkinFromReservation) via
+// BillingService.creditFolioLine — jamais d'écriture FolioLine directe ici,
+// même chemin canonique que PaymentsService.createPayment (docs/modules/payments.md §10).
+model ReservationDeposit {
+  id              Int           @id @default(autoincrement())
+  reservationId   Int
+  reservation     Reservation   @relation(fields: [reservationId], references: [id])
+  montant         Decimal       @db.Decimal(10, 2)
+  moyen           MoyenPaiement
+  statut          StatutAcompte @default(ENCAISSE)
+  idempotencyKey  String        @unique
+  // Renseigné au moment de l'imputation (check-in) — jamais avant.
+  imputeAuFolioId Int?
+  imputeAuFolio   Folio?        @relation(fields: [imputeAuFolioId], references: [id])
+  createdAt       DateTime      @default(now())
+  // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
+  deletedAt       DateTime?
+
+  @@index([deletedAt])
+  @@index([reservationId])
+}
+
+// Une ligne par nuit occupée (roomId, date). La contrainte unique ci-dessous
+// est le verrou anti-double-réservation/double-occupation (docs/plan-execution-claude-code.md
+// §8) : deux transactions concurrentes qui tentent d'occuper la même nuit
+// pour la même chambre ne peuvent jamais réussir toutes les deux — InnoDB
+// fait respecter l'unicité au niveau de l'index, indépendamment de
+// l'isolation de transaction. Les lignes sont supprimées quand une
+// réservation est annulée/déplacée, ou quand un séjour est clôturé
+// (check-out, voir CheckinService.checkout).
+//
+// reservationId et stayId sont tous deux optionnels : une nuit verrouillée
+// par une réservation est rattachée au séjour (stayId) au moment du
+// check-in sans être recréée (même ligne, même contrainte d'unicité) ; une
+// nuit issue d'un check-in walk-in n'a jamais de reservationId.
+// CH-024 (docs/governance/REGISTRE_CHANTIERS.md) : `reservationId IS NOT
+// NULL OR stayId IS NOT NULL` (jamais les deux nulles) reste un invariant
+// purement applicatif, jamais les deux nulles en pratique (3 sites de
+// création + 1 mise à jour audités, aucun ne produit ce cas) — PAS porté
+// par une contrainte CHECK MySQL : `onDelete: Cascade` sur les deux FK
+// ci-dessous rend toute expression CHECK les référençant rejetée par
+// MySQL 8 (erreur 3823, restriction documentée). Voir la fiche CH-024
+// pour le détail et les options non retenues (retirer CASCADE, trigger).
+model RoomNight {
+  id            Int          @id @default(autoincrement())
+  roomId        Int
+  room          Room         @relation(fields: [roomId], references: [id])
+  date          DateTime     @db.Date
+  reservationId Int?
+  reservation   Reservation? @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  stayId        Int?
+  stay          Stay?        @relation(fields: [stayId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, date])
+}
+
+// ------------------------------------------------------------------
+// 5.5 — Check-in / Check-out / Séjours
+// ------------------------------------------------------------------
+
+// CH-013 (docs/governance/REGISTRE_CHANTIERS.md, RD-012) : ANNULE retiré —
+// jamais écrit en base, aucun cas d'usage réel défini pour annuler un
+// séjour déjà en cours (distinct du check-out normal et de l'annulation
+// d'une réservation avant arrivée, StatutReservation.ANNULEE).
+enum StatutSejour {
+  EN_COURS
+  CHECKOUT
+}
+
+// Le séjour est l'objet central (CLAUDE.md règle 1) : une réservation peut
+// devenir un séjour (check-in), mais un séjour peut aussi exister sans
+// réservation préalable (walk-in) — reservationId est donc optionnel.
+model Stay {
+  id                 Int                @id @default(autoincrement())
+  reservationId      Int?               @unique
+  reservation        Reservation?       @relation(fields: [reservationId], references: [id])
+  roomId             Int
+  room               Room               @relation(fields: [roomId], references: [id])
+  guestId            Int
+  guest              Guest              @relation(fields: [guestId], references: [id])
+  dateCheckin        DateTime           @default(now())
+  dateCheckoutPrevue DateTime           @db.Date
+  dateCheckoutReelle DateTime?
+  statut             StatutSejour       @default(EN_COURS)
+  // Priorité 3 — reprend Reservation.formule au check-in depuis réservation,
+  // ou saisie directement pour un walk-in (WalkinDto.formule). Détermine si
+  // une FolioLine EXTRA "repas" est créée au check-in
+  // (StayService.createFolioPrincipal).
+  formule            FormuleHebergement @default(BED_AND_BREAKFAST)
+  nights             RoomNight[]
+  folios             Folio[]
+  policeRecord       PoliceRecord?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
+  deletedAt          DateTime?
+
+  @@index([deletedAt])
+}
+
+enum TypePiece {
+  CIN
+  PASSEPORT
+  SEJOUR
+  AUTRE
+}
+
+// Registre légal des personnes hébergées (obligation DGSN, cahier des
+// charges — registre exportable sur demande). Une fiche par séjour
+// (stayId unique), jamais fusionnée dans Guest : un même client peut
+// présenter une pièce différente d'un séjour à l'autre (renouvellement,
+// document différent au passage de frontière), et le registre doit rester
+// un instantané figé par séjour, pas une fiche client réécrite
+// rétroactivement. Alimentée par PoliceService.upsert — seul chemin
+// d'écriture (même discipline que RoomStatusLog/GuestCategoryLog).
+model PoliceRecord {
+  id               Int       @id @default(autoincrement())
+  stayId           Int       @unique
+  stay             Stay      @relation(fields: [stayId], references: [id])
+  guestId          Int
+  guest            Guest     @relation(fields: [guestId], references: [id])
+  numeroPiece      String
+  typePiece        TypePiece
+  nationalite      String
+  dateNaissance    DateTime  @db.Date
+  paysProvenance   String?
+  villeProvenance  String?
+  paysDestination  String?
+  villeDestination String?
+  dateArrivee      DateTime
+  dateDepart       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+enum TypeLigneFolio {
+  HEBERGEMENT
+  EXTRA
+  TAXE_SEJOUR
+  PAIEMENT
+}
+
+// Règles 2 et 3 (CLAUDE.md) : un séjour peut avoir plusieurs folios ; ce
+// module ne crée que le "Folio principal" à l'ouverture du séjour (une ligne
+// HEBERGEMENT reprenant Reservation.prixTotalFinal ou le prix calculé pour
+// un walk-in). Le module billing (5.13) ajoutera folios secondaires,
+// transferts de lignes et génération de factures — jamais en contournement
+// de ce modèle (règle 5).
+model Folio {
+  id            Int                  @id @default(autoincrement())
+  stayId        Int
+  stay          Stay                 @relation(fields: [stayId], references: [id])
+  libelle       String
+  lignes        FolioLine[]
+  invoices      Invoice[]
+  payments      Payment[]
+  deposits      ReservationDeposit[]
+  // Taxes actives/applicables par défaut explicitement écartées de ce folio
+  // (client exonéré — entreprise, diplomate...), réglé via
+  // PATCH /folios/:id/taxes-exclues avant génération de facture. Table de
+  // jonction plutôt qu'un Int[] : MySQL/Prisma ne supporte pas les colonnes
+  // de type liste scalaire (réservé à PostgreSQL/CockroachDB).
+  taxExclusions FolioTaxExclusion[]
+  createdAt     DateTime             @default(now())
+}
+
+// CH-025 : `montant >= 0` (jamais négatif, toujours — voir
+// stay/utils/solde.ts pour le traitement en débit des lignes PAIEMENT via
+// `type`, pas via le signe stocké) porté aussi par une contrainte CHECK
+// MySQL (migration `20260724063000_ch025_check_constraints`, non
+// représentable ici). `>= 0` et non `> 0` : un montant nul est un cas réel
+// (ex. ligne TAXE_SEJOUR calculée sur 0 nuit facturable).
+model FolioLine {
+  id              Int            @id @default(autoincrement())
+  folioId         Int
+  folio           Folio          @relation(fields: [folioId], references: [id])
+  type            TypeLigneFolio
+  libelle         String
+  montant         Decimal        @db.Decimal(10, 2)
+  tauxTva         Decimal        @default(0) @db.Decimal(5, 2)
+  annulee         Boolean        @default(false)
+  motifAnnulation String?
+  createdAt       DateTime       @default(now())
+  // Traçabilité de la ligne de taxe générée automatiquement à la facturation
+  // (BillingService.generateInvoice) — null pour toute ligne non fiscale
+  // (HEBERGEMENT/EXTRA/PAIEMENT) ou pour la TVA (appliquée en marge dans
+  // calculateInvoiceTotal, jamais matérialisée en ligne propre). Permet le
+  // regroupement par taxe exact dans GET /reporting/taxes, plutôt que de se
+  // fier au seul TypeLigneFolio.TAXE_SEJOUR (trop grossier : plusieurs taxes
+  // configurables distinctes peuvent partager ce même type de ligne).
+  taxRateConfigId Int?
+  taxRateConfig   TaxRateConfig? @relation(fields: [taxRateConfigId], references: [id])
+}
+
+// ------------------------------------------------------------------
+// 5.13 — Billing (facturation, TVA, taxe de séjour, paiements)
+// ------------------------------------------------------------------
+
+enum TaxMode {
+  MONTANT_FIXE
+  POURCENTAGE
+}
+
+model TaxRateConfig {
+  id                  Int                 @id @default(autoincrement())
+  type                String // "TVA_HEBERGEMENT" | "TVA_ANNEXE" | "TAXE_SEJOUR" | tout
+  // nouveau libellé créé depuis /parameters/tax-rates (ex. future taxe
+  // touristique régionale) — libre, jamais un enum : une nouvelle taxe doit
+  // pouvoir être créée depuis les paramètres sans migration de schéma.
+  // MONTANT_FIXE : `taux` est un montant MAD (ex. 3.00 DH/nuit/adulte).
+  // POURCENTAGE  : `taux` est un pourcentage (ex. 10 = 10%), comme avant.
+  mode                TaxMode             @default(POURCENTAGE)
+  taux                Decimal             @db.Decimal(5, 2)
+  applicableA         String? // catégorie hôtel / commune si pertinent
+  // false = taxe désactivée : ignorée par getTaxRateMap() (marge TVA) ET par
+  // getApplicableTaxes() (génération de ligne à la facturation) — permet de
+  // suspendre une taxe sans supprimer son historique/traçabilité.
+  actif               Boolean             @default(true)
+  // true = taxe collectée pour le compte du Trésor public (taxe de séjour,
+  // TVA...) — isolée dans sa propre section du rapport GET /reporting/taxes
+  // pour la déclaration mensuelle DGI, distincte du chiffre d'affaires propre
+  // de l'hôtel.
+  collectePourTresor  Boolean             @default(false)
+  // false = taxe optionnelle (ne génère jamais de ligne automatiquement à la
+  // facturation, doit être ajoutée manuellement via addFolioLine) — true =
+  // appliquée par défaut à chaque génération de facture, sous réserve des
+  // exclusions du folio (FolioTaxExclusion).
+  applicableParDefaut Boolean             @default(true)
+  actifDepuis         DateTime            @default(now())
+  createdAt           DateTime            @default(now())
+  folioLines          FolioLine[]
+  folioExclusions     FolioTaxExclusion[]
+}
+
+// Exclusion explicite d'une taxe pour un folio donné (client exonéré),
+// décidée avant génération de facture — jamais après (la facture EMISE est
+// immuable, INV-FAC-001). Une ligne = une taxe écartée pour un folio.
+model FolioTaxExclusion {
+  id              Int           @id @default(autoincrement())
+  folioId         Int
+  folio           Folio         @relation(fields: [folioId], references: [id])
+  taxRateConfigId Int
+  taxRateConfig   TaxRateConfig @relation(fields: [taxRateConfigId], references: [id])
+  motif           String
+  userId          Int?
+  createdAt       DateTime      @default(now())
+
+  @@unique([folioId, taxRateConfigId])
+}
+
+// Table posée par le module parameters (docs/modules/parameters.md, BR-RH-001)
+// pour le futur chantier hr (Sprint 11) — readiness structurelle uniquement,
+// aucun endpoint ni écran construit dessus tant que hr n'a pas de
+// consommateur réel (même logique que les colonnes deletedAt posées sans
+// middleware lors du chantier ADR-005).
+model CnssRateConfig {
+  id               Int      @id @default(autoincrement())
+  branche          String // ex. "AMO", "Allocations familiales", "Prestations sociales"
+  tauxSalarie      Decimal  @db.Decimal(5, 2)
+  tauxEmployeur    Decimal  @db.Decimal(5, 2)
+  plafondMensuel   Decimal? @db.Decimal(10, 2)
+  applicableDepuis DateTime @default(now())
+  createdAt        DateTime @default(now())
+}
+
+enum StatutFacture {
+  EMISE
+  ANNULEE_PAR_AVOIR
+}
+
+model Invoice {
+  id           Int           @id @default(autoincrement())
+  numero       String        @unique
+  folioId      Int
+  folio        Folio         @relation(fields: [folioId], references: [id])
+  montantTotal Decimal       @db.Decimal(10, 2)
+  statut       StatutFacture @default(EMISE)
+  pdfUrl       String?
+  creditNotes  CreditNote[]
+  payments     Payment[]
+  createdAt    DateTime      @default(now())
+}
+
+model CreditNote {
+  id        Int      @id @default(autoincrement())
+  invoiceId Int
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id])
+  motif     String
+  montant   Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+}
+
+enum MoyenPaiement {
+  ESPECES
+  CARTE
+  VIREMENT
+  ACOMPTE
+}
+
+// CH-025 : `montant > 0` porté aussi par une contrainte CHECK MySQL
+// (migration `20260724063000_ch025_check_constraints`, non représentable
+// ici — `CreatePaymentDto` n'a aujourd'hui aucune validation de
+// positivité côté DTO, gap réel comblé pour l'instant uniquement en base).
+model Payment {
+  id             Int           @id @default(autoincrement())
+  // Cible d'imputation créditrice (docs/modules/payments.md §4) — toujours
+  // renseigné : un règlement crédite un folio (avant même qu'une facture
+  // n'existe, ex. acompte avant-séjour), jamais directement une facture.
+  folioId        Int
+  folio          Folio         @relation(fields: [folioId], references: [id])
+  invoiceId      Int?
+  invoice        Invoice?      @relation(fields: [invoiceId], references: [id])
+  moyen          MoyenPaiement
+  montant        Decimal       @db.Decimal(10, 2)
+  idempotencyKey String        @unique
+  createdAt      DateTime      @default(now())
+  // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
+  deletedAt      DateTime?
+
+  @@index([deletedAt])
+}
+
+// ------------------------------------------------------------------
+// 5.1 / 5.2 / 5.2.1 — Core (config hôtel, auth, rôles, permissions)
+// ------------------------------------------------------------------
+
+// Singleton (id fixé à 1 par convention applicative, jamais créé en
+// deuxième ligne) : informations légales/fiscales de l'hôtel, réutilisées
+// par la facturation (en-tête de facture) et par l'UI (devise, format de
+// date). Pas de multi-hôtel dans ce projet (voir CLAUDE.md).
+model HotelConfig {
+  id                Int      @id @default(autoincrement())
+  raisonSociale     String
+  ice               String
+  identifiantFiscal String
+  rc                String
+  adresse           String
+  logoUrl           String?
+  categorieEtoiles  Int
+  devise            String   @default("MAD")
+  formatDate        String   @default("DD/MM/YYYY")
+  updatedAt         DateTime @updatedAt
+}
+
+model Role {
+  id          Int              @id @default(autoincrement())
+  nom         String           @unique
+  permissions RolePermission[]
+  users       User[]
+}
+
+// Une permission = (module, action). "module" reprend le nom de base de
+// route des modules métier existants ("reservations", "checkin",
+// "housekeeping", "billing", "dashboard") ou futurs — volontairement une
+// String plutôt qu'un enum, pour ne pas devoir migrer le schéma à chaque
+// nouveau module (cahier des charges règle 5 : les modules futurs se
+// branchent sans contournement, y compris sur le système de permissions).
+model Permission {
+  id     Int              @id @default(autoincrement())
+  module String
+  action String // "read" | "write" | "delete" | "export"
+  roles  RolePermission[]
+
+  @@unique([module, action])
+}
+
+model RolePermission {
+  roleId       Int
+  permissionId Int
+  role         Role       @relation(fields: [roleId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+}
+
+model User {
+  id                Int                  @id @default(autoincrement())
+  nom               String
+  email             String               @unique
+  motDePasseHash    String
+  roleId            Int
+  role              Role                 @relation(fields: [roleId], references: [id])
+  actif             Boolean              @default(true)
+  createdAt         DateTime             @default(now())
+  loginLogs         LoginLog[]
+  passwordResets    PasswordResetToken[]
+  refreshTokens     RefreshToken[]
+  auditLogs         AuditLog[]
+  // Profil RH (module 5.11) : au plus un Employee par compte de connexion.
+  employee          Employee?
+  // Bulletins de paie validés par cet utilisateur en tant que responsable RH.
+  paySlipsValidated PaySlip[]
+  stockMovements    StockMovement[]
+  // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
+  deletedAt         DateTime?
+
+  @@index([deletedAt])
+}
+
+model LoginLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  succes    Boolean
+  ip        String?
+  createdAt DateTime @default(now())
+}
+
+// Jeton à usage unique pour le flux "mot de passe oublié" — pas d'envoi
+// d'email réel à ce stade (cahier des charges, cette itération) : le jeton
+// est stocké en base et exposé tel quel par l'API pour valider le flux.
+// Expire après 30 minutes ; utiliseAt marque la consommation (empêche la
+// réutilisation du même lien).
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id])
+  token     String    @unique
+  expiresAt DateTime
+  utiliseAt DateTime?
+  createdAt DateTime  @default(now())
+}
+
+// CH-026(f) — suivi des refresh tokens émis, pour permettre rotation et
+// révocation (l'access token, lui, reste entièrement stateless — aucune
+// requête base sur son chemin de vérification, seul son homologue refresh,
+// déjà bien moins fréquent, paie le coût d'une lecture). `jti` (identifiant
+// unique embarqué dans le payload JWT du refresh token, pas dans l'access
+// token) est la seule donnée nécessaire pour retrouver la ligne — le JWT
+// reste la source de vérité pour l'expiration/la signature, cette table
+// n'ajoute qu'un état de révocation binaire. AuthService.refresh() révoque
+// systématiquement l'ancien jeton en émettant le nouveau (rotation à usage
+// unique : la réutilisation d'un refresh token déjà consommé échoue).
+model RefreshToken {
+  id        Int       @id @default(autoincrement())
+  jti       String    @unique
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id])
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// ------------------------------------------------------------------
+// 5.8 — Maintenance & Incidents
+// ------------------------------------------------------------------
+
+enum PrioriteTicket {
+  BASSE
+  MOYENNE
+  HAUTE
+  URGENTE
+}
+
+// roomId nullable : un ticket peut concerner une panne hors chambre (partie
+// commune) sans lieu structuré dans cette itération (pas de concept de zone
+// — décision Phase 2, voir plan de génération). Quand roomId est renseigné,
+// la création/résolution du ticket pilote automatiquement le statut
+// EN_MAINTENANCE de la chambre via HousekeepingService.transitionRoom (le
+// seul chemin d'écriture de Room.statut) — jamais d'écriture directe ici.
+model MaintenanceTicket {
+  id        Int            @id @default(autoincrement())
+  roomId    Int?
+  room      Room?          @relation(fields: [roomId], references: [id])
+  typePanne String
+  priorite  PrioriteTicket @default(MOYENNE)
+  photoUrl  String?
+  assigneA  String?
+  resoluAt  DateTime?
+  createdAt DateTime       @default(now())
+}
+
+// ------------------------------------------------------------------
+// 5.11 — Ressources Humaines (Pointage inviolable & Paie CNSS/AMO)
+// Voir ADR-007 (machine à états TimeShift/TimeShiftSegment, INV-TSH-001 à
+// 005) et BUSINESS_RULES.md (BR-RH-001, BR-RH-003 à BR-RH-005). BR-RH-002
+// (échange de shifts entre employés) est hors périmètre de ce sprint —
+// reporté (voir docs/execution/SPRINT_11.md, section "Reporté").
+// ------------------------------------------------------------------
+
+// Employee est distinct de User (docs/DATA_DICTIONARY.md Gap #1,
+// docs/RBAC_MATRIX.md "fiches individuelles de contrat") : User porte
+// uniquement l'identité de connexion/rôle, Employee porte les données RH
+// (salaire, matricule CNSS, date d'embauche) — jamais mélangées sur le même
+// modèle.
+model Employee {
+  id            Int         @id @default(autoincrement())
+  userId        Int         @unique
+  user          User        @relation(fields: [userId], references: [id])
+  matriculeCnss String?
+  salaireBase   Decimal     @db.Decimal(10, 2)
+  dateEmbauche  DateTime
+  actif         Boolean     @default(true)
+  timeShifts    TimeShift[]
+  paySlips      PaySlip[]
+  createdAt     DateTime    @default(now())
+  // Soft delete (ADR-005 §3.1) — RBAC_MATRIX.md interdit la suppression
+  // physique d'un dossier employé ("Interdit de supprimer définitivement un
+  // dossier de paie ou d'employé").
+  deletedAt     DateTime?
+
+  @@index([deletedAt])
+}
+
+// NON_DEMARRE (ADR-007 §3.2) n'est jamais persisté comme valeur de colonne
+// TimeShift.statut : c'est l'ABSENCE de TimeShift ACTIF/EN_PAUSE pour un
+// employé qui représente cet état. Conservé dans l'enum pour rester fidèle
+// au vocabulaire de l'ADR (utilisé côté API de statut courant).
+enum StatutTimeShift {
+  NON_DEMARRE
+  ACTIF
+  EN_PAUSE
+  TERMINE
+}
+
+enum TypeSegment {
+  TRAVAIL
+  PAUSE
+}
+
+// Conteneur global de la journée/session de travail d'un employé (ADR-007
+// §3.3). Un shift de nuit à cheval sur minuit (§6.2) reste une seule entité
+// TimeShift, jamais coupé automatiquement à minuit.
+model TimeShift {
+  id         Int                @id @default(autoincrement())
+  employeeId Int
+  employee   Employee           @relation(fields: [employeeId], references: [id])
+  statut     StatutTimeShift    @default(ACTIF)
+  // INV-TSH-001 : générés exclusivement par le serveur (new Date()), jamais
+  // par une valeur transmise dans le body de la requête.
+  startedAt  DateTime           @default(now())
+  endedAt    DateTime?
+  segments   TimeShiftSegment[]
+  createdAt  DateTime           @default(now())
+  // Non-suppression physique (INV-TSH-005) — invalidation logique uniquement,
+  // avec motif obligatoire porté par la ligne AuditLog associée.
+  deletedAt  DateTime?
+
+  // INV-TSH-002 : au plus un TimeShift ACTIF/EN_PAUSE par employé. Un index
+  // partiel serait idéal mais MySQL/Prisma ne le permettent pas nativement
+  // ici — l'unicité est donc garantie applicativement par AttendanceService
+  // (vérification en transaction avant insertion), voir aussi le test
+  // d'intégration dédié.
+  @@index([employeeId, statut])
+  @@index([deletedAt])
+}
+
+// Isolation par segments temporels (ADR-007 §3.3) : le cumul des heures
+// travaillées est strictement la somme des segments TRAVAIL, jamais un
+// simple delta startedAt/endedAt du TimeShift parent (qui inclurait les
+// pauses).
+// CH-025 : `fin IS NULL OR fin >= debut` porté aussi par une contrainte
+// CHECK MySQL (migration `20260724063000_ch025_check_constraints`, non
+// représentable ici — `AttendanceService.ajusterSegment` ne validait
+// jusqu'ici aucune cohérence entre nouveauDebut/nouvelleFin, gap réel
+// comblé pour l'instant uniquement en base).
+model TimeShiftSegment {
+  id          Int         @id @default(autoincrement())
+  timeShiftId Int
+  timeShift   TimeShift   @relation(fields: [timeShiftId], references: [id])
+  type        TypeSegment
+  debut       DateTime    @default(now())
+  fin         DateTime?
+  deletedAt   DateTime?
+
+  @@index([timeShiftId])
+  @@index([deletedAt])
+}
+
+// Bulletin de paie mensuel (SPRINT_11.md §3.1). estValide=false tant que le
+// rôle RH n'a pas explicitement validé (PayrollController.validate) — un
+// bulletin non validé reste une simulation, jamais une pièce comptable
+// opposable (BR-AUD-001 : la validation est auditée, voir AuditAction).
+model PaySlip {
+  id            Int       @id @default(autoincrement())
+  employeeId    Int
+  employee      Employee  @relation(fields: [employeeId], references: [id])
+  mois          Int
+  annee         Int
+  salaireBase   Decimal   @db.Decimal(10, 2)
+  indemnites    Decimal   @default(0) @db.Decimal(10, 2)
+  retenueCnss   Decimal   @db.Decimal(10, 2)
+  retenueAmo    Decimal   @db.Decimal(10, 2)
+  salaireNet    Decimal   @db.Decimal(10, 2)
+  estValide     Boolean   @default(false)
+  issuedAt      DateTime  @default(now())
+  validatedById Int?
+  validatedBy   User?     @relation(fields: [validatedById], references: [id])
+  deletedAt     DateTime?
+
+  // Un seul bulletin par employé et par mois calendaire.
+  @@unique([employeeId, mois, annee])
+  @@index([deletedAt])
+}
+
+// ------------------------------------------------------------------
+// 5.12 — Stocks & Consommables (docs/modules/stock.md, SPRINT_12.md)
+// BR-STK-001 (sortie automatique à la validation de nettoyage) et
+// BR-STK-002 (alerte de seuil critique) uniquement — la valorisation CUMP
+// et l'ajustement manuel de perte/casse évoqués par stock.md ne sont
+// adossés à aucune règle numérotée de BUSINESS_RULES.md et sont hors
+// périmètre de ce sprint (voir SPRINT_12.md §6).
+// ------------------------------------------------------------------
+
+enum TypeMouvementStock {
+  ENTREE
+  SORTIE
+}
+
+model StockItem {
+  id                 Int             @id @default(autoincrement())
+  code               String          @unique
+  libelle            String
+  quantiteDisponible Int             @default(0)
+  seuilAlerte        Int
+  uniteMesure        String
+  // Marque les articles du kit d'accueil standard (savons, shampoings...)
+  // soumis au décompte automatique de BR-STK-001. Les autres articles
+  // (linge, fournitures) ne sont mouvementés que manuellement (réassort).
+  kitAccueil         Boolean         @default(false)
+  movements          StockMovement[]
+  createdAt          DateTime        @default(now())
+  deletedAt          DateTime?
+
+  @@index([deletedAt])
+}
+
+// Journal transactionnel append-only (docs/modules/stock.md §18, même
+// discipline que AuditLog) : aucune méthode de service n'expose de
+// update/delete sur cette table. userId nullable : une sortie automatique
+// déclenchée par le nettoyage n'a pas d'auteur humain direct (voir
+// StockService.decompterKitAccueil).
+model StockMovement {
+  id                   Int                @id @default(autoincrement())
+  stockItemId          Int
+  stockItem            StockItem          @relation(fields: [stockItemId], references: [id])
+  typeMouvement        TypeMouvementStock
+  quantite             Int
+  motif                String
+  // Renseigné uniquement pour une ENTREE de réassort (bon de livraison /
+  // n° de commande fournisseur) — toujours null pour une SORTIE.
+  referenceFournisseur String?
+  userId               Int?
+  user                 User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  roomId               Int?
+  room                 Room?              @relation(fields: [roomId], references: [id])
+  createdAt            DateTime           @default(now())
+
+  @@index([stockItemId])
+  @@index([createdAt])
+}
+
+// ------------------------------------------------------------------
+// F7 — Notifications (CRM & Marketing, canal email en v1)
+// ------------------------------------------------------------------
+
+enum EvenementNotification {
+  RESERVATION_CONFIRMEE
+  RAPPEL_J_MOINS_1
+  POST_SEJOUR
+  // F6 — envoi du lien de self check-in (réutilise le canal email de F7,
+  // voir SelfCheckinService.generateLink).
+  SELF_CHECKIN_LIEN
+}
+
+// v1 email-only, étendu ici (F7 suite) à SMS/WHATSAPP — enum plutôt que
+// chaîne libre (contrairement à TaxRateConfig.type) : un canal engage un
+// fournisseur/une intégration technique réelle (SMTP, Twilio), pas une
+// simple donnée de configuration créable depuis l'UI. Ajout additif et non
+// destructif (aucune donnée existante affectée).
+enum CanalNotification {
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+enum StatutNotification {
+  EN_ATTENTE
+  ENVOYE
+  ECHEC
+  // Consentement refusé ou destinataire manquant (ex. Guest.email vide) —
+  // distinct d'ECHEC (tentative réelle ratée côté fournisseur SMTP) pour ne
+  // jamais confondre un opt-out avec une panne technique dans les logs.
+  IGNORE
+}
+
+// Contenu éditable sans déploiement (motif ≥10 caractères, audité — même
+// discipline que ParametersService.createSeasonRate). Une ligne par
+// (évènement, canal).
+model NotificationTemplate {
+  id        Int                   @id @default(autoincrement())
+  evenement EvenementNotification
+  canal     CanalNotification
+  sujet     String?
+  corps     String                @db.Text
+  actif     Boolean               @default(true)
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  @@unique([evenement, canal])
+}
+
+// Trace d'envoi append-only (jamais d'update/delete exposé) — sert à la
+// fois de journal de livraison et de preuve de consentement respecté au
+// moment de l'envoi (destinataire figé, pas une relecture de Guest.email
+// qui peut changer après coup).
+model NotificationLog {
+  id            Int                   @id @default(autoincrement())
+  guestId       Int
+  // onDelete: Cascade — même précédent que RoomNight.reservation/stay : en
+  // production Guest/Reservation ne sont jamais supprimés physiquement
+  // (soft delete, ADR-005), donc cette cascade ne se déclenche jamais côté
+  // application réelle. Elle sert uniquement à ce que les tests e2e
+  // puissent continuer à faire un hard delete de leurs fixtures Guest/
+  // Reservation en cleanup sans devoir connaître ce log, généré comme
+  // effet de bord de reservation.confirmee/checkout.effectue.
+  guest         Guest                 @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  reservationId Int?
+  reservation   Reservation?          @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  evenement     EvenementNotification
+  canal         CanalNotification
+  destinataire  String
+  statut        StatutNotification    @default(EN_ATTENTE)
+  erreur        String?
+  envoyeAt      DateTime?
+  createdAt     DateTime              @default(now())
+
+  @@index([guestId])
+  @@index([reservationId])
+}
+
+// ------------------------------------------------------------------
+// F6 — Self check-in (lien mobile pré-arrivée)
+// ------------------------------------------------------------------
+
+// Un seul lien actif par réservation (reservationId @unique) — regénérer
+// (SelfCheckinService.generateLink) réécrit token/expiresAt/usedAt sur la
+// même ligne plutôt que d'en créer une seconde, pour qu'un ancien lien
+// envoyé par email cesse aussitôt de fonctionner. onDelete: Cascade — même
+// précédent que NotificationLog/RoomNight (ne se déclenche jamais en
+// production, Reservation n'étant jamais supprimée physiquement).
+//
+// Les champs numeroPiece..villeDestination sont volontairement "en
+// attente" : PoliceRecord exige un stayId (schema, @unique) qui n'existe
+// pas encore avant le check-in réel (StayService.checkinFromReservation).
+// Ce n'est donc jamais écrit directement dans PoliceRecord ici — la
+// réception les relit via SelfCheckinService.findPending() au moment du
+// check-in pour pré-remplir POST /police/:stayId, même logique d'écart
+// documenté que Reservation.montantPenalite (BR-RES-006, CLAUDE.md).
+// `nationalite` n'est pas dupliqué ici : c'est déjà un champ Guest, écrit
+// directement dessus par SelfCheckinService.submit().
+model SelfCheckinToken {
+  id               Int         @id @default(autoincrement())
+  reservationId    Int         @unique
+  reservation      Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  token            String      @unique
+  expiresAt        DateTime
+  usedAt           DateTime?
+  numeroPiece      String?
+  typePiece        TypePiece?
+  dateNaissance    DateTime?   @db.Date
+  paysProvenance   String?
+  villeProvenance  String?
+  paysDestination  String?
+  villeDestination String?
+  createdAt        DateTime    @default(now())
+}
+
+// ------------------------------------------------------------------
+// Audit & Sécurité (ADR-005, audit de conformité architecture gelée)
+// ------------------------------------------------------------------
+
+enum AuditEntity {
+  Guest
+  Reservation
+  Stay
+  Room
+  Payment
+  Invoice
+  HotelConfig
+  TaxRateConfig
+  SeasonRate
+  TimeShift
+  PaySlip
+  POLICE_RECORD
+  RESERVATION_DEPOSIT
+  Folio
+  CancellationPolicy
+  RateRestriction
+  NotificationTemplate
+  ChannelRoomTypeMapping
+}
+
+enum AuditAction {
+  CHANGE_CATEGORY
+  BLACKLIST_CLIENT
+  UPDATE_PRICE
+  CANCEL_RESERVATION
+  UPDATE_HOTEL_CONFIG
+  UPDATE_TAX_RATE
+  CREATE_TAX_RATE
+  CREATE_SEASON_RATE
+  UPDATE_SEASON_RATE
+  DELETE_SEASON_RATE
+  ADJUST_TIME_SHIFT
+  INVALIDATE_TIME_SHIFT
+  AUTO_CLOSE_TIME_SHIFT
+  VALIDATE_PAYSLIP
+  CREATE_POLICE_RECORD
+  CREATE_DEPOSIT
+  IMPUTE_DEPOSIT
+  REFUND_DEPOSIT
+  EXCLUDE_FOLIO_TAX
+  CREATE_CANCELLATION_POLICY
+  UPDATE_CANCELLATION_POLICY
+  MARK_NO_SHOW
+  CREATE_RATE_RESTRICTION
+  UPDATE_RATE_RESTRICTION
+  DELETE_RATE_RESTRICTION
+  CREATE_NOTIFICATION_TEMPLATE
+  UPDATE_NOTIFICATION_TEMPLATE
+  CREATE_CHANNEL_ROOM_TYPE_MAPPING
+  DELETE_CHANNEL_ROOM_TYPE_MAPPING
+  // CH-001 (docs/governance/REGISTRE_CHANTIERS.md) — avoir total sur une
+  // facture émise (BillingService.createCreditNote).
+  CREATE_CREDIT_NOTE
+  // CH-005 — check-out forcé malgré un solde impayé (StayService.checkout),
+  // réservé à la permission dédiée checkin:force-checkout.
+  FORCE_CHECKOUT
+}
+
+// ------------------------------------------------------------------
+// F10 — Channel Manager / OTA Sync
+// ------------------------------------------------------------------
+
+// Configuration admin (parameters:write, même famille que SeasonRate/
+// TaxRateConfig) : résout le code de type de chambre externe d'une OTA
+// (ex. "STD-1" côté Booking.com) vers notre RoomType interne, avant tout
+// import de réservation. Sans mapping configuré pour un (canal,
+// externalRoomTypeId), l'import est rejeté explicitement plutôt que de
+// deviner un type de chambre au hasard.
+model ChannelRoomTypeMapping {
+  id                 Int              @id @default(autoincrement())
+  canal              CanalReservation
+  externalRoomTypeId String
+  roomTypeId         Int
+  roomType           RoomType         @relation(fields: [roomTypeId], references: [id])
+  createdAt          DateTime         @default(now())
+
+  @@unique([canal, externalRoomTypeId])
+}
+
+// Idempotence d'import (même pattern que Payment.idempotencyKey,
+// docs/modules/payments.md) : un webhook OTA rejoué (retry après timeout,
+// livraison dupliquée) avec le même (canal, otaReservationId) ne doit
+// jamais créer une deuxième Reservation — voir
+// ChannelManagerService.importReservation. reservationId est unique (une
+// seule ligne d'import par réservation créée).
+model ChannelReservationImport {
+  id               Int              @id @default(autoincrement())
+  canal            CanalReservation
+  otaReservationId String
+  reservationId    Int              @unique
+  reservation      Reservation      @relation(fields: [reservationId], references: [id])
+  createdAt        DateTime         @default(now())
+
+  @@unique([canal, otaReservationId])
+}
+
+// Registre d'audit transverse (ADR-005 §3.2). Append-only : aucune méthode
+// de service ni route d'API n'expose de update/delete sur cette table
+// (INV-AUD-001) — voir AuditService (writeLog + findMany uniquement). id en
+// UUID (seule table du schéma à utiliser ce type, ADR-005 §3.2.1 — toutes
+// les autres tables restent en Int autoincrement). oldValue/newValue ne
+// contiennent jamais un snapshot complet de l'entité, uniquement les champs
+// réellement modifiés.
+model AuditLog {
+  id           String      @id @default(uuid())
+  userId       Int?
+  user         User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action       AuditAction
+  targetEntity AuditEntity
+  targetId     Int
+  oldValue     Json?
+  newValue     Json?
+  motif        String
+  createdAt    DateTime    @default(now())
+
+  @@index([targetEntity, targetId])
+  @@index([userId])
+  @@index([createdAt])
+}

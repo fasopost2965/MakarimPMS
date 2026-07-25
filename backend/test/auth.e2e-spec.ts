@@ -1,0 +1,891 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ThrottlerStorage } from '@nestjs/throttler';
+import type { ThrottlerStorageRecord } from '@nestjs/throttler/dist/throttler-storage-record.interface';
+import * as bcrypt from 'bcryptjs';
+import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
+import request from 'supertest';
+import { App } from 'supertest/types';
+import { AppModule } from './../src/app.module';
+import { PrismaService } from './../src/prisma/prisma.service';
+import { MailerService } from './../src/modules/notifications/mailer.service';
+import {
+  authedRequest,
+  extractCookieValue,
+  loginAs,
+  SEED_USERS,
+} from './helpers/auth';
+
+// Stockage de secours jamais bloquant, en remplacement du
+// ThrottlerStorageService en mémoire par défaut — voir commentaire dans
+// beforeAll ci-dessous pour la justification complète.
+class NeverBlockingThrottlerStorage implements ThrottlerStorage {
+  increment(): Promise<ThrottlerStorageRecord> {
+    return Promise.resolve({
+      totalHits: 1,
+      timeToExpire: 0,
+      isBlocked: false,
+      timeToBlockExpire: 0,
+    });
+  }
+}
+
+// Module core (5.1/5.2/5.2.1) : auth JWT + rôles/permissions. Vérifie les
+// deux garanties non négociables demandées explicitement — route protégée
+// sans token => 401, rôle sans la permission requise => 403 — ainsi que le
+// cycle complet login/refresh/forgot-password/reset-password. Vrais appels
+// HTTP contre une vraie base MySQL, aucun mock.
+describe('Auth — JWT, rôles et permissions (e2e)', () => {
+  let app: INestApplication<App>;
+  let prisma: PrismaService;
+  let mailerService: MailerService;
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    })
+      // Ce fichier exerce /auth/login et /auth/refresh bien plus de 5 fois
+      // (limite réelle, AuthController @Throttle) en quelques secondes —
+      // légitime pour tester le cycle JWT complet, mais ça faisait échouer
+      // les tests suivants avec un 429 (voire un 400 en cascade, le corps
+      // {message:"Too Many Requests"} n'ayant pas de refreshToken/
+      // accessToken à renvoyer à /refresh). Ce fichier teste la sémantique
+      // JWT, pas le rate limiting — aucune autre suite e2e n'exerce le
+      // comportement 429 lui-même, donc neutraliser le stockage ici ne
+      // fait perdre aucune couverture. La limite de 5/min réelle reste
+      // inchangée en production (AuthController).
+      //
+      // Note : overrideGuard(ThrottlerGuard) ne suffit PAS ici — ThrottlerGuard
+      // n'est enregistré que via { provide: APP_GUARD, useClass: ThrottlerGuard }
+      // dans AppModule (vérifié en le sabotant : le override restait sans
+      // effet, x-ratelimit-limit continuait d'apparaître et le 429 persistait).
+      // ThrottlerStorage, en revanche, est son propre token de provider
+      // (fourni indépendamment par ThrottlerModule), donc bien overridable.
+      .overrideProvider(ThrottlerStorage)
+      .useClass(NeverBlockingThrottlerStorage)
+      .compile();
+
+    app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('api');
+    // CH-026(a) — helmet() n'est monté que dans main.ts (bootstrap manuel),
+    // jamais via un provider Nest — même gap de fidélité déjà rencontré
+    // pour AllExceptionsFilter (CH-010) : aucun des fichiers e2e existants
+    // ne reproduit le bootstrap de main.ts à l'identique. Corrigé ici
+    // seulement, où le test l'exige, pas généralisé aux 20 autres fichiers.
+    app.use(helmet());
+    // CH-026(e) — cookie-parser n'est monté que dans main.ts (bootstrap
+    // manuel, jamais via un provider Nest), même gap de fidélité que helmet
+    // ci-dessus : sans lui, req.cookies reste undefined et tous les tests
+    // qui dépendent des cookies d'authentification échouent en 401/204 au
+    // lieu du comportement attendu (constaté en le retirant temporairement
+    // pendant le développement de ce fichier — les tests CSRF passaient à
+    // tort à 204 au lieu de 403, faute de req.cookies pour les lire).
+    app.use(cookieParser());
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
+    await app.init();
+
+    prisma = app.get(PrismaService);
+    mailerService = app.get(MailerService);
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  const server = () => app.getHttpServer();
+
+  describe('Protection des routes (JwtAuthGuard + PermissionsGuard)', () => {
+    it('renvoie 401 sur une route protégée sans token', async () => {
+      const res = await request(server()).get('/api/dashboard/resume');
+      expect(res.status).toBe(401);
+    });
+
+    it('renvoie 401 avec un token invalide/mal formé', async () => {
+      const res = await request(server())
+        .get('/api/dashboard/resume')
+        .set('Authorization', 'Bearer ceci-nest-pas-un-jwt-valide');
+      expect(res.status).toBe(401);
+    });
+
+    it("renvoie 403 quand le rôle authentifié n'a pas la permission requise", async () => {
+      // Gouvernante n'a que housekeeping:read/write (voir prisma/seed.ts) —
+      // pas d'accès à billing.
+      const token = await loginAs(server(), 'gouvernante');
+      const client = authedRequest(server(), token);
+      const res = await client.get('/api/invoices/1');
+      expect(res.status).toBe(403);
+    });
+
+    it('autorise une route protégée avec un token valide et la bonne permission', async () => {
+      const token = await loginAs(server(), 'gouvernante');
+      const client = authedRequest(server(), token);
+      const res = await client.get('/api/rooms');
+      expect(res.status).toBe(200);
+    });
+
+    it('les routes publiques du module auth restent accessibles sans token', async () => {
+      const res = await request(server()).get('/api/auth/roles-actifs');
+      expect(res.status).toBe(200);
+    });
+
+    // CH-026(a) — en-têtes de sécurité HTTP (helmet). Un seul en-tête
+    // suffit à prouver que le middleware est bien monté (pas une revue
+    // exhaustive de la CSP, hors périmètre de ce test).
+    it('pose les en-têtes de sécurité HTTP standards (helmet)', async () => {
+      const res = await request(server()).get('/api/auth/roles-actifs');
+      expect(res.headers['x-content-type-options']).toBe('nosniff');
+    });
+  });
+
+  describe('Connexion (POST /auth/login)', () => {
+    // CH-026(e) — les jetons ne sont plus renvoyés dans le corps de la
+    // réponse (docs/security/CH-026E_NOTE_CONCEPTION_COOKIES_HTTPONLY.md) :
+    // posés comme cookies httpOnly (access/refresh) + un cookie CSRF non
+    // httpOnly, tous trois SameSite=Lax.
+    it('pose les cookies access/refresh (httpOnly) et CSRF (non httpOnly) pour des identifiants valides', async () => {
+      const res = await request(server()).post('/api/auth/login').send({
+        email: SEED_USERS.admin,
+        motDePasse: 'Password123!',
+      });
+      expect(res.status).toBe(201);
+      expect(res.body).not.toHaveProperty('accessToken');
+      expect(res.body).not.toHaveProperty('refreshToken');
+
+      const setCookie = res.headers['set-cookie'] as string[];
+      const access = setCookie.find((c) =>
+        c.startsWith('makarim_access_token='),
+      );
+      const refresh = setCookie.find((c) =>
+        c.startsWith('makarim_refresh_token='),
+      );
+      const csrf = setCookie.find((c) => c.startsWith('makarim_csrf_token='));
+
+      expect(access).toBeDefined();
+      expect(access).toMatch(/HttpOnly/i);
+      expect(access).toMatch(/SameSite=Lax/i);
+      expect(refresh).toBeDefined();
+      expect(refresh).toMatch(/HttpOnly/i);
+      expect(csrf).toBeDefined();
+      // Seul cookie des trois volontairement lisible en JS (double-submit
+      // CSRF, §2.2 de la note de conception) — jamais HttpOnly.
+      expect(csrf).not.toMatch(/HttpOnly/i);
+
+      // §9 de la note de conception (correctif post-vérification live) :
+      // frontend et backend étant deux origines distinctes, document.cookie
+      // ne peut structurellement jamais voir ce cookie côté frontend — sa
+      // valeur doit donc aussi transiter dans le corps JSON, identique à
+      // celle posée dans le cookie.
+      const csrfCookieValue = csrf!.split(';')[0].split('=')[1];
+      expect((res.body as { csrfToken: string }).csrfToken).toBe(
+        csrfCookieValue,
+      );
+    });
+
+    it('le cookie access token émis fonctionne bien sur une route protégée', async () => {
+      const agent = request.agent(server());
+      const login = await agent.post('/api/auth/login').send({
+        email: SEED_USERS.admin,
+        motDePasse: 'Password123!',
+      });
+      expect(login.status).toBe(201);
+
+      // request.agent() persiste les cookies reçus et les rejoue
+      // automatiquement — comportement réaliste d'un navigateur.
+      const res = await agent.get('/api/dashboard/resume');
+      expect(res.status).toBe(200);
+    });
+
+    it('renvoie 401 pour un mot de passe incorrect, et journalise la tentative en échec', async () => {
+      const user = await prisma.user.findUniqueOrThrow({
+        where: { email: SEED_USERS.admin },
+      });
+      const logsBefore = await prisma.loginLog.count({
+        where: { userId: user.id, succes: false },
+      });
+
+      const res = await request(server()).post('/api/auth/login').send({
+        email: SEED_USERS.admin,
+        motDePasse: 'mauvais-mot-de-passe',
+      });
+      expect(res.status).toBe(401);
+
+      const logsAfter = await prisma.loginLog.count({
+        where: { userId: user.id, succes: false },
+      });
+      expect(logsAfter).toBe(logsBefore + 1);
+    });
+
+    it('renvoie 401 pour un email inconnu', async () => {
+      const res = await request(server()).post('/api/auth/login').send({
+        email: 'personne@makarim.test',
+        motDePasse: 'Password123!',
+      });
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe('Rafraîchissement (POST /auth/refresh)', () => {
+    // CH-026(e) — le refresh token part désormais via le cookie httpOnly
+    // makarim_refresh_token, plus dans le corps de la requête. Injection
+    // manuelle du cookie (.set('Cookie', ...)) plutôt qu'un agent complet :
+    // ces tests exercent la sémantique de refresh elle-même, pas
+    // l'enchaînement réaliste navigateur (voir describe CSRF plus bas pour
+    // ce dernier).
+    it('émet un nouveau access token à partir d’un refresh token valide', async () => {
+      const login = await request(server()).post('/api/auth/login').send({
+        email: SEED_USERS.reception,
+        motDePasse: 'Password123!',
+      });
+      const refreshToken = extractCookieValue(
+        login.headers['set-cookie'] as string[],
+        'makarim_refresh_token',
+      );
+      const loginCsrfToken = extractCookieValue(
+        login.headers['set-cookie'] as string[],
+        'makarim_csrf_token',
+      );
+
+      const refreshed = await request(server())
+        .post('/api/auth/refresh')
+        .set('Cookie', `makarim_refresh_token=${refreshToken}`);
+      expect(refreshed.status).toBe(201);
+      const newAccessToken = extractCookieValue(
+        refreshed.headers['set-cookie'] as string[],
+        'makarim_access_token',
+      );
+
+      // §9 de la note de conception — le cookie CSRF est régénéré à chaque
+      // refresh (AuthCookieService.setAuthCookies) : la nouvelle valeur doit
+      // à la fois différer de celle du login et correspondre au corps JSON
+      // (canal de récupération pour le frontend, cross-origine).
+      const newCsrfCookieValue = extractCookieValue(
+        refreshed.headers['set-cookie'] as string[],
+        'makarim_csrf_token',
+      );
+      expect(newCsrfCookieValue).not.toBe(loginCsrfToken);
+      expect((refreshed.body as { csrfToken: string }).csrfToken).toBe(
+        newCsrfCookieValue,
+      );
+
+      // Le nouveau token fonctionne bien sur une route protégée (via
+      // Authorization: Bearer — double extracteur, voir JwtAccessStrategy).
+      const client = authedRequest(server(), newAccessToken);
+      const res = await client.get('/api/reservations/arrivees-du-jour');
+      expect(res.status).toBe(200);
+    });
+
+    it('renvoie 401 pour un refresh token invalide', async () => {
+      const res = await request(server())
+        .post('/api/auth/refresh')
+        .set('Cookie', 'makarim_refresh_token=jeton-invalide');
+      expect(res.status).toBe(401);
+    });
+
+    it('renvoie 401 quand le cookie de refresh est absent', async () => {
+      const res = await request(server()).post('/api/auth/refresh');
+      expect(res.status).toBe(401);
+    });
+
+    it('un access token ne peut pas être utilisé comme refresh token (secrets distincts)', async () => {
+      const login = await request(server()).post('/api/auth/login').send({
+        email: SEED_USERS.reception,
+        motDePasse: 'Password123!',
+      });
+      const accessToken = extractCookieValue(
+        login.headers['set-cookie'] as string[],
+        'makarim_access_token',
+      );
+
+      const refreshed = await request(server())
+        .post('/api/auth/refresh')
+        .set('Cookie', `makarim_refresh_token=${accessToken}`);
+      expect(refreshed.status).toBe(401);
+    });
+  });
+
+  describe('Mot de passe oublié (POST /auth/forgot-password + reset-password)', () => {
+    // CH-002 (docs/governance/REGISTRE_CHANTIERS.md) : le jeton n'est plus
+    // jamais exposé dans la réponse HTTP (envoyé par email désormais, voir
+    // AuthService.forgotPassword) — ces tests le relisent directement en
+    // base (vraie base MySQL, pas un mock) plutôt que dans le corps de la
+    // réponse, exactement comme le ferait un utilisateur consultant sa
+    // boîte mail.
+    async function latestTokenFor(email: string): Promise<string> {
+      const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+      const record = await prisma.passwordResetToken.findFirstOrThrow({
+        where: { userId: user.id },
+        orderBy: { createdAt: 'desc' },
+      });
+      return record.token;
+    }
+
+    it('renvoie un message générique sans jamais exposer de jeton, et envoie le jeton par email, pour un compte existant', async () => {
+      const sendSpy = jest
+        .spyOn(mailerService, 'send')
+        .mockImplementation(() => Promise.resolve());
+      try {
+        const res = await request(server())
+          .post('/api/auth/forgot-password')
+          .send({ email: SEED_USERS.comptable });
+        expect(res.status).toBe(201);
+        expect(res.body).not.toHaveProperty('resetToken');
+        expect(res.body).not.toHaveProperty('expiresAt');
+        expect(res.body).toHaveProperty('message');
+
+        // Le jeton existe bien en base (envoyé par email, jamais dans la
+        // réponse HTTP) — sabotage/restore : si le jeton n'était plus créé
+        // du tout, cette relecture échouerait (findFirstOrThrow), ce qui
+        // distingue "jeton créé mais pas exposé" de "jeton jamais créé".
+        const token = await latestTokenFor(SEED_USERS.comptable);
+        expect(typeof token).toBe('string');
+        expect(token.length).toBeGreaterThan(0);
+
+        // MailerService.send() est bien appelé avec l'adresse du compte et
+        // un corps contenant le jeton fraîchement créé — preuve que le
+        // jeton part réellement par email plutôt que d'être simplement
+        // écrit en base sans être communiqué à personne.
+        expect(sendSpy).toHaveBeenCalledTimes(1);
+        const [to, subject, html] = sendSpy.mock.calls[0];
+        expect(to).toBe(SEED_USERS.comptable);
+        expect(subject).toMatch(/réinitialisation/i);
+        expect(html).toContain(token);
+      } finally {
+        sendSpy.mockRestore();
+      }
+    });
+
+    it('ne révèle pas si un email est inconnu — réponse strictement identique (même forme) au cas existant, et n’envoie aucun email', async () => {
+      const sendSpy = jest
+        .spyOn(mailerService, 'send')
+        .mockImplementation(() => Promise.resolve());
+      try {
+        const res = await request(server())
+          .post('/api/auth/forgot-password')
+          .send({ email: 'inconnu@makarim.test' });
+        expect(res.status).toBe(201);
+        expect(res.body).not.toHaveProperty('resetToken');
+        expect(res.body).not.toHaveProperty('expiresAt');
+        expect(Object.keys(res.body as object)).toEqual(['message']);
+        expect(sendSpy).not.toHaveBeenCalled();
+      } finally {
+        sendSpy.mockRestore();
+      }
+    });
+
+    it('permet de définir un nouveau mot de passe avec un jeton valide, puis le rejette à la deuxième utilisation', async () => {
+      await request(server())
+        .post('/api/auth/forgot-password')
+        .send({ email: SEED_USERS.maintenance });
+      const resetToken = await latestTokenFor(SEED_USERS.maintenance);
+
+      const reset = await request(server())
+        .post('/api/auth/reset-password')
+        .send({ token: resetToken, nouveauMotDePasse: 'NouveauMdp123!' });
+      expect(reset.status).toBe(201);
+
+      // Le nouveau mot de passe fonctionne.
+      const loginNew = await request(server()).post('/api/auth/login').send({
+        email: SEED_USERS.maintenance,
+        motDePasse: 'NouveauMdp123!',
+      });
+      expect(loginNew.status).toBe(201);
+
+      // L'ancien mot de passe ne fonctionne plus.
+      const loginOld = await request(server()).post('/api/auth/login').send({
+        email: SEED_USERS.maintenance,
+        motDePasse: 'Password123!',
+      });
+      expect(loginOld.status).toBe(401);
+
+      // Le jeton est à usage unique : une deuxième tentative est refusée.
+      const reuse = await request(server())
+        .post('/api/auth/reset-password')
+        .send({ token: resetToken, nouveauMotDePasse: 'AutreMdp456!' });
+      expect(reuse.status).toBe(400);
+
+      // Remettre le mot de passe de seed pour ne pas perturber d'autres
+      // suites qui s'authentifient avec ce compte (maintenance.e2e-spec.ts,
+      // module 5.8) — l'ordre d'exécution des fichiers par Jest n'est pas
+      // garanti alphabétique, donc laisser le mot de passe modifié ferait
+      // échouer maintenance.e2e-spec.ts de façon intermittente selon l'ordre.
+      await request(server())
+        .post('/api/auth/forgot-password')
+        .send({ email: SEED_USERS.maintenance });
+      const restoreToken = await latestTokenFor(SEED_USERS.maintenance);
+      await request(server())
+        .post('/api/auth/reset-password')
+        .send({ token: restoreToken, nouveauMotDePasse: 'Password123!' });
+    });
+
+    it('rejette un jeton invalide', async () => {
+      const res = await request(server())
+        .post('/api/auth/reset-password')
+        .send({ token: 'jeton-inexistant', nouveauMotDePasse: 'Xxxxxxxx1!' });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('Rôles actifs (GET /auth/roles-actifs)', () => {
+    it('ne renvoie que les rôles ayant au moins une permission accordée', async () => {
+      const res = await request(server()).get('/api/auth/roles-actifs');
+      expect(res.status).toBe(200);
+      const noms = (res.body as { nom: string }[]).map((r) => r.nom);
+      expect(noms).toEqual(
+        expect.arrayContaining([
+          'Administrateur',
+          'Réception',
+          'Gouvernante',
+          'Comptable',
+          'Maintenance',
+          // RH actif depuis le module 5.11 (Sprint 11) — voir seed.ts.
+          'RH',
+        ]),
+      );
+    });
+  });
+
+  // CH-011 — alimente le gating RBAC frontend (filtrage de NAV_ITEMS par
+  // permission déclarée, granularité onglet entier — voir
+  // docs/governance/REGISTRE_DECISIONS.md RD-009).
+  describe('Identité courante (GET /auth/me)', () => {
+    it('renvoie 401 sans token (contrairement à /auth/roles-actifs, cette route exige un Bearer)', async () => {
+      const res = await request(server()).get('/api/auth/me');
+      expect(res.status).toBe(401);
+    });
+
+    it("renvoie les permissions réelles d'un rôle restreint (Gouvernante), jamais les permissions d'un autre module", async () => {
+      const token = await loginAs(server(), 'gouvernante');
+      const client = authedRequest(server(), token);
+      const res = await client.get('/api/auth/me');
+      expect(res.status).toBe(200);
+      const body = res.body as {
+        email: string;
+        roleName: string;
+        permissions: string[];
+      };
+      expect(body.email).toBe(SEED_USERS.gouvernante);
+      expect(body.roleName).toBe('Gouvernante');
+      expect(body.permissions).toEqual(
+        expect.arrayContaining([
+          'housekeeping:read',
+          'housekeeping:write',
+          'maintenance:read',
+          'stock:read',
+          'stock:write',
+        ]),
+      );
+      // Gouvernante n'a explicitement pas accès à billing (voir seed.ts) —
+      // le test de la route protégée plus haut le vérifie déjà côté 403,
+      // ici on vérifie que /me ne prétend pas le contraire.
+      expect(body.permissions).not.toEqual(
+        expect.arrayContaining(['billing:read', 'billing:write']),
+      );
+    });
+
+    it('renvoie les actions dédiées hors grille read/write/delete/export pour un Administrateur (guests:blacklist, payments:refund, checkin:force-checkout)', async () => {
+      const token = await loginAs(server(), 'admin');
+      const client = authedRequest(server(), token);
+      const res = await client.get('/api/auth/me');
+      expect(res.status).toBe(200);
+      const body = res.body as { permissions: string[] };
+      expect(body.permissions).toEqual(
+        expect.arrayContaining([
+          'guests:blacklist',
+          'payments:refund',
+          'checkin:force-checkout',
+        ]),
+      );
+    });
+
+    it("reflète immédiatement le retrait d'une permission au rôle, sans mise en cache (même garantie que PermissionsGuard)", async () => {
+      const token = await loginAs(server(), 'maintenance');
+      const client = authedRequest(server(), token);
+
+      const before = await client.get('/api/auth/me');
+      expect((before.body as { permissions: string[] }).permissions).toEqual(
+        expect.arrayContaining(['maintenance:write']),
+      );
+
+      const role = await prisma.role.findFirstOrThrow({
+        where: { nom: 'Maintenance' },
+      });
+      const permission = await prisma.permission.findFirstOrThrow({
+        where: { module: 'maintenance', action: 'write' },
+      });
+      await prisma.rolePermission.deleteMany({
+        where: { roleId: role.id, permissionId: permission.id },
+      });
+
+      try {
+        const after = await client.get('/api/auth/me');
+        expect(
+          (after.body as { permissions: string[] }).permissions,
+        ).not.toEqual(expect.arrayContaining(['maintenance:write']));
+      } finally {
+        // Restauration — ne pas laisser le seed de dev dans un état modifié
+        // pour les suites e2e suivantes (maintenance.e2e-spec.ts en dépend).
+        await prisma.rolePermission.create({
+          data: { roleId: role.id, permissionId: permission.id },
+        });
+      }
+    });
+  });
+
+  // CH-026(f) — rotation à usage unique + révocation explicite. Utilise
+  // reception (compte partagé par plusieurs describe ci-dessus, mais aucun
+  // n'enchaîne login puis relit un refresh token précis — pas de risque de
+  // collision d'état).
+  describe('Rotation et révocation du refresh token (CH-026(f))', () => {
+    it('révoque le refresh token précédent à chaque rafraîchissement — la réutilisation du même jeton échoue ensuite', async () => {
+      const login = await request(server()).post('/api/auth/login').send({
+        email: SEED_USERS.reception,
+        motDePasse: 'Password123!',
+      });
+      const original = extractCookieValue(
+        login.headers['set-cookie'] as string[],
+        'makarim_refresh_token',
+      );
+
+      const first = await request(server())
+        .post('/api/auth/refresh')
+        .set('Cookie', `makarim_refresh_token=${original}`);
+      expect(first.status).toBe(201);
+
+      // Le jeton d'origine, désormais révoqué, ne peut plus être rejoué —
+      // preuve directe de la rotation à usage unique (avant CH-026(f), un
+      // JWT stateless restait valable jusqu'à expiration naturelle, quel
+      // que soit le nombre de réutilisations).
+      const replay = await request(server())
+        .post('/api/auth/refresh')
+        .set('Cookie', `makarim_refresh_token=${original}`);
+      expect(replay.status).toBe(401);
+
+      // Le nouveau jeton émis par le premier refresh, lui, reste valide.
+      const rotated = extractCookieValue(
+        first.headers['set-cookie'] as string[],
+        'makarim_refresh_token',
+      );
+      const second = await request(server())
+        .post('/api/auth/refresh')
+        .set('Cookie', `makarim_refresh_token=${rotated}`);
+      expect(second.status).toBe(201);
+    });
+
+    it('POST /auth/logout révoque le refresh token — un refresh ultérieur avec ce jeton échoue', async () => {
+      const login = await request(server()).post('/api/auth/login').send({
+        email: SEED_USERS.comptable,
+        motDePasse: 'Password123!',
+      });
+      const refreshToken = extractCookieValue(
+        login.headers['set-cookie'] as string[],
+        'makarim_refresh_token',
+      );
+
+      const logout = await request(server())
+        .post('/api/auth/logout')
+        .set('Cookie', `makarim_refresh_token=${refreshToken}`);
+      expect(logout.status).toBe(204);
+
+      const refreshed = await request(server())
+        .post('/api/auth/refresh')
+        .set('Cookie', `makarim_refresh_token=${refreshToken}`);
+      expect(refreshed.status).toBe(401);
+    });
+
+    it('POST /auth/logout est idempotent et tolérant à un jeton déjà révoqué, invalide ou absent', async () => {
+      const login = await request(server()).post('/api/auth/login').send({
+        email: SEED_USERS.comptable,
+        motDePasse: 'Password123!',
+      });
+      const refreshToken = extractCookieValue(
+        login.headers['set-cookie'] as string[],
+        'makarim_refresh_token',
+      );
+
+      const first = await request(server())
+        .post('/api/auth/logout')
+        .set('Cookie', `makarim_refresh_token=${refreshToken}`);
+      expect(first.status).toBe(204);
+
+      // Rejouer le logout sur un jeton déjà révoqué ne doit jamais planter
+      // (updateMany, pas update — voir AuthService.logout).
+      const second = await request(server())
+        .post('/api/auth/logout')
+        .set('Cookie', `makarim_refresh_token=${refreshToken}`);
+      expect(second.status).toBe(204);
+
+      const invalid = await request(server())
+        .post('/api/auth/logout')
+        .set('Cookie', 'makarim_refresh_token=jeton-completement-invalide');
+      expect(invalid.status).toBe(204);
+
+      // Cookie totalement absent — logout doit rester 204 (une déconnexion
+      // doit toujours réussir côté client, AuthController.logout).
+      const absent = await request(server()).post('/api/auth/logout');
+      expect(absent.status).toBe(204);
+    });
+
+    it('POST /auth/logout efface bien les 3 cookies côté réponse (Set-Cookie avec expiration passée)', async () => {
+      const login = await request(server()).post('/api/auth/login').send({
+        email: SEED_USERS.comptable,
+        motDePasse: 'Password123!',
+      });
+      const refreshToken = extractCookieValue(
+        login.headers['set-cookie'] as string[],
+        'makarim_refresh_token',
+      );
+
+      const logout = await request(server())
+        .post('/api/auth/logout')
+        .set('Cookie', `makarim_refresh_token=${refreshToken}`);
+      expect(logout.status).toBe(204);
+
+      const cleared = logout.headers['set-cookie'] as string[];
+      for (const name of [
+        'makarim_access_token',
+        'makarim_refresh_token',
+        'makarim_csrf_token',
+      ]) {
+        const cookie = cleared.find((c) => c.startsWith(`${name}=`));
+        expect(cookie).toBeDefined();
+        // express.clearCookie() pose une date d'expiration passée
+        // (Expires=Thu, 01 Jan 1970...) plutôt qu'une simple absence.
+        expect(cookie).toMatch(/Expires=Thu, 01 Jan 1970/i);
+      }
+    });
+  });
+
+  // CH-026(e) (docs/security/CH-026E_NOTE_CONCEPTION_COOKIES_HTTPONLY.md
+  // §2.2) — protection CSRF par double-submit cookie. request.agent()
+  // reproduit un vrai navigateur (persiste et rejoue automatiquement les 3
+  // cookies posés au login), c'est le seul describe de ce fichier qui
+  // exerce le flux réaliste de bout en bout plutôt que des cookies injectés
+  // manuellement.
+  describe('Protection CSRF — double-submit cookie (CH-026(e))', () => {
+    it('rejette une requête mutante authentifiée par cookie sans en-tête X-CSRF-Token', async () => {
+      const agent = request.agent(server());
+      await agent.post('/api/auth/login').send({
+        email: SEED_USERS.comptable,
+        motDePasse: 'Password123!',
+      });
+
+      // POST /auth/logout : mutante (révoque le refresh token), le cookie
+      // access est présent (session active) — CsrfGuard doit s'appliquer.
+      const res = await agent.post('/api/auth/logout');
+      expect(res.status).toBe(403);
+    });
+
+    it('rejette une requête mutante avec un en-tête X-CSRF-Token qui ne correspond pas au cookie', async () => {
+      const agent = request.agent(server());
+      await agent.post('/api/auth/login').send({
+        email: SEED_USERS.comptable,
+        motDePasse: 'Password123!',
+      });
+
+      const res = await agent
+        .post('/api/auth/logout')
+        .set('X-CSRF-Token', 'valeur-qui-ne-correspond-a-rien');
+      expect(res.status).toBe(403);
+    });
+
+    it("accepte une requête mutante quand l'en-tête X-CSRF-Token correspond au cookie", async () => {
+      const agent = request.agent(server());
+      const login = await agent.post('/api/auth/login').send({
+        email: SEED_USERS.comptable,
+        motDePasse: 'Password123!',
+      });
+      const csrfToken = extractCookieValue(
+        login.headers['set-cookie'] as string[],
+        'makarim_csrf_token',
+      );
+
+      const res = await agent
+        .post('/api/auth/logout')
+        .set('X-CSRF-Token', csrfToken);
+      expect(res.status).toBe(204);
+    });
+
+    it("s'efface pour une requête authentifiée par Authorization: Bearer plutôt que par cookie (F9 mobile, non concerné)", async () => {
+      // Pas d'agent ici : requête isolée, seul le Bearer porte
+      // l'authentification, aucun cookie makarim_access_token n'est envoyé
+      // — CsrfGuard doit laisser passer sans exiger d'en-tête CSRF.
+      const token = await loginAs(server(), 'comptable');
+      const res = await request(server())
+        .post('/api/auth/logout')
+        .set('Authorization', `Bearer ${token}`);
+      // 204 (pas 403) : la requête n'est pas bloquée par CsrfGuard. logout()
+      // ne lit de toute façon le refresh token que depuis le cookie — sans
+      // cookie refresh, rien n'est révoqué, mais la route reste accessible.
+      expect(res.status).toBe(204);
+    });
+
+    it('les routes en lecture (GET) restent accessibles sans en-tête CSRF, même avec un cookie de session actif', async () => {
+      const agent = request.agent(server());
+      await agent.post('/api/auth/login').send({
+        email: SEED_USERS.comptable,
+        motDePasse: 'Password123!',
+      });
+
+      const res = await agent.get('/api/auth/me');
+      expect(res.status).toBe(200);
+    });
+
+    // §9 de la note de conception (correctif post-vérification live
+    // navigateur) : document.cookie ne peut structurellement jamais voir le
+    // cookie CSRF côté frontend (autre origine que l'API) — GET /auth/me
+    // est le canal de récupération après un rechargement de page (mémoire
+    // JS perdue). Vérifie que la valeur renvoyée dans le corps correspond
+    // bien au cookie effectivement posé, pas une valeur arbitraire.
+    it('GET /auth/me renvoie le jeton CSRF courant dans le corps, identique au cookie posé au login', async () => {
+      const agent = request.agent(server());
+      const login = await agent.post('/api/auth/login').send({
+        email: SEED_USERS.comptable,
+        motDePasse: 'Password123!',
+      });
+      const csrfCookieValue = extractCookieValue(
+        login.headers['set-cookie'] as string[],
+        'makarim_csrf_token',
+      );
+
+      const res = await agent.get('/api/auth/me');
+      expect(res.status).toBe(200);
+      expect((res.body as { csrfToken: string }).csrfToken).toBe(
+        csrfCookieValue,
+      );
+    });
+
+    // Preuve de rigueur sabotage/restore (CLAUDE.md §Tests, non-négociable
+    // pour toute règle de sécurité) : CsrfGuard temporairement retiré des
+    // APP_GUARD dans app.module.ts pendant le développement de ce test —
+    // les 2 tests "rejette..." ci-dessus passaient alors à 204 au lieu du
+    // 403 attendu (la garde ne faisait plus rien), confirmant qu'ils
+    // discriminent bien la présence réelle du guard. CsrfGuard restauré,
+    // suite complète rejouée verte avant ce commit.
+  });
+
+  // CH-026(c) — verrouillage de compte après échecs répétés. Utilisateur
+  // jetable dédié (jamais SEED_USERS) pour ne polluer ni les autres blocs de
+  // ce fichier ni les autres suites e2e qui s'authentifient sur les mêmes
+  // comptes partagés.
+  describe('Verrouillage de compte après échecs répétés (CH-026(c))', () => {
+    const LOCKOUT_THRESHOLD = 5;
+
+    async function createLockoutTestUser() {
+      const role = await prisma.role.findFirstOrThrow();
+      const email = `lockout-test-${Date.now()}@makarim.test`;
+      const motDePasseHash = await bcrypt.hash('Password123!', 10);
+      return prisma.user.create({
+        data: { nom: 'Lockout Test', email, motDePasseHash, roleId: role.id },
+      });
+    }
+
+    it('verrouille après 5 échecs consécutifs — un mot de passe correct est alors lui aussi refusé', async () => {
+      const user = await createLockoutTestUser();
+
+      for (let i = 0; i < LOCKOUT_THRESHOLD; i++) {
+        const res = await request(server()).post('/api/auth/login').send({
+          email: user.email,
+          motDePasse: 'mauvais-mot-de-passe',
+        });
+        expect(res.status).toBe(401);
+        expect((res.body as { message: string }).message).not.toMatch(
+          /verrouillé/i,
+        );
+      }
+
+      // Sabotage/restore direct sur le seuil : au 6e essai, même avec le
+      // BON mot de passe, le compte reste bloqué — preuve que le
+      // verrouillage precède la vérification bcrypt plutôt que de ne
+      // s'appliquer qu'aux échecs.
+      const lockedOut = await request(server()).post('/api/auth/login').send({
+        email: user.email,
+        motDePasse: 'Password123!',
+      });
+      expect(lockedOut.status).toBe(401);
+      expect((lockedOut.body as { message: string }).message).toMatch(
+        /verrouillé/i,
+      );
+    });
+
+    it('un succès de connexion ne verrouille jamais, quel que soit le nombre de tentatives précédentes en dessous du seuil', async () => {
+      const user = await createLockoutTestUser();
+
+      for (let i = 0; i < LOCKOUT_THRESHOLD - 1; i++) {
+        await request(server()).post('/api/auth/login').send({
+          email: user.email,
+          motDePasse: 'mauvais-mot-de-passe',
+        });
+      }
+
+      const res = await request(server()).post('/api/auth/login').send({
+        email: user.email,
+        motDePasse: 'Password123!',
+      });
+      expect(res.status).toBe(201);
+    });
+
+    it('le verrouillage se lève automatiquement une fois la fenêtre glissante expirée, sans intervention manuelle', async () => {
+      const user = await createLockoutTestUser();
+
+      for (let i = 0; i < LOCKOUT_THRESHOLD; i++) {
+        await request(server()).post('/api/auth/login').send({
+          email: user.email,
+          motDePasse: 'mauvais-mot-de-passe',
+        });
+      }
+
+      const stillLocked = await request(server())
+        .post('/api/auth/login')
+        .send({ email: user.email, motDePasse: 'Password123!' });
+      expect(stillLocked.status).toBe(401);
+
+      // Recule artificiellement les échecs hors de la fenêtre glissante
+      // (LOCKOUT_WINDOW_MINUTES=15) plutôt que d'attendre en temps réel —
+      // vérifie le comportement d'expiration sans dépendre de l'horloge du
+      // test runner.
+      await prisma.loginLog.updateMany({
+        where: { userId: user.id, succes: false },
+        data: { createdAt: new Date(Date.now() - 20 * 60 * 1000) },
+      });
+
+      const unlockedNow = await request(server())
+        .post('/api/auth/login')
+        .send({ email: user.email, motDePasse: 'Password123!' });
+      expect(unlockedNow.status).toBe(201);
+    });
+  });
+
+  // CH-026(d) — complexité minimale du nouveau mot de passe.
+  describe('Complexité du mot de passe (CH-026(d))', () => {
+    async function latestTokenFor(email: string): Promise<string> {
+      const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+      const record = await prisma.passwordResetToken.findFirstOrThrow({
+        where: { userId: user.id },
+        orderBy: { createdAt: 'desc' },
+      });
+      return record.token;
+    }
+
+    it('rejette un nouveau mot de passe sans majuscule/minuscule/chiffre, sans consommer le jeton', async () => {
+      await request(server())
+        .post('/api/auth/forgot-password')
+        .send({ email: SEED_USERS.maintenance });
+      const resetToken = await latestTokenFor(SEED_USERS.maintenance);
+
+      const weak = await request(server())
+        .post('/api/auth/reset-password')
+        .send({ token: resetToken, nouveauMotDePasse: 'toutminuscule' });
+      expect(weak.status).toBe(400);
+
+      // Le jeton reste utilisable : rejeté par la validation du DTO, en
+      // amont du service, jamais marqué consommé.
+      const strong = await request(server())
+        .post('/api/auth/reset-password')
+        .send({ token: resetToken, nouveauMotDePasse: 'Password123!' });
+      expect(strong.status).toBe(201);
+    });
+  });
+});

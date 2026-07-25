@@ -1,0 +1,38 @@
+# Statut des modules — Makarim PMS v1
+
+Statut par module backend, croisé avec la présence d'une interface frontend et les chantiers ouverts. Source : `docs/audits/PHASE_04_BACKEND.md` (liste des 21 modules), `PHASE_08_FRONTEND.md` (correspondance frontend).
+
+**Légende Backend** : ✅ fonctionnel et audité sans écart critique · ⚠️ fonctionnel avec écart(s) identifié(s) · ❌ chantier bloquant ouvert
+**Légende Frontend** : ✅ interface complète · ⚠️ interface partielle (fonctionnalité intégrée ailleurs) · ❌ aucune interface
+
+| Module | Backend | Frontend | Chantiers ouverts | Remarque |
+|---|---|---|---|---|
+| `auth` | ✅ | ✅ | CH-026(e) | CH-002 (reset password non sécurisé) **terminé**, **CH-011 terminé** (`GET /auth/me` alimente désormais le gating RBAC frontend transverse, voir `AppSidebar`), **CH-026(a)(b)(c)(d)(f) terminés** (helmet, comparaison à temps constant du secret webhook, verrouillage de compte, complexité mot de passe, rotation/révocation refresh token) — seul CH-026(e) (cookie httpOnly) reste explicitement différé, RD-016 |
+| `rooms` | ✅ | ✅ (via housekeeping) | — | **CH-014 terminé** — historique de statut consultable (`GET /rooms/:id/historique-statuts`, `RoomHistoryDialog.tsx`) |
+| `parameters` | ✅ | ✅ | — | — |
+| `reservations` | ⚠️ | ✅ | CH-016 | Service le plus volumineux, dette de découpage |
+| `stay` | ✅ | ✅ (`checkin/`) | — | **CH-005 terminé** — checkout bloqué sur solde impayé (`ConflictException`), check-out forcé réservé à `checkin:force-checkout` |
+| `housekeeping` | ✅ | ✅ | — | — |
+| `maintenance` | ✅ | ✅ | — | — |
+| `guests` (+ `companies`) | ⚠️ | ✅ | CH-021 | **CH-010 terminé** — contrainte dure sur `pieceIdentite` (index aveugle) + détection souple email/téléphone ; `Company` reste déconnectée (CH-021, dépriorisé formellement, EA-001) |
+| `billing` | ✅ | ⚠️ (via checkin ; pas d'UI pour l'avoir) | — | **CH-001 terminé** — avoir total (`POST /invoices/:id/credit-notes`), régénération de facture corrigée possible sur le même folio |
+| `payments` | ✅ | ⚠️ (via checkin) | — | **CH-012 terminé** — remboursement d'acompte imputé fonctionnel (préalable : avoir sur toute facture active) |
+| `dashboard` | ✅ | ✅ | — | — |
+| `audit` | ✅ | ✅ | — | **CH-015 terminé** — écran de consultation (`features/audit/`, onglet « Audit », `audit:read`) |
+| `police` | ✅ | ✅ | — | **CH-003 terminé** — onglet dédié dans `StayDetailsDialog.tsx` |
+| `notifications` | ⚠️ | ✅ | CH-002 (extension) | **CH-008 terminé** — onglet dédié `features/notifications/` (templates + journal) ; reste pas raccordé au reset password (écart antérieur, hors périmètre de CH-008) |
+| `self-checkin` | ✅ | ✅ | — | **CH-007 terminé** — `SelfCheckinPanel.tsx` sur le détail de réservation (génération/régénération de lien, statut d'attente) |
+| `booking-engine` | ✅ | n/a | — | Façade publique pure, pas d'UI staff attendue |
+| `document-ocr` | ✅ | ✅ | — | **CH-022 terminé** — `features/document-ocr/`, onglet dédié « Scan pièce d'identité » ; correctif embarqué d'un bug bloquant réel (crash serveur sur image corrompue) |
+| `reporting` | ✅ | ✅ | — | Export CSV du registre de police fonctionnel (mais dépend de CH-003 pour avoir des données à exporter) |
+| `hr` | ✅ | ✅ | CH-027 (cadré, non planifié) | Référentiel personnel/planning/pointage étendu cadré (`docs/planning/CADRAGE_PLANNING_ATTENDANCE_STAFF.md`, RD-017) : provisioning `User`+`Employee`, `ShiftPlan` (planning prévisionnel, `BR-RH-002` jamais implémenté), rapprochement prévu/réel — validé en principe, timing non tranché, aucun code écrit |
+| `stock` | ✅ | ✅ | — | — |
+| `channel-manager` | ✅ | ✅ | — | **CH-009 terminé** — 4e onglet « Channel Manager » dans `ParametersPage.tsx` (CRUD des mappings type de chambre ↔ canal externe) |
+
+## Synthèse
+
+- **21/21 modules** ont un backend fonctionnel au sens strict (répondent, testés en e2e pour la plupart).
+- **0/21 module** porte encore un chantier bloquant, backend ou frontend — les 4 chantiers bloquants du registre (CH-001 à CH-004) sont désormais tous terminés (`billing`, `auth`, `guests`, `police`).
+- **1/21 module** n'a aucune interface frontend staff (`booking-engine`) — choix de conception correct (façade publique pure, aucune UI staff attendue). Tous les autres ont désormais une interface : `audit` (CH-015 terminé, ligne restée obsolète dans une version antérieure de cette synthèse — corrigé), `document-ocr` (CH-022 terminé), `police` (CH-003 terminé), `self-checkin` (CH-007 terminé), `channel-manager` (CH-009 terminé), `notifications` (CH-008 terminé).
+
+*Mettre à jour ce tableau à chaque clôture de chantier du registre.*

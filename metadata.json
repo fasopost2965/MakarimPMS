@@ -1,0 +1,6 @@
+{
+  "name": "PMS Hôtel Makarim",
+  "description": "Property Management System pour l'Hôtel Makarim (Tétouan) - Gestion des réservations, séjours, facturation, housekeeping et RH",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

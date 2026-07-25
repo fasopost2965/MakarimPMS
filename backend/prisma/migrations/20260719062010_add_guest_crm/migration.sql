@@ -1,0 +1,20 @@
+-- AlterTable
+ALTER TABLE `Guest` ADD COLUMN `categorie` ENUM('STANDARD', 'VIP', 'ENTREPRISE', 'AGENCE', 'BLACKLIST') NOT NULL DEFAULT 'STANDARD',
+    ADD COLUMN `nationalite` VARCHAR(191) NULL,
+    ADD COLUMN `preferences` VARCHAR(191) NULL;
+
+-- CreateTable
+CREATE TABLE `GuestCategoryLog` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `guestId` INTEGER NOT NULL,
+    `ancienneCategorie` ENUM('STANDARD', 'VIP', 'ENTREPRISE', 'AGENCE', 'BLACKLIST') NOT NULL,
+    `nouvelleCategorie` ENUM('STANDARD', 'VIP', 'ENTREPRISE', 'AGENCE', 'BLACKLIST') NOT NULL,
+    `motif` VARCHAR(191) NOT NULL,
+    `userId` INTEGER NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- AddForeignKey
+ALTER TABLE `GuestCategoryLog` ADD CONSTRAINT `GuestCategoryLog_guestId_fkey` FOREIGN KEY (`guestId`) REFERENCES `Guest`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;

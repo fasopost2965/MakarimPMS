@@ -1,0 +1,122 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { BullModule } from '@nestjs/bullmq';
+import { LoggerModule } from 'nestjs-pino';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { PrismaModule } from './prisma/prisma.module';
+import { RoomsModule } from './modules/rooms/rooms.module';
+import { ParametersModule } from './modules/parameters/parameters.module';
+import { ReservationsModule } from './modules/reservations/reservations.module';
+import { StayModule } from './modules/stay/stay.module';
+import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
+import { BillingModule } from './modules/billing/billing.module';
+import { PaymentsModule } from './modules/payments/payments.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { MaintenanceModule } from './modules/maintenance/maintenance.module';
+import { GuestsModule } from './modules/guests/guests.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { HrModule } from './modules/hr/hr.module';
+import { StockModule } from './modules/stock/stock.module';
+import { ReportingModule } from './modules/reporting/reporting.module';
+import { PoliceModule } from './modules/police/police.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { SelfCheckinModule } from './modules/self-checkin/self-checkin.module';
+import { BookingEngineModule } from './modules/booking-engine/booking-engine.module';
+import { DocumentOcrModule } from './modules/document-ocr/document-ocr.module';
+import { ChannelManagerModule } from './modules/channel-manager/channel-manager.module';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { PermissionsGuard } from './common/guards/permissions.guard';
+import { CsrfGuard } from './common/guards/csrf.guard';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    EventEmitterModule.forRoot(),
+    // Logs structurés (remplace le logger console par défaut de Nest) :
+    // JSON brut en production (ingestion par un collecteur de logs), format
+    // lisible (pino-pretty) en développement. pino-http journalise chaque
+    // requête HTTP entrante (method, path, statusCode, durée) automatiquement.
+    LoggerModule.forRoot({
+      pinoHttp: {
+        level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+        transport:
+          process.env.NODE_ENV === 'production'
+            ? undefined
+            : { target: 'pino-pretty', options: { singleLine: true } },
+        // Le mot de passe et les tokens ne doivent jamais atterrir dans les
+        // logs, même en clair dans le corps d'une requête /auth/login.
+        redact: {
+          paths: [
+            'req.headers.authorization',
+            'req.body.motDePasse',
+            'req.body.nouveauMotDePasse',
+            'req.body.refreshToken',
+          ],
+          censor: '[REDACTED]',
+        },
+      },
+    }),
+    // Limite globale par défaut (100 req/min/IP). AuthController surcharge
+    // ce même throttler 'default' avec une limite bien plus stricte sur
+    // /login et /refresh via @Throttle — la force brute sur ces deux routes
+    // reste le principal vecteur d'attaque non couvert par le RBAC.
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 1000 }]),
+    // File d'attente (Redis) pour les traitements lourds hors thread
+    // principal — voir modules/reporting/queues/reporting.queue.ts. Connexion
+    // partagée par toute future queue (billing y compris) sans dupliquer la
+    // configuration Redis module par module.
+    BullModule.forRoot({
+      connection: {
+        host: process.env.REDIS_HOST ?? 'localhost',
+        port: Number(process.env.REDIS_PORT ?? 6379),
+        maxRetriesPerRequest: null,
+        enableOfflineQueue: true,
+        retryStrategy: (times) => Math.min(times * 100, 3000),
+      },
+    }),
+    PrismaModule,
+    AuthModule,
+    RoomsModule,
+    ParametersModule,
+    ReservationsModule,
+    StayModule,
+    HousekeepingModule,
+    BillingModule,
+    PaymentsModule,
+    DashboardModule,
+    MaintenanceModule,
+    GuestsModule,
+    AuditModule,
+    HrModule,
+    StockModule,
+    ReportingModule,
+    PoliceModule,
+    NotificationsModule,
+    SelfCheckinModule,
+    BookingEngineModule,
+    DocumentOcrModule,
+    ChannelManagerModule,
+  ],
+  controllers: [AppController],
+  providers: [
+    AppService,
+    // Ordre significatif — Nest exécute les APP_GUARD dans l'ordre
+    // d'enregistrement : ThrottlerGuard limite le débit avant même de savoir
+    // si la requête est authentifiée (protège aussi les routes @Public()
+    // comme /auth/login), puis JwtAuthGuard authentifie (peuple req.user ou
+    // laisse passer les routes @Public()), puis PermissionsGuard vérifie
+    // l'autorisation, puis CsrfGuard (CH-026(e)) — dernier, car il n'a
+    // besoin de rien de plus que req.cookies/req.headers, indépendant du
+    // résultat des guards précédents.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: PermissionsGuard },
+    { provide: APP_GUARD, useClass: CsrfGuard },
+  ],
+})
+export class AppModule {}
