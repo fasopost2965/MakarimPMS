@@ -52,8 +52,18 @@ Chaque ligne = un chantier CH-XXX complet : DTO/service/controller réécrits, R
 - **CH-043** — Widgets tableau de bord (alertes, courbe réservations, tâches ménage) — lecture seule.
 
 ### Phase C — Décisions & nettoyage documentation
-- **CH-044** — Trancher le multi-folio (ADR-002) : implémenter réellement, ou acter le single-folio comme réalité pratique et corriger la doc en conséquence.
+- **CH-044** — Trancher le multi-folio (ADR-002). **Tranché (session courante)** : cas d'usage réel fourni par l'utilisateur (facturation scindée entreprise/client), implémentation réelle décidée — voir `docs/execution/PLAN_MODULE_FACTURATION.md`. Se poursuit désormais sous CH-048/CH-049/CH-050 (facturation scindée, modification de durée de séjour, diffusion de facture PDF/email/WhatsApp + UI d'ajout d'extra), plan écrit, en attente de validation utilisateur avant code.
 - **CH-045** — Corriger les 3 documents obsolètes identifiés en §0.2 (`DETTE_TECHNIQUE.md` #9, la ligne audit UI de `FONCTIONNALITES_INCOMPLETES.md`, la stratégie de branches jamais suivie d'`EXECUTION_MASTER_PLAN.md`).
+
+### Phase E — Module de facturation complet (ajouté en session courante, demande explicite utilisateur)
+- **CH-048** — Facturation scindée entreprise/client (multi-folio réel, tranche CH-044).
+- **CH-049** — Modification de durée de séjour (raccourcissement au check-in ou en cours de séjour, prolongation) — tranche CH-041 avec l'étude d'impact RoomNight/facturation demandée par le plan ; prérequiert CH-040 (annulation contrôlée d'une ligne de folio).
+- **CH-050** — Diffusion de facture (PDF serveur, email en pièce jointe, WhatsApp via lien à token) + UI frontend d'ajout de charge extra (le backend existe déjà, `POST /folios/:id/lignes`).
+
+Détail de conception, questions ouvertes et recommandations : `docs/execution/PLAN_MODULE_FACTURATION.md`. Les trois chantiers nécessitent une migration Prisma — bloqués par la même question de base de données locale que CH-038/039/040/041 (voir §2ter ci-dessous, la cause réelle a changé).
+
+## 2ter. Migration base de données locale (bac à sable) — mise à jour de la cause réelle (session courante)
+La cause précédemment documentée (`prisma migrate reset --force` nécessaire, dérive de migration antérieure à cette session) reste d'actualité dans ce nouveau bac à sable, mais avec une cause plus précise identifiée : `_prisma_migrations` contient un enregistrement fantôme (`20260724070000_ch024_roomnight_exclusivity`, `applied_steps_count: 0`, `finished_at: NULL` — jamais réellement appliqué, probablement une commande interrompue lors d'une session précédente), pas une vraie migration manquante. Le correctif standard et non destructif (`npx prisma migrate resolve --rolled-back 20260724070000_ch024_roomnight_exclusivity`, qui ne touche aucune donnée) a été tenté mais **bloqué par le classificateur de permissions de l'environnement d'exécution** (même famille de restriction que `migrate reset --force`, alors que la nature de l'opération est très différente — sans donnée à risque). Consentement explicite de l'utilisateur nécessaire pour cette commande précise avant de pouvoir démarrer CH-038/039/040/041/048/049/050.
 
 ### Phase D — Infrastructure de production réelle
 - **CH-046** — Réécriture de `GO_LIVE_CHECKLIST.md` et `OPERATIONS_RUNBOOK.md` pour le stack réel (Docker Compose + Nginx + Certbot sur VPS Hostinger, pas GCP), configuration Nginx hôte committée et testée, pipeline `deploy.yml` réel, script de sauvegarde MySQL automatisé + un exercice de restauration effectivement testé.
