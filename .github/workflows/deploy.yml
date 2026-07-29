@@ -64,7 +64,7 @@ jobs:
           # nginx) — doit être l'URL publique réelle de l'API en production,
           # jamais le fallback localhost de dev (voir frontend/Dockerfile).
           build-args: |
-            VITE_API_URL=https://api.hotelmarim.cloud/api
+            VITE_API_URL=https://api.hotelmakarim.cloud/api
 
   deploy:
     needs: build-and-push
