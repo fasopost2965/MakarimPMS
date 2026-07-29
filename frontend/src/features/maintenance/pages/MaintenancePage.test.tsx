@@ -26,7 +26,7 @@ function mockTicket(overrides: Partial<MaintenanceTicket>): MaintenanceTicket {
     priorite: 'MOYENNE' as const,
     photoUrl: null,
     assigneA: null,
-    createdAt: new Date(),
+    createdAt: new Date().toISOString(),
     resoluAt: null,
     ...overrides,
   };
