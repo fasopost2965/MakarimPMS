@@ -244,8 +244,10 @@ describe('Maintenance — tickets et connexion au statut chambre (e2e)', () => {
           photoUrl: 'https://example.com/photo.jpg',
         });
       expect(res.status).toBe(400);
-      const message = (res.body as any).message;
-      const messageStr = Array.isArray(message) ? message.join(' ') : message;
+      const resBody = res.body as { message?: string | string[] };
+      const messageStr = Array.isArray(resBody.message)
+        ? resBody.message.join(' ')
+        : resBody.message ?? '';
       expect(messageStr).toContain('data URI');
     });
 
@@ -262,8 +264,10 @@ describe('Maintenance — tickets et connexion au statut chambre (e2e)', () => {
           photoUrl: oversizedDataUri,
         });
       expect(res.status).toBe(400);
-      const message = (res.body as any).message;
-      const messageStr = Array.isArray(message) ? message.join(' ') : message;
+      const resBody = res.body as { message?: string | string[] };
+      const messageStr = Array.isArray(resBody.message)
+        ? resBody.message.join(' ')
+        : resBody.message ?? '';
       expect(messageStr).toContain('dépasse la taille');
     });
 
