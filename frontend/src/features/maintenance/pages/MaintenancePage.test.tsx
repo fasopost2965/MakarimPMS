@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { MaintenanceTicket } from '../types';
-import type { Room } from '../../reservations/types';
 
 vi.mock('../api', () => ({
   listTickets: vi.fn(),
@@ -16,7 +15,7 @@ vi.mock('../../reservations/api', () => ({
 }));
 
 import { MaintenancePage } from './MaintenancePage';
-import { listTickets, listRooms, createTicket } from '../api';
+import { listTickets, listRooms } from '../api';
 
 function mockTicket(overrides: Partial<MaintenanceTicket>): MaintenanceTicket {
   return {
@@ -29,17 +28,6 @@ function mockTicket(overrides: Partial<MaintenanceTicket>): MaintenanceTicket {
     assigneA: null,
     createdAt: new Date(),
     resoluAt: null,
-    ...overrides,
-  };
-}
-
-function mockRoom(overrides: Partial<Room>): Room {
-  return {
-    id: 1,
-    numero: '101',
-    roomTypeId: 1,
-    statut: 'LIBRE_PROPRE',
-    roomType: { id: 1, nom: 'Single', prixBase: '400', capacite: 1 },
     ...overrides,
   };
 }
@@ -75,9 +63,7 @@ describe('MaintenancePage — photo upload CH-055', () => {
 
   it('ouvre un dialog avec la photo en plein format au clic sur miniature', async () => {
     const photoUrl = 'data:image/png;base64,iVBORw0KGgo=';
-    vi.mocked(listTickets).mockResolvedValue([
-      mockTicket({ photoUrl }),
-    ]);
+    vi.mocked(listTickets).mockResolvedValue([mockTicket({ photoUrl })]);
     vi.mocked(listRooms).mockResolvedValue([]);
 
     render(<MaintenancePage />);
@@ -109,9 +95,7 @@ describe('MaintenancePage — photo upload CH-055', () => {
 
     // Vérifier que la zone de dépôt est affichée
     await waitFor(() => {
-      expect(
-        screen.getByText(/Glissez un fichier ici/),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/Glissez un fichier ici/)).toBeInTheDocument();
     });
   });
 });
