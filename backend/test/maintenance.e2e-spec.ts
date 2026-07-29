@@ -244,7 +244,9 @@ describe('Maintenance — tickets et connexion au statut chambre (e2e)', () => {
           photoUrl: 'https://example.com/photo.jpg',
         });
       expect(res.status).toBe(400);
-      expect((res.body as { message?: string }).message).toContain('data URI');
+      const message = (res.body as any).message;
+      const messageStr = Array.isArray(message) ? message.join(' ') : message;
+      expect(messageStr).toContain('data URI');
     });
 
     it('rejette un photoUrl valide en format mais trop volumineux (>7Mo) (400)', async () => {
@@ -260,9 +262,9 @@ describe('Maintenance — tickets et connexion au statut chambre (e2e)', () => {
           photoUrl: oversizedDataUri,
         });
       expect(res.status).toBe(400);
-      expect((res.body as { message?: string }).message).toContain(
-        'dépasse la taille',
-      );
+      const message = (res.body as any).message;
+      const messageStr = Array.isArray(message) ? message.join(' ') : message;
+      expect(messageStr).toContain('dépasse la taille');
     });
 
     it('accepte un data URI image valide (JPEG) de taille raisonnable (201)', async () => {
