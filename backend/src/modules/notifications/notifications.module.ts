@@ -11,8 +11,10 @@ import { AuditModule } from '../audit/audit.module';
 import { GuestsModule } from '../guests/guests.module';
 import { ReservationsModule } from '../reservations/reservations.module';
 import { StayModule } from '../stay/stay.module';
+import { BillingModule } from '../billing/billing.module';
 import { ReservationConfirmeeListener } from './listeners/reservation-confirmee.listener';
 import { CheckoutEffectueListener } from './listeners/checkout-effectue.listener';
+import { FactureEnvoiDemandeListener } from './listeners/facture-envoi-demande.listener';
 import { RappelJMoins1Cron } from './cron/rappel-j-moins-1.cron';
 
 // notifications est le CONSOMMATEUR des évènements reservation.confirmee
@@ -31,6 +33,10 @@ import { RappelJMoins1Cron } from './cron/rappel-j-moins-1.cron';
     GuestsModule,
     ReservationsModule,
     StayModule,
+    // CH-050 suite — façade BillingService (getInvoiceDeliveryContext,
+    // createDownloadToken) pour FactureEnvoiDemandeListener, jamais de
+    // Prisma direct sur Invoice/Folio hors du module billing.
+    BillingModule,
     BullModule.registerQueue({ name: NOTIFICATIONS_QUEUE }),
   ],
   controllers: [NotificationsController],
@@ -42,6 +48,7 @@ import { RappelJMoins1Cron } from './cron/rappel-j-moins-1.cron';
     NotificationsProcessor,
     ReservationConfirmeeListener,
     CheckoutEffectueListener,
+    FactureEnvoiDemandeListener,
     RappelJMoins1Cron,
   ],
   // MailerService exporté en plus de NotificationsService — CH-002

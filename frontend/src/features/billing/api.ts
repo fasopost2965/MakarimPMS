@@ -42,3 +42,13 @@ export function downloadInvoicePdf(invoiceId: number) {
     `facture-${invoiceId}.pdf`,
   );
 }
+
+// CH-050 suite — le résultat réel (envoyé/échec par canal) se consulte dans
+// le journal de notifications (onglet Notifications) : cet appel ne fait
+// que déclencher la demande (traitement asynchrone côté serveur).
+export function requestInvoiceDelivery(invoiceId: number) {
+  return apiRequest<{ statut: string }>(`/invoices/${invoiceId}/envoyer`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}

@@ -41,10 +41,19 @@ export class TwilioService {
     await this.client.messages.create({ from: this.smsFrom, to, body });
   }
 
-  async sendWhatsapp(to: string, body: string): Promise<void> {
+  // CH-050 suite — mediaUrl optionnel : Twilio récupère lui-même le fichier
+  // à cette URL et l'attache nativement au message WhatsApp (pièce jointe
+  // réelle dans la conversation, pas seulement un lien texte) — nécessite
+  // une URL publique atteignable par Twilio, jamais un endpoint authentifié
+  // par cookie (voir GET /invoices/download/:token, @Public()).
+  async sendWhatsapp(
+    to: string,
+    body: string,
+    mediaUrl?: string,
+  ): Promise<void> {
     if (!this.client || !this.whatsappFrom) {
       this.logger.log(
-        `[Twilio WhatsApp non configuré — simulé] à: ${to}\n${body}`,
+        `[Twilio WhatsApp non configuré — simulé] à: ${to}${mediaUrl ? ` (média: ${mediaUrl})` : ''}\n${body}`,
       );
       return;
     }
@@ -52,6 +61,7 @@ export class TwilioService {
       from: `whatsapp:${this.whatsappFrom}`,
       to: `whatsapp:${to}`,
       body,
+      mediaUrl: mediaUrl ? [mediaUrl] : undefined,
     });
   }
 }

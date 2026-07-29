@@ -3,6 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { randomBytes } from 'node:crypto';
 import {
   AuditAction,
   AuditEntity,
@@ -24,6 +26,13 @@ import {
   generateInvoiceNumber,
 } from './utils/invoice-calc';
 import { buildInvoicePdf } from './utils/invoice.pdf';
+import { FactureEnvoiDemandeEvent } from './events/facture-envoi-demande.event';
+
+// CH-050 suite — durée de vie d'un lien de téléchargement de facture
+// (InvoiceDownloadToken). Assez court pour limiter la fenêtre d'exposition
+// d'un lien non authentifié, assez long pour qu'un client WhatsApp/email
+// lent (ou consulté quelques jours plus tard) puisse encore l'ouvrir.
+const DOWNLOAD_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class BillingService {
@@ -31,6 +40,7 @@ export class BillingService {
     private readonly prisma: PrismaService,
     private readonly parametersService: ParametersService,
     private readonly auditService: AuditService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   // Vérifie qu'un folio existe et que son séjour est encore en cours
@@ -451,6 +461,76 @@ export class BillingService {
         annulee: l.annulee,
       })),
     });
+  }
+
+  // CH-050 suite — demande d'envoi d'une facture par email/WhatsApp. Ne fait
+  // qu'émettre l'évènement (découplage volontaire, même convention que
+  // ReservationsService.create()/StayService.checkout() — le listener vit
+  // dans le module consommateur, notifications, jamais importé ici en
+  // retour). emitAsync (pas emit) : NotificationsService.notify() écrit des
+  // NotificationLog qui référencent guestId — l'appelant doit pouvoir
+  // attendre que l'écriture ait eu lieu avant de répondre 200 au client HTTP
+  // (même règle générale que reservation.confirmee, CLAUDE.md).
+  async requestDelivery(invoiceId: number, userId?: number) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+    });
+    if (!invoice) {
+      throw new NotFoundException(`Facture ${invoiceId} introuvable.`);
+    }
+    await this.eventEmitter.emitAsync(
+      'facture.envoi-demande',
+      new FactureEnvoiDemandeEvent(invoiceId, userId),
+    );
+  }
+
+  // Contexte complet nécessaire à l'envoi (guest, montants, PDF déjà généré)
+  // — appelé par le listener notifications (façade, jamais de Prisma direct
+  // sur Invoice/Folio/Stay/Guest hors de ce module). Réutilise
+  // generateInvoicePdf() plutôt que de dupliquer la requête Prisma.
+  async getInvoiceDeliveryContext(invoiceId: number) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        folio: { include: { stay: { include: { guest: true } } } },
+      },
+    });
+    if (!invoice) {
+      throw new NotFoundException(`Facture ${invoiceId} introuvable.`);
+    }
+    const pdf = await this.generateInvoicePdf(invoiceId);
+    return {
+      guestId: invoice.folio.stay.guest.id,
+      numero: invoice.numero,
+      montantTotal: invoice.montantTotal.toString(),
+      pdf,
+    };
+  }
+
+  // Jeton de téléchargement public à durée limitée (voir InvoiceDownloadToken
+  // en schéma pour le contexte complet) — un jeton par demande d'envoi,
+  // jamais réutilisé/régénéré en place.
+  async createDownloadToken(invoiceId: number) {
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + DOWNLOAD_TOKEN_TTL_MS);
+    await this.prisma.invoiceDownloadToken.create({
+      data: { token, invoiceId, expiresAt },
+    });
+    return token;
+  }
+
+  // Résout un jeton public en PDF (voir GET /invoices/download/:token,
+  // @Public()) — jamais de fuite d'information sur la raison d'un échec
+  // (jeton inconnu vs expiré) au-delà d'un 404 générique, même posture que
+  // les autres jetons publics du projet (SelfCheckinToken).
+  async resolveDownloadToken(token: string): Promise<Buffer> {
+    const record = await this.prisma.invoiceDownloadToken.findUnique({
+      where: { token },
+    });
+    if (!record || record.expiresAt < new Date()) {
+      throw new NotFoundException('Lien de téléchargement invalide ou expiré.');
+    }
+    return this.generateInvoicePdf(record.invoiceId);
   }
 
   async findInvoiceById(id: number) {

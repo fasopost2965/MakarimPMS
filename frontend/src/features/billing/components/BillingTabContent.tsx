@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Download, Printer } from 'lucide-react';
+import { Download, Printer, Send } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { listFoliosByStay, generateInvoice, downloadInvoicePdf } from '../api';
+import { toastManager } from '@/components/ui/toast';
+import {
+  listFoliosByStay,
+  generateInvoice,
+  downloadInvoicePdf,
+  requestInvoiceDelivery,
+} from '../api';
 import { RecordPaymentDialog } from '@/features/payments/components/RecordPaymentDialog';
 import { InvoicePrintModal } from './InvoicePrintModal';
 import { AddFolioLineDialog } from './AddFolioLineDialog';
@@ -48,6 +54,7 @@ export function BillingTabContent({
   const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<
     number | null
   >(null);
+  const [sendingInvoiceId, setSendingInvoiceId] = useState<number | null>(null);
   const [printingInvoice, setPrintingInvoice] = useState<{
     invoice: Invoice;
     folio: Folio;
@@ -94,6 +101,27 @@ export function BillingTabContent({
       );
     } finally {
       setDownloadingInvoiceId(null);
+    }
+  }
+
+  // CH-050 suite — le résultat réel par canal (envoyé/échec, template
+  // configuré ou non) se consulte dans le journal de notifications
+  // (onglet Notifications, déjà existant, F7) : ce toast ne confirme que
+  // la prise en compte de la demande, jamais un envoi effectif déjà
+  // garanti — cohérent avec le traitement asynchrone (file BullMQ).
+  async function handleSendInvoice(invoiceId: number) {
+    setSendingInvoiceId(invoiceId);
+    try {
+      await requestInvoiceDelivery(invoiceId);
+      toastManager.add({
+        title: 'Envoi demandé',
+        description:
+          'La facture sera envoyée par email/WhatsApp selon les canaux configurés — voir le journal de notifications pour le résultat.',
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur d'envoi");
+    } finally {
+      setSendingInvoiceId(null);
     }
   }
 
@@ -212,6 +240,17 @@ export function BillingTabContent({
                         onClick={() => handleDownloadPdf(invoice.id)}
                       >
                         <Download className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="size-7"
+                        title="Envoyer par email/WhatsApp"
+                        disabled={sendingInvoiceId === invoice.id}
+                        onClick={() => handleSendInvoice(invoice.id)}
+                      >
+                        <Send className="size-4" />
                       </Button>
                       {guest && room && (
                         <Button

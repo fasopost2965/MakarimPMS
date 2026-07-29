@@ -63,7 +63,9 @@ describe('buildInvoicePdf', () => {
 
   it('produit un rendu différent quand le montant total diffère (pas une valeur figée)', async () => {
     const pdfA = await buildInvoicePdf(
-      sampleData({ invoice: { ...sampleData().invoice, montantTotal: '100.00' } }),
+      sampleData({
+        invoice: { ...sampleData().invoice, montantTotal: '100.00' },
+      }),
     );
     const pdfB = await buildInvoicePdf(
       sampleData({

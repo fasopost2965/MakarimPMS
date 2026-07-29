@@ -325,6 +325,22 @@ async function main() {
       corps:
         'Bonjour {{prenom}} {{nom}},\n\nVotre arrivée est prévue le {{dateArrivee}}, chambre {{chambre}}. Gagnez du temps à votre arrivée en complétant vos informations dès maintenant :\n{{lien}}\n\nÀ très bientôt.\n\nHôtel Makarim',
     },
+    // CH-050 suite — deux canaux actifs par défaut (contrairement aux 4
+    // évènements ci-dessus, EMAIL seul) : la demande utilisateur porte
+    // explicitement sur email ET WhatsApp pour la diffusion de facture.
+    {
+      evenement: 'FACTURE_EMISE' as const,
+      canal: 'EMAIL' as const,
+      sujet: 'Votre facture {{numero}} — Hôtel Makarim',
+      corps:
+        'Bonjour,\n\nVeuillez trouver ci-joint votre facture {{numero}} d\'un montant de {{montant}} MAD.\n\nVous pouvez également la télécharger ici : {{lien_facture}}\n\nHôtel Makarim',
+    },
+    {
+      evenement: 'FACTURE_EMISE' as const,
+      canal: 'WHATSAPP' as const,
+      corps:
+        'Hôtel Makarim — voici votre facture {{numero}} ({{montant}} MAD) : {{lien_facture}}',
+    },
   ];
   for (const template of notificationTemplates) {
     await prisma.notificationTemplate.create({ data: template });

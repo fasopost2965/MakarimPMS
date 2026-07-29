@@ -48,11 +48,21 @@ export class NotificationsService {
       : 'Client sans numéro de téléphone';
   }
 
+  // CH-050 suite — options génériques et facultatives, jamais spécifiques à
+  // un évènement en particulier (ce serait contaminer un point d'entrée
+  // partagé par RESERVATION_CONFIRMEE/RAPPEL_J_MOINS_1/POST_SEJOUR/
+  // SELF_CHECKIN_LIEN avec un concept propre aux factures) : n'importe quel
+  // futur évènement pourra vouloir joindre un PDF à l'email ou un média au
+  // WhatsApp, pas seulement FACTURE_EMISE.
   async notify(
     evenement: EvenementNotification,
     guestId: number,
     reservationId: number | null,
     variables: Record<string, string>,
+    options?: {
+      emailAttachment?: { filename: string; content: Buffer };
+      whatsappMediaUrl?: string;
+    },
   ) {
     // Façade guests (jamais de lecture Prisma directe de Guest hors de son
     // module) — c'est aussi la seule source du consentement/email/téléphone
@@ -145,6 +155,13 @@ export class NotificationsService {
             destinataire,
             sujet: sujet ?? '(sans objet)',
             corps,
+            attachment: options?.emailAttachment
+              ? {
+                  filename: options.emailAttachment.filename,
+                  contentBase64:
+                    options.emailAttachment.content.toString('base64'),
+                }
+              : undefined,
           });
           break;
         case CanalNotification.SMS:
@@ -159,6 +176,7 @@ export class NotificationsService {
             notificationLogId: log.id,
             destinataire,
             corps,
+            mediaUrl: options?.whatsappMediaUrl,
           });
           break;
       }

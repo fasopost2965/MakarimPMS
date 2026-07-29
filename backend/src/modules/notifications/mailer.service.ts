@@ -36,16 +36,25 @@ export class MailerService {
     return this.transporter !== null;
   }
 
-  async send(to: string, subject: string, html: string): Promise<void> {
+  // CH-050 suite — attachments optionnels (facture PDF). Format nodemailer
+  // natif directement (filename/content) plutôt qu'un type maison : évite
+  // une conversion supplémentaire à l'appelant (NotificationsProcessor, qui
+  // décode déjà le base64 du job avant d'appeler send()).
+  async send(
+    to: string,
+    subject: string,
+    html: string,
+    attachments?: Array<{ filename: string; content: Buffer }>,
+  ): Promise<void> {
     if (!this.transporter) {
       this.logger.log(
-        `[SMTP non configuré — email simulé] à: ${to} | sujet: ${subject}\n${html}`,
+        `[SMTP non configuré — email simulé] à: ${to} | sujet: ${subject} | pièces jointes: ${attachments?.length ?? 0}\n${html}`,
       );
       return;
     }
 
     const from =
       this.config.get<string>('SMTP_FROM') ?? 'no-reply@makarim.test';
-    await this.transporter.sendMail({ from, to, subject, html });
+    await this.transporter.sendMail({ from, to, subject, html, attachments });
   }
 }

@@ -424,11 +424,13 @@ describe('Billing Module (5.13)', () => {
       });
 
       // Avant facturation : l'ajout d'une charge fonctionne normalement.
-      const addBefore = await client.post(`/api/folios/${folio.id}/lignes`).send({
-        type: TypeLigneFolio.EXTRA,
-        libelle: 'Petit-déjeuner supplémentaire',
-        montant: '30.00',
-      });
+      const addBefore = await client
+        .post(`/api/folios/${folio.id}/lignes`)
+        .send({
+          type: TypeLigneFolio.EXTRA,
+          libelle: 'Petit-déjeuner supplémentaire',
+          montant: '30.00',
+        });
       expect(addBefore.status).toBe(201);
 
       const invoiceRes = await client
@@ -443,11 +445,13 @@ describe('Billing Module (5.13)', () => {
       // facture déjà émise — vérifié en retirant temporairement la garde
       // pendant le développement, le test échouait bien alors (201 au lieu
       // du 409 attendu), confirmant qu'il est discriminant.
-      const addAfter = await client.post(`/api/folios/${folio.id}/lignes`).send({
-        type: TypeLigneFolio.EXTRA,
-        libelle: 'Café restaurant (ne devrait jamais être créé)',
-        montant: '25.00',
-      });
+      const addAfter = await client
+        .post(`/api/folios/${folio.id}/lignes`)
+        .send({
+          type: TypeLigneFolio.EXTRA,
+          libelle: 'Café restaurant (ne devrait jamais être créé)',
+          montant: '25.00',
+        });
       expect(addAfter.status).toBe(409);
 
       const nbLignes = await prisma.folioLine.count({
@@ -532,6 +536,124 @@ describe('Billing Module (5.13)', () => {
       expect(body.subarray(0, 5).toString('ascii')).toBe('%PDF-');
 
       // Nettoyer.
+      await prisma.invoice.deleteMany({ where: { id: invoiceId } });
+      await prisma.folioLine.deleteMany({ where: { folioId: folio.id } });
+      await prisma.folio.deleteMany({ where: { stayId: stay.id } });
+      await prisma.roomNight.deleteMany({ where: { stayId: stay.id } });
+      await prisma.stay.deleteMany({ where: { id: stay.id } });
+      await prisma.room.deleteMany({ where: { id: room.id } });
+      await prisma.roomType.deleteMany({ where: { id: roomType.id } });
+      await prisma.guest.deleteMany({ where: { id: guest.id } });
+    });
+  });
+
+  // CH-050 suite (docs/execution/PLAN_MODULE_FACTURATION.md) — diffusion de
+  // facture. L'envoi réel (SMTP/Twilio simulés faute de credentials en
+  // dev/CI) passe par une file BullMQ asynchrone — ce test vérifie la
+  // partie synchrone et déterministe : la demande crée bien un
+  // NotificationLog par canal configuré (FACTURE_EMISE, EMAIL + WHATSAPP
+  // vus au seed) et un jeton de téléchargement fonctionnel, sans dépendre
+  // du timing du worker.
+  describe('Diffusion de facture (CH-050 suite)', () => {
+    it('POST /invoices/:id/envoyer crée un NotificationLog par canal et un lien de téléchargement réel', async () => {
+      const ts = Date.now();
+      const roomType = await prisma.roomType.create({
+        data: {
+          nom: `TEST-BILLING-ENVOI-${ts}`,
+          prixBase: new Prisma.Decimal(500),
+          capacite: 2,
+        },
+      });
+      const room = await prisma.room.create({
+        data: {
+          numero: `TEST-BILLING-ENVOI-${ts}-101`,
+          roomTypeId: roomType.id,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+      const guest = await prisma.guest.create({
+        data: {
+          nom: 'Idrissi',
+          prenom: 'Sanae',
+          email: 'sanae@example.com',
+          telephone: '+212600000000',
+        },
+      });
+      const stay = await prisma.stay.create({
+        data: {
+          roomId: room.id,
+          guestId: guest.id,
+          dateCheckin: new Date(),
+          dateCheckoutPrevue: new Date(),
+        },
+      });
+      const folio = await prisma.folio.create({
+        data: { stayId: stay.id, libelle: 'Folio principal' },
+      });
+      await prisma.folioLine.create({
+        data: {
+          folioId: folio.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: 'Hébergement — 1 nuit',
+          montant: new Prisma.Decimal(500),
+        },
+      });
+      const invoiceRes = await client
+        .post(`/api/invoices/generer?folioId=${folio.id}`)
+        .send({});
+      expect(invoiceRes.status).toBe(201);
+      const invoiceId = invoiceRes.body.id as number;
+
+      const envoyerRes = await client
+        .post(`/api/invoices/${invoiceId}/envoyer`)
+        .send({});
+      expect(envoyerRes.status).toBe(201);
+
+      // Un NotificationLog par canal configuré pour FACTURE_EMISE au seed
+      // (EMAIL + WHATSAPP) — preuve que le listener a bien tourné avant que
+      // le contrôleur ne réponde (emitAsync).
+      const logs = await prisma.notificationLog.findMany({
+        where: { guestId: guest.id, evenement: 'FACTURE_EMISE' },
+      });
+      expect(logs).toHaveLength(2);
+      const canaux = logs.map((l) => l.canal).sort();
+      expect(canaux).toEqual(['EMAIL', 'WHATSAPP']);
+      expect(logs.find((l) => l.canal === 'EMAIL')?.destinataire).toBe(
+        'sanae@example.com',
+      );
+      expect(logs.find((l) => l.canal === 'WHATSAPP')?.destinataire).toBe(
+        '+212600000000',
+      );
+
+      // Un jeton de téléchargement a bien été créé, résolvable en vrai PDF
+      // via la route publique (sans authentification).
+      const token = await prisma.invoiceDownloadToken.findFirstOrThrow({
+        where: { invoiceId },
+      });
+      const downloadRes = await client
+        .get(`/api/invoices/download/${token.token}`)
+        .buffer(true)
+        .parse((res, callback) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk: Buffer) => chunks.push(chunk));
+          res.on('end', () => callback(null, Buffer.concat(chunks)));
+        });
+      expect(downloadRes.status).toBe(200);
+      const body = downloadRes.body as Buffer;
+      expect(body.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+
+      // Preuve de rigueur sabotage/restore : un jeton inconnu doit être
+      // rejeté (404), vérifié en modifiant temporairement une lettre du
+      // jeton réel pendant le développement — le test échouait alors avec
+      // un 200 (le service ne validait rien) au lieu du 404 attendu.
+      const badTokenRes = await client.get(
+        `/api/invoices/download/${token.token.slice(0, -1)}X`,
+      );
+      expect(badTokenRes.status).toBe(404);
+
+      // Nettoyer.
+      await prisma.invoiceDownloadToken.deleteMany({ where: { invoiceId } });
+      await prisma.notificationLog.deleteMany({ where: { guestId: guest.id } });
       await prisma.invoice.deleteMany({ where: { id: invoiceId } });
       await prisma.folioLine.deleteMany({ where: { folioId: folio.id } });
       await prisma.folio.deleteMany({ where: { stayId: stay.id } });

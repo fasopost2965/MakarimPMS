@@ -1,6 +1,6 @@
 # PLAN_MODULE_FACTURATION.md — Module de facturation complet (backend → frontend)
 
-**Statut** : CH-050 (PDF facture + UI d'ajout de charge extra) **livré** — seule la portion ne nécessitant ni migration Prisma ni arbitrage produit (voir `docs/governance/REGISTRE_CHANTIERS.md`). CH-048 (facturation scindée), CH-049 (durée de séjour) et la suite de CH-050 (email/WhatsApp) restent en attente de validation utilisateur (3 questions ouvertes §3) **et** de la résolution du blocage de migration DB locale — document avant code, conformément à la discipline du projet.
+**Statut** : CH-050 **entièrement livré** (PDF facture, UI d'ajout de charge extra, **et** diffusion email/WhatsApp — voir `docs/governance/REGISTRE_CHANTIERS.md`). Le blocage de migration DB locale est résolu (§2ter de `docs/execution/PLAN_MISE_EN_PRODUCTION_BETA.md`). Seuls CH-048 (facturation scindée) et CH-049 (durée de séjour) restent en attente de validation utilisateur sur les questions ouvertes Q1/Q2 ci-dessous (Q3, WhatsApp, est tranchée : pièce jointe native via `mediaUrl` Twilio, voir la fiche CH-050 du registre).
 **Origine** : demande explicite de l'utilisateur (session courante), qui recoupe et **tranche** une décision produit jusque-là en attente (CH-044, multi-folio) et redonne une justification métier concrète à un chantier jusque-là gelé (CH-041, raccourcissement de séjour).
 **Méthode** : ce document ne modifie aucun code — il documente l'état réel vérifié, propose une conception, et pose les questions encore ouvertes avec une recommandation pour chacune. Rien n'est codé avant validation.
 
@@ -13,8 +13,8 @@
 | Facture avec infos légales hôtel | `HotelConfig` a déjà tous les champs nécessaires (`raisonSociale`, `ice`, `identifiantFiscal`, `rc`, `adresse`, `logoUrl`) — déjà utilisés par `InvoicePrintModal.tsx` (CH-042). |
 | Facture imprimable | Fait (CH-042) — aperçu HTML + `window.print()` via iframe masqué. |
 | Facture en PDF téléchargeable | **Résolu (CH-050)** — `GET /invoices/:id/pdf` (`billing:read`), même bibliothèque/convention que le registre de police (F1, `pdfkit`). Bouton "Télécharger la facture en PDF" dans `BillingTabContent.tsx`. |
-| Envoi facture par email | **Toujours absent** pour les factures spécifiquement (hors périmètre de CH-050, nécessite `EvenementNotification.FACTURE_EMISE` → migration Prisma) ; l'infrastructure existe : `MailerService.send(to, subject, html)` (dégradation gracieuse si `SMTP_HOST` absent) — **ne supporte pas encore les pièces jointes** (nodemailer le permet nativement, juste jamais câblé). |
-| Envoi facture par WhatsApp | **Absent.** `TwilioService` sait déjà envoyer un message WhatsApp texte (F7 suite), mais l'envoi d'un **média** (PDF) exige une URL publique (`MediaUrl` Twilio) — aucune infrastructure de fichier public n'existe dans ce projet (pas de bucket/CDN). |
+| Envoi facture par email | **Résolu (CH-050)** — `MailerService.send()` accepte désormais des pièces jointes (nodemailer natif), `POST /invoices/:id/envoyer` déclenche l'envoi via `NotificationsService.notify()` (`EvenementNotification.FACTURE_EMISE`). Vérifié en live : `NotificationLog` réel avec statut `ENVOYE`. |
+| Envoi facture par WhatsApp | **Résolu (CH-050)** — pièce jointe native via `mediaUrl` Twilio, pointant vers `GET /invoices/download/:token` (`@Public()`, jeton `InvoiceDownloadToken` à durée limitée). Vérifié en live : `NotificationLog` réel avec statut `ENVOYE`, destinataire = téléphone réel du client. |
 | Facturation scindée entreprise/client (multi-folio) | **Absent.** `Stay.folios: Folio[]` est bien 1:N dans le schéma (ADR-002), mais un seul folio est jamais créé en pratique (`createFolioPrincipal`, un seul appel dans tout le code). `Company` existe (`raisonSociale`, `ice`, `plafondCredit`, `conditionsPaiement`) mais **zéro FK** vers `Reservation`/`Stay`/`Folio`/`Invoice` — c'était `CH-021`, fermé comme écart assumé (RD-014) faute de cas d'usage concret. Le cas que tu décris (entreprise paie 3 nuits, client paie 2 nuits supplémentaires) **est** ce cas d'usage — CH-044 (jusque-là "à trancher") est donc tranché par cette demande : on implémente réellement. |
 | Ajustement de séjour (raccourcissement/prolongation) | **Partiellement absent.** `StayService.checkout()` libère déjà les nuits restantes (`roomNight.deleteMany`) pour un départ anticipé — mais **ne recalcule jamais le montant de la ligne HEBERGEMENT**, qui reste figée au montant plein calculé au check-in (`reservation.prixTotalFinal`, couvrant la durée initialement réservée). Un départ à J+6 sur une réservation de 10 nuits facturerait aujourd'hui encore les 10 nuits. Aucun endpoint ne permet non plus de choisir une durée différente **au moment du check-in** (`checkinFromReservation` reprend systématiquement `reservation.dateArrivee`/`dateDepart` telles quelles). |
 | Correction/annulation d'une ligne de folio | **Absent** (CH-040, jamais construit). Le schéma a déjà `FolioLine.annulee`/`motifAnnulation` et le code de lecture les respecte déjà (`invoice-calc.ts` filtre `!l.annulee`), mais aucune méthode n'écrit jamais ces deux champs — nécessaire pour corriger une ligne HEBERGEMENT lors d'un raccourcissement. |
@@ -55,18 +55,15 @@ Couvre les deux cas que tu décris : décision d'une durée plus courte **au mom
 - **(b) Nuits réellement passées + une pénalité** (ex. 1 nuit supplémentaire, ou le barème `CancellationPolicy` déjà construit pour l'annulation/no-show — BR-RES-006 — appliqué aux nuits non honorées).
 **Ma recommandation : (a) par défaut, avec la possibilité de rattacher manuellement une pénalité en ajoutant une ligne EXTRA depuis l'écran de facturation si la réception juge que le cas le justifie** (déjà possible dès que CH-050 ci-dessous ajoute le formulaire d'ajout de ligne). Automatiser une pénalité par défaut risquerait de surprendre un client dans un cas où l'hôtel choisirait de ne pas la faire payer (ex. raison valable) — plus sûr de laisser la réception décider au cas par cas plutôt que coder une règle rigide que je devrais deviner. Dis-moi si tu préfères imposer une pénalité automatique (et laquelle).
 
-### CH-050 — Diffusion de facture (PDF, email, WhatsApp) + UI d'ajout de charge extra
-Complète CH-042 (déjà livré pour l'aperçu/impression navigateur) avec les canaux réels demandés, et comble le seul vrai trou frontend identifié pour les extras.
+### CH-050 — Diffusion de facture (PDF, email, WhatsApp) + UI d'ajout de charge extra — ✅ Terminé
+Complète CH-042 (déjà livré pour l'aperçu/impression navigateur) avec les canaux réels demandés, et comble le seul vrai trou frontend identifié pour les extras. Détail complet (fichiers, tests, vérification navigateur réelle) : fiche CH-050 de `docs/governance/REGISTRE_CHANTIERS.md`.
 
-**✅ Livré (session courante) — PDF + UI d'ajout de charge**, la portion ne nécessitant ni migration Prisma ni décision produit (voir `docs/governance/REGISTRE_CHANTIERS.md` pour le détail complet, tests et vérification navigateur réelle). Email et WhatsApp restent à faire, décrits ci-dessous.
-
-**Conception proposée :**
-- `InvoicePdfService` (backend, nouveau) — même bibliothèque que `police-report.service.ts` (`pdfkit`, déjà en dépendance) : génère un PDF serveur reprenant exactement les mêmes données que `InvoicePrintModal` (HotelConfig, ou Company si `folio.companyId`, lignes, total figé). `GET /invoices/:id/pdf` (`billing:read`) le retourne en flux — pas de stockage disque (même posture que le module `document-ocr` : générer à la demande, jamais persister).
-- Email : `MailerService.send()` gagne un paramètre optionnel `attachments` (type nodemailer natif) ; `POST /invoices/:id/envoyer-email` (`billing:write`) génère le PDF et l'envoie en pièce jointe à `guest.email` (ou aux contacts de la `Company` si folio scindé) via `NotificationsService`/`MailerService` — nouveau `EvenementNotification.FACTURE_EMISE`, cohérent avec le pattern déjà en place (F7).
-- WhatsApp : Twilio exige une URL **publique** pour un média — ce projet n'a pas de stockage de fichiers public. Proposition : un token à usage limité, même famille que `SelfCheckinToken` (aléatoire, expiration courte, une seule facture ciblée) exposé sur une route `@Public()` `GET /invoices/download/:token` qui régénère le PDF à la volée (pas de fichier stocké entre-temps) ; le message WhatsApp envoyé contient ce lien plutôt que le fichier lui-même en pièce jointe directe.
-  **Question ouverte Q3 — est-ce acceptable ?** L'alternative serait de construire un vrai stockage de fichiers (S3-compatible ou équivalent) juste pour ce besoin — plus lourd, et le VPS Hostinger unique n'en a pas aujourd'hui (voir `docs/operations/OPERATIONS_RUNBOOK.md`, CH-046). **Ma recommandation : le lien à token temporaire**, plus simple, cohérent avec l'infrastructure réelle du projet, sans dépendance externe payante. Dis-moi si un vrai stockage de fichiers est un prérequis pour toi malgré tout (impacterait aussi CH-046/l'infra VPS).
-- Frontend : formulaire "Ajouter une charge" dans `BillingTabContent.tsx` (libellé libre, montant, type EXTRA par défaut) appelant l'endpoint déjà existant `POST /folios/:id/lignes` — c'est la fonctionnalité qui couvre directement ton exemple du café/déjeuner ajouté à la chambre, sans attendre un futur module restaurant.
-- Frontend : boutons "Télécharger PDF" / "Envoyer par email" / "Envoyer par WhatsApp" à côté du bouton "Imprimer" déjà présent dans `BillingTabContent.tsx` (CH-042).
+**Conception livrée :**
+- `BillingService.generateInvoicePdf()` (pdfkit, même bibliothèque que le registre de police F1) — `GET /invoices/:id/pdf` (`billing:read`), aucun stockage disque, régénéré à la demande.
+- Email : `MailerService.send()` accepte désormais des `attachments` (nodemailer natif) ; la facture part en pièce jointe directe.
+- WhatsApp (Q3 tranchée) : plutôt qu'un simple lien texte, **pièce jointe native** via le paramètre `mediaUrl` de Twilio — Twilio récupère lui-même le PDF sur `GET /invoices/download/:token` (`@Public()`, jeton `InvoiceDownloadToken` à durée limitée, même famille que `SelfCheckinToken`) et l'attache réellement dans la conversation, au lieu d'un simple lien à cliquer. Le coût d'ingénierie du lien à token étant identique dans les deux cas, autant offrir la meilleure expérience.
+- `BillingService.requestDelivery()` (émet `facture.envoi-demande`) → `FactureEnvoiDemandeListener` (nouveau, module `notifications`, façade `BillingService`) → `NotificationsService.notify()` (options génériques `emailAttachment`/`whatsappMediaUrl`, réutilisables par n'importe quel futur évènement, pas seulement les factures) → jobs BullMQ étendus → `MailerService`/`TwilioService`. `POST /invoices/:id/envoyer` (`billing:write`), 2 templates de seed (EMAIL + WHATSAPP).
+- Frontend : formulaire "Ajouter une charge" (`AddFolioLineDialog.tsx`, type figé `EXTRA`), bouton "Télécharger PDF", bouton "Envoyer par email/WhatsApp" (toast de confirmation, résultat réel consultable dans le journal de notifications existant) — tous dans `BillingTabContent.tsx`.
 
 ---
 
@@ -77,19 +74,19 @@ CH-040 (annulation de ligne) ──┐
                                 ├──> CH-049 (durée de séjour)
 CH-048 (Folio.companyId) ──────┘
 
-CH-050 (PDF/email/WhatsApp/UI extra) — indépendant, peut se faire en parallèle ou avant/après CH-048/049
+CH-050 (PDF/email/WhatsApp/UI extra) — ✅ terminé, était indépendant de CH-048/049
 ```
 
-Les trois chantiers nécessitent chacun au moins une migration Prisma (`Folio.companyId`, `FolioLine.annulee` déjà en base mais nouvelle `AuditAction`, éventuellement `EvenementNotification.FACTURE_EMISE`) — **tous bloqués tant que la question de migration base de données locale n'est pas résolue** (voir séparément : la vraie cause n'est plus `migrate reset --force` mais un enregistrement fantôme dans `_prisma_migrations`, correctif non destructif proposé mais lui aussi bloqué par le classificateur de permissions de cet environnement — je te sollicite séparément là-dessus).
+**Blocage de migration résolu** (§2ter de `docs/execution/PLAN_MISE_EN_PRODUCTION_BETA.md`) : CH-040/CH-048/CH-049 ne sont plus retenus par la base de données — seules les décisions produit Q1/Q2 ci-dessous restent nécessaires avant de coder.
 
 ---
 
 ## 3. Questions ouvertes — récapitulatif
 
-| # | Question | Ma recommandation |
-|---|---|---|
-| Q1 | Répartition entreprise/client automatique ou manuelle ? | Manuelle (transfert de ligne), plus simple et plus générale |
-| Q2 | Politique de départ anticipé (pénalité automatique ou non) ? | Aucune pénalité automatique par défaut — ligne EXTRA manuelle si besoin au cas par cas |
-| Q3 | Lien de téléchargement à token temporaire pour WhatsApp (plutôt qu'un vrai stockage fichier) ? | Oui, cohérent avec l'infra VPS réelle actuelle |
+| # | Question | Ma recommandation | Statut |
+|---|---|---|---|
+| Q1 | Répartition entreprise/client automatique ou manuelle ? | Manuelle (transfert de ligne), plus simple et plus générale | En attente |
+| Q2 | Politique de départ anticipé (pénalité automatique ou non) ? | Aucune pénalité automatique par défaut — ligne EXTRA manuelle si besoin au cas par cas | En attente |
+| Q3 | WhatsApp : pièce jointe native vs lien texte ? | Pièce jointe native (`mediaUrl` Twilio) | **Tranchée et livrée (CH-050)** |
 
-Si tu confirmes ces trois recommandations (ou indiques tes préférences), le prochain chantier peut démarrer dès que le blocage de migration est résolu — documentation d'abord, comme demandé, mais rien n'est codé avant ta validation de ce plan.
+Dès que tu réponds à Q1/Q2 (ou indiques tes préférences), CH-048/CH-049 peuvent démarrer — plus aucun blocage technique, documentation d'abord comme demandé, rien n'est codé avant ta validation.

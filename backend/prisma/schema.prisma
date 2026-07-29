@@ -601,16 +601,40 @@ enum StatutFacture {
 }
 
 model Invoice {
-  id           Int           @id @default(autoincrement())
-  numero       String        @unique
-  folioId      Int
-  folio        Folio         @relation(fields: [folioId], references: [id])
-  montantTotal Decimal       @db.Decimal(10, 2)
-  statut       StatutFacture @default(EMISE)
-  pdfUrl       String?
-  creditNotes  CreditNote[]
-  payments     Payment[]
-  createdAt    DateTime      @default(now())
+  id             Int                     @id @default(autoincrement())
+  numero         String                  @unique
+  folioId        Int
+  folio          Folio                   @relation(fields: [folioId], references: [id])
+  montantTotal   Decimal                 @db.Decimal(10, 2)
+  statut         StatutFacture           @default(EMISE)
+  pdfUrl         String?
+  creditNotes    CreditNote[]
+  payments       Payment[]
+  downloadTokens InvoiceDownloadToken[]
+  createdAt      DateTime                @default(now())
+}
+
+// CH-050 suite (docs/execution/PLAN_MODULE_FACTURATION.md) — lien de
+// téléchargement public à durée limitée, utilisé pour l'envoi de facture par
+// email (pièce jointe régénérée à l'envoi, ce jeton n'est alors qu'une
+// solution de repli) et par WhatsApp (Twilio ne peut pas atteindre un
+// endpoint authentifié par cookie — `mediaUrl` doit être une URL publique
+// qu'il peut atteindre lui-même). Même famille que `SelfCheckinToken`
+// (aléatoire, expiration courte) mais sans contrainte d'unicité par
+// facture : chaque demande d'envoi crée son propre jeton, jamais réutilisé
+// ni régénéré en place — une facture déjà envoyée peut être renvoyée avec
+// un nouveau lien sans invalider un lien précédent encore dans une boîte
+// mail. Le PDF n'est jamais persisté (`GET /invoices/download/:token`
+// régénère à la volée, même principe que `GET /invoices/:id/pdf`).
+model InvoiceDownloadToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  invoiceId Int
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id])
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([invoiceId])
 }
 
 model CreditNote {
@@ -995,6 +1019,10 @@ enum EvenementNotification {
   // F6 — envoi du lien de self check-in (réutilise le canal email de F7,
   // voir SelfCheckinService.generateLink).
   SELF_CHECKIN_LIEN
+  // CH-050 suite — envoi manuel d'une facture par email/WhatsApp, déclenché
+  // par la réception (POST /invoices/:id/envoyer), pas un évènement
+  // automatique du cycle de vie du séjour comme les 4 précédents.
+  FACTURE_EMISE
 }
 
 // v1 email-only, étendu ici (F7 suite) à SMS/WHATSAPP — enum plutôt que

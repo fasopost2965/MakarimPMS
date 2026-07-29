@@ -33,10 +33,22 @@ export class NotificationsProcessor extends WorkerHost {
   async process(job: Job<NotificationJobData, void, string>) {
     switch (job.name) {
       case NOTIFICATIONS_JOB.SEND_EMAIL: {
-        const { notificationLogId, destinataire, sujet, corps } =
+        const { notificationLogId, destinataire, sujet, corps, attachment } =
           job.data as SendEmailJobData;
         await this.dispatch(job, notificationLogId, () =>
-          this.mailerService.send(destinataire, sujet, corps),
+          this.mailerService.send(
+            destinataire,
+            sujet,
+            corps,
+            attachment
+              ? [
+                  {
+                    filename: attachment.filename,
+                    content: Buffer.from(attachment.contentBase64, 'base64'),
+                  },
+                ]
+              : undefined,
+          ),
         );
         return;
       }
@@ -48,9 +60,10 @@ export class NotificationsProcessor extends WorkerHost {
         return;
       }
       case NOTIFICATIONS_JOB.SEND_WHATSAPP: {
-        const { notificationLogId, destinataire, corps } = job.data;
+        const { notificationLogId, destinataire, corps, mediaUrl } =
+          job.data as SendWhatsappJobData;
         await this.dispatch(job, notificationLogId, () =>
-          this.twilioService.sendWhatsapp(destinataire, corps),
+          this.twilioService.sendWhatsapp(destinataire, corps, mediaUrl),
         );
         return;
       }

@@ -11,8 +11,10 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { BillingService } from './billing.service';
 import { AddFolioLineDto } from './dto/add-folio-line.dto';
@@ -111,5 +113,41 @@ export class BillingController {
   @Get('stays/:stayId/folios')
   findFoliosByStay(@Param('stayId', ParseIntPipe) stayId: number) {
     return this.billingService.findFoliosByStayId(stayId);
+  }
+
+  // CH-050 suite (docs/execution/PLAN_MODULE_FACTURATION.md) — déclenche
+  // l'envoi de la facture par email/WhatsApp (canaux réellement tentés
+  // déterminés par les NotificationTemplate actifs pour FACTURE_EMISE,
+  // même logique que tout le reste du module notifications — voir
+  // NotificationsService.notify()). 202 : traitement asynchrone (file
+  // BullMQ), le résultat réel se consulte dans le journal de notifications.
+  @RequirePermission('billing', 'write')
+  @ApiOperation({
+    summary: 'Demande l’envoi de la facture au client (email/WhatsApp)',
+  })
+  @Post('invoices/:id/envoyer')
+  async requestDelivery(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    await this.billingService.requestDelivery(id, user.sub);
+    return { statut: 'demande envoyée' };
+  }
+
+  // Lien public à durée limitée (InvoiceDownloadToken) — nécessaire pour que
+  // Twilio (WhatsApp mediaUrl) et un lien email puissent atteindre le PDF
+  // sans passer par l'authentification cookie de l'API privée. Throttlé
+  // comme les autres routes publiques du projet (self-checkin).
+  @Public()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Télécharge une facture via un lien public temporaire',
+  })
+  @Get('invoices/download/:token')
+  async downloadByToken(@Param('token') token: string, @Res() res: Response) {
+    const pdf = await this.billingService.resolveDownloadToken(token);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="facture.pdf"');
+    res.send(pdf);
   }
 }
