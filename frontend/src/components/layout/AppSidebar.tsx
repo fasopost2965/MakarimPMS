@@ -22,6 +22,10 @@ interface Props {
   // encore été chargées (aucun onglet affiché plutôt qu'un flash de tous
   // les onglets suivi d'un filtrage tardif).
   permissions: string[] | null;
+  // Design Marine & Or — logo configurable (GET /parameters/branding,
+  // Paramètres). `null` tant que non chargé ou non configuré : fallback
+  // sur le badge "M" texte, jamais de plantage sur un logo absent.
+  logoUrl?: string | null;
 }
 
 // Navigation principale (sidebar repliable) — remplace l'ancienne rangée de
@@ -42,6 +46,7 @@ export function AppSidebar({
   mobileOpen,
   onMobileClose,
   permissions,
+  logoUrl,
 }: Props) {
   const visibleItems =
     permissions === null
@@ -90,9 +95,17 @@ export function AppSidebar({
             !showLabels && 'justify-center px-0',
           )}
         >
-          <span className="bg-sidebar-primary text-sidebar-primary-foreground flex size-7 shrink-0 items-center justify-center rounded-md text-xs font-bold">
-            M
-          </span>
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt="Logo"
+              className="size-7 shrink-0 rounded-md object-contain"
+            />
+          ) : (
+            <span className="bg-sidebar-primary text-sidebar-primary-foreground flex size-7 shrink-0 items-center justify-center rounded-md text-xs font-bold">
+              M
+            </span>
+          )}
           {showLabels && (
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold">

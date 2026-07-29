@@ -45,6 +45,19 @@ export class ParametersService {
     return config;
   }
 
+  // Identité visuelle publique — route @Public() consommée par l'écran de
+  // connexion (pas encore de JWT) et par le shell applicatif authentifié
+  // (évite un trou RBAC pour les rôles sans parameters:read, ex. Gouvernante/
+  // Maintenance/RH). Projection stricte : jamais ice/rc/identifiantFiscal/
+  // adresse, qui restent réservés à parameters:read (données fiscales).
+  async getBranding() {
+    const config = await this.getHotelConfig();
+    return {
+      raisonSociale: config.raisonSociale,
+      logoUrl: config.logoUrl,
+    };
+  }
+
   async updateHotelConfig(dto: UpdateHotelConfigDto, userId?: number) {
     const existing = await this.getHotelConfig();
     const { motif, ...fields } = dto;

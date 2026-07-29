@@ -12,6 +12,13 @@ export interface HotelConfig {
   updatedAt: string;
 }
 
+// Identité visuelle publique (GET /branding, @Public() côté backend) —
+// jamais de donnée fiscale ici, voir ParametersService.getBranding.
+export interface Branding {
+  raisonSociale: string;
+  logoUrl: string | null;
+}
+
 export interface UpdateHotelConfigInput {
   raisonSociale?: string;
   ice?: string;

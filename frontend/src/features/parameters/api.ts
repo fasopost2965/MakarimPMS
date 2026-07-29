@@ -1,5 +1,6 @@
 import { apiRequest } from '@/lib/api-client';
 import type {
+  Branding,
   ChannelRoomTypeMapping,
   CreateChannelRoomTypeMappingInput,
   CreateSeasonRateInput,
@@ -12,6 +13,13 @@ import type {
 
 export function getHotelConfig() {
   return apiRequest<HotelConfig>('/hotel-config');
+}
+
+// @Public() côté backend — appelable avant authentification (écran de
+// connexion) comme après (shell applicatif, évite le trou RBAC des rôles
+// sans parameters:read).
+export function getBranding() {
+  return apiRequest<Branding>('/branding');
 }
 
 export function updateHotelConfig(input: UpdateHotelConfigInput) {

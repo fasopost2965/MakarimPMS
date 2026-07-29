@@ -10,6 +10,12 @@ import type { RoleActif } from '../types';
 interface Props {
   onLoginSuccess: () => void;
   onForgotPassword: () => void;
+  // Design Marine & Or — logo/nom configurables (GET /parameters/branding,
+  // Paramètres), chargés avant authentification (route @Public()). `null`/
+  // absent tant que non chargé ou non configuré : fallback sur le nom en
+  // dur "Hôtel Makarim", jamais de plantage sur un logo absent.
+  logoUrl?: string | null;
+  raisonSociale?: string;
 }
 
 // Landing page dynamique par profil (cahier des charges §5.2.1) : les rôles
@@ -17,7 +23,12 @@ interface Props {
 // accordée (ex. Maintenance/RH tant que ces modules n'existent pas) ne
 // s'affiche pas ici. Cette liste est informative ; l'authentification reste
 // email + mot de passe, le rôle est déterminé côté serveur par le compte.
-export function LoginPage({ onLoginSuccess, onForgotPassword }: Props) {
+export function LoginPage({
+  onLoginSuccess,
+  onForgotPassword,
+  logoUrl,
+  raisonSociale,
+}: Props) {
   const [roles, setRoles] = useState<RoleActif[]>([]);
   const [email, setEmail] = useState('');
   const [motDePasse, setMotDePasse] = useState('');
@@ -56,8 +67,17 @@ export function LoginPage({ onLoginSuccess, onForgotPassword }: Props) {
   return (
     <div className="flex h-screen items-center justify-center p-6">
       <div className="flex w-full max-w-sm flex-col gap-6">
-        <div className="text-center">
-          <h1 className="text-xl font-semibold">Hôtel Makarim</h1>
+        <div className="flex flex-col items-center gap-2 text-center">
+          {logoUrl && (
+            <img
+              src={logoUrl}
+              alt="Logo"
+              className="h-16 w-16 object-contain"
+            />
+          )}
+          <h1 className="text-xl font-semibold">
+            {raisonSociale ?? 'Hôtel Makarim'}
+          </h1>
           <p className="text-muted-foreground text-sm">
             Système de gestion hôtelière
           </p>
