@@ -20,6 +20,7 @@ import { getNightsBetween } from '../reservations/utils/nights';
 import { AddFolioLineDto } from './dto/add-folio-line.dto';
 import { ExcludeFolioTaxesDto } from './dto/exclude-folio-taxes.dto';
 import { CreateCreditNoteDto } from './dto/create-credit-note.dto';
+import { CancelFolioLineDto } from './dto/cancel-folio-line.dto';
 import {
   calculateInvoiceTotal,
   computeTaxLineAmount,
@@ -108,6 +109,63 @@ export class BillingService {
         montant: montantDecimal,
         tauxTva: new Prisma.Decimal(0),
       },
+    });
+  }
+
+  // CH-040 (BR-AUD-002, docs/modules/billing.md §5) — annulation contrôlée
+  // d'une ligne EXTRA : le schéma portait déjà `FolioLine.annulee`/
+  // `motifAnnulation` et toute la lecture en aval (computeSoldeDu exclut
+  // déjà les lignes annulées, generateInvoice filtre déjà .annulee) —
+  // seul manquait ce point d'écriture. Restreint aux lignes EXTRA
+  // (HEBERGEMENT/TAXE_SEJOUR sont générées par le système, jamais annulées
+  // à la main ; PAIEMENT a son propre flux dédié, payments:refund). Mêmes
+  // gardes que addFolioLine ci-dessus (séjour en cours, pas de facture déjà
+  // émise sur ce folio) — sinon une ligne facturée disparaîtrait du solde
+  // sans que la facture immuable (INV-FAC-001) ne le reflète jamais.
+  async cancelFolioLine(
+    lineId: number,
+    dto: CancelFolioLineDto,
+    userId?: number,
+  ) {
+    const ligne = await this.prisma.folioLine.findUnique({
+      where: { id: lineId },
+      include: { folio: { include: { invoices: true } } },
+    });
+    if (!ligne) {
+      throw new NotFoundException(`Ligne de folio ${lineId} introuvable.`);
+    }
+    if (ligne.annulee) {
+      throw new ConflictException(`Ligne de folio ${lineId} déjà annulée.`);
+    }
+    if (ligne.type !== TypeLigneFolio.EXTRA) {
+      throw new ConflictException(
+        `Seules les lignes de type EXTRA peuvent être annulées manuellement (BR-AUD-002) — la ligne ${lineId} est de type ${ligne.type}.`,
+      );
+    }
+    await this.assertFolioWritable(ligne.folioId);
+    if (ligne.folio.invoices.some((i) => i.statut === 'EMISE')) {
+      throw new ConflictException(
+        `Une facture active existe déjà pour le folio ${ligne.folioId} — impossible d'annuler une ligne déjà facturée. Génère un avoir avant d'annuler.`,
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.folioLine.update({
+        where: { id: lineId },
+        data: { annulee: true, motifAnnulation: dto.motif },
+      });
+
+      await this.auditService.writeLog(tx, {
+        userId,
+        action: AuditAction.CANCEL_FOLIO_LINE,
+        targetEntity: AuditEntity.FolioLine,
+        targetId: lineId,
+        oldValue: { annulee: false, montant: ligne.montant.toString() },
+        newValue: { annulee: true, motifAnnulation: dto.motif },
+        motif: dto.motif,
+      });
+
+      return updated;
     });
   }
 

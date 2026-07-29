@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -20,6 +21,7 @@ import { BillingService } from './billing.service';
 import { AddFolioLineDto } from './dto/add-folio-line.dto';
 import { ExcludeFolioTaxesDto } from './dto/exclude-folio-taxes.dto';
 import { CreateCreditNoteDto } from './dto/create-credit-note.dto';
+import { CancelFolioLineDto } from './dto/cancel-folio-line.dto';
 
 @ApiTags('billing')
 @ApiBearerAuth()
@@ -35,6 +37,22 @@ export class BillingController {
     @Body() dto: AddFolioLineDto,
   ) {
     return this.billingService.addFolioLine(folioId, dto);
+  }
+
+  // CH-040 (BR-AUD-002) — annulation contrôlée d'une ligne de folio d'extras
+  // (motif obligatoire), jamais une suppression physique (ADR-005).
+  @RequirePermission('billing', 'write')
+  @ApiOperation({
+    summary:
+      'Annule une ligne de folio de type EXTRA (motif obligatoire) — interdit une fois la facture émise',
+  })
+  @Delete('folios/lignes/:id')
+  cancelFolioLine(
+    @Param('id', ParseIntPipe) lineId: number,
+    @Body() dto: CancelFolioLineDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.billingService.cancelFolioLine(lineId, dto, user.sub);
   }
 
   @RequirePermission('billing', 'write')

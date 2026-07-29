@@ -236,6 +236,218 @@ describe('Billing Module (5.13)', () => {
     });
   });
 
+  // CH-040 (BR-AUD-002, docs/modules/billing.md §5) — annulation contrôlée
+  // d'une ligne de folio d'extras. Vraie base MySQL, pas de mock.
+  describe('Annulation de ligne de folio — CH-040', () => {
+    async function createStayWithFolio(labelSuffix: string) {
+      const ts = Date.now();
+      const roomType = await prisma.roomType.create({
+        data: {
+          nom: `TEST-CH040-TYPE-${labelSuffix}-${ts}`,
+          prixBase: new Prisma.Decimal(500),
+          capacite: 2,
+        },
+      });
+      const room = await prisma.room.create({
+        data: {
+          numero: `TEST-CH040-${labelSuffix}-${ts}`,
+          roomTypeId: roomType.id,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+      const guest = await prisma.guest.create({
+        data: { nom: 'Berrada', prenom: 'Yasmine' },
+      });
+      const stay = await prisma.stay.create({
+        data: {
+          roomId: room.id,
+          guestId: guest.id,
+          dateCheckin: new Date(),
+          dateCheckoutPrevue: new Date(),
+        },
+      });
+      const folio = await prisma.folio.create({
+        data: { stayId: stay.id, libelle: 'Folio principal' },
+      });
+      return { roomType, room, guest, stay, folio };
+    }
+
+    async function cleanup(ctx: {
+      roomType: { id: number };
+      room: { id: number };
+      guest: { id: number };
+      stay: { id: number };
+      folio: { id: number };
+    }) {
+      await prisma.invoice.deleteMany({ where: { folioId: ctx.folio.id } });
+      await prisma.folioLine.deleteMany({ where: { folioId: ctx.folio.id } });
+      await prisma.folio.deleteMany({ where: { stayId: ctx.stay.id } });
+      await prisma.roomNight.deleteMany({ where: { stayId: ctx.stay.id } });
+      await prisma.stay.deleteMany({ where: { id: ctx.stay.id } });
+      await prisma.room.deleteMany({ where: { id: ctx.room.id } });
+      await prisma.roomType.deleteMany({ where: { id: ctx.roomType.id } });
+      await prisma.guest.deleteMany({ where: { id: ctx.guest.id } });
+    }
+
+    it('annule une ligne EXTRA — motif écrit dans FolioLine.motifAnnulation et journalisé dans AuditLog', async () => {
+      const ctx = await createStayWithFolio('OK');
+      const ligne = await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.EXTRA,
+          libelle: 'Room service (erreur de saisie)',
+          montant: new Prisma.Decimal(80),
+        },
+      });
+
+      const res = await client
+        .delete(`/api/folios/lignes/${ligne.id}`)
+        .send({ motif: 'Erreur de saisie — annulée par le Comptable' });
+      expect(res.status).toBe(200);
+      expect(res.body.annulee).toBe(true);
+      expect(res.body.motifAnnulation).toBe(
+        'Erreur de saisie — annulée par le Comptable',
+      );
+
+      const logs = await prisma.auditLog.findMany({
+        where: { targetEntity: 'FolioLine', targetId: ligne.id },
+      });
+      expect(logs).toHaveLength(1);
+      expect(logs[0].action).toBe('CANCEL_FOLIO_LINE');
+
+      await cleanup(ctx);
+    });
+
+    it('un motif < 10 caractères est rejeté (BR-AUD-002, 400)', async () => {
+      const ctx = await createStayWithFolio('MOTIF');
+      const ligne = await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.EXTRA,
+          libelle: 'Extra test',
+          montant: new Prisma.Decimal(20),
+        },
+      });
+
+      const res = await client
+        .delete(`/api/folios/lignes/${ligne.id}`)
+        .send({ motif: 'court' });
+      expect(res.status).toBe(400);
+
+      await cleanup(ctx);
+    });
+
+    it('refuse l’annulation d’une ligne HEBERGEMENT (réservée aux lignes EXTRA)', async () => {
+      const ctx = await createStayWithFolio('HEBERGEMENT');
+      const ligne = await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: 'Hébergement — 1 nuit',
+          montant: new Prisma.Decimal(500),
+        },
+      });
+
+      const res = await client
+        .delete(`/api/folios/lignes/${ligne.id}`)
+        .send({ motif: 'Tentative non autorisée test e2e' });
+      expect(res.status).toBe(409);
+
+      await cleanup(ctx);
+    });
+
+    it('refuse l’annulation d’une ligne déjà annulée (idempotence)', async () => {
+      const ctx = await createStayWithFolio('DEJA');
+      const ligne = await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.EXTRA,
+          libelle: 'Extra déjà annulé',
+          montant: new Prisma.Decimal(20),
+          annulee: true,
+          motifAnnulation: 'Déjà annulée précédemment',
+        },
+      });
+
+      const res = await client
+        .delete(`/api/folios/lignes/${ligne.id}`)
+        .send({ motif: 'Nouvelle tentative test e2e' });
+      expect(res.status).toBe(409);
+
+      await cleanup(ctx);
+    });
+
+    it('un lineId inexistant renvoie 404', async () => {
+      const res = await client
+        .delete('/api/folios/lignes/999999')
+        .send({ motif: 'Test 404 ligne inexistante' });
+      expect(res.status).toBe(404);
+    });
+
+    it('la Réception (billing:read seul) ne peut pas annuler de ligne (403)', async () => {
+      const ctx = await createStayWithFolio('RBAC');
+      const ligne = await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.EXTRA,
+          libelle: 'Extra test RBAC',
+          montant: new Prisma.Decimal(20),
+        },
+      });
+
+      const receptionToken = await loginAs(app.getHttpServer(), 'reception');
+      const receptionClient = authedRequest(
+        app.getHttpServer(),
+        receptionToken,
+      );
+      const res = await receptionClient
+        .delete(`/api/folios/lignes/${ligne.id}`)
+        .send({ motif: 'Tentative non autorisée test e2e' });
+      expect(res.status).toBe(403);
+
+      await cleanup(ctx);
+    });
+
+    // Bug potentiel identifié par analogie avec le bug réel de CH-050
+    // (« Add folio line — garde facture déjà émise » ci-dessus) : sans
+    // cette garde, annuler une ligne EXTRA après émission de la facture
+    // ferait disparaître son montant du solde dû (computeSoldeDu exclut les
+    // lignes annulées) sans que la facture immuable déjà émise (INV-FAC-001)
+    // ne le reflète jamais — écart silencieux entre le solde affiché et le
+    // montant réellement facturé.
+    it('refuse l’annulation d’une ligne une fois une facture active émise sur le folio', async () => {
+      const ctx = await createStayWithFolio('FACTURE');
+      await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: 'Hébergement — 1 nuit',
+          montant: new Prisma.Decimal(500),
+        },
+      });
+      const ligneExtra = await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.EXTRA,
+          libelle: 'Room service',
+          montant: new Prisma.Decimal(50),
+        },
+      });
+
+      const invoiceRes = await client
+        .post(`/api/invoices/generer?folioId=${ctx.folio.id}`)
+        .send({});
+      expect(invoiceRes.status).toBe(201);
+
+      const res = await client
+        .delete(`/api/folios/lignes/${ligneExtra.id}`)
+        .send({ motif: 'Tentative annulation post-facturation e2e' });
+      expect(res.status).toBe(409);
+
+      await cleanup(ctx);
+    });
+  });
+
   // CH-001 (docs/governance/REGISTRE_CHANTIERS.md) — avoir total uniquement
   // (arbitrage confirmé). Vraie base MySQL, pas de mock.
   describe('Avoir total sur une facture (CreditNote) — CH-001', () => {
