@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { App } from 'supertest/types';
+import { ValidationPipe } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/prisma/prisma.service';
 import { authedRequest, loginAs } from './helpers/auth';
@@ -22,7 +22,7 @@ interface StayResponse {
 // non-négociable "un ticket ouvert restant garde la chambre bloquée". Vrais
 // appels HTTP contre une vraie base MySQL, aucun mock.
 describe('Maintenance — tickets et connexion au statut chambre (e2e)', () => {
-  let app: INestApplication<App>;
+  let app: NestExpressApplication;
   let prisma: PrismaService;
   let maintenanceClient: ReturnType<typeof authedRequest>;
   let gouvernanteClient: ReturnType<typeof authedRequest>;
@@ -34,11 +34,16 @@ describe('Maintenance — tickets et connexion au statut chambre (e2e)', () => {
       imports: [AppModule],
     }).compile();
 
-    app = moduleFixture.createNestApplication();
+    app = moduleFixture.createNestApplication<NestExpressApplication>();
     app.setGlobalPrefix('api');
     app.useGlobalPipes(
       new ValidationPipe({ whitelist: true, transform: true }),
     );
+    // CH-055 — même relèvement de la limite du body parser Express que
+    // main.ts (défaut ~100 kb, insuffisant pour un data URI photo jusqu'à
+    // ~7 Mo) : les tests e2e créent leur propre app via TestingModule et ne
+    // passent jamais par bootstrap(), donc ce réglage doit être dupliqué ici.
+    app.useBodyParser('json', { limit: '10mb' });
     await app.init();
 
     prisma = app.get(PrismaService);
@@ -247,7 +252,7 @@ describe('Maintenance — tickets et connexion au statut chambre (e2e)', () => {
       const resBody = res.body as { message?: string | string[] };
       const messageStr = Array.isArray(resBody.message)
         ? resBody.message.join(' ')
-        : resBody.message ?? '';
+        : (resBody.message ?? '');
       expect(messageStr).toContain('data URI');
     });
 
@@ -267,7 +272,7 @@ describe('Maintenance — tickets et connexion au statut chambre (e2e)', () => {
       const resBody = res.body as { message?: string | string[] };
       const messageStr = Array.isArray(resBody.message)
         ? resBody.message.join(' ')
-        : resBody.message ?? '';
+        : (resBody.message ?? '');
       expect(messageStr).toContain('dépasse la taille');
     });
 

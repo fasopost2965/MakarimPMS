@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { CorsOptionsDelegate } from '@nestjs/common/interfaces/external/cors-options.interface';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import type { IncomingMessage } from 'http';
@@ -28,8 +29,18 @@ async function bootstrap() {
   // bufferLogs + useLogger ci-dessous : remplace le logger console par
   // défaut de Nest par nestjs-pino dès le bootstrap (pas seulement après),
   // les logs de démarrage passent aussi par le format structuré.
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: true,
+  });
   app.useLogger(app.get(Logger));
+  // CH-055 — la limite par défaut du body parser Express (~100 kb) rejette
+  // en 413 tout data URI photo maintenance (jusqu'à ~7 Mo, voir
+  // PHOTO_MAX_LENGTH du DTO) avant même que le ValidationPipe ne puisse
+  // renvoyer un 400 explicite. Relevée une seule fois ici plutôt que par
+  // route : aucune autre route de ce projet n'accepte de payload JSON large
+  // (les uploads binaires — document-ocr, photo maintenance côté client —
+  // passent par multipart ou par un data URI borné par ce même plafond).
+  app.useBodyParser('json', { limit: '10mb' });
   // CH-026(a) — en-têtes de sécurité HTTP standards (X-Content-Type-Options,
   // X-Frame-Options, etc.). CSP par défaut désactivée hors production
   // uniquement : Swagger UI (/api/docs, jamais monté en production, voir
