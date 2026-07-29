@@ -51,7 +51,15 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
-      command: 'npm run dev -- --port 5173 --strictPort',
+      // --host 127.0.0.1 explicite : sans lui, Vite se lie sur la
+      // résolution système de "localhost", qui sur les runners GitHub
+      // Actions Ubuntu peut préférer ::1 (IPv6) — le healthcheck ci-dessous
+      // (et baseURL) sonde 127.0.0.1 explicitement, un décalage silencieux
+      // entre les deux fait échouer ce webServer par timeout sans jamais
+      // d'erreur explicite (constaté : "Timed out waiting 60000ms" sur
+      // chaque run CI récent, non reproductible en local où localhost
+      // résout déjà en 127.0.0.1 par défaut).
+      command: 'npm run dev -- --host 127.0.0.1 --port 5173 --strictPort',
       cwd: '.',
       url: 'http://127.0.0.1:5173',
       reuseExistingServer: !process.env.CI,
