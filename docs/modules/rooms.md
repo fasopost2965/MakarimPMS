@@ -93,7 +93,7 @@ Ce module a l'interdiction stricte de dépendre de :
 ---
 
 ## 12. Contraintes métier
-* **Exactitude d'Inventaire :** Le système de l'Hôtel Makarim est configuré pour un inventaire fixe et immuable de **24 chambres**. L'ajout ou la suppression physique d'une chambre en production est une anomalie et doit être interdit en dehors d'une procédure d'audit d'infrastructure lourde de la direction.
+* **Inventaire configurable (corrigé, RD-024) :** l'hôtel démarre avec 24 chambres mais l'inventaire n'est **pas** figé — l'établissement doit pouvoir ajouter des chambres à l'avenir (ex. une nouvelle suite, un étage supplémentaire) sans procédure hors-PMS. `POST /rooms`/`PATCH /rooms/:id` (permission `rooms:write`, Administrateur) couvrent ce besoin. La suppression reste une opération sensible : `DELETE /rooms/:id` est un **soft delete** (`Room.deletedAt`, jamais une suppression physique — ADR-005), motif obligatoire, journalisé en audit, et refusée tant que la chambre est réservée/occupée (`RESERVEE`/`OCCUPEE`/`DEPART_PREVU`) ou porte une nuitée future confirmée.
 * **Garde-fou d'attribution :** L'affectation d'une chambre à un séjour doit s'accompagner d'une validation de compatibilité avec la catégorie d'hébergement facturée (`RoomType`).
 
 ---
@@ -123,7 +123,8 @@ La machine à états physique de la chambre est régie par `StatutChambre` :
 ---
 
 ## 16. Dette technique connue
-* *Aucune dette technique identifiée à ce stade.*
+* **CH-038** : `RoomType` n'a pas de route de suppression (création/modification seulement) — une catégorie peut être référencée par des chambres/tarifs saisonniers/restrictions existants, suppression jugée plus risquée et non demandée dans l'immédiat. À construire si un besoin réel apparaît (avec vérification stricte d'absence de références).
+* **CH-038** : `GET /rooms` et `PATCH /rooms/:id/statut` restent sur `HousekeepingController` (`housekeeping:read`/`housekeeping:write`) plutôt que migrés vers le nouveau `RoomsController` — écart RBAC résiduel assumé (§7), pour ne pas casser le frontend existant sans nécessité. Les nouvelles routes de configuration (`POST`/`PATCH`/`DELETE /rooms`, `GET /rooms/types`, etc.) utilisent bien les clés dédiées `rooms:read`/`rooms:write`.
 
 ---
 

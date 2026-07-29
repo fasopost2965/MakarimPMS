@@ -148,6 +148,11 @@ model Room {
   roomTypeId         Int
   roomType           RoomType            @relation(fields: [roomTypeId], references: [id])
   statut             StatutChambre       @default(LIBRE_PROPRE)
+  // CH-038 (RD-024) — étage physique, indépendant du numéro (qui encode le
+  // type de chambre par convention, ex. 1xx = Single). Nullable : les 24
+  // chambres seedées n'ont pas d'étage connu au moment de l'introduction du
+  // champ, jamais rétro-deviné automatiquement.
+  etage              Int?
   reservations       Reservation[]
   nights             RoomNight[]
   stays              Stay[]
