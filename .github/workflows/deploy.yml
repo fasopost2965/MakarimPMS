@@ -1,0 +1,144 @@
+name: Deploy
+
+# Se déclenche uniquement après une exécution RÉUSSIE du workflow CI sur `main` —
+# jamais directement sur push, pour ne jamais déployer un commit dont ci.yml est
+# rouge (docs/operations/OPERATIONS_RUNBOOK.md §2.2).
+#
+# Secrets GitHub requis (Settings > Environments > production, ou repo secrets) —
+# aucune valeur réelle n'est connue de ce dépôt, à renseigner par l'opérateur ayant
+# l'accès VPS avant la première exécution :
+#   VPS_HOST      : IP ou nom d'hôte du VPS Hostinger
+#   VPS_USER      : utilisateur SSH non-root de déploiement
+#   VPS_SSH_KEY   : clé privée SSH dédiée au déploiement (paire générée pour ce seul usage)
+#   VPS_SSH_PORT  : optionnel, 22 par défaut
+# Prérequis sur le VPS (une fois, hors pipeline) : dépôt cloné dans /opt/makarimpms,
+# docker-compose.yml + docker-compose.prod.yml présents, fichier .env réel (voir
+# OPERATIONS_RUNBOOK.md §1.2) à côté, MySQL/Redis déjà démarrés au moins une fois.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  build-and-push:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      sha_tag: ${{ steps.tag.outputs.sha_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Déterminer le tag d'image
+        id: tag
+        run: echo "sha_tag=sha-${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Connexion à GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build + push image backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/makarimpms-backend:${{ steps.tag.outputs.sha_tag }}
+
+      - name: Build + push image frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/makarimpms-frontend:${{ steps.tag.outputs.sha_tag }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      packages: write
+    steps:
+      - name: Déployer sur le VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT || 22 }}
+          # set -e : tout échec (migration, healthcheck) doit interrompre le script
+          # et déclencher le job de rollback ci-dessous, jamais laisser un déploiement
+          # à moitié appliqué en place.
+          script: |
+            set -e
+            cd /opt/makarimpms
+            export IMAGE_TAG="${{ needs.build-and-push.outputs.sha_tag }}"
+            echo "$IMAGE_TAG" > /tmp/makarimpms-deploy-tag
+
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend frontend
+
+            echo "Application des migrations (backend/Dockerfile ne migre jamais tout seul, voir OPERATIONS_RUNBOOK.md §3)"
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm backend npx prisma migrate deploy
+
+            echo "Bascule des conteneurs applicatifs (MySQL/Redis non touchés)"
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps backend frontend
+
+            echo "Vérification de santé post-déploiement"
+            for i in $(seq 1 10); do
+              if curl -fsS http://127.0.0.1:3000/api/health > /dev/null; then
+                echo "Healthcheck OK (tentative $i)"
+                exit 0
+              fi
+              echo "Healthcheck échoué (tentative $i/10), nouvelle tentative dans 3s..."
+              sleep 3
+            done
+            echo "Healthcheck en échec après 10 tentatives — arrêt pour déclencher le rollback." >&2
+            exit 1
+
+      - name: Connexion à GitHub Container Registry
+        if: success()
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Marquer l'image comme stable (déploiement réussi)
+        if: success()
+        run: |
+          docker buildx imagetools create \
+            -t ghcr.io/${{ github.repository_owner }}/makarimpms-backend:stable \
+            ghcr.io/${{ github.repository_owner }}/makarimpms-backend:${{ needs.build-and-push.outputs.sha_tag }}
+          docker buildx imagetools create \
+            -t ghcr.io/${{ github.repository_owner }}/makarimpms-frontend:stable \
+            ghcr.io/${{ github.repository_owner }}/makarimpms-frontend:${{ needs.build-and-push.outputs.sha_tag }}
+
+  rollback:
+    needs: deploy
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Redéployer la dernière image stable connue
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          script: |
+            set -e
+            cd /opt/makarimpms
+            export IMAGE_TAG=stable
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend frontend
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps backend frontend
+            echo "Rollback vers l'image 'stable' effectué — voir OPERATIONS_RUNBOOK.md §4.1."

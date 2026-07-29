@@ -70,7 +70,7 @@ La Definition of Done (DoD) s'applique uniformément à chaque élément de trav
 | Risque Identifié | Impact | Probabilité | Stratégie d'Atténuation |
 | :--- | :---: | :---: | :--- |
 | **Race Condition d'affectation de chambres** | Critique | Moyenne | Isolation de transaction de niveau `SERIALIZABLE` ou verrous exclusifs SQL de type `SELECT FOR UPDATE` lors de l'écriture dans `RoomNight`. |
-| **Vol de session ou usurpation d'identité** | Haute | Faible | Révocation immédiate des jetons JWT actifs en cas de suspicion par incrémentation forcée de la colonne `tokenVersion` de l'employé en base de données. |
+| **Vol de session ou usurpation d'identité** | Haute | Faible | Désactivation du compte (`User.actif = false`) + révocation de tous ses `RefreshToken` en base — bloque toute nouvelle connexion/rafraîchissement ; l'access token en cours (stateless, `JwtAccessStrategy`) expire naturellement sous 15 minutes au plus (`JWT_ACCESS_EXPIRES_IN`), pas de révocation instantanée d'un jeton déjà émis. Procédure détaillée : `docs/operations/OPERATIONS_RUNBOOK.md` §6.1. |
 | **Falsification des temps de présence RH** | Moyenne | Haute | Rejet total de l'horodatage soumis par les clients web/mobiles. Le serveur backend applique souverainement son heure système de confiance (`new Date()`). |
 | **Rupture ou désynchronisation de stock** | Moyenne | Moyenne | Traitement asynchrone découplé des décomptes de stocks avec journalisation précise de chaque écart de stock d'entretien. |
 

@@ -1,0 +1,45 @@
+## Override de production (CH-046, docs/operations/OPERATIONS_RUNBOOK.md).
+## Usage : `docker compose -f docker-compose.yml -f docker-compose.prod.yml ...`
+## sur le VPS uniquement — jamais utilisé en développement local (docker-compose.yml
+## seul suffit, avec `build:` en local pour itérer sans dépendre d'un registre).
+##
+## Deux choses que ce fichier change par rapport à docker-compose.yml :
+## 1. `image:` remplace `build:` pour backend/frontend — le pipeline de déploiement
+##    (.github/workflows/deploy.yml) pousse déjà l'image construite sur GHCR ; le VPS
+##    la télécharge, il ne la reconstruit jamais localement.
+## 2. Les ports applicatifs/DB/cache ne sont liés qu'à 127.0.0.1 — seul le Nginx hôte
+##    (infra/nginx/pms-hotel-makarim.conf, hors Docker) doit être joignable depuis
+##    l'extérieur ; docker-compose.yml seul (dev local) n'a pas ce besoin de durcissement.
+##
+## `!reset null` (syntaxe Compose Specification) efface explicitement `build:` hérité
+## de docker-compose.yml — sans quoi Docker Compose reconstruirait l'image localement
+## au lieu de tirer celle poussée sur le registre. `!override` sur `ports:` REMPLACE la
+## liste héritée au lieu de la compléter (comportement de fusion par défaut de Compose
+## pour les séquences) — vérifié avec `docker compose config` : sans ce tag, le port non
+## restreint à 127.0.0.1 de docker-compose.yml restait présent EN PLUS de la version
+## restreinte ci-dessous, annulant silencieusement le durcissement recherché. Les deux
+## tags nécessitent Docker Compose >= 2.24 (vérifier avec `docker compose version`
+## avant le premier déploiement sur le VPS ; confirmé fonctionnel ici avec v5.1.1).
+
+services:
+  mysql:
+    ports: !override
+      - '127.0.0.1:3307:3306'
+
+  redis:
+    ports: !override
+      - '127.0.0.1:6380:6379'
+
+  backend:
+    image: ghcr.io/fasopost2965/makarimpms-backend:${IMAGE_TAG:-stable}
+    build: !reset null
+    ports: !override
+      - '127.0.0.1:3000:3000'
+    environment:
+      NODE_ENV: production
+
+  frontend:
+    image: ghcr.io/fasopost2965/makarimpms-frontend:${IMAGE_TAG:-stable}
+    build: !reset null
+    ports: !override
+      - '127.0.0.1:8081:80'

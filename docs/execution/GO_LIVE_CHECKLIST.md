@@ -1,6 +1,8 @@
 # GO_LIVE_CHECKLIST.md — Protocole de Mise en Production & Go-Live de l'Établissement
 
-Ce document répertorie l'ensemble des contrôles critiques d'exploitation technique, de sécurité et d'infrastructure système à valider avant d'activer le Property Management System (PMS) de l'Hôtel Makarim en environnement de production réelle.
+Ce document répertorie l'ensemble des contrôles critiques d'exploitation technique, de sécurité et d'infrastructure système à valider avant d'activer le Property Management System (PMS) de l'Hôtel Makarim en environnement de production réelle — **sur l'infrastructure réelle du projet** : un VPS Hostinger unique, Docker Compose, Nginx (reverse proxy hôte) et Certbot, sans cloud managé (pas de Cloud SQL, pas de Secret Manager, pas de réplication multi-zone). Réécrit par CH-046 (`docs/execution/PLAN_MISE_EN_PRODUCTION_BETA.md`, Phase D) — la version précédente décrivait une architecture GCP qui ne correspond à aucun composant réel du projet (écart signalé dans `docs/operations/CH-026E_DEPLOIEMENT_DOMAINE.md` §6).
+
+Projet mono-développeur (agent IA + validation utilisateur, voir `docs/execution/EXECUTION_MASTER_PLAN.md` §5.1) : les colonnes "Responsable" ci-dessous reflètent des **rôles fonctionnels**, pas des équipes séparées — la même personne (l'utilisateur, propriétaire du produit et de l'infrastructure) peut endosser plusieurs colonnes.
 
 ---
 
@@ -10,20 +12,20 @@ Toutes les étapes doivent être marquées **[OK]** avant le lancement officiel 
 
 | Périmètre de Contrôle | Action / Vérification Physique | Statut | Responsable |
 | :--- | :--- | :---: | :--- |
-| **1. Sauvegarde d'Origine** | Sauvegarde à froid complète de la base de données existante | `[ ]` | Admin BD |
-| **2. Clés & Secrets d'Env** | Configuration de `.env` en production (Aucun secret par défaut) | `[ ]` | DevOps |
-| **3. JWT Security** | Définition d'une clé secrète JWT complexe (`JWT_SECRET` > 32 char) | `[ ]` | DevOps |
-| **4. Cryptographie CRM** | Clé de chiffrement AES-256 (`ENCRYPTION_KEY`) CRM valide | `[ ]` | DevOps |
-| **5. Sécurisation HTTPS** | Certificat SSL/TLS Let's Encrypt actif et valide sur le domaine | `[ ]` | DevOps |
-| **6. Serveur Web Reverse Proxy**| Configuration Nginx optimisée avec en-têtes de sécurité (CORS/HSTS) | `[ ]` | DevOps |
-| **7. Cloud SQL Production** | Instance Cloud SQL dimensionnée avec réplication Multi-Zone active | `[ ]` | DevOps / Admin BD |
-| **8. Journalisation des Logs** | Collecte centralisée des logs applicatifs (Winston / Cloud Logging) | `[ ]` | DevOps |
-| **9. Monitoring de l'Hôte** | Métriques système actives (Mémoire, CPU, taux d'occupation disque) | `[ ]` | DevOps |
-| **10. Alertes Système** | Configuration d'alertes en cas d'erreurs 5xx ou de saturation | `[ ]` | DevOps |
-| **11. Plan de Backups Automatiques**| Activation des sauvegardes quotidiennes avec rétention de 30 jours | `[ ]` | DevOps / Admin BD |
-| **12. Plan de Reprise (Rollback)** | Documentation et validation de la procédure d'interruption Go-Live | `[ ]` | Équipe Ops |
-| **13. Smoke Tests** | Tests de connectivité et de parcours de base en production | `[ ]` | Lead Developer / QA |
-| **14. Approbation Métier** | Signature de conformité des fonctionnalités par le Product Owner | `[ ]` | Product Owner |
+| **1. Sauvegarde d'Origine** | Première sauvegarde `infra/scripts/backup-mysql.sh` exécutée avec succès sur la base de production, restauration testée au moins une fois (`infra/scripts/restore-mysql.sh`) | `[ ]` | Admin BD |
+| **2. Clés & Secrets d'Env** | Fichier `.env` réel à la racine du dépôt sur le VPS (voir `docs/operations/OPERATIONS_RUNBOOK.md` §1.2), aucune valeur par défaut de `backend/.env.example` conservée | `[ ]` | DevOps |
+| **3. JWT Security** | `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` générés (`openssl rand -base64 48`), le bootstrap (`assertStrongSecrets`) refuse déjà de démarrer sinon en `NODE_ENV=production` — vérifier que le démarrage réel réussit avec les vraies valeurs | `[ ]` | DevOps |
+| **4. Chiffrement au repos (Guest)** | `ENCRYPTION_KEY` réelle (32 octets base64, `openssl rand -base64 32`), différente de la valeur de développement — même garde de démarrage que le point 3 | `[ ]` | DevOps |
+| **5. Sécurisation HTTPS** | Certificat SAN Let's Encrypt actif (`certbot --nginx -d pms.<domaine> -d api.<domaine>`), renouvellement automatique vérifié (`certbot renew --dry-run`) | `[ ]` | DevOps |
+| **6. Nginx hôte & en-têtes de sécurité** | `infra/nginx/pms-hotel-makarim.conf` déployé (HSTS, `X-Frame-Options`, `X-Content-Type-Options` déjà inclus dans le gabarit) | `[ ]` | DevOps |
+| **7. Base de données MySQL** | Conteneur `mysql` démarré, healthcheck vert (`docker compose ps`), volume `mysql_data` sur un disque persistant du VPS | `[ ]` | DevOps / Admin BD |
+| **8. Journalisation des Logs** | Rotation Docker configurée (`/etc/docker/daemon.json`, voir `OPERATIONS_RUNBOOK.md` §5.2) — sans quoi les logs JSON saturent le disque unique du VPS avec le temps | `[ ]` | DevOps |
+| **9. Monitoring de l'Hôte** | Surveillance manuelle a minima documentée (`docker stats`, `df -h`) ; outil auto-hébergé (ex. Uptime Kuma) explicitement hors périmètre de ce Go-Live si non installé — ne pas cocher ce point en prétendant un outil géré inexistant | `[ ]` | DevOps |
+| **10. Vérification post-déploiement** | `deploy.yml` a exécuté avec succès son healthcheck (`GET /api/health`) sur un déploiement réel, pas seulement en local | `[ ]` | DevOps |
+| **11. Plan de Sauvegardes Automatiques** | `infra/scripts/backup-mysql.sh` planifié en crontab sur le VPS (`crontab -l` le confirme), rétention locale + destination hors VPS confirmée par l'utilisateur | `[ ]` | DevOps / Admin BD |
+| **12. Plan de Reprise (Rollback)** | Rollback applicatif testé au moins une fois en conditions réelles (déploiement volontairement cassé puis rollback, voir `OPERATIONS_RUNBOOK.md` §4.1) — pas seulement lu, exécuté | `[ ]` | Équipe Ops |
+| **13. Smoke Tests** | Parcours de fumée réel post-Go-Live : connexion, consultation planning, check-in walk-in, encaissement, check-out (voir `docs/execution/RELEASE_CHECKLIST.md`) | `[ ]` | Lead Developer / QA |
+| **14. Approbation Métier** | Confirmation explicite du Product Owner (utilisateur) que les fonctionnalités livrées couvrent le besoin minimal d'exploitation quotidienne | `[ ]` | Product Owner |
 | **15. Accord Direction** | Autorisation officielle de bascule par la direction de l'hôtel | `[ ]` | Direction Générale |
 
 ---
@@ -31,20 +33,20 @@ Toutes les étapes doivent être marquées **[OK]** avant le lancement officiel 
 ## 📝 Guide Technique de Déploiement & Sécurisation
 
 ### 1. Variables d'Environnement & Chiffrement
-*   **Alerte de Sécurité :** Toutes les variables d'environnement de production doivent être injectées via la console d'orchestration ou un gestionnaire de secrets sécurisé (Google Secret Manager).
-*   **Validation :** Exécuter une commande de contrôle de configuration pour confirmer qu'aucun identifiant de pré-production ou de test n'est injecté.
+*   Toutes les variables d'environnement de production vivent dans un unique fichier `.env` à la racine du dépôt sur le VPS (jamais commit, `chmod 600`) — pas de gestionnaire de secrets cloud dans ce projet (voir `docs/operations/OPERATIONS_RUNBOOK.md` §1.2). `docker-compose.yml` les substitue nativement.
+*   **Validation** : après démarrage, `docker compose logs backend` ne doit contenir aucune erreur `assertStrongSecrets`/`assertEncryptionKeyConfigured` — leur présence signifie qu'une valeur par défaut de développement est encore active.
 
-### 2. reverse Proxy Nginx & HTTPS
-*   Nginx doit rediriger de manière stricte le trafic HTTP vers HTTPS (Port 443).
-*   Ajout obligatoire des en-têtes de sécurité pour neutraliser les injections de scripts ou le clickjacking :
-    *   `Strict-Transport-Security: max-age=31536000; includeSubDomains`
-    *   `X-Frame-Options: SAMEORIGIN`
-    *   `X-Content-Type-Options: nosniff`
+### 2. Nginx hôte & HTTPS
+*   Le Nginx **hôte** (hors conteneurs, `infra/nginx/pms-hotel-makarim.conf`) redirige tout le trafic HTTP (port 80) vers HTTPS (port 443).
+*   En-têtes de sécurité déjà inclus dans le gabarit — vérifier leur présence réelle sur les deux `server_name` (`pms.<domaine>`, `api.<domaine>`) après déploiement :
+    ```bash
+    curl -sI https://api.<domaine>/api/health | grep -i strict-transport-security
+    ```
 
-### 3. Monitoring & Planification de Reprise d'Activité (PRA)
-*   **Alertes de Seuils :** Configurer une alerte sur Slack ou par SMS si la consommation CPU dépasse **80%** pendant plus de 5 minutes ou si le taux d'erreurs HTTP 500 dépasse 1% du trafic global.
-*   **Plan de Secours (Rollback) :** En cas d'anomalie critique découverte au cours des 2 premières heures de mise en service :
-    1.  Activation de la page de maintenance statique externe.
-    2.  Restauration de la sauvegarde de la base de données d'origine.
-    3.  Bascule du trafic DNS vers l'ancienne version stable ou plateforme temporaire.
-    4.  Analyse post-mortem dans un environnement isolé.
+### 3. Monitoring & Plan de Reprise d'Activité (PRA)
+*   Pas d'alerting automatisé géré dans ce projet à ce stade (§5.2 du runbook) — surveillance manuelle documentée comme mesure minimale acceptée, pas simulée comme un outil qui n'existe pas.
+*   **Plan de Secours (Rollback)** en cas d'anomalie critique découverte après Go-Live :
+    1.  Basculer Nginx hôte en mode maintenance (bloc commenté en bas de `infra/nginx/pms-hotel-makarim.conf`).
+    2.  Rollback applicatif (`OPERATIONS_RUNBOOK.md` §4.1) ou restauration de la sauvegarde MySQL la plus récente (§4.2/§6.2) selon la nature du problème.
+    3.  Retirer le mode maintenance, valider un parcours de fumée avant réouverture.
+    4.  Analyse post-mortem, consignée dans `docs/governance/REGISTRE_CHANTIERS.md` si elle donne lieu à un correctif de fond.
