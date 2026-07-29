@@ -1,14 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { Folio } from '../types';
 
 vi.mock('../api', () => ({
   listFoliosByStay: vi.fn(),
   generateInvoice: vi.fn(),
+  cancelFolioLine: vi.fn(),
 }));
 
 import { BillingTabContent } from './BillingTabContent';
-import { listFoliosByStay } from '../api';
+import { listFoliosByStay, cancelFolioLine } from '../api';
 
 const ISO = '2026-01-01T00:00:00.000Z';
 
@@ -93,6 +95,82 @@ describe('BillingTabContent — affichage financier (montants, libellés, statut
       expect(
         screen.getByText('Aucun folio pour ce séjour.'),
       ).toBeInTheDocument();
+    });
+  });
+});
+
+// CH-040/CH-053 — le bouton d'annulation doit refléter exactement la garde
+// backend (BR-AUD-002 : seules les lignes EXTRA non déjà annulées) plutôt
+// que d'être visible partout et de dépendre du 409 pour se corriger.
+describe('BillingTabContent — annulation de ligne EXTRA (CH-040/CH-053)', () => {
+  const folioAvecExtra: Folio = {
+    ...folioFixture,
+    lignes: [
+      ...folioFixture.lignes,
+      {
+        id: 4,
+        type: 'EXTRA',
+        libelle: 'Room service',
+        montant: '80.00',
+        tauxTva: '20',
+        annulee: false,
+        createdAt: ISO,
+      },
+      {
+        id: 5,
+        type: 'EXTRA',
+        libelle: 'Extra déjà annulé',
+        montant: '30.00',
+        tauxTva: '20',
+        annulee: true,
+        motifAnnulation: 'Erreur de saisie initiale',
+        createdAt: ISO,
+      },
+    ],
+  };
+
+  it('affiche « Annuler » uniquement sur la ligne EXTRA non annulée, jamais sur HEBERGEMENT/TAXE_SEJOUR/PAIEMENT/EXTRA déjà annulée', async () => {
+    vi.mocked(listFoliosByStay).mockResolvedValue([folioAvecExtra]);
+    render(<BillingTabContent stayId={42} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Séjour principal')).toBeInTheDocument();
+    });
+
+    // Une seule ligne EXTRA porte le bouton (celle non annulée) — jamais
+    // HEBERGEMENT/TAXE_SEJOUR/PAIEMENT, jamais l'EXTRA déjà annulée.
+    expect(screen.getAllByRole('button', { name: 'Annuler' })).toHaveLength(1);
+    expect(
+      screen.getByText('Annulée — Erreur de saisie initiale'),
+    ).toBeInTheDocument();
+  });
+
+  it('appelle cancelFolioLine avec le motif saisi une fois confirmé', async () => {
+    vi.mocked(listFoliosByStay).mockResolvedValue([folioAvecExtra]);
+    vi.mocked(cancelFolioLine).mockResolvedValue({
+      ...folioAvecExtra.lignes[3],
+      annulee: true,
+      motifAnnulation: 'Client insatisfait, geste commercial',
+    });
+    const user = userEvent.setup();
+
+    render(<BillingTabContent stayId={42} />);
+    await waitFor(() => {
+      expect(screen.getByText('Séjour principal')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Annuler' }));
+    const motifInput = screen.getByPlaceholderText(
+      "Motif d'annulation (≥ 10 caractères)",
+    );
+    await user.type(motifInput, 'Client insatisfait, geste commercial');
+    await user.click(screen.getByRole('button', { name: 'Confirmer' }));
+
+    await waitFor(() => {
+      expect(cancelFolioLine).toHaveBeenCalledWith(
+        4,
+        'Client insatisfait, geste commercial',
+      );
     });
   });
 });

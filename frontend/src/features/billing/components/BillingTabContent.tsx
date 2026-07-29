@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { Download, Printer, Send } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { toastManager } from '@/components/ui/toast';
 import {
   listFoliosByStay,
   generateInvoice,
   downloadInvoicePdf,
   requestInvoiceDelivery,
+  cancelFolioLine,
 } from '../api';
 import { RecordPaymentDialog } from '@/features/payments/components/RecordPaymentDialog';
 import { InvoicePrintModal } from './InvoicePrintModal';
@@ -59,6 +61,14 @@ export function BillingTabContent({
     invoice: Invoice;
     folio: Folio;
   } | null>(null);
+  // CH-040/CH-053 — annulation de ligne EXTRA : motif saisi inline, même
+  // convention que SeasonRatesSection (parameters) plutôt qu'un dialog
+  // séparé pour une action ponctuelle et déjà contextualisée dans la ligne.
+  const [cancelingLineId, setCancelingLineId] = useState<number | null>(null);
+  const [cancelMotifs, setCancelMotifs] = useState<Record<number, string>>({});
+  const [cancelSubmittingId, setCancelSubmittingId] = useState<number | null>(
+    null,
+  );
 
   const refetch = useCallback(async () => {
     setLoading(true);
@@ -125,6 +135,26 @@ export function BillingTabContent({
     }
   }
 
+  async function handleCancelLine(lineId: number) {
+    const motif = cancelMotifs[lineId] ?? '';
+    if (motif.length < 10) return;
+    setCancelSubmittingId(lineId);
+    try {
+      await cancelFolioLine(lineId, motif);
+      toastManager.add({
+        title: 'Ligne annulée',
+        description: motif,
+        type: 'success',
+      });
+      setCancelingLineId(null);
+      await refetch();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur d'annulation");
+    } finally {
+      setCancelSubmittingId(null);
+    }
+  }
+
   if (loading) {
     return <p className="text-muted-foreground text-sm">Chargement…</p>;
   }
@@ -181,16 +211,81 @@ export function BillingTabContent({
                 <p className="text-xs text-muted-foreground">Aucune ligne</p>
               ) : (
                 folio.lignes.map((ligne) => (
-                  <div
-                    key={ligne.id}
-                    className="flex items-center justify-between text-sm"
-                  >
-                    <span className="text-muted-foreground">
-                      {TYPE_LIGNE_LABEL[ligne.type] || ligne.type}
-                    </span>
-                    <span className="font-mono">
-                      {Number(ligne.montant).toFixed(2)} MAD
-                    </span>
+                  <div key={ligne.id} className="flex flex-col gap-1 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <span
+                        className={
+                          ligne.annulee
+                            ? 'text-muted-foreground line-through'
+                            : 'text-muted-foreground'
+                        }
+                      >
+                        {TYPE_LIGNE_LABEL[ligne.type] || ligne.type}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={
+                            ligne.annulee
+                              ? 'font-mono text-muted-foreground line-through'
+                              : 'font-mono'
+                          }
+                        >
+                          {Number(ligne.montant).toFixed(2)} MAD
+                        </span>
+                        {/* CH-040/CH-053 (BR-AUD-002) — annulation réservée
+                            aux lignes EXTRA non déjà annulées, cohérent
+                            avec la garde backend. */}
+                        {ligne.type === 'EXTRA' && !ligne.annulee && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-2 text-xs"
+                            onClick={() =>
+                              setCancelingLineId(
+                                cancelingLineId === ligne.id ? null : ligne.id,
+                              )
+                            }
+                          >
+                            Annuler
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    {ligne.annulee && ligne.motifAnnulation && (
+                      <p className="text-muted-foreground text-xs italic">
+                        Annulée — {ligne.motifAnnulation}
+                      </p>
+                    )}
+                    {cancelingLineId === ligne.id && (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={cancelMotifs[ligne.id] ?? ''}
+                          onChange={(e) =>
+                            setCancelMotifs({
+                              ...cancelMotifs,
+                              [ligne.id]: e.target.value,
+                            })
+                          }
+                          placeholder="Motif d'annulation (≥ 10 caractères)"
+                          className="h-7 flex-1 text-xs"
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          disabled={
+                            cancelSubmittingId === ligne.id ||
+                            (cancelMotifs[ligne.id] ?? '').length < 10
+                          }
+                          onClick={() => handleCancelLine(ligne.id)}
+                        >
+                          {cancelSubmittingId === ligne.id
+                            ? 'Annulation…'
+                            : 'Confirmer'}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 ))
               )}

@@ -11,6 +11,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Table,
   TableBody,
   TableCell,
@@ -20,7 +27,14 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsList, TabsPanel, TabsTrigger } from '@/components/ui/tabs';
 import { toastManager } from '@/components/ui/toast';
-import { listMovements, listStockItems, replenishStock } from '../api';
+import { listRooms } from '../../reservations/api';
+import type { Room } from '../../reservations/types';
+import {
+  listMovements,
+  listStockItems,
+  manualStockOut,
+  replenishStock,
+} from '../api';
 import type { StockItem, StockMovement } from '../types';
 
 type StockView = 'articles' | 'mouvements';
@@ -37,18 +51,22 @@ export function StockPage() {
   const [replenishingItem, setReplenishingItem] = useState<StockItem | null>(
     null,
   );
+  const [sortingOutItem, setSortingOutItem] = useState<StockItem | null>(null);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [view, setView] = useState<StockView>('articles');
 
   const refetch = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
-      const [itemsData, movementsData] = await Promise.all([
+      const [itemsData, movementsData, roomsData] = await Promise.all([
         listStockItems(),
         listMovements(),
+        listRooms(),
       ]);
       setItems(itemsData);
       setMovements(movementsData);
+      setRooms(roomsData);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Erreur de chargement');
     } finally {
@@ -95,14 +113,22 @@ export function StockPage() {
                     {item.code} — {item.quantiteDisponible} {item.uniteMesure}{' '}
                     (seuil {item.seuilAlerte})
                   </p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-fit"
-                    onClick={() => setReplenishingItem(item)}
-                  >
-                    Réassort
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setReplenishingItem(item)}
+                    >
+                      Réassort
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSortingOutItem(item)}
+                    >
+                      Sortie
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -120,6 +146,7 @@ export function StockPage() {
                       <TableHead>Mouvement</TableHead>
                       <TableHead className="text-right">Quantité</TableHead>
                       <TableHead>Article</TableHead>
+                      <TableHead>Chambre</TableHead>
                       <TableHead>Motif</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -145,7 +172,10 @@ export function StockPage() {
                           {m.quantite}
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          Article #{m.stockItemId}
+                          {m.stockItem?.libelle ?? `Article #${m.stockItemId}`}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {m.room ? `Chambre ${m.room.numero}` : '—'}
                         </TableCell>
                         <TableCell>{m.motif}</TableCell>
                       </TableRow>
@@ -169,6 +199,25 @@ export function StockPage() {
               onClose={() => setReplenishingItem(null)}
               onDone={async () => {
                 setReplenishingItem(null);
+                await refetch();
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={sortingOutItem !== null}
+        onOpenChange={(next) => !next && setSortingOutItem(null)}
+      >
+        <DialogContent>
+          {sortingOutItem && (
+            <ManualStockOutForm
+              item={sortingOutItem}
+              rooms={rooms}
+              onClose={() => setSortingOutItem(null)}
+              onDone={async () => {
+                setSortingOutItem(null);
                 await refetch();
               }}
             />
@@ -256,6 +305,130 @@ function ReplenishForm({ item, onClose, onDone }: ReplenishFormProps) {
             value={motif}
             onChange={(e) => setMotif(e.target.value)}
             placeholder="Ex. Livraison hebdomadaire fournisseur habituel"
+            required
+          />
+        </div>
+
+        {error && <p className="text-destructive text-sm">{error}</p>}
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Annuler
+          </Button>
+          <Button type="submit" disabled={submitting || !canSubmit}>
+            {submitting ? 'Enregistrement…' : 'Enregistrer'}
+          </Button>
+        </DialogFooter>
+      </form>
+    </>
+  );
+}
+
+interface ManualStockOutFormProps {
+  item: StockItem;
+  rooms: Room[];
+  onClose: () => void;
+  onDone: () => void;
+}
+
+// CH-039/CH-052 (docs/execution/PLAN_FRONTEND_PARITE_ADMIN.md §2) — sortie
+// manuelle : réfection de chambre (roomId choisi), consommation minibar, ou
+// constat de perte/casse/péremption (roomId laissé sur « Aucune »). Motif
+// toujours obligatoire (BR-STK-003), même rigueur que ReplenishForm.
+function ManualStockOutForm({
+  item,
+  rooms,
+  onClose,
+  onDone,
+}: ManualStockOutFormProps) {
+  const [quantite, setQuantite] = useState('');
+  const [roomId, setRoomId] = useState<string>('NONE');
+  const [motif, setMotif] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const canSubmit = quantite && Number(quantite) > 0 && motif.length >= 10;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await manualStockOut({
+        stockItemId: item.id,
+        quantite: Number(quantite),
+        motif,
+        roomId: roomId === 'NONE' ? undefined : Number(roomId),
+      });
+      toastManager.add({
+        title: 'Sortie enregistrée',
+        description: `−${quantite} ${item.uniteMesure} — ${item.libelle}`,
+        type: 'success',
+      });
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>Sortie manuelle — {item.libelle}</DialogTitle>
+      </DialogHeader>
+      <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="sortieQuantite">
+            Quantité sortie ({item.uniteMesure})
+          </Label>
+          <Input
+            id="sortieQuantite"
+            type="number"
+            min="1"
+            max={item.quantiteDisponible}
+            value={quantite}
+            onChange={(e) => setQuantite(e.target.value)}
+            required
+          />
+          <span className="text-muted-foreground text-xs">
+            Disponible : {item.quantiteDisponible} {item.uniteMesure}
+          </span>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="sortieChambre">
+            Chambre concernée (optionnel — laisser vide pour une perte/casse)
+          </Label>
+          <Select value={roomId} onValueChange={(v) => v && setRoomId(v)}>
+            <SelectTrigger id="sortieChambre">
+              <SelectValue placeholder="Aucune (perte/casse/péremption)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="NONE">
+                Aucune (perte/casse/péremption)
+              </SelectItem>
+              {rooms.map((room) => (
+                <SelectItem key={room.id} value={String(room.id)}>
+                  Chambre {room.numero}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="sortieMotif">Motif (≥ 10 caractères)</Label>
+          <Input
+            id="sortieMotif"
+            value={motif}
+            onChange={(e) => setMotif(e.target.value)}
+            placeholder="Ex. Réfection chambre — linge envoyé en buanderie"
             required
           />
         </div>

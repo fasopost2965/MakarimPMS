@@ -1,5 +1,10 @@
 import { apiRequest } from '@/lib/api-client';
-import type { ReplenishStockInput, StockItem, StockMovement } from './types';
+import type {
+  ManualStockOutInput,
+  ReplenishStockInput,
+  StockItem,
+  StockMovement,
+} from './types';
 
 export function listStockItems() {
   return apiRequest<StockItem[]>('/stocks');
@@ -7,6 +12,13 @@ export function listStockItems() {
 
 export function replenishStock(input: ReplenishStockInput) {
   return apiRequest<StockItem>('/stocks/replenish', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function manualStockOut(input: ManualStockOutInput) {
+  return apiRequest<StockItem>('/stocks/sortie', {
     method: 'POST',
     body: JSON.stringify(input),
   });

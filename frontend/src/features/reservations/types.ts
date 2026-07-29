@@ -15,12 +15,22 @@ export interface RoomType {
   nom: string;
   prixBase: string;
   capacite: number;
+  // CH-038 — champs de formule d'hébergement (Priorité 3), optionnels côté
+  // type pour ne pas casser les usages existants qui ne les lisent jamais
+  // (WalkinCheckinDialog, ParametersPage saisons…) mais réellement présents
+  // dans toute réponse backend (CreateRoomTypeDto/UpdateRoomTypeDto).
+  prixPetitDejeuner?: string;
+  prixDemiPension?: string;
+  prixPensionComplete?: string;
 }
 
 export interface Room {
   id: number;
   numero: string;
   roomTypeId: number;
+  // CH-038 (RD-024) — étage physique, nullable (chambres seedées avant
+  // l'introduction du champ).
+  etage?: number | null;
   statut: StatutChambre;
   roomType: RoomType;
 }

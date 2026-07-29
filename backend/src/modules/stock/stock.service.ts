@@ -32,10 +32,15 @@ export class StockService {
     }));
   }
 
+  // CH-052 (docs/execution/PLAN_FRONTEND_PARITE_ADMIN.md §2) — inclut
+  // l'article/la chambre pour affichage lisible côté frontend (libellé,
+  // numéro de chambre) plutôt que de forcer un second aller-retour réseau
+  // par mouvement ; lecture seule, aucun changement de contrat d'écriture.
   findMovements(stockItemId?: number) {
     return this.prisma.stockMovement.findMany({
       where: { stockItemId },
       orderBy: { createdAt: 'desc' },
+      include: { stockItem: true, room: true },
     });
   }
 

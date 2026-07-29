@@ -40,8 +40,10 @@ import type {
   TaxRateConfig,
 } from '../types';
 import type { RoomType } from '../../reservations/types';
+import { RoomsSection } from '../../rooms/components/RoomsSection';
 
-type Section = 'identite' | 'taxes' | 'saisons' | 'channel-manager';
+type Section =
+  'identite' | 'taxes' | 'saisons' | 'chambres' | 'channel-manager';
 
 const CANAL_OTA_LABEL: Record<CanalOTA, string> = {
   BOOKING_COM: 'Booking.com',
@@ -87,6 +89,13 @@ export function ParametersPage() {
           Grille saisonnière
         </Button>
         <Button
+          variant={section === 'chambres' ? 'default' : 'ghost'}
+          size="sm"
+          onClick={() => setSection('chambres')}
+        >
+          Chambres & types
+        </Button>
+        <Button
           variant={section === 'channel-manager' ? 'default' : 'ghost'}
           size="sm"
           onClick={() => setSection('channel-manager')}
@@ -98,6 +107,7 @@ export function ParametersPage() {
       {section === 'identite' && <HotelIdentitySection />}
       {section === 'taxes' && <TaxRatesSection />}
       {section === 'saisons' && <SeasonRatesSection />}
+      {section === 'chambres' && <RoomsSection />}
       {section === 'channel-manager' && <ChannelManagerSection />}
     </div>
   );

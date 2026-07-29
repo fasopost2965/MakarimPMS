@@ -21,6 +21,10 @@ export interface StockMovement {
   userId: number | null;
   roomId: number | null;
   createdAt: string;
+  // CH-052 — findMovements() inclut désormais l'article/la chambre pour un
+  // affichage lisible (libellé, numéro), voir stock.service.ts.
+  stockItem?: { libelle: string; code: string };
+  room?: { numero: string } | null;
 }
 
 export interface ReplenishStockInput {
@@ -28,4 +32,13 @@ export interface ReplenishStockInput {
   quantite: number;
   motif: string;
   referenceFournisseur?: string;
+}
+
+// CH-039/CH-052 — sortie manuelle (réfection de chambre, consommation
+// minibar, ou constat de perte/casse/péremption si roomId omis).
+export interface ManualStockOutInput {
+  stockItemId: number;
+  quantite: number;
+  motif: string;
+  roomId?: number;
 }

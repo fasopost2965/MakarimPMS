@@ -36,6 +36,17 @@ export function addFolioLine(folioId: number, input: AddFolioLineInput) {
   });
 }
 
+// CH-040/CH-053 — annulation contrôlée d'une ligne EXTRA (motif obligatoire,
+// BR-AUD-002). Le backend rejette explicitement les lignes HEBERGEMENT/
+// TAXE_SEJOUR/PAIEMENT (409) — le bouton n'est de toute façon affiché que
+// pour les lignes EXTRA non annulées côté UI.
+export function cancelFolioLine(lineId: number, motif: string) {
+  return apiRequest<FolioLine>(`/folios/lignes/${lineId}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ motif }),
+  });
+}
+
 export function downloadInvoicePdf(invoiceId: number) {
   return apiRequestBlob(
     `/invoices/${invoiceId}/pdf`,
