@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getDashboardResume } from '../api';
 import type { DashboardResume } from '../types';
+import { RoomsToCleanWidget } from '../components/RoomsToCleanWidget';
+import { OpenMaintenanceWidget } from '../components/OpenMaintenanceWidget';
 
-export type DashboardTarget = 'reservations' | 'checkin' | 'housekeeping';
+export type DashboardTarget =
+  'reservations' | 'checkin' | 'housekeeping' | 'maintenance';
 
 interface Props {
   onNavigate: (target: DashboardTarget) => void;
@@ -111,6 +114,11 @@ export function DashboardPage({ onNavigate }: Props) {
           />
         </div>
       )}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <RoomsToCleanWidget onNavigate={() => onNavigate('housekeeping')} />
+        <OpenMaintenanceWidget onNavigate={() => onNavigate('maintenance')} />
+      </div>
     </div>
   );
 }
