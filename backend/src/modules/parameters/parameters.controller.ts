@@ -10,6 +10,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Public } from '../../common/decorators/public.decorator';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
@@ -29,6 +30,19 @@ import { DeleteRateRestrictionDto } from './dto/delete-rate-restriction.dto';
 @Controller()
 export class ParametersController {
   constructor(private readonly parametersService: ParametersService) {}
+
+  // Design Marine & Or — identité visuelle publique (nom + logo), consommée
+  // par l'écran de connexion (pré-authentification) et par le shell
+  // applicatif authentifié. @Public() bypass JwtAuthGuard ; aucune donnée
+  // fiscale/adresse ici (voir ParametersService.getBranding).
+  @Public()
+  @ApiOperation({
+    summary: "Identité visuelle publique de l'hôtel (nom + logo)",
+  })
+  @Get('branding')
+  getBranding() {
+    return this.parametersService.getBranding();
+  }
 
   @RequirePermission('parameters', 'read')
   @ApiOperation({

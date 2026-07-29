@@ -102,6 +102,13 @@ export function InvoicePrintModal({
 
         <div id="facture-imprimable" className="flex flex-col gap-6 p-2">
           <div className="flex flex-col gap-1">
+            {hotelConfig?.logoUrl && (
+              <img
+                src={hotelConfig.logoUrl}
+                alt="Logo"
+                className="h-12 w-12 object-contain"
+              />
+            )}
             <h2 className="text-lg font-bold">
               {hotelConfig?.raisonSociale || 'Hôtel'}
             </h2>

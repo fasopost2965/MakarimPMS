@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { FileUpload } from '@/components/ui/file-upload';
 import { DateRangeField } from '@/components/ui/date-picker';
 import {
   Dialog,
@@ -50,6 +51,12 @@ const CANAL_OTA_LABEL: Record<CanalOTA, string> = {
   EXPEDIA: 'Expedia',
   AIRBNB: 'Airbnb',
 };
+
+// Design Marine & Or — logo de l'hôtel, même convention CH-055 (data URI
+// base64, conversion File → data URI côté client, jamais de persistance
+// disque). Plafond aligné sur LOGO_MAX_LENGTH côté backend (~2,2 Mo source).
+const LOGO_MAX_SIZE_MB = 2;
+const LOGO_MAX_SIZE_BYTES = LOGO_MAX_SIZE_MB * 1024 * 1024;
 
 const TAX_TYPE_LABEL: Record<string, string> = {
   TVA_HEBERGEMENT: 'TVA hébergement',
@@ -121,6 +128,8 @@ function HotelIdentitySection() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoError, setLogoError] = useState<string | null>(null);
 
   useEffect(() => {
     getHotelConfig()
@@ -143,7 +152,41 @@ function HotelIdentitySection() {
     if (!config || motif.length < 10) return;
     setSaving(true);
     setSaveError(null);
+    setLogoError(null);
     setSaved(false);
+
+    let logoUrl = config.logoUrl ?? undefined;
+    if (logoFile) {
+      if (logoFile.size > LOGO_MAX_SIZE_BYTES) {
+        setLogoError(
+          `Le logo dépasse la taille maximale (${LOGO_MAX_SIZE_MB} Mo)`,
+        );
+        setSaving(false);
+        return;
+      }
+      try {
+        logoUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result;
+            if (typeof result === 'string') {
+              resolve(result);
+            } else {
+              reject(new Error('Erreur lors de la lecture du fichier'));
+            }
+          };
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(logoFile);
+        });
+      } catch (err) {
+        setLogoError(
+          err instanceof Error ? err.message : 'Erreur lors du chargement',
+        );
+        setSaving(false);
+        return;
+      }
+    }
+
     try {
       const updated = await updateHotelConfig({
         raisonSociale: config.raisonSociale,
@@ -151,7 +194,7 @@ function HotelIdentitySection() {
         identifiantFiscal: config.identifiantFiscal,
         rc: config.rc,
         adresse: config.adresse,
-        logoUrl: config.logoUrl ?? undefined,
+        logoUrl,
         categorieEtoiles: config.categorieEtoiles,
         devise: config.devise,
         formatDate: config.formatDate,
@@ -159,6 +202,7 @@ function HotelIdentitySection() {
       });
       setConfig(updated);
       setMotif('');
+      setLogoFile(null);
       setSaved(true);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Erreur');
@@ -217,6 +261,24 @@ function HotelIdentitySection() {
           onChange={(e) => setConfig({ ...config, rc: e.target.value })}
           required
         />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="logo">Logo de l'hôtel</Label>
+        {config.logoUrl && !logoFile && (
+          <img
+            src={config.logoUrl}
+            alt="Logo actuel"
+            className="h-16 w-16 rounded object-contain"
+          />
+        )}
+        <FileUpload
+          id="logo"
+          accept="image/jpeg,image/png,image/webp"
+          value={logoFile}
+          onChange={setLogoFile}
+          hint={`Max ${LOGO_MAX_SIZE_MB} Mo (JPEG, PNG, WebP) — utilisé dans la sidebar, l'écran de connexion et les factures PDF`}
+        />
+        {logoError && <p className="text-destructive text-sm">{logoError}</p>}
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="categorieEtoiles">Catégorie (étoiles)</Label>

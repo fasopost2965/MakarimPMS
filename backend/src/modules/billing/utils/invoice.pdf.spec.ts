@@ -61,6 +61,53 @@ describe('buildInvoicePdf', () => {
     expect(pdf.subarray(0, 5).toString('ascii')).toBe('%PDF-');
   });
 
+  // Design Marine & Or — logo optionnel (HotelConfig.logoUrl), décodé
+  // depuis un data URI base64 et embarqué en en-tête (voir invoice.pdf.ts).
+  it('génère un PDF valide plus volumineux quand un logo est fourni', async () => {
+    const smallPngDataUri =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const pdfSansLogo = await buildInvoicePdf(sampleData());
+    const pdfAvecLogo = await buildInvoicePdf(
+      sampleData({
+        hotel: { ...sampleData().hotel, logoUrl: smallPngDataUri },
+      }),
+    );
+    expect(pdfAvecLogo.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+    expect(pdfAvecLogo.length).toBeGreaterThan(pdfSansLogo.length);
+  });
+
+  it("n'échoue pas si logoUrl n'a pas le préfixe data URI attendu (ignoré silencieusement)", async () => {
+    const pdf = await buildInvoicePdf(
+      sampleData({
+        hotel: { ...sampleData().hotel, logoUrl: 'not-a-valid-data-uri' },
+      }),
+    );
+    expect(pdf.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+  });
+
+  // Preuve de rigueur sabotage/restore : un logoUrl avec le bon préfixe
+  // data URI mais un contenu base64 qui n'est pas une image décodable
+  // (corruption improbable en base, la validation DTO en amont devrait
+  // déjà l'empêcher) ne doit jamais faire échouer la génération de la
+  // facture — dégradation silencieuse vers l'en-tête texte seul (bloc
+  // try/catch de invoice.pdf.ts). Sabotage : retrait temporaire de ce
+  // try/catch → ce test échoue bien avec une exception pdfkit ("Unsupported
+  // image format") au lieu d'un PDF valide, confirmant que le test est
+  // discriminant (le préfixe régulier passe bien le garde-fou regex, donc
+  // c'est réellement le try/catch autour de doc.image() qui est exercé,
+  // pas le filtre de préfixe testé ci-dessus). Restauré, revérifié vert.
+  it("n'échoue pas si logoUrl a le bon préfixe mais un contenu base64 non décodable en image", async () => {
+    const pdf = await buildInvoicePdf(
+      sampleData({
+        hotel: {
+          ...sampleData().hotel,
+          logoUrl: 'data:image/png;base64,dGhpcyBpcyBub3QgYSByZWFsIHBuZw==',
+        },
+      }),
+    );
+    expect(pdf.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+  });
+
   it('produit un rendu différent quand le montant total diffère (pas une valeur figée)', async () => {
     const pdfA = await buildInvoicePdf(
       sampleData({

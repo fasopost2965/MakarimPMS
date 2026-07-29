@@ -408,6 +408,18 @@ export class StayService {
   // la permission requise, donc pas exprimable par @RequirePermission,
   // même pattern que GuestsService.updateCategorie/guests:blacklist).
   // Solde négatif ou nul : jamais bloqué, comportement inchangé.
+  //
+  // F11 (CH-056, RD-025/RD-F11-03) — extension de BR-SEJ-004 : une note
+  // restaurant non annulée bloque aussi le check-out, indépendamment du
+  // solde global. Vérification distincte (pas seulement absorbée par
+  // computeSoldeDu, qui ne peut pas dire si un paiement couvre
+  // spécifiquement une charge restaurant plutôt qu'une autre — aucune
+  // allocation de paiement par type de ligne dans ce modèle) : tant qu'une
+  // FolioLine RESTAURANT n'est pas explicitement soldée (annulée par
+  // RestaurantService.updateCharge après vérification), elle bloque,
+  // même si le solde total est nul ou négatif. Même échappatoire
+  // (force + motif + checkin:force-checkout), mais AuditAction distinct
+  // (FORCE_CHECKOUT_RESTAURANT) pour ne pas confondre les deux causes.
   async checkout(
     id: number,
     dto?: ForceCheckoutDto,
@@ -423,6 +435,11 @@ export class StayService {
 
     const soldeDu = computeSoldeDu(stay.folios);
     const soldePositif = soldeDu.gt(0);
+    const restaurantNonAcquittee = stay.folios.some((folio) =>
+      folio.lignes.some(
+        (ligne) => ligne.type === TypeLigneFolio.RESTAURANT && !ligne.annulee,
+      ),
+    );
     const force = dto?.force === true;
 
     if (soldePositif && !force) {
@@ -430,9 +447,14 @@ export class StayService {
         `Solde impayé (${soldeDu.toFixed(2)} MAD) : le check-out est bloqué tant que le solde n'est pas ramené à 0 (paiement ou avoir). Un check-out forcé est possible (force: true, motif ≥ 10 caractères), réservé à la permission checkin:force-checkout.`,
       );
     }
+    if (restaurantNonAcquittee && !force) {
+      throw new ConflictException(
+        `Une ou plusieurs notes restaurant n'ont pas été soldées pour ce séjour : le check-out est bloqué tant qu'elles ne sont pas annulées (correction) ou explicitement réglées. Un check-out forcé est possible (force: true, motif ≥ 10 caractères), réservé à la permission checkin:force-checkout.`,
+      );
+    }
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      if (soldePositif && force) {
+      if ((soldePositif || restaurantNonAcquittee) && force) {
         const grant = await tx.permission.findFirst({
           where: {
             module: 'checkin',
@@ -446,15 +468,28 @@ export class StayService {
           );
         }
 
-        await this.auditService.writeLog(tx, {
-          userId,
-          action: AuditAction.FORCE_CHECKOUT,
-          targetEntity: AuditEntity.Stay,
-          targetId: id,
-          oldValue: { soldeDu: soldeDu.toFixed(2) },
-          newValue: { statut: StatutSejour.CHECKOUT },
-          motif: dto.motif!,
-        });
+        if (soldePositif) {
+          await this.auditService.writeLog(tx, {
+            userId,
+            action: AuditAction.FORCE_CHECKOUT,
+            targetEntity: AuditEntity.Stay,
+            targetId: id,
+            oldValue: { soldeDu: soldeDu.toFixed(2) },
+            newValue: { statut: StatutSejour.CHECKOUT },
+            motif: dto.motif!,
+          });
+        }
+        if (restaurantNonAcquittee) {
+          await this.auditService.writeLog(tx, {
+            userId,
+            action: AuditAction.FORCE_CHECKOUT_RESTAURANT,
+            targetEntity: AuditEntity.Stay,
+            targetId: id,
+            oldValue: { restaurantNonAcquittee: true },
+            newValue: { statut: StatutSejour.CHECKOUT },
+            motif: dto.motif!,
+          });
+        }
       }
 
       await tx.roomNight.deleteMany({ where: { stayId: id } });

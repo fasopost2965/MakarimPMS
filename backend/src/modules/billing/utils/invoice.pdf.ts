@@ -17,6 +17,10 @@ export interface InvoicePdfData {
     identifiantFiscal: string;
     rc: string;
     categorieEtoiles: number;
+    // Design Marine & Or — data URI base64 (HotelConfig.logoUrl), même
+    // convention que MaintenanceTicket.photoUrl (CH-055). Décodé en Buffer
+    // ici même, jamais persisté sur disque.
+    logoUrl?: string | null;
   };
   guest: {
     nom: string;
@@ -61,6 +65,29 @@ export function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
     doc.on('error', reject);
 
     const { hotel, guest, stay, invoice, lignes } = data;
+
+    // Logo — décodé depuis le data URI (jamais un chemin disque, jamais
+    // une URL externe). Une erreur de décodage (fichier corrompu en base,
+    // improbable vu la validation DTO en amont) ne doit jamais empêcher la
+    // génération de la facture — dégradation silencieuse vers l'en-tête
+    // texte seul.
+    if (hotel.logoUrl) {
+      const match = /^data:image\/(?:jpeg|png|webp);base64,(.+)$/.exec(
+        hotel.logoUrl,
+      );
+      if (match) {
+        try {
+          const logoBuffer = Buffer.from(match[1], 'base64');
+          const logoWidth = 60;
+          doc.image(logoBuffer, (doc.page.width - logoWidth) / 2, doc.y, {
+            width: logoWidth,
+          });
+          doc.moveDown(4);
+        } catch {
+          // Dégradation silencieuse — voir commentaire ci-dessus.
+        }
+      }
+    }
 
     // Pas de glyphe ★ (voir police-record.pdf.ts — Helvetica/WinAnsiEncoding
     // ne le supporte pas, remplacé silencieusement par un caractère erroné).

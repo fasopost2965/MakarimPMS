@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { App } from 'supertest/types';
+import { ValidationPipe } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/prisma/prisma.service';
 import { authedRequest, loginAs } from './helpers/auth';
@@ -22,7 +22,7 @@ interface StayResponse {
 // non-négociable "un ticket ouvert restant garde la chambre bloquée". Vrais
 // appels HTTP contre une vraie base MySQL, aucun mock.
 describe('Maintenance — tickets et connexion au statut chambre (e2e)', () => {
-  let app: INestApplication<App>;
+  let app: NestExpressApplication;
   let prisma: PrismaService;
   let maintenanceClient: ReturnType<typeof authedRequest>;
   let gouvernanteClient: ReturnType<typeof authedRequest>;
@@ -34,11 +34,16 @@ describe('Maintenance — tickets et connexion au statut chambre (e2e)', () => {
       imports: [AppModule],
     }).compile();
 
-    app = moduleFixture.createNestApplication();
+    app = moduleFixture.createNestApplication<NestExpressApplication>();
     app.setGlobalPrefix('api');
     app.useGlobalPipes(
       new ValidationPipe({ whitelist: true, transform: true }),
     );
+    // CH-055 — même relèvement de la limite du body parser Express que
+    // main.ts (défaut ~100 kb, insuffisant pour un data URI photo jusqu'à
+    // ~7 Mo) : les tests e2e créent leur propre app via TestingModule et ne
+    // passent jamais par bootstrap(), donc ce réglage doit être dupliqué ici.
+    app.useBodyParser('json', { limit: '10mb' });
     await app.init();
 
     prisma = app.get(PrismaService);
@@ -232,5 +237,110 @@ describe('Maintenance — tickets et connexion au statut chambre (e2e)', () => {
       .post('/api/maintenance-tickets')
       .send({ typePanne: 'Test permission', priorite: 'BASSE' });
     expect(create.status).toBe(403);
+  });
+
+  describe('CH-055 — Photo upload validation (data URI base64)', () => {
+    it("rejette un photoUrl qui n'est pas un data URI image valide (400)", async () => {
+      const res = await maintenanceClient
+        .post('/api/maintenance-tickets')
+        .send({
+          typePanne: 'Test photo invalide',
+          priorite: 'MOYENNE',
+          photoUrl: 'https://example.com/photo.jpg',
+        });
+      expect(res.status).toBe(400);
+      const resBody = res.body as { message?: string | string[] };
+      const messageStr = Array.isArray(resBody.message)
+        ? resBody.message.join(' ')
+        : (resBody.message ?? '');
+      expect(messageStr).toContain('data URI');
+    });
+
+    it('rejette un photoUrl valide en format mais trop volumineux (>7Mo) (400)', async () => {
+      // Construire un data URI artificiel de ~7.5 Mo (dépassera le plafond 7 Mo)
+      const base64Data = 'A'.repeat(7_500_000);
+      const oversizedDataUri = `data:image/jpeg;base64,${base64Data}`;
+
+      const res = await maintenanceClient
+        .post('/api/maintenance-tickets')
+        .send({
+          typePanne: 'Test photo trop grande',
+          priorite: 'MOYENNE',
+          photoUrl: oversizedDataUri,
+        });
+      expect(res.status).toBe(400);
+      const resBody = res.body as { message?: string | string[] };
+      const messageStr = Array.isArray(resBody.message)
+        ? resBody.message.join(' ')
+        : (resBody.message ?? '');
+      expect(messageStr).toContain('dépasse la taille');
+    });
+
+    it('accepte un data URI image valide (JPEG) de taille raisonnable (201)', async () => {
+      // Petit data URI image JPEG valide (~500 bytes)
+      const validDataUri =
+        'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAIBAQIBAQICAgICAgICAwUDAwwDAww' +
+        'sDAwMEAwMDA4ODAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA';
+
+      const res = await maintenanceClient
+        .post('/api/maintenance-tickets')
+        .send({
+          typePanne: 'Test photo valide',
+          priorite: 'MOYENNE',
+          photoUrl: validDataUri,
+        });
+      expect(res.status).toBe(201);
+      const ticket = res.body as TicketResponse & { photoUrl: string };
+      expect(ticket.photoUrl).toBe(validDataUri);
+    });
+
+    it('accepte un data URI image PNG valide', async () => {
+      // Petit PNG valide
+      const pngDataUri =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+      const res = await maintenanceClient
+        .post('/api/maintenance-tickets')
+        .send({
+          typePanne: 'Test photo PNG',
+          priorite: 'BASSE',
+          photoUrl: pngDataUri,
+        });
+      expect(res.status).toBe(201);
+      expect((res.body as TicketResponse & { photoUrl: string }).photoUrl).toBe(
+        pngDataUri,
+      );
+    });
+
+    it('accepte un data URI image WebP valide', async () => {
+      // Petit WebP valide
+      const webpDataUri =
+        'data:image/webp;base64,UklGRiYAAABXRUJQVlA4IBIAAAAwAQCdASoBAAEAAUAcJaACdLoB/gAA/v8AP';
+
+      const res = await maintenanceClient
+        .post('/api/maintenance-tickets')
+        .send({
+          typePanne: 'Test photo WebP',
+          priorite: 'BASSE',
+          photoUrl: webpDataUri,
+        });
+      expect(res.status).toBe(201);
+      expect((res.body as TicketResponse & { photoUrl: string }).photoUrl).toBe(
+        webpDataUri,
+      );
+    });
+
+    it('accepte un ticket sans photoUrl (omis)', async () => {
+      const res = await maintenanceClient
+        .post('/api/maintenance-tickets')
+        .send({
+          typePanne: 'Test sans photo',
+          priorite: 'BASSE',
+        });
+      expect(res.status).toBe(201);
+      expect(
+        (res.body as TicketResponse & { photoUrl: string | null }).photoUrl,
+      ).toBeNull();
+    });
   });
 });

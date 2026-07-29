@@ -6,6 +6,8 @@ import { statutCourant } from '@/features/hr/api';
 import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { ForgotPasswordPage } from '@/features/auth/pages/ForgotPasswordPage';
 import { me as fetchMe } from '@/features/auth/api';
+import { getBranding } from '@/features/parameters/api';
+import type { Branding } from '@/features/parameters/types';
 
 // CH-030 (docs/audits/PHASE_11_FRONTEND_QUALITE.md §4.4) — chaque page de
 // premier niveau chargée à la demande plutôt qu'au premier login : un rôle
@@ -138,6 +140,37 @@ function App() {
   // CH-011 — permissions effectives de l'utilisateur courant, `null` tant
   // qu'elles n'ont pas encore été chargées (voir AppSidebar).
   const [permissions, setPermissions] = useState<string[] | null>(null);
+  // Design Marine & Or — identité visuelle publique (nom + logo), chargée
+  // une seule fois indépendamment de l'authentification (route @Public(),
+  // consommée aussi bien par LoginPage que par le shell applicatif). `null`
+  // tant que non chargée : les deux consommateurs se rabattent sur un
+  // fallback texte/icône, jamais de plantage sur un logo absent.
+  const [branding, setBranding] = useState<Branding | null>(null);
+
+  useEffect(() => {
+    getBranding()
+      .then(setBranding)
+      .catch(() => {
+        // Dégradation silencieuse — fallback texte déjà géré par les
+        // consommateurs (AppSidebar/LoginPage), pas une erreur bloquante.
+      });
+  }, []);
+
+  // Favicon dynamique — reflète le logo configuré dès qu'il est chargé,
+  // sans dépendre d'un fichier statique committé (l'hôtel peut changer son
+  // logo à tout moment depuis Paramètres, voir ParametersPage).
+  useEffect(() => {
+    if (!branding?.logoUrl) return;
+    const link =
+      document.querySelector<HTMLLinkElement>('link[rel="icon"]') ??
+      (() => {
+        const el = document.createElement('link');
+        el.rel = 'icon';
+        document.head.appendChild(el);
+        return el;
+      })();
+    link.href = branding.logoUrl;
+  }, [branding?.logoUrl]);
 
   useEffect(() => {
     onAuthFailure(() => {
@@ -235,6 +268,8 @@ function App() {
       <LoginPage
         onLoginSuccess={() => setIsAuthenticated(true)}
         onForgotPassword={() => setAuthScreen('forgot-password')}
+        logoUrl={branding?.logoUrl ?? null}
+        raisonSociale={branding?.raisonSociale}
       />
     );
   }
@@ -249,6 +284,7 @@ function App() {
         mobileOpen={mobileNavOpen}
         onMobileClose={() => setMobileNavOpen(false)}
         permissions={permissions}
+        logoUrl={branding?.logoUrl ?? null}
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <AppTopbar

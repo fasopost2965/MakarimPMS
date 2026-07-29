@@ -441,6 +441,10 @@ async function main() {
     // CH-038 (RD-024) — routes de configuration chambres/types de chambre,
     // distinctes de housekeeping:read/write (voir docs/modules/rooms.md §7/§16).
     'rooms',
+    // F11 (CH-056, RD-025) — note restaurant écrite directement en folio par
+    // le rôle dédié RESTAURATEUR, pas de réutilisation d'une permission
+    // existante (contrairement à police/companies).
+    'restaurant',
   ] as const;
   const ALL_ACTIONS = ['read', 'write', 'delete', 'export'] as const;
 
@@ -578,6 +582,14 @@ async function main() {
       // définitivement un dossier de paie ou d'employé").
       permissionKeys: ['rh:read', 'rh:write', 'rh:export', 'rooms:read'],
     },
+    {
+      nom: 'RESTAURATEUR',
+      // F11 (CH-056, RD-025) — accès direct au folio du séjour en cours
+      // pour y ajouter/corriger une note restaurant (RD-F11-01/02), sans
+      // aucune autre permission du PMS (pas de reservations/checkin/billing
+      // etc. — le compte restaurant ne doit voir/faire que ceci).
+      permissionKeys: ['restaurant:write'],
+    },
   ];
 
   const roles: Record<string, { id: number }> = {};
@@ -618,6 +630,11 @@ async function main() {
       role: 'Maintenance',
     },
     { nom: 'RH Test', email: 'rh@makarim.test', role: 'RH' },
+    {
+      nom: 'Restaurant Test',
+      email: 'restaurant@makarim.test',
+      role: 'RESTAURATEUR',
+    },
   ];
   for (const { nom, email, role } of usersData) {
     await prisma.user.create({

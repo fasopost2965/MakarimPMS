@@ -3,9 +3,18 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
+  MaxLength,
   Min,
   MinLength,
 } from 'class-validator';
+
+// Même convention que CH-055 (MaintenanceTicket.photoUrl) : data URI base64
+// uniquement, jamais une URL externe (aucune persistance disque pour le
+// logo). Plafond ~2,2 Mo de fichier source, largement suffisant pour un
+// logo d'établissement (le base64 gonfle la taille d'un facteur ~1,37×).
+const LOGO_DATA_URI_REGEX = /^data:image\/(jpeg|png|webp);base64,/;
+const LOGO_MAX_LENGTH = 3_000_000;
 
 export class UpdateHotelConfigDto {
   @IsOptional()
@@ -30,6 +39,13 @@ export class UpdateHotelConfigDto {
 
   @IsOptional()
   @IsString()
+  @Matches(LOGO_DATA_URI_REGEX, {
+    message:
+      'logoUrl doit être un data URI image valide (data:image/jpeg|png|webp;base64,...).',
+  })
+  @MaxLength(LOGO_MAX_LENGTH, {
+    message: 'logoUrl dépasse la taille maximale autorisée (~2,2 Mo).',
+  })
   logoUrl?: string;
 
   @IsOptional()

@@ -6,6 +6,13 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+# VITE_API_URL est une variable Vite résolue au build (import.meta.env),
+# jamais lisible au runtime du conteneur nginx qui ne sert que du HTML/JS
+# statique — sans cet ARG, le pipeline de déploiement (.github/workflows/deploy.yml)
+# construirait silencieusement une image pointant vers le fallback de dev
+# (http://localhost:3000/api, voir lib/api-client.ts) en production.
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
 
 # ---- production ----

@@ -51,11 +51,33 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
-      command: 'npm run dev -- --port 5173 --strictPort',
+      // --host 127.0.0.1 explicite : sans lui, Vite se lie sur la
+      // résolution système de "localhost", qui sur les runners GitHub
+      // Actions Ubuntu peut préférer ::1 (IPv6) — le healthcheck ci-dessous
+      // (et baseURL) sonde 127.0.0.1 explicitement, un décalage silencieux
+      // entre les deux fait échouer ce webServer par timeout sans jamais
+      // d'erreur explicite (constaté : "Timed out waiting 60000ms" sur
+      // chaque run CI récent, non reproductible en local où localhost
+      // résout déjà en 127.0.0.1 par défaut).
+      command: 'npm run dev -- --host 127.0.0.1 --port 5173 --strictPort',
       cwd: '.',
       url: 'http://127.0.0.1:5173',
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
+      // VITE_API_URL sans ceci retombe sur le fallback de lib/api-client.ts
+      // (http://localhost:3000/api) — "localhost" et "127.0.0.1" ne
+      // partagent pas de domaine enregistrable, donc ne sont pas "same-site"
+      // pour un navigateur : le cookie d'authentification host-only posé
+      // par la connexion (CH-026e) est silencieusement refusé sur l'appel
+      // suivant (GET /auth/me, cross-site de son point de vue), les
+      // permissions retombent à [] et aucun onglet de navigation ne
+      // s'affiche jamais — exactement le symptôme observé (#nav-dashboard
+      // introuvable). Corrigé en alignant explicitement l'origine de l'API
+      // sur celle de la page (127.0.0.1), cohérent avec FRONTEND_URL déjà
+      // en 127.0.0.1 dans ci.yml.
+      env: {
+        VITE_API_URL: 'http://127.0.0.1:3000/api',
+      },
     },
   ],
 });
