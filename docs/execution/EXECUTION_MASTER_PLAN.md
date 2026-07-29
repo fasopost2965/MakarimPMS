@@ -78,17 +78,12 @@ La Definition of Done (DoD) s'applique uniformément à chaque élément de trav
 
 ## 5. Stratégie Git, Politique de Branches & Versioning
 
-### 5.1. Politique de Branches (GitFlow Adapté)
-Le projet utilise trois branches principales à durée de vie infinie :
-*   `main` : Branche de production hautement stable. Reflète l'état en direct dans l'hôtel.
-*   `develop` : Branche d'intégration des sprints. Regroupe les fonctionnalités prêtes pour la prochaine version.
-*   `staging` : Branche de pré-production pour les tests QA finaux et validation de l'Hôtel Makarim.
+### 5.1. Politique de Branches (corrigé — resynchronisé avec la pratique réelle, `docs/execution/PLAN_MISE_EN_PRODUCTION_BETA.md`)
+Le GitFlow à trois branches (`main`/`develop`/`staging` + `feature/*`) décrit dans une version antérieure de ce document n'a **jamais été suivi en pratique** — projet interne mono-développeur (agent IA + validation utilisateur), sans besoin réel d'intégration multi-équipe. La pratique réelle, en vigueur depuis le début du projet : une seule branche de travail à la fois (poussée directement ou via une PR unique vers `main`), fusionnée dès qu'un chantier est terminé et vérifié ; `main` reste toujours l'unique état déployable. Aucune branche `develop`/`staging` n'existe ni n'est prévue.
 
-Chaque fonctionnalité est développée sur une branche temporaire tirée de `develop` nommée selon le pattern : `feature/<sprint-id>-<nom-du-module>` (ex: `feature/s01-auth-jwt`).
-
-### 5.2. Stratégie de Fusion (Merge)
-*   **Revue Obligatoire :** Toute Pull Request (PR) vers `develop` exige la validation d'au moins un réviseur et le passage au vert de la suite CI (Lint, Build, Tests).
-*   **Pas de Fast-Forward :** Les fusions sur `develop` s'effectuent obligatoirement avec génération d'un commit de merge (`git merge --no-ff`) pour conserver l'historique visuel des fonctionnalités.
+### 5.2. Stratégie de Fusion (Merge) — corrigé
+*   Chaque chantier (`CH-XXX`) est documenté, codé, testé (build/lint/test + vérification réelle) puis fusionné dans `main` avant de passer au suivant — pas de fusion par lot en attente de validation croisée (pas d'équipe à coordonner).
+*   Revue : validation par l'utilisateur (propriétaire du produit), pas de second réviseur technique — cohérent avec l'échelle du projet.
 
 ### 5.3. Versioning Sémantique (SemVer)
 Le PMS Makarim applique scrupuleusement la spécification **SemVer 2.0.0** pour son numérotage de versions :

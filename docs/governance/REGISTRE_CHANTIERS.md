@@ -621,7 +621,13 @@ Issus de `docs/execution/PLAN_MISE_EN_PRODUCTION_BETA.md` (audit du 29 juillet 2
 - **Statut** : ✅ **Terminé** (session courante).
 - **Éléments testés** : 6 tests unitaires (3 par widget — filtrage correct par statut/tickets ouverts, état vide explicite, dégradation silencieuse sans crash sur échec réseau/403) ; `npm run build`/`lint`/`test` clean (60/60). **Vérification en navigateur réel** (Playwright, données seedées réelles) : état initial vide confirmé cohérent avec la carte KPI « Chambres à nettoyer : 0 » ; ouverture d'un vrai ticket de maintenance (chambre 103, priorité Urgente) + passage réel de la chambre 103 en À nettoyer → les deux widgets reflètent immédiatement ces changements réels (capture d'écran), aucune donnée fabriquée à aucun moment ; nettoyage post-vérification (ticket résolu, chambre repassée Libre & propre).
 
-*(CH-039, CH-040, CH-041, CH-044 à CH-047 : fiches à détailler au fil de l'exécution des Phases B/C/D — CH-039/040/041 bloqués par la même dérive de migration que CH-038, voir le plan pour la liste complète et les critères de chaque chantier.)*
+### CH-045 — Resynchronisation de documentation obsolète (dette découverte pendant l'audit du 29 juillet 2026)
+
+- **Source** : `docs/execution/PLAN_MISE_EN_PRODUCTION_BETA.md` Phase C.
+- **Statut** : ✅ **Terminé** (session courante).
+- **Résolution** : `docs/governance/FONCTIONNALITES_INCOMPLETES.md` (la ligne « Journal d'audit transverse consultable côté interface » était restée « Aucune UI de consultation » alors que CH-015/CH-032 l'avaient déjà résolue — corrigée) ; `docs/execution/EXECUTION_MASTER_PLAN.md` §5.1/5.2 (décrivait une politique GitFlow `main`/`develop`/`staging`/`feature/*` jamais suivie en pratique — corrigé pour refléter la pratique réelle : une seule branche de travail fusionnée dans `main` chantier par chantier).
+
+*(CH-039, CH-040, CH-041, CH-044, CH-046, CH-047 : fiches à détailler au fil de l'exécution des Phases B/C/D — CH-039/040/041 bloqués par la même dérive de migration que CH-038 ; CH-044 (décision multi-folio) nécessite un arbitrage produit de l'utilisateur avant tout code ; voir le plan pour la liste complète et les critères de chaque chantier.)*
 
 ---
 
