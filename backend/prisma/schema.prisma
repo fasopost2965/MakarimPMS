@@ -822,7 +822,7 @@ model MaintenanceTicket {
   room      Room?          @relation(fields: [roomId], references: [id])
   typePanne String
   priorite  PrioriteTicket @default(MOYENNE)
-  photoUrl  String?
+  photoUrl  String?        @db.LongText
   assigneA  String?
   resoluAt  DateTime?
   createdAt DateTime       @default(now())

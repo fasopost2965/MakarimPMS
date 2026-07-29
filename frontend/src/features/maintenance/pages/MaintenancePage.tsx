@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { FileUpload } from '@/components/ui/file-upload';
 import {
   Dialog,
   DialogContent,
@@ -44,12 +45,15 @@ const PRIORITE_BADGE_VARIANT: Record<
   URGENTE: 'destructive',
 };
 
+const PHOTO_MAX_SIZE_MB = 5;
+const PHOTO_MAX_SIZE_BYTES = PHOTO_MAX_SIZE_MB * 1024 * 1024;
+
 // Module maintenance simplifié (cahier des charges §5.8, Phase 2) : liste
 // des tickets, création (chambre optionnelle — bloque automatiquement la
 // chambre en maintenance côté backend, voir MaintenanceService.createTicket)
 // et résolution (libère la chambre s'il n'y a plus de ticket ouvert dessus).
-// Pas d'upload de photo réel dans cette itération — photoUrl est un simple
-// champ texte.
+// Photo upload via FileUpload, conversion File → data URI base64 côté client,
+// stockage LONGTEXT (CH-055).
 export function MaintenancePage() {
   const [tickets, setTickets] = useState<MaintenanceTicket[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -60,6 +64,7 @@ export function MaintenancePage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
 
   const refetch = useCallback(async () => {
     setLoading(true);
@@ -132,26 +137,41 @@ export function MaintenancePage() {
               key={ticket.id}
               className="flex items-center justify-between gap-2 rounded-md border p-3"
             >
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium">
-                    {ticket.room
-                      ? `Chambre ${ticket.room.numero}`
-                      : 'Zone commune'}{' '}
-                    — {ticket.typePanne}
-                  </p>
-                  <Badge variant={PRIORITE_BADGE_VARIANT[ticket.priorite]}>
-                    {PRIORITE_LABEL[ticket.priorite]}
-                  </Badge>
-                  <Badge variant={ticket.resoluAt ? 'outline' : 'secondary'}>
-                    {ticket.resoluAt ? 'Résolu' : 'Ouvert'}
-                  </Badge>
-                </div>
-                {ticket.assigneA && (
-                  <p className="text-muted-foreground text-xs">
-                    Assigné à {ticket.assigneA}
-                  </p>
+              <div className="flex items-center gap-3">
+                {ticket.photoUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setViewingPhoto(ticket.photoUrl)}
+                    className="flex-shrink-0 rounded object-cover hover:opacity-80"
+                  >
+                    <img
+                      src={ticket.photoUrl}
+                      alt={`Ticket ${ticket.id}`}
+                      className="h-10 w-10 rounded object-cover"
+                    />
+                  </button>
                 )}
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium">
+                      {ticket.room
+                        ? `Chambre ${ticket.room.numero}`
+                        : 'Zone commune'}{' '}
+                      — {ticket.typePanne}
+                    </p>
+                    <Badge variant={PRIORITE_BADGE_VARIANT[ticket.priorite]}>
+                      {PRIORITE_LABEL[ticket.priorite]}
+                    </Badge>
+                    <Badge variant={ticket.resoluAt ? 'outline' : 'secondary'}>
+                      {ticket.resoluAt ? 'Résolu' : 'Ouvert'}
+                    </Badge>
+                  </div>
+                  {ticket.assigneA && (
+                    <p className="text-muted-foreground text-xs">
+                      Assigné à {ticket.assigneA}
+                    </p>
+                  )}
+                </div>
               </div>
 
               {!ticket.resoluAt && (
@@ -185,6 +205,30 @@ export function MaintenancePage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={viewingPhoto !== null}
+        onOpenChange={(next) => !next && setViewingPhoto(null)}
+      >
+        <DialogContent className="max-w-2xl">
+          {viewingPhoto && (
+            <div className="flex flex-col items-center gap-4">
+              <img
+                src={viewingPhoto}
+                alt="Ticket détail"
+                className="max-h-96 max-w-full rounded"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setViewingPhoto(null)}
+              >
+                Fermer
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -208,7 +252,8 @@ function CreateTicketForm({
   const [typePanne, setTypePanne] = useState('');
   const [priorite, setPriorite] = useState<PrioriteTicket>('MOYENNE');
   const [assigneA, setAssigneA] = useState('');
-  const [photoUrl, setPhotoUrl] = useState('');
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   return (
     <>
@@ -218,15 +263,49 @@ function CreateTicketForm({
 
       <form
         className="flex flex-col gap-3"
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
           if (!typePanne) return;
+          setPhotoError(null);
+
+          let photoUrl: string | undefined;
+          if (photoFile) {
+            if (photoFile.size > PHOTO_MAX_SIZE_BYTES) {
+              setPhotoError(
+                `La photo dépasse la taille maximale (${PHOTO_MAX_SIZE_MB} Mo)`,
+              );
+              return;
+            }
+            try {
+              photoUrl = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const result = reader.result;
+                  if (typeof result === 'string') {
+                    resolve(result);
+                  } else {
+                    reject(new Error('Erreur lors de la lecture du fichier'));
+                  }
+                };
+                reader.onerror = () => reject(reader.error);
+                reader.readAsDataURL(photoFile);
+              });
+            } catch (err) {
+              setPhotoError(
+                err instanceof Error
+                  ? err.message
+                  : 'Erreur lors du chargement',
+              );
+              return;
+            }
+          }
+
           onConfirm({
             roomId: roomId ? Number(roomId) : undefined,
             typePanne,
             priorite,
             assigneA: assigneA || undefined,
-            photoUrl: photoUrl || undefined,
+            photoUrl,
           });
         }}
       >
@@ -302,12 +381,17 @@ function CreateTicketForm({
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="photoUrl">URL photo (optionnel)</Label>
-          <Input
+          <Label htmlFor="photoUrl">Photo (optionnel)</Label>
+          <FileUpload
             id="photoUrl"
-            value={photoUrl}
-            onChange={(e) => setPhotoUrl(e.target.value)}
+            accept="image/jpeg,image/png,image/webp"
+            value={photoFile}
+            onChange={setPhotoFile}
+            hint={`Max ${PHOTO_MAX_SIZE_MB} Mo (JPEG, PNG, WebP)`}
           />
+          {photoError && (
+            <p className="text-destructive text-sm">{photoError}</p>
+          )}
         </div>
 
         {error && <p className="text-destructive text-sm">{error}</p>}

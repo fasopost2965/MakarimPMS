@@ -233,4 +233,89 @@ describe('Maintenance — tickets et connexion au statut chambre (e2e)', () => {
       .send({ typePanne: 'Test permission', priorite: 'BASSE' });
     expect(create.status).toBe(403);
   });
+
+  describe('CH-055 — Photo upload validation (data URI base64)', () => {
+    it('rejette un photoUrl qui n\'est pas un data URI image valide (400)', async () => {
+      const res = await maintenanceClient.post('/api/maintenance-tickets').send({
+        typePanne: 'Test photo invalide',
+        priorite: 'MOYENNE',
+        photoUrl: 'https://example.com/photo.jpg',
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain('data URI');
+    });
+
+    it('rejette un photoUrl valide en format mais trop volumineux (>7Mo) (400)', async () => {
+      // Construire un data URI artificiel de ~7.5 Mo (dépassera le plafond 7 Mo)
+      const base64Data = 'A'.repeat(7_500_000);
+      const oversizedDataUri = `data:image/jpeg;base64,${base64Data}`;
+
+      const res = await maintenanceClient.post('/api/maintenance-tickets').send({
+        typePanne: 'Test photo trop grande',
+        priorite: 'MOYENNE',
+        photoUrl: oversizedDataUri,
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain('dépasse la taille');
+    });
+
+    it('accepte un data URI image valide (JPEG) de taille raisonnable (201)', async () => {
+      // Petit data URI image JPEG valide (~500 bytes)
+      const validDataUri =
+        'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAIBAQIBAQICAgICAgICAwUDAwwDAww' +
+        'sDAwMEAwMDA4ODAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA';
+
+      const res = await maintenanceClient.post('/api/maintenance-tickets').send({
+        typePanne: 'Test photo valide',
+        priorite: 'MOYENNE',
+        photoUrl: validDataUri,
+      });
+      expect(res.status).toBe(201);
+      const ticket = res.body as TicketResponse & { photoUrl: string };
+      expect(ticket.photoUrl).toBe(validDataUri);
+    });
+
+    it('accepte un data URI image PNG valide', async () => {
+      // Petit PNG valide
+      const pngDataUri =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+      const res = await maintenanceClient.post('/api/maintenance-tickets').send({
+        typePanne: 'Test photo PNG',
+        priorite: 'BASSE',
+        photoUrl: pngDataUri,
+      });
+      expect(res.status).toBe(201);
+      expect((res.body as TicketResponse & { photoUrl: string }).photoUrl).toBe(
+        pngDataUri,
+      );
+    });
+
+    it('accepte un data URI image WebP valide', async () => {
+      // Petit WebP valide
+      const webpDataUri =
+        'data:image/webp;base64,UklGRiYAAABXRUJQVlA4IBIAAAAwAQCdASoBAAEAAUAcJaACdLoB/gAA/v8AP';
+
+      const res = await maintenanceClient.post('/api/maintenance-tickets').send({
+        typePanne: 'Test photo WebP',
+        priorite: 'BASSE',
+        photoUrl: webpDataUri,
+      });
+      expect(res.status).toBe(201);
+      expect((res.body as TicketResponse & { photoUrl: string }).photoUrl).toBe(
+        webpDataUri,
+      );
+    });
+
+    it('accepte un ticket sans photoUrl (omis)', async () => {
+      const res = await maintenanceClient.post('/api/maintenance-tickets').send({
+        typePanne: 'Test sans photo',
+        priorite: 'BASSE',
+      });
+      expect(res.status).toBe(201);
+      expect(
+        (res.body as TicketResponse & { photoUrl: string | null }).photoUrl,
+      ).toBeNull();
+    });
+  });
 });
