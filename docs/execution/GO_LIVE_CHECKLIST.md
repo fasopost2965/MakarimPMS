@@ -16,7 +16,7 @@ Toutes les étapes doivent être marquées **[OK]** avant le lancement officiel 
 | **2. Clés & Secrets d'Env** | Fichier `.env` réel à la racine du dépôt sur le VPS (voir `docs/operations/OPERATIONS_RUNBOOK.md` §1.2), aucune valeur par défaut de `backend/.env.example` conservée | `[ ]` | DevOps |
 | **3. JWT Security** | `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` générés (`openssl rand -base64 48`), le bootstrap (`assertStrongSecrets`) refuse déjà de démarrer sinon en `NODE_ENV=production` — vérifier que le démarrage réel réussit avec les vraies valeurs | `[ ]` | DevOps |
 | **4. Chiffrement au repos (Guest)** | `ENCRYPTION_KEY` réelle (32 octets base64, `openssl rand -base64 32`), différente de la valeur de développement — même garde de démarrage que le point 3 | `[ ]` | DevOps |
-| **5. Sécurisation HTTPS** | Certificat SAN Let's Encrypt actif (`certbot --nginx -d pms.<domaine> -d api.<domaine>`), renouvellement automatique vérifié (`certbot renew --dry-run`) | `[ ]` | DevOps |
+| **5. Sécurisation HTTPS** | Certificat SAN Let's Encrypt actif (`certbot --nginx -d pms.hotelmarim.cloud -d api.hotelmarim.cloud`), renouvellement automatique vérifié (`certbot renew --dry-run`) | `[ ]` | DevOps |
 | **6. Nginx hôte & en-têtes de sécurité** | `infra/nginx/pms-hotel-makarim.conf` déployé (HSTS, `X-Frame-Options`, `X-Content-Type-Options` déjà inclus dans le gabarit) | `[ ]` | DevOps |
 | **7. Base de données MySQL** | Conteneur `mysql` démarré, healthcheck vert (`docker compose ps`), volume `mysql_data` sur un disque persistant du VPS | `[ ]` | DevOps / Admin BD |
 | **8. Journalisation des Logs** | Rotation Docker configurée (`/etc/docker/daemon.json`, voir `OPERATIONS_RUNBOOK.md` §5.2) — sans quoi les logs JSON saturent le disque unique du VPS avec le temps | `[ ]` | DevOps |
@@ -38,9 +38,9 @@ Toutes les étapes doivent être marquées **[OK]** avant le lancement officiel 
 
 ### 2. Nginx hôte & HTTPS
 *   Le Nginx **hôte** (hors conteneurs, `infra/nginx/pms-hotel-makarim.conf`) redirige tout le trafic HTTP (port 80) vers HTTPS (port 443).
-*   En-têtes de sécurité déjà inclus dans le gabarit — vérifier leur présence réelle sur les deux `server_name` (`pms.<domaine>`, `api.<domaine>`) après déploiement :
+*   En-têtes de sécurité déjà inclus dans le gabarit — vérifier leur présence réelle sur les deux `server_name` (`pms.hotelmarim.cloud`, `api.hotelmarim.cloud`) après déploiement :
     ```bash
-    curl -sI https://api.<domaine>/api/health | grep -i strict-transport-security
+    curl -sI https://api.hotelmarim.cloud/api/health | grep -i strict-transport-security
     ```
 
 ### 3. Monitoring & Plan de Reprise d'Activité (PRA)

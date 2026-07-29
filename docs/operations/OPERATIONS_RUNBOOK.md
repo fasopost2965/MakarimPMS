@@ -20,9 +20,9 @@ Le PMS est déployé sur un unique VPS Hostinger (Ubuntu), avec Docker Compose p
 
 ```mermaid
 flowchart LR
-    DNS["DNS : pms.<domaine> / api.<domaine> -> IP du VPS"] --> NGX["Nginx hôte (hors Docker) : TLS Certbot, routage par server_name"]
-    NGX -->|"pms.<domaine>"| FE["Conteneur frontend (nginx:1.27-alpine, port hôte 8081)"]
-    NGX -->|"api.<domaine>"| BE["Conteneur backend (NestJS, port hôte 3000)"]
+    DNS["DNS : pms.hotelmarim.cloud / api.hotelmarim.cloud -> IP du VPS"] --> NGX["Nginx hôte (hors Docker) : TLS Certbot, routage par server_name"]
+    NGX -->|"pms.hotelmarim.cloud"| FE["Conteneur frontend (nginx:1.27-alpine, port hôte 8081)"]
+    NGX -->|"api.hotelmarim.cloud"| BE["Conteneur backend (NestJS, port hôte 3000)"]
     BE --> DB[("Conteneur MySQL 8, volume mysql_data")]
     BE --> Cache[("Conteneur Redis 7, file BullMQ")]
 ```
@@ -40,7 +40,7 @@ Référence complète du routage nginx hôte (domaines, certificat SAN Certbot, 
 
 Les ports 3307/6380 (au lieu des ports standards 3306/6379) évitent un conflit avec un éventuel MySQL/Redis natif déjà présent sur l'hôte — c'est une convention héritée du développement local (`docker-compose.yml`), conservée telle quelle en production puisque rien d'autre qu'un client d'administration occasionnel (ex. `mysqldump` de sauvegarde, §6.2) n'a besoin d'atteindre MySQL/Redis depuis l'hôte.
 
-**En production, seuls `pms.<domaine>` et `api.<domaine>` (via Nginx hôte, TLS) sont exposés publiquement** — les ports 3000/3307/6380/8081 ne doivent être accessibles que sur `127.0.0.1` (déjà le cas par défaut avec la syntaxe `'3000:3000'` de `docker-compose.yml`, qui lie en réalité sur toutes les interfaces ; **action de durcissement requise avant le premier déploiement réel** : republier ces ports en `127.0.0.1:3000:3000` etc. dans `docker-compose.prod.yml`, voir `infra/README.md`, pour qu'aucun accès direct ne contourne Nginx/TLS/le pare-feu).
+**En production, seuls `pms.hotelmarim.cloud` et `api.hotelmarim.cloud` (via Nginx hôte, TLS) sont exposés publiquement** — les ports 3000/3307/6380/8081 ne doivent être accessibles que sur `127.0.0.1` (`docker-compose.yml` seul les lie sur toutes les interfaces, adapté au développement local uniquement). Durcissement déjà en place, pas une action restante : `docker-compose.prod.yml` republie tous les ports applicatifs en `127.0.0.1:<port>:<port>` via le tag `!override` (Compose Specification — remplace la liste héritée au lieu de la fusionner, voir `infra/README.md`) ; à utiliser systématiquement en production (`docker compose -f docker-compose.yml -f docker-compose.prod.yml ...`, jamais `docker-compose.yml` seul), ce qui est déjà le cas dans `.github/workflows/deploy.yml`.
 
 ### 1.2. Variables d'environnement requises (fichier `.env` à la racine du dépôt sur le VPS, jamais commit)
 
@@ -50,7 +50,7 @@ Les ports 3307/6380 (au lieu des ports standards 3306/6379) évitent un conflit 
 *   `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` : le bootstrap (`assertStrongSecrets`, `main.ts`) refuse de démarrer en `NODE_ENV=production` si l'une de ces deux valeurs vaut encore le défaut de développement — générer avec `openssl rand -base64 48`.
 *   `ENCRYPTION_KEY` : AES-256-GCM pour `Guest.pieceIdentite` — 32 octets base64 exacts (`openssl rand -base64 32`), même garde de démarrage.
 *   `CHANNEL_WEBHOOK_SECRET` : requis pour les webhooks OTA (F10) — absent, le guard rejette tout appel (fail closed, pas de dégradation gracieuse).
-*   `FRONTEND_URL` : `https://pms.<domaine>` — seule origine CORS autorisée avec `credentials:true`.
+*   `FRONTEND_URL` : `https://pms.hotelmarim.cloud` — seule origine CORS autorisée avec `credentials:true`.
 *   `NODE_ENV=production` : désactive Swagger (`/api/docs`), active la validation stricte des secrets ci-dessus.
 
 ---
