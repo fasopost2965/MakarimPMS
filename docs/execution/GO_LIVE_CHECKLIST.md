@@ -24,7 +24,7 @@ Toutes les étapes doivent être marquées **[OK]** avant le lancement officiel 
 | **10. Vérification post-déploiement** | `deploy.yml` a exécuté avec succès son healthcheck (`GET /api/health`) sur un déploiement réel, pas seulement en local | `[ ]` | DevOps |
 | **11. Plan de Sauvegardes Automatiques** | `infra/scripts/backup-mysql.sh` planifié en crontab sur le VPS (`crontab -l` le confirme), rétention locale + destination hors VPS confirmée par l'utilisateur | `[ ]` | DevOps / Admin BD |
 | **12. Plan de Reprise (Rollback)** | Rollback applicatif testé au moins une fois en conditions réelles (déploiement volontairement cassé puis rollback, voir `OPERATIONS_RUNBOOK.md` §4.1) — pas seulement lu, exécuté | `[ ]` | Équipe Ops |
-| **13. Smoke Tests** | Parcours de fumée réel post-Go-Live : connexion, consultation planning, check-in walk-in, encaissement, check-out (voir `docs/execution/RELEASE_CHECKLIST.md`) | `[ ]` | Lead Developer / QA |
+| **13. Smoke Tests** | `infra/scripts/smoke-test.sh [domaine]` (lecture seule : health check, HSTS, endpoint public, login, 401 sur route protégée) **puis** parcours manuel réel : check-in walk-in sur une chambre de test, encaissement, check-out — jamais automatisé en aveugle contre la prod (voir `docs/execution/RELEASE_CHECKLIST.md`) | `[ ]` | Lead Developer / QA |
 | **14. Approbation Métier** | Confirmation explicite du Product Owner (utilisateur) que les fonctionnalités livrées couvrent le besoin minimal d'exploitation quotidienne | `[ ]` | Product Owner |
 | **15. Accord Direction** | Autorisation officielle de bascule par la direction de l'hôtel | `[ ]` | Direction Générale |
 
