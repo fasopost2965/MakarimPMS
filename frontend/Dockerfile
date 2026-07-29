@@ -1,17 +1,21 @@
 # syntax=docker/dockerfile:1
 
 # ---- build ----
-# node:22-alpine (pas 20) : doit matcher exactement la version Node de
-# .github/workflows/ci.yml (node-version: 22, tous jobs) — npm ci sous
-# Node 20 échoue en ERESOLVE sur eslint@10/eslint-plugin-jsx-a11y (résolution
-# de peer dependencies différente entre les versions de npm embarquées),
-# alors que le job frontend de la CI (Node 22) installe les mêmes
-# package.json/package-lock.json sans erreur. Bug resté invisible tant que
-# deploy.yml ne s'était jamais réellement déclenché (CI historiquement
-# toujours rouge avant CH-058) — découvert au premier run réel du pipeline.
+# node:22-alpine : aligné sur .github/workflows/ci.yml (node-version: 22,
+# tous jobs) — sans lien de cause avec le bug ci-dessous (npm ci échouait
+# aussi sous Node 22 avant ce correctif), gardé par cohérence d'environnement.
 FROM node:22-alpine AS build
 WORKDIR /app
-COPY package.json package-lock.json ./
+# .npmrc DOIT être copié avant `npm ci` : legacy-peer-deps=true y est défini
+# spécifiquement pour tolérer un conflit de peer dependency réel et déjà
+# assumé (eslint@10 / eslint-plugin-jsx-a11y@6.10.2, voir le commentaire
+# dans .npmrc) — sans ce fichier, npm ci échoue en ERESOLVE à l'intérieur du
+# conteneur alors que le job frontend de la CI (checkout complet du dépôt,
+# .npmrc présent dès le départ) ne rencontre jamais l'erreur. Bug réel
+# détecté au premier déclenchement effectif de deploy.yml (jamais exécuté
+# avant CH-058, faute de CI verte) — mon premier correctif (Node 20→22)
+# n'était qu'une coïncidence de timing, pas la cause réelle.
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 COPY . .
 # VITE_API_URL est une variable Vite résolue au build (import.meta.env),
