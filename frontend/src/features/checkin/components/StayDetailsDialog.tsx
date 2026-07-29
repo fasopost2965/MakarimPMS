@@ -124,7 +124,11 @@ export function StayDetailsDialog({
             )}
 
             {activeTab === 'facturation' && (
-              <BillingTabContent stayId={stay.id} />
+              <BillingTabContent
+                stayId={stay.id}
+                guest={stay.guest}
+                room={stay.room}
+              />
             )}
 
             {activeTab === 'police' && (

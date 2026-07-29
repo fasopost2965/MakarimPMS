@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Printer } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { listFoliosByStay, generateInvoice } from '../api';
 import { RecordPaymentDialog } from '@/features/payments/components/RecordPaymentDialog';
-import type { Folio } from '../types';
+import { InvoicePrintModal } from './InvoicePrintModal';
+import type { Folio, Invoice } from '../types';
 
 const TYPE_LIGNE_LABEL: Record<string, string> = {
   HEBERGEMENT: 'Hébergement',
@@ -19,9 +21,19 @@ const STATUT_FACTURE_LABEL: Record<string, string> = {
 
 export interface BillingTabContentProps {
   stayId: number;
+  // CH-042 — l'aperçu imprimable a besoin de l'identité du client et de la
+  // chambre, que ce composant n'a jamais chargées lui-même (le folio ne les
+  // porte pas). Le parent (StayDetailsDialog) les a déjà via `stay` — plus
+  // simple à faire transiter en props qu'un nouvel appel réseau dédié.
+  guest?: { nom: string; prenom: string; email?: string | null };
+  room?: { numero: string; roomType: { nom: string } };
 }
 
-export function BillingTabContent({ stayId }: BillingTabContentProps) {
+export function BillingTabContent({
+  stayId,
+  guest,
+  room,
+}: BillingTabContentProps) {
   const [folios, setFolios] = useState<Folio[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +41,10 @@ export function BillingTabContent({ stayId }: BillingTabContentProps) {
     null,
   );
   const [payingFolioId, setPayingFolioId] = useState<number | null>(null);
+  const [printingInvoice, setPrintingInvoice] = useState<{
+    invoice: Invoice;
+    folio: Folio;
+  } | null>(null);
 
   const refetch = useCallback(async () => {
     setLoading(true);
@@ -147,9 +163,23 @@ export function BillingTabContent({ stayId }: BillingTabContentProps) {
                         {STATUT_FACTURE_LABEL[invoice.statut] || invoice.statut}
                       </Badge>
                     </div>
-                    <span className="font-mono text-sm font-semibold">
-                      {Number(invoice.montantTotal).toFixed(2)} MAD
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-sm font-semibold">
+                        {Number(invoice.montantTotal).toFixed(2)} MAD
+                      </span>
+                      {guest && room && (
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="size-7"
+                          title="Imprimer la facture"
+                          onClick={() => setPrintingInvoice({ invoice, folio })}
+                        >
+                          <Printer className="size-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -167,6 +197,17 @@ export function BillingTabContent({ stayId }: BillingTabContentProps) {
             setPayingFolioId(null);
             void refetch();
           }}
+        />
+      )}
+
+      {guest && room && (
+        <InvoicePrintModal
+          open={printingInvoice !== null}
+          onClose={() => setPrintingInvoice(null)}
+          invoice={printingInvoice?.invoice ?? null}
+          folio={printingInvoice?.folio ?? { libelle: '', lignes: [] }}
+          guest={guest}
+          room={room}
         />
       )}
     </div>
