@@ -1151,6 +1151,11 @@ enum AuditEntity {
   RateRestriction
   NotificationTemplate
   ChannelRoomTypeMapping
+  // CH-038 (RD-024) — cible d'audit pour la nouvelle CRUD de configuration
+  // (RoomsService.createRoomType/updateRoomType). `Room` existait déjà dans
+  // cet enum sans jamais être utilisé avant CH-038 non plus (RoomStatusLog
+  // est une table d'historique dédiée, distincte d'AuditLog).
+  RoomType
 }
 
 enum AuditAction {
@@ -1189,6 +1194,13 @@ enum AuditAction {
   // CH-005 — check-out forcé malgré un solde impayé (StayService.checkout),
   // réservé à la permission dédiée checkin:force-checkout.
   FORCE_CHECKOUT
+  // CH-038 (RD-024) — CRUD de configuration chambres/types de chambre
+  // (rooms:write, Administrateur), même rigueur que parameters:write.
+  CREATE_ROOM
+  UPDATE_ROOM
+  DELETE_ROOM
+  CREATE_ROOM_TYPE
+  UPDATE_ROOM_TYPE
 }
 
 // ------------------------------------------------------------------

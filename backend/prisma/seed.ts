@@ -38,6 +38,10 @@ async function main() {
   await prisma.payment.deleteMany();
   await prisma.reservationDeposit.deleteMany();
   await prisma.creditNote.deleteMany();
+  // CH-050 suite : InvoiceDownloadToken référence Invoice par FK non-cascade,
+  // même raison que ChannelReservationImport/SelfCheckinToken ci-dessus —
+  // doit être vidée avant invoice.deleteMany().
+  await prisma.invoiceDownloadToken.deleteMany();
   await prisma.invoice.deleteMany();
   await prisma.folioTaxExclusion.deleteMany();
   await prisma.folioLine.deleteMany();
@@ -434,6 +438,9 @@ async function main() {
     'stock',
     'reporting',
     'notifications',
+    // CH-038 (RD-024) — routes de configuration chambres/types de chambre,
+    // distinctes de housekeeping:read/write (voir docs/modules/rooms.md §7/§16).
+    'rooms',
   ] as const;
   const ALL_ACTIONS = ['read', 'write', 'delete', 'export'] as const;
 
@@ -503,6 +510,10 @@ async function main() {
         // jamais le contenu des templates (notifications:write réservé à
         // l'Administrateur, même logique que parameters:write).
         'notifications:read',
+        // rooms:read (CH-038, docs/modules/rooms.md §7) — consulte les
+        // types de chambre (tarifs de base) pour conseiller un client,
+        // jamais rooms:write (configuration réservée à l'Administrateur).
+        'rooms:read',
       ],
     },
     {
@@ -521,6 +532,7 @@ async function main() {
         // contraire dans docs/modules/stock.md — RBAC_MATRIX.md fait foi).
         'stock:read',
         'stock:write',
+        'rooms:read',
       ],
     },
     {
@@ -550,11 +562,12 @@ async function main() {
         // rapport de police et données financières consolidées).
         'reporting:read',
         'reporting:export',
+        'rooms:read',
       ],
     },
     {
       nom: 'Maintenance',
-      permissionKeys: ['maintenance:read', 'maintenance:write'],
+      permissionKeys: ['maintenance:read', 'maintenance:write', 'rooms:read'],
     },
     {
       nom: 'RH',
@@ -563,7 +576,7 @@ async function main() {
       // relevés de cotisations CNSS/AMO. Jamais de suppression physique
       // (rh:delete non accordé — RBAC_MATRIX.md "Interdit de supprimer
       // définitivement un dossier de paie ou d'employé").
-      permissionKeys: ['rh:read', 'rh:write', 'rh:export'],
+      permissionKeys: ['rh:read', 'rh:write', 'rh:export', 'rooms:read'],
     },
   ];
 
