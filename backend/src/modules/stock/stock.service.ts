@@ -6,7 +6,9 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RoomsService } from '../rooms/rooms.service';
 import { ReplenishStockDto } from './dto/replenish-stock.dto';
+import { ManualStockOutDto } from './dto/manual-stock-out.dto';
 import { estSousSeuilAlerte } from './utils/seuil-alerte.util';
 import { StockThresholdAlertEvent } from './events/stock-threshold-alert.event';
 
@@ -17,6 +19,7 @@ export class StockService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly roomsService: RoomsService,
   ) {}
 
   async findAll() {
@@ -98,10 +101,35 @@ export class StockService {
     }
   }
 
+  // CH-039 (docs/modules/stock.md §8) — sortie manuelle déclarée par un
+  // humain : réfection de chambre (linge/produits d'accueil), consommation
+  // minibar à l'inspection de départ, ou constat de perte/casse/péremption
+  // (BR-STK-003, motif écrit toujours exigé par le DTO). roomId validé via
+  // la façade RoomsService (dépendance explicitement autorisée, stock.md
+  // §10) plutôt qu'une FK Prisma nue — un roomId invalide renvoie un 404
+  // clair plutôt qu'une erreur de contrainte opaque.
+  async manualStockOut(dto: ManualStockOutDto, userId: number) {
+    if (dto.roomId !== undefined) {
+      await this.roomsService.findByIdOrThrow(dto.roomId);
+    }
+
+    const updated = await this.sortir(
+      dto.stockItemId,
+      dto.quantite,
+      dto.motif,
+      {
+        userId,
+        roomId: dto.roomId,
+      },
+    );
+
+    return { ...updated, sousSeuilAlerte: estSousSeuilAlerte(updated) };
+  }
+
   // Sortie de stock générique (INV-STK-001 : quantité jamais négative).
   // Utilisée à la fois par le décompte automatique (roomId renseigné, pas
-  // de userId — aucun auteur humain direct) et par une future sortie
-  // manuelle. Émet StockThresholdAlertEvent (BR-STK-002) si le nouveau
+  // de userId — aucun auteur humain direct) et par la sortie manuelle
+  // ci-dessus. Émet StockThresholdAlertEvent (BR-STK-002) si le nouveau
   // niveau franchit le seuil.
   private async sortir(
     stockItemId: number,

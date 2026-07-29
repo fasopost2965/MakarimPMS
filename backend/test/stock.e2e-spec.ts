@@ -146,6 +146,97 @@ describe('Stock — inventaire et déstockage automatique (e2e)', () => {
     });
   });
 
+  describe('Sortie manuelle (POST /stocks/sortie, CH-039)', () => {
+    it('décrémente la quantité et journalise une SORTIE liée à une chambre réelle (réfection de chambre)', async () => {
+      const roomId = await createRoomANettoyer();
+      const before = await getItem(DRAP_CODE);
+
+      const res = await gouvernanteClient.post('/api/stocks/sortie').send({
+        stockItemId: before.id,
+        quantite: 2,
+        motif: 'Réfection chambre — linge sale envoyé en buanderie',
+        roomId,
+      });
+      expect(res.status).toBe(201);
+      const item = res.body as StockItemResponse;
+      expect(item.quantiteDisponible).toBe(before.quantiteDisponible - 2);
+
+      const mouvement = await prisma.stockMovement.findFirst({
+        where: { stockItemId: before.id, typeMouvement: 'SORTIE', roomId },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(mouvement).toBeDefined();
+      expect(mouvement!.quantite).toBe(2);
+      expect(mouvement!.roomId).toBe(roomId);
+    });
+
+    it('accepte une sortie sans chambre (constat de perte/casse/péremption, BR-STK-003)', async () => {
+      const before = await getItem(DRAP_CODE);
+
+      const res = await gouvernanteClient.post('/api/stocks/sortie').send({
+        stockItemId: before.id,
+        quantite: 1,
+        motif: 'Constat de casse — drap déchiré, mis au rebut',
+      });
+      expect(res.status).toBe(201);
+
+      const mouvement = await prisma.stockMovement.findFirst({
+        where: {
+          stockItemId: before.id,
+          typeMouvement: 'SORTIE',
+          roomId: null,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(mouvement).toBeDefined();
+      expect(mouvement!.motif).toContain('Constat de casse');
+    });
+
+    it('un motif < 10 caractères est rejeté (BR-STK-003, 400)', async () => {
+      const item = await getItem(DRAP_CODE);
+      const res = await gouvernanteClient.post('/api/stocks/sortie').send({
+        stockItemId: item.id,
+        quantite: 1,
+        motif: 'court',
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('un roomId inexistant renvoie 404 (façade RoomsService, pas une erreur FK opaque)', async () => {
+      const item = await getItem(DRAP_CODE);
+      const res = await gouvernanteClient.post('/api/stocks/sortie').send({
+        stockItemId: item.id,
+        quantite: 1,
+        motif: 'Test roomId inexistant e2e',
+        roomId: 999999,
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it('refuse une sortie qui rendrait la quantité négative (INV-STK-001, 400)', async () => {
+      const item = await getItem(DRAP_CODE);
+      const res = await gouvernanteClient.post('/api/stocks/sortie').send({
+        stockItemId: item.id,
+        quantite: item.quantiteDisponible + 1000,
+        motif: 'Test sortie excessive e2e',
+      });
+      expect(res.status).toBe(400);
+
+      const apres = await getItem(DRAP_CODE);
+      expect(apres.quantiteDisponible).toBe(item.quantiteDisponible);
+    });
+
+    it('la Réception ne peut pas déclarer de sortie manuelle (403)', async () => {
+      const item = await getItem(DRAP_CODE);
+      const res = await receptionClient.post('/api/stocks/sortie').send({
+        stockItemId: item.id,
+        quantite: 1,
+        motif: 'Tentative non autorisée test e2e',
+      });
+      expect(res.status).toBe(403);
+    });
+  });
+
   describe('Cloisonnement RBAC (module stock, RBAC_MATRIX.md)', () => {
     it('la Réception ne peut ni lire ni écrire (403)', async () => {
       const lecture = await receptionClient.get('/api/stocks');

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
+
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { AuditAction, AuditEntity, StatutChambre } from '@prisma/client';
@@ -62,7 +62,7 @@ describe('Rooms (CH-038, configuration)', () => {
   });
 
   describe('Types de chambre (rooms:write — Administrateur uniquement)', () => {
-    it("la Réception ne peut pas créer de type de chambre (403)", async () => {
+    it('la Réception ne peut pas créer de type de chambre (403)', async () => {
       const res = await receptionClient.post('/api/rooms/types').send({
         nom: 'TEST-RBAC-TYPE',
         prixBase: '400.00',
@@ -128,7 +128,7 @@ describe('Rooms (CH-038, configuration)', () => {
       });
     }
 
-    it("la Réception ne peut pas créer de chambre (403)", async () => {
+    it('la Réception ne peut pas créer de chambre (403)', async () => {
       const roomType = await createTestRoomType();
       const res = await receptionClient.post('/api/rooms').send({
         numero: `TEST-${Date.now()}`,
@@ -199,7 +199,7 @@ describe('Rooms (CH-038, configuration)', () => {
       await prisma.roomType.delete({ where: { id: roomType.id } });
     });
 
-    it('refuse la suppression tant que la chambre est engagée dans un cycle d\'occupation (RESERVEE/OCCUPEE/DEPART_PREVU)', async () => {
+    it("refuse la suppression tant que la chambre est engagée dans un cycle d'occupation (RESERVEE/OCCUPEE/DEPART_PREVU)", async () => {
       const roomType = await createTestRoomType();
       const createRes = await adminClient.post('/api/rooms').send({
         numero: `TEST-OCC-${Date.now()}`,

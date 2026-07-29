@@ -5,6 +5,7 @@ import { RequirePermission } from '../../common/decorators/require-permission.de
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { StockService } from './stock.service';
 import { ReplenishStockDto } from './dto/replenish-stock.dto';
+import { ManualStockOutDto } from './dto/manual-stock-out.dto';
 
 @ApiTags('stock')
 @ApiBearerAuth()
@@ -27,6 +28,19 @@ export class StockController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.stockService.replenish(dto, user.sub);
+  }
+
+  @RequirePermission('stock', 'write')
+  @ApiOperation({
+    summary:
+      'Sortie manuelle (réfection chambre, consommation minibar, perte/casse) — motif obligatoire',
+  })
+  @Post('sortie')
+  sortieManuelle(
+    @Body() dto: ManualStockOutDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.stockService.manualStockOut(dto, user.sub);
   }
 
   @RequirePermission('stock', 'read')
