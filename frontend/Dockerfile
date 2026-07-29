@@ -1,7 +1,15 @@
 # syntax=docker/dockerfile:1
 
 # ---- build ----
-FROM node:20-alpine AS build
+# node:22-alpine (pas 20) : doit matcher exactement la version Node de
+# .github/workflows/ci.yml (node-version: 22, tous jobs) — npm ci sous
+# Node 20 échoue en ERESOLVE sur eslint@10/eslint-plugin-jsx-a11y (résolution
+# de peer dependencies différente entre les versions de npm embarquées),
+# alors que le job frontend de la CI (Node 22) installe les mêmes
+# package.json/package-lock.json sans erreur. Bug resté invisible tant que
+# deploy.yml ne s'était jamais réellement déclenché (CI historiquement
+# toujours rouge avant CH-058) — découvert au premier run réel du pipeline.
+FROM node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
