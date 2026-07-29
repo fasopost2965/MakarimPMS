@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Printer } from 'lucide-react';
+import { Download, Printer } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { listFoliosByStay, generateInvoice } from '../api';
+import { listFoliosByStay, generateInvoice, downloadInvoicePdf } from '../api';
 import { RecordPaymentDialog } from '@/features/payments/components/RecordPaymentDialog';
 import { InvoicePrintModal } from './InvoicePrintModal';
+import { AddFolioLineDialog } from './AddFolioLineDialog';
 import type { Folio, Invoice } from '../types';
 
 const TYPE_LIGNE_LABEL: Record<string, string> = {
@@ -41,6 +42,12 @@ export function BillingTabContent({
     null,
   );
   const [payingFolioId, setPayingFolioId] = useState<number | null>(null);
+  const [addingLineFolioId, setAddingLineFolioId] = useState<number | null>(
+    null,
+  );
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<
+    number | null
+  >(null);
   const [printingInvoice, setPrintingInvoice] = useState<{
     invoice: Invoice;
     folio: Folio;
@@ -77,6 +84,19 @@ export function BillingTabContent({
     }
   }
 
+  async function handleDownloadPdf(invoiceId: number) {
+    setDownloadingInvoiceId(invoiceId);
+    try {
+      await downloadInvoicePdf(invoiceId);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Erreur de téléchargement PDF',
+      );
+    } finally {
+      setDownloadingInvoiceId(null);
+    }
+  }
+
   if (loading) {
     return <p className="text-muted-foreground text-sm">Chargement…</p>;
   }
@@ -99,13 +119,28 @@ export function BillingTabContent({
         <div key={folio.id} className="rounded-lg border p-4">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="font-medium">{folio.libelle}</h3>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setPayingFolioId(folio.id)}
-            >
-              Encaisser un paiement
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={folio.invoices.some((i) => i.statut === 'EMISE')}
+                title={
+                  folio.invoices.some((i) => i.statut === 'EMISE')
+                    ? "Impossible : une facture active existe déjà sur ce folio, elle n'inclurait jamais cette charge"
+                    : undefined
+                }
+                onClick={() => setAddingLineFolioId(folio.id)}
+              >
+                Ajouter une charge
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPayingFolioId(folio.id)}
+              >
+                Encaisser un paiement
+              </Button>
+            </div>
           </div>
 
           {/* Lignes du folio */}
@@ -167,6 +202,17 @@ export function BillingTabContent({
                       <span className="font-mono text-sm font-semibold">
                         {Number(invoice.montantTotal).toFixed(2)} MAD
                       </span>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="size-7"
+                        title="Télécharger la facture en PDF"
+                        disabled={downloadingInvoiceId === invoice.id}
+                        onClick={() => handleDownloadPdf(invoice.id)}
+                      >
+                        <Download className="size-4" />
+                      </Button>
                       {guest && room && (
                         <Button
                           type="button"
@@ -195,6 +241,18 @@ export function BillingTabContent({
           onClose={() => setPayingFolioId(null)}
           onRecorded={() => {
             setPayingFolioId(null);
+            void refetch();
+          }}
+        />
+      )}
+
+      {addingLineFolioId !== null && (
+        <AddFolioLineDialog
+          open
+          folioId={addingLineFolioId}
+          onClose={() => setAddingLineFolioId(null)}
+          onAdded={() => {
+            setAddingLineFolioId(null);
             void refetch();
           }}
         />

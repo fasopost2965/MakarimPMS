@@ -23,6 +23,7 @@ import {
   computeTaxLineAmount,
   generateInvoiceNumber,
 } from './utils/invoice-calc';
+import { buildInvoicePdf } from './utils/invoice.pdf';
 
 @Injectable()
 export class BillingService {
@@ -61,8 +62,26 @@ export class BillingService {
   // services, etc.) sont rattachés aux folios existants plutôt que créant
   // un nouveau folio (CLAUDE.md règle 2 : un séjour peut avoir plusieurs
   // folios, mais les lignes s'ajoutent au folio principal en Phase 1).
+  //
+  // Bug réel identifié en câblant l'UI de cette route (CH-050,
+  // docs/execution/PLAN_MODULE_FACTURATION.md) : assertFolioWritable ne
+  // vérifie que le statut du séjour, jamais celui des factures — une charge
+  // ajoutée après l'émission d'une facture (INV-FAC-001, immuable) ne
+  // pouvait donc jamais y apparaître, sans que rien ne le signale à la
+  // réception (montant silencieusement non facturé). Garde ajoutée ici
+  // uniquement (pas dans creditFolioLine ci-dessous, appelée par
+  // payments/stay pour créditer un règlement ou un acompte — un client doit
+  // pouvoir payer une facture déjà émise, cas normal, pas un bug).
   async addFolioLine(folioId: number, dto: AddFolioLineDto) {
     await this.assertFolioWritable(folioId);
+    const invoices = await this.prisma.invoice.findMany({
+      where: { folioId },
+    });
+    if (invoices.some((i) => i.statut === 'EMISE')) {
+      throw new ConflictException(
+        `Une facture active existe déjà pour le folio ${folioId} — impossible d'ajouter une charge qui n'y apparaîtrait jamais. Génère un avoir avant d'ajouter puis de refacturer.`,
+      );
+    }
 
     const montantDecimal = new Prisma.Decimal(dto.montant);
 
@@ -372,6 +391,66 @@ export class BillingService {
       throw new NotFoundException(`Folio ${id} introuvable.`);
     }
     return folio;
+  }
+
+  // CH-050 (docs/execution/PLAN_MODULE_FACTURATION.md) — génère le PDF d'une
+  // facture déjà émise. Réutilise le même principe que
+  // PoliceService.generatePdf (utilitaire pur buildInvoicePdf, aucune
+  // persistance disque — régénéré à la demande à chaque appel). HotelConfig
+  // lu via la façade ParametersService (jamais Prisma direct sur cette
+  // table, docs/modules/parameters.md §10) — même convention que
+  // generateInvoice ci-dessus pour les taux de taxe.
+  async generateInvoicePdf(invoiceId: number): Promise<Buffer> {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        folio: {
+          include: {
+            lignes: true,
+            stay: {
+              include: { guest: true, room: { include: { roomType: true } } },
+            },
+          },
+        },
+      },
+    });
+    if (!invoice) {
+      throw new NotFoundException(`Facture ${invoiceId} introuvable.`);
+    }
+
+    const hotelConfig = await this.parametersService.getHotelConfig();
+
+    return buildInvoicePdf({
+      hotel: {
+        raisonSociale: hotelConfig.raisonSociale,
+        adresse: hotelConfig.adresse,
+        ice: hotelConfig.ice,
+        identifiantFiscal: hotelConfig.identifiantFiscal,
+        rc: hotelConfig.rc,
+        categorieEtoiles: hotelConfig.categorieEtoiles,
+      },
+      guest: {
+        nom: invoice.folio.stay.guest.nom,
+        prenom: invoice.folio.stay.guest.prenom,
+        email: invoice.folio.stay.guest.email,
+      },
+      stay: {
+        id: invoice.folio.stay.id,
+        roomNumero: invoice.folio.stay.room.numero,
+        roomTypeNom: invoice.folio.stay.room.roomType.nom,
+      },
+      invoice: {
+        numero: invoice.numero,
+        createdAt: invoice.createdAt,
+        montantTotal: invoice.montantTotal.toString(),
+        statut: invoice.statut,
+      },
+      lignes: invoice.folio.lignes.map((l) => ({
+        libelle: l.libelle,
+        montant: l.montant.toString(),
+        annulee: l.annulee,
+      })),
+    });
   }
 
   async findInvoiceById(id: number) {

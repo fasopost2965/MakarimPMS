@@ -7,7 +7,9 @@ import {
   Patch,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -66,6 +68,26 @@ export class BillingController {
   @Get('invoices/:id')
   findInvoiceById(@Param('id', ParseIntPipe) id: number) {
     return this.billingService.findInvoiceById(id);
+  }
+
+  // CH-050 (docs/execution/PLAN_MODULE_FACTURATION.md) — même convention que
+  // PoliceController.generatePdf : res.send() direct (pas @Res({passthrough:
+  // true}), qui sérialiserait le Buffer en JSON au lieu de l'envoyer en
+  // binaire).
+  @RequirePermission('billing', 'read')
+  @ApiOperation({ summary: "Génère le PDF d'une facture" })
+  @Get('invoices/:id/pdf')
+  async generatePdf(
+    @Param('id', ParseIntPipe) id: number,
+    @Res() res: Response,
+  ) {
+    const pdf = await this.billingService.generateInvoicePdf(id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="facture-${id}.pdf"`,
+    );
+    res.send(pdf);
   }
 
   // CH-001 (docs/governance/REGISTRE_CHANTIERS.md) — avoir total : annule la

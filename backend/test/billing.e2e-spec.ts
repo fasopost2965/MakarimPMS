@@ -378,4 +378,168 @@ describe('Billing Module (5.13)', () => {
       await prisma.guest.deleteMany({ where: { id: guest.id } });
     });
   });
+
+  // CH-050 (docs/execution/PLAN_MODULE_FACTURATION.md) — bug réel identifié
+  // en câblant l'UI d'ajout de charge : addFolioLine ne vérifiait jamais si
+  // une facture EMISE existait déjà, une charge ajoutée après coup ne
+  // pouvait donc jamais y apparaître silencieusement.
+  describe('Add folio line — garde facture déjà émise (CH-050)', () => {
+    it('rejette l’ajout d’une ligne une fois une facture active émise sur le folio', async () => {
+      const ts = Date.now();
+      const roomType = await prisma.roomType.create({
+        data: {
+          nom: `TEST-BILLING-GUARD-${ts}`,
+          prixBase: new Prisma.Decimal(500),
+          capacite: 2,
+        },
+      });
+      const room = await prisma.room.create({
+        data: {
+          numero: `TEST-BILLING-GUARD-${ts}-101`,
+          roomTypeId: roomType.id,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+      const guest = await prisma.guest.create({
+        data: { nom: 'Fassi', prenom: 'Omar' },
+      });
+      const stay = await prisma.stay.create({
+        data: {
+          roomId: room.id,
+          guestId: guest.id,
+          dateCheckin: new Date(),
+          dateCheckoutPrevue: new Date(),
+        },
+      });
+      const folio = await prisma.folio.create({
+        data: { stayId: stay.id, libelle: 'Folio principal' },
+      });
+      await prisma.folioLine.create({
+        data: {
+          folioId: folio.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: 'Hébergement — 1 nuit',
+          montant: new Prisma.Decimal(500),
+        },
+      });
+
+      // Avant facturation : l'ajout d'une charge fonctionne normalement.
+      const addBefore = await client.post(`/api/folios/${folio.id}/lignes`).send({
+        type: TypeLigneFolio.EXTRA,
+        libelle: 'Petit-déjeuner supplémentaire',
+        montant: '30.00',
+      });
+      expect(addBefore.status).toBe(201);
+
+      const invoiceRes = await client
+        .post(`/api/invoices/generer?folioId=${folio.id}`)
+        .send({});
+      expect(invoiceRes.status).toBe(201);
+      const invoiceId = invoiceRes.body.id as number;
+
+      // Preuve de rigueur sabotage/restore : sans la garde ajoutée dans
+      // addFolioLine (vérification des factures EMISE), cet appel aurait
+      // renvoyé 201 et créé une ligne qui n'apparaîtrait jamais sur la
+      // facture déjà émise — vérifié en retirant temporairement la garde
+      // pendant le développement, le test échouait bien alors (201 au lieu
+      // du 409 attendu), confirmant qu'il est discriminant.
+      const addAfter = await client.post(`/api/folios/${folio.id}/lignes`).send({
+        type: TypeLigneFolio.EXTRA,
+        libelle: 'Café restaurant (ne devrait jamais être créé)',
+        montant: '25.00',
+      });
+      expect(addAfter.status).toBe(409);
+
+      const nbLignes = await prisma.folioLine.count({
+        where: { folioId: folio.id },
+      });
+      // HEBERGEMENT + EXTRA (avant facturation) + TAXE_SEJOUR (matérialisée
+      // automatiquement par generateInvoice(), même à 0 MAD sur un séjour
+      // de 0 nuit ici — voir computeTaxLineAmount) = 3, jamais 4 (le rejet
+      // ci-dessus ne doit ajouter aucune ligne).
+      expect(nbLignes).toBe(3);
+
+      // Nettoyer.
+      await prisma.invoice.deleteMany({ where: { id: invoiceId } });
+      await prisma.folioLine.deleteMany({ where: { folioId: folio.id } });
+      await prisma.folio.deleteMany({ where: { stayId: stay.id } });
+      await prisma.roomNight.deleteMany({ where: { stayId: stay.id } });
+      await prisma.stay.deleteMany({ where: { id: stay.id } });
+      await prisma.room.deleteMany({ where: { id: room.id } });
+      await prisma.roomType.deleteMany({ where: { id: roomType.id } });
+      await prisma.guest.deleteMany({ where: { id: guest.id } });
+    });
+  });
+
+  // CH-050 (docs/execution/PLAN_MODULE_FACTURATION.md) — génération PDF réelle.
+  describe('Invoice PDF (CH-050)', () => {
+    it('renvoie un vrai flux PDF avec le bon Content-Type', async () => {
+      const ts = Date.now();
+      const roomType = await prisma.roomType.create({
+        data: {
+          nom: `TEST-BILLING-PDF-${ts}`,
+          prixBase: new Prisma.Decimal(500),
+          capacite: 2,
+        },
+      });
+      const room = await prisma.room.create({
+        data: {
+          numero: `TEST-BILLING-PDF-${ts}-101`,
+          roomTypeId: roomType.id,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+      const guest = await prisma.guest.create({
+        data: { nom: 'Tazi', prenom: 'Salma', email: 'salma@example.com' },
+      });
+      const stay = await prisma.stay.create({
+        data: {
+          roomId: room.id,
+          guestId: guest.id,
+          dateCheckin: new Date(),
+          dateCheckoutPrevue: new Date(),
+        },
+      });
+      const folio = await prisma.folio.create({
+        data: { stayId: stay.id, libelle: 'Folio principal' },
+      });
+      await prisma.folioLine.create({
+        data: {
+          folioId: folio.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: 'Hébergement — 1 nuit',
+          montant: new Prisma.Decimal(500),
+        },
+      });
+      const invoiceRes = await client
+        .post(`/api/invoices/generer?folioId=${folio.id}`)
+        .send({});
+      expect(invoiceRes.status).toBe(201);
+      const invoiceId = invoiceRes.body.id as number;
+
+      const pdfRes = await client
+        .get(`/api/invoices/${invoiceId}/pdf`)
+        .buffer(true)
+        .parse((res, callback) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk: Buffer) => chunks.push(chunk));
+          res.on('end', () => callback(null, Buffer.concat(chunks)));
+        });
+
+      expect(pdfRes.status).toBe(200);
+      expect(pdfRes.headers['content-type']).toContain('application/pdf');
+      const body = pdfRes.body as Buffer;
+      expect(body.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+
+      // Nettoyer.
+      await prisma.invoice.deleteMany({ where: { id: invoiceId } });
+      await prisma.folioLine.deleteMany({ where: { folioId: folio.id } });
+      await prisma.folio.deleteMany({ where: { stayId: stay.id } });
+      await prisma.roomNight.deleteMany({ where: { stayId: stay.id } });
+      await prisma.stay.deleteMany({ where: { id: stay.id } });
+      await prisma.room.deleteMany({ where: { id: room.id } });
+      await prisma.roomType.deleteMany({ where: { id: roomType.id } });
+      await prisma.guest.deleteMany({ where: { id: guest.id } });
+    });
+  });
 });
