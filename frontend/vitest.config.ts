@@ -18,5 +18,9 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    // CH-036 — e2e/ contient les suites Playwright (autre exécuteur, autre
+    // API test/expect) : sans cette exclusion, Vitest tente de les
+    // interpréter comme des tests unitaires et échoue sur l'API Playwright.
+    exclude: ['**/node_modules/**', 'e2e/**'],
   },
 });

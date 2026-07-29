@@ -112,5 +112,102 @@ jobs:
       - name: Installer les dépendances
         run: npm ci
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests unitaires (Vitest)
+        run: npm test
+
       - name: Build (tsc + vite)
         run: npm run build
+
+  e2e-frontend:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: pms_makarim
+          MYSQL_USER: pms
+          MYSQL_PASSWORD: pms
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DATABASE_URL: mysql://pms:pms@127.0.0.1:3306/pms_makarim
+      JWT_ACCESS_SECRET: ci-access-secret
+      JWT_REFRESH_SECRET: ci-refresh-secret
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      ENCRYPTION_KEY: tJpZnGUKdaOOe3qhWB5ZfZnSH7jsuCqb3Npr6qBBrGA=
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6380
+      # CH-036 — même convention host que le développement local (backend/
+      # .env local de cet environnement) : les URLs de front/back doivent
+      # matcher exactement pour que le CORS (main.ts, credentials: true)
+      # laisse passer les requêtes du navigateur Playwright.
+      FRONTEND_URL: http://127.0.0.1:5173
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Installer les dépendances backend
+        working-directory: backend
+        run: npm ci
+
+      - name: Générer le client Prisma
+        working-directory: backend
+        run: npx prisma generate
+
+      - name: Appliquer les migrations
+        working-directory: backend
+        run: npx prisma migrate deploy
+
+      - name: Charger les données de seed
+        working-directory: backend
+        run: npx prisma db seed
+
+      - name: Installer les dépendances frontend
+        working-directory: frontend
+        run: npm ci
+
+      - name: Installer les navigateurs Playwright (Chromium uniquement)
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Tests e2e frontend (Playwright, backend+MySQL réels)
+        working-directory: frontend
+        env:
+          CI: true
+        run: npm run test:e2e
+
+      - name: Publier le rapport Playwright en cas d'échec
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7

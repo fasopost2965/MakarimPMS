@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# CH-036 — artefacts Playwright (jamais committés, régénérés à chaque run)
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

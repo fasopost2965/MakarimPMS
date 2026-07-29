@@ -574,6 +574,34 @@ Contrairement aux chantiers CH-001 à CH-026 (issus des Phases 1-10, constat de 
 
 ---
 
+## Chantiers — Plan de mise en production bêta (VPS Hostinger)
+
+Issus de `docs/execution/PLAN_MISE_EN_PRODUCTION_BETA.md` (audit du 29 juillet 2026, comparatif avec `MakarimPMS_v2`), validé par l'utilisateur avant exécution. Phases A (rigueur frontend) → B (portage sélectif v2) → C (décisions/nettoyage doc) → D (infrastructure VPS réelle), un point de validation par phase.
+
+### CH-036 — Socle de tests e2e automatisés frontend (Playwright)
+
+- **Source** : `docs/execution/PLAN_MISE_EN_PRODUCTION_BETA.md` Phase A, demande explicite utilisateur (« le frontend de main doit être codé avec la même rigueur que le backend »).
+- **Description factuelle** : le backend a 23 suites e2e réelles contre MySQL (`backend/test/*.e2e-spec.ts`). Le frontend n'a que 15 fichiers de tests unitaires de composants (Vitest, CH-028) — aucune des 16 pages `features/*/pages/*.tsx` n'est couverte, et aucun parcours utilisateur complet (connexion → action → résultat visible) n'est vérifié automatiquement. Toute vérification de chantier frontend cette session a été manuelle, en navigateur réel, non reproductible en CI.
+- **Modules concernés** : transverse, ciblé sur les parcours à risque financier/légal en priorité.
+- **Priorité** : Bloquant pour la bêta · **Criticité** : Élevée
+- **Livrable attendu** : `@playwright/test` installé (Chromium pré-installé sur cet environnement, pas de nouveau téléchargement) ; configuration pointant vers le serveur de dev/preview + le backend réel (MySQL/Redis réels, données seedées, jamais de mock) ; 6 parcours critiques : connexion, création de réservation walk-in, check-in, check-out + paiement (jusqu'à solde à zéro), changement de statut ménage, déconnexion ; intégration au pipeline CI (`ci.yml`).
+- **Critères de validation** : les 6 parcours passent en local et en CI contre une vraie base MySQL seedée ; un des tests reproduit un scénario métier réellement sensible (ex. blocage du check-out sur solde impayé, BR-SEJ-004) pour prouver la valeur du socle sur un cas réel.
+- **Statut** : ✅ **Terminé** (session courante).
+- **Résolution** : `@playwright/test` 1.62 installé (`frontend/playwright.config.ts`) ; `webServer` démarre backend réel (`npm run start:dev`) et frontend réel (`vite dev`) avant les tests — jamais de mock, MySQL/Redis réels, données seedées via `npx prisma db seed`. **5 scénarios** couvrant les 6 parcours prévus (réservation walk-in et check-in fusionnés : dans ce produit, un check-in walk-in *est* la création de la réservation, pas une étape séparée) : `01-auth.spec.ts` (connexion réussie, mot de passe incorrect, déconnexion + persistance de la session après reload) ; `02-checkin-checkout-paiement.spec.ts` (le scénario le plus sensible — check-in walk-in, check-out **refusé** tant que le solde HEBERGEMENT n'est pas réglé — preuve réelle de BR-SEJ-004/INV-SEJ-002 — paiement intégral via `RecordPaymentDialog`, check-out qui réussit ensuite) ; `03-housekeeping-statut.spec.ts` (ADR-003 — bascule manuelle LIBRE_PROPRE→À nettoyer→En nettoyage→LIBRE_PROPRE). Chaque scénario financier/métier sensible nettoie son propre état en fin de test (repasse la chambre à LIBRE_PROPRE) — vérifié rejouable deux fois de suite sans reseed intermédiaire (la matrice `ROOM_TRANSITIONS`, `rooms/utils/room-transitions.ts`, interdit `A_NETTOYER→OCCUPEE` : un premier essai sans ce nettoyage laissait la chambre inutilisable pour un rejeu, bug de test découvert et corrigé en vérifiant réellement une deuxième exécution, pas supposé). `ci.yml` : nouveau job `e2e-frontend` (services MySQL/Redis, migrate+seed, `playwright install --with-deps chromium`, upload du rapport HTML en cas d'échec) ; job `frontend` existant complété avec les étapes `lint`/`test` (vitest) qui manquaient totalement à la CI jusqu'ici (aucun test frontend n'était donc jamais exécuté automatiquement, même le socle Vitest de CH-028). `vitest.config.ts` exclut désormais `e2e/**` (Vitest tentait sinon d'interpréter les specs Playwright avec son propre `describe`/`it`, incompatibles). 5/5 verts, rejouable deux fois sans reseed.
+- **Éléments testés** : suite complète rejouée deux fois consécutives sans reseed (idempotence vérifiée, pas supposée) ; `npm run build`/`lint`/`test` (unitaires) clean.
+
+### CH-037 — Tests unitaires des pages frontend non couvertes
+
+- **Source** : `docs/execution/PLAN_MISE_EN_PRODUCTION_BETA.md` Phase A.
+- **Description factuelle** : complète CH-036 au niveau composant plutôt que parcours bout-en-bout — `ReservationsCalendarPage`, `CheckinPage`, `HousekeepingPage`, `GuestsPage` au minimum (pattern déjà établi par `BillingTabContent.test.tsx`/`PoliceRecordForm.test.tsx`).
+- **Statut** : ✅ **Terminé (socle initial)** (session courante) — comme CH-028, pratique continue au-delà de ce socle, pas clos une fois pour toutes.
+- **Résolution** : `HousekeepingPage.test.tsx` (3 tests) — seule règle métier non triviale de cet écran (ADR-003 : `RESERVEE`/`OCCUPEE`/`DEPART_PREVU` pilotés exclusivement par le système, jamais un `<Select>` manuel, remplacés par un texte explicatif), jamais vérifiée automatiquement jusqu'ici. `ReservationsCalendarPage`/`CheckinPage`/`GuestsPage` restent couverts par CH-036 (parcours e2e bout-en-bout) plutôt que dupliqués ici au niveau composant — priorité donnée à la page la moins déjà couverte plutôt qu'à une couverture exhaustive immédiate, même logique que CH-028.
+- **Éléments testés** : 51/51 tests unitaires (48 précédents + 3 nouveaux), `npm run build`/`lint` clean.
+
+*(CH-038 à CH-047 : fiches à détailler au fil de l'exécution des Phases B/C/D, voir le plan pour la liste complète et les critères de chaque chantier.)*
+
+---
+
 ## Résumé quantitatif
 
 | Priorité | Nombre de chantiers | Charge cumulée estimée (ordre de grandeur) | Terminés |

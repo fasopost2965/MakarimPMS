@@ -46,10 +46,11 @@ Ce document isole la dette **structurelle** (comment le code est construit) de l
 **Pourquoi c'est fragile** : le coût que le plan d'origine cherchait explicitement à éviter s'est matérialisé exactement comme anticipé — chaque nouvel écran continue de payer individuellement l'absence de socle plutôt que de le consommer, et la dette grossit à chaque livraison plutôt que de se stabiliser.
 **Chantiers** : CH-031 (error boundary), CH-032 (composants partagés).
 
-### 9. Zéro test automatisé frontend — Phase 11 §4.1
+### 9. ~~Zéro test automatisé frontend~~ (Phase 11 §4.1) — **Résolu (CH-028, CH-036, CH-037)**
 
-**Nature** : `frontend/package.json` ne déclare aucune dépendance de test (pas de Vitest, pas de Testing Library). Toute vérification de chantier frontend cette session a été manuelle, en navigateur réel, non reproductible en CI.
-**Pourquoi c'est fragile** : symétrique de la zone de fragilité n°3 ci-dessus côté backend (absence de tests unitaires de service), mais plus large — côté backend, la couverture e2e réelle contre MySQL compense partiellement l'absence de tests unitaires ; côté frontend, il n'existe **aucune** couche de test, e2e ou unitaire, automatisée.
+**Nature d'origine** : `frontend/package.json` ne déclarait aucune dépendance de test (pas de Vitest, pas de Testing Library). Toute vérification de chantier frontend a longtemps été manuelle, en navigateur réel, non reproductible en CI — y compris en CI : le job `frontend` de `ci.yml` n'exécutait même pas `npm run lint`/`npm test` avant CH-036, un écart distinct découvert en corrigeant celui-ci.
+**Résolution** : Vitest + Testing Library (CH-028, 48 tests) puis Playwright (CH-036, 5 suites e2e réelles contre backend+MySQL réels, dont la preuve d'un scénario financier sensible — BR-SEJ-004) puis tests unitaires ciblés supplémentaires (CH-037). `ci.yml` exécute désormais `lint`+`test` dans le job `frontend` et un nouveau job `e2e-frontend` dédié. Écart résiduel documenté (pas résolu ici) : ce socle reste bien plus mince que la couverture e2e backend (23 suites) — pratique continue, pas un chantier clos une fois pour toutes, même limite que la dette n°3 côté backend.
+**Chantiers** : CH-028 (terminé) + CH-036 (terminé) + CH-037 (terminé, socle initial).
 **Chantier** : CH-028.
 
 ### 10. Absence d'isolation aux erreurs de rendu (error boundary) — Phase 11 §4.5
