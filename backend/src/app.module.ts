@@ -29,6 +29,7 @@ import { SelfCheckinModule } from './modules/self-checkin/self-checkin.module';
 import { BookingEngineModule } from './modules/booking-engine/booking-engine.module';
 import { DocumentOcrModule } from './modules/document-ocr/document-ocr.module';
 import { ChannelManagerModule } from './modules/channel-manager/channel-manager.module';
+import { RestaurantModule } from './modules/restaurant/restaurant.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { CsrfGuard } from './common/guards/csrf.guard';
@@ -98,6 +99,7 @@ import { CsrfGuard } from './common/guards/csrf.guard';
     BookingEngineModule,
     DocumentOcrModule,
     ChannelManagerModule,
+    RestaurantModule,
   ],
   controllers: [AppController],
   providers: [

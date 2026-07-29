@@ -470,6 +470,11 @@ enum TypeLigneFolio {
   EXTRA
   TAXE_SEJOUR
   PAIEMENT
+  // F11 (CH-056) — note restaurant écrite directement par un compte
+  // RESTAURATEUR (RD-025/RD-F11-01), jamais par la réception. Distincte
+  // d'EXTRA pour permettre le badge visuel dédié côté frontend et le
+  // blocage de check-out spécifique (BR-SEJ-004 étendu, RD-F11-03).
+  RESTAURANT
 }
 
 // Règles 2 et 3 (CLAUDE.md) : un séjour peut avoir plusieurs folios ; ce
@@ -601,17 +606,17 @@ enum StatutFacture {
 }
 
 model Invoice {
-  id             Int                     @id @default(autoincrement())
-  numero         String                  @unique
+  id             Int                    @id @default(autoincrement())
+  numero         String                 @unique
   folioId        Int
-  folio          Folio                   @relation(fields: [folioId], references: [id])
-  montantTotal   Decimal                 @db.Decimal(10, 2)
-  statut         StatutFacture           @default(EMISE)
+  folio          Folio                  @relation(fields: [folioId], references: [id])
+  montantTotal   Decimal                @db.Decimal(10, 2)
+  statut         StatutFacture          @default(EMISE)
   pdfUrl         String?
   creditNotes    CreditNote[]
   payments       Payment[]
   downloadTokens InvoiceDownloadToken[]
-  createdAt      DateTime                @default(now())
+  createdAt      DateTime               @default(now())
 }
 
 // CH-050 suite (docs/execution/PLAN_MODULE_FACTURATION.md) — lien de
@@ -691,7 +696,11 @@ model HotelConfig {
   identifiantFiscal String
   rc                String
   adresse           String
-  logoUrl           String?
+  // Logo de l'hôtel — data URI base64 (même convention que
+  // MaintenanceTicket.photoUrl, CH-055 : jamais de persistance disque,
+  // stockage LongText). Utilisé par le frontend (sidebar, écran de
+  // connexion) et par la génération de facture PDF.
+  logoUrl           String?  @db.LongText
   categorieEtoiles  Int
   devise            String   @default("MAD")
   formatDate        String   @default("DD/MM/YYYY")
@@ -1208,6 +1217,17 @@ enum AuditAction {
   // CH-040 (BR-AUD-002) — annulation contrôlée d'une ligne de folio d'extras
   // (BillingService.cancelFolioLine).
   CANCEL_FOLIO_LINE
+  // F11 (CH-056, RD-025) — note restaurant écrite directement par un compte
+  // RESTAURATEUR (RestaurantService.addCharge, distinct de la charge EXTRA
+  // manuelle réception qui n'est pas auditée). La correction d'une note
+  // (RD-F11-02) réutilise CANCEL_FOLIO_LINE pour l'annulation puis écrit
+  // une deuxième CREATE_RESTAURANT_CHARGE pour la recréation — 2 lignes
+  // d'audit dans la même transaction, jamais une mutation directe.
+  CREATE_RESTAURANT_CHARGE
+  // F11 — check-out forcé malgré une note restaurant non acquittée
+  // (RD-F11-03), distinct de FORCE_CHECKOUT (solde impayé) pour ne pas
+  // confondre les deux causes de forçage dans l'audit.
+  FORCE_CHECKOUT_RESTAURANT
 }
 
 // ------------------------------------------------------------------

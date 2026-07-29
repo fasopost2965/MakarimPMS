@@ -83,9 +83,18 @@ export class BillingService {
   // uniquement (pas dans creditFolioLine ci-dessous, appelée par
   // payments/stay pour créditer un règlement ou un acompte — un client doit
   // pouvoir payer une facture déjà émise, cas normal, pas un bug).
-  async addFolioLine(folioId: number, dto: AddFolioLineDto) {
-    await this.assertFolioWritable(folioId);
-    const invoices = await this.prisma.invoice.findMany({
+  // F11 (CH-056) — tx optionnel ajouté pour permettre à RestaurantService
+  // d'écrire la FolioLine RESTAURANT et son AuditLog dans une seule
+  // transaction (ADR-005) sans dupliquer cette méthode, même pattern que
+  // creditFolioLine/assertFolioWritable ci-dessous.
+  async addFolioLine(
+    folioId: number,
+    dto: AddFolioLineDto,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx ?? this.prisma;
+    await this.assertFolioWritable(folioId, tx);
+    const invoices = await client.invoice.findMany({
       where: { folioId },
     });
     if (invoices.some((i) => i.statut === 'EMISE')) {
@@ -101,7 +110,7 @@ export class BillingService {
     // appliqués selon le type de charge. Pour l'instant (Phase 1), on laisse
     // tauxTva à sa valeur par défaut (0) — la TVA s'applique lors de la
     // génération de facture depuis le type de ligne.
-    return this.prisma.folioLine.create({
+    return client.folioLine.create({
       data: {
         folioId,
         type: dto.type,
@@ -116,18 +125,26 @@ export class BillingService {
   // d'une ligne EXTRA : le schéma portait déjà `FolioLine.annulee`/
   // `motifAnnulation` et toute la lecture en aval (computeSoldeDu exclut
   // déjà les lignes annulées, generateInvoice filtre déjà .annulee) —
-  // seul manquait ce point d'écriture. Restreint aux lignes EXTRA
+  // seul manquait ce point d'écriture. Restreint aux lignes EXTRA/RESTAURANT
   // (HEBERGEMENT/TAXE_SEJOUR sont générées par le système, jamais annulées
-  // à la main ; PAIEMENT a son propre flux dédié, payments:refund). Mêmes
-  // gardes que addFolioLine ci-dessus (séjour en cours, pas de facture déjà
-  // émise sur ce folio) — sinon une ligne facturée disparaîtrait du solde
-  // sans que la facture immuable (INV-FAC-001) ne le reflète jamais.
+  // à la main ; PAIEMENT a son propre flux dédié, payments:refund).
+  // F11 (CH-056) — RESTAURANT ajouté à la garde de type : RD-F11-02 réutilise
+  // ce chemin d'écriture pour la première moitié (annulation) d'une
+  // correction de note restaurant (annulation + recréation via addFolioLine
+  // ci-dessus, jamais de mutation directe d'une ligne existante). tx
+  // optionnel ajouté pour que RestaurantService compose annulation+
+  // recréation dans une seule transaction. Mêmes gardes qu'addFolioLine
+  // ci-dessus (séjour en cours, pas de facture déjà émise sur ce folio) —
+  // sinon une ligne facturée disparaîtrait du solde sans que la facture
+  // immuable (INV-FAC-001) ne le reflète jamais.
   async cancelFolioLine(
     lineId: number,
     dto: CancelFolioLineDto,
     userId?: number,
+    tx?: Prisma.TransactionClient,
   ) {
-    const ligne = await this.prisma.folioLine.findUnique({
+    const client = tx ?? this.prisma;
+    const ligne = await client.folioLine.findUnique({
       where: { id: lineId },
       include: { folio: { include: { invoices: true } } },
     });
@@ -137,25 +154,28 @@ export class BillingService {
     if (ligne.annulee) {
       throw new ConflictException(`Ligne de folio ${lineId} déjà annulée.`);
     }
-    if (ligne.type !== TypeLigneFolio.EXTRA) {
+    if (
+      ligne.type !== TypeLigneFolio.EXTRA &&
+      ligne.type !== TypeLigneFolio.RESTAURANT
+    ) {
       throw new ConflictException(
-        `Seules les lignes de type EXTRA peuvent être annulées manuellement (BR-AUD-002) — la ligne ${lineId} est de type ${ligne.type}.`,
+        `Seules les lignes de type EXTRA ou RESTAURANT peuvent être annulées manuellement (BR-AUD-002) — la ligne ${lineId} est de type ${ligne.type}.`,
       );
     }
-    await this.assertFolioWritable(ligne.folioId);
+    await this.assertFolioWritable(ligne.folioId, tx);
     if (ligne.folio.invoices.some((i) => i.statut === 'EMISE')) {
       throw new ConflictException(
         `Une facture active existe déjà pour le folio ${ligne.folioId} — impossible d'annuler une ligne déjà facturée. Génère un avoir avant d'annuler.`,
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.folioLine.update({
+    const run = async (activeTx: Prisma.TransactionClient) => {
+      const updated = await activeTx.folioLine.update({
         where: { id: lineId },
         data: { annulee: true, motifAnnulation: dto.motif },
       });
 
-      await this.auditService.writeLog(tx, {
+      await this.auditService.writeLog(activeTx, {
         userId,
         action: AuditAction.CANCEL_FOLIO_LINE,
         targetEntity: AuditEntity.FolioLine,
@@ -166,7 +186,9 @@ export class BillingService {
       });
 
       return updated;
-    });
+    };
+
+    return tx ? run(tx) : this.prisma.$transaction(run);
   }
 
   // Générer une facture depuis un folio. Règle non négociable : une fois
@@ -496,6 +518,7 @@ export class BillingService {
         identifiantFiscal: hotelConfig.identifiantFiscal,
         rc: hotelConfig.rc,
         categorieEtoiles: hotelConfig.categorieEtoiles,
+        logoUrl: hotelConfig.logoUrl,
       },
       guest: {
         nom: invoice.folio.stay.guest.nom,
