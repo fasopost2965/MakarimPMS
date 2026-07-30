@@ -43,9 +43,28 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-me}
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      MOBILE_JWT_EXPIRES_IN: ${MOBILE_JWT_EXPIRES_IN:-8h}
+      # CH-004 — requis dans TOUS les environnements (pas seulement en production),
+      # sans elle aucune lecture/écriture de Guest n'est possible (voir backend/.env.example).
+      # Valeur par défaut = même clé de dev que backend/.env.example, jamais utilisée pour
+      # un déploiement réel puisqu'elle doit alors être fournie explicitement via .env.
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-AqPFDtHd7Jqqh9wQnh/7ArvxgNAOK3o3sgodMRH8khw=}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:3000/api}
+      NODE_ENV: ${NODE_ENV:-}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      CHANNEL_WEBHOOK_SECRET: ${CHANNEL_WEBHOOK_SECRET:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-no-reply@makarim.test}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_SMS_FROM: ${TWILIO_SMS_FROM:-}
+      TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-}
     ports:
       - '3000:3000'
     depends_on:
