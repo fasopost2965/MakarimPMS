@@ -217,7 +217,7 @@ export function PoliceRecordForm({ stayId, reservationId, onSaved }: Props) {
   return (
     <div className="flex flex-col gap-4">
       {!record && (
-        <p className="text-sm text-amber-600">
+        <p className="text-warning text-sm">
           Aucune fiche de police enregistrée pour ce séjour — obligation légale
           DGSN.
         </p>

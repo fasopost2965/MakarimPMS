@@ -89,7 +89,7 @@ export function SelfCheckinPanel({ reservationId, guestEmail }: Props) {
       {loadError && <p className="text-destructive text-sm">{loadError}</p>}
 
       {!guestEmail && (
-        <p className="text-amber-600 text-xs">
+        <p className="text-warning text-xs">
           Ce client n'a pas d'adresse email enregistrée — le lien ne pourra pas
           être envoyé automatiquement, à transmettre manuellement (copier le
           lien).

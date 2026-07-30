@@ -88,7 +88,7 @@ export function StayDetailsDialog({
               >
                 Police
                 {!stay.policeRecord && (
-                  <span className="text-amber-500 ml-1">⚠</span>
+                  <span className="text-warning ml-1">⚠</span>
                 )}
               </Button>
             </div>
