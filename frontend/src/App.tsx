@@ -267,7 +267,11 @@ function App() {
   if (!isAuthenticated) {
     if (authScreen === 'forgot-password') {
       return (
-        <ForgotPasswordPage onBackToLogin={() => setAuthScreen('login')} />
+        <ForgotPasswordPage
+          onBackToLogin={() => setAuthScreen('login')}
+          logoUrl={branding?.logoUrl ?? null}
+          raisonSociale={branding?.raisonSociale}
+        />
       );
     }
     return (
