@@ -1,4 +1,10 @@
 export type CanalReservation = 'WALK_IN' | 'DIRECT' | 'BOOKING_COM';
+// CH-061 (Lot #3 design) — jusqu'ici saisie uniquement via Paramètres
+// (grille tarifaire des types de chambre), jamais exposée dans les
+// formulaires de création (réservation, walk-in) malgré son support
+// backend complet (CreateReservationDto.formule/WalkinCheckinDto.formule).
+export type FormuleHebergement =
+  'ROOM_ONLY' | 'BED_AND_BREAKFAST' | 'HALF_BOARD' | 'FULL_BOARD';
 export type StatutReservation =
   'CONFIRMEE' | 'ANNULEE' | 'NO_SHOW' | 'TRANSFORMEE_EN_SEJOUR';
 export type StatutChambre =
@@ -73,6 +79,7 @@ export type CreateReservationInput = {
   dateArrivee: string;
   dateDepart: string;
   canal?: CanalReservation;
+  formule?: FormuleHebergement;
 } & (
   | { guestId: number; guest?: undefined }
   | {

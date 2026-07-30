@@ -1,6 +1,7 @@
 import { apiRequest } from '@/lib/api-client';
 import type {
   CreateReservationInput,
+  FormuleHebergement,
   Reservation,
   Room,
   SelfCheckinLink,
@@ -24,6 +25,26 @@ export function listReservations(params?: { du?: string; au?: string }) {
   if (params?.au) query.set('au', params.au);
   const qs = query.toString();
   return apiRequest<Reservation[]>(`/reservations${qs ? `?${qs}` : ''}`);
+}
+
+// CH-061 (Lot #3 design) — aperçu de prix en direct côté formulaire
+// réception, avant confirmation (ne crée rien). Réutilise le même calcul
+// que la création réelle (ReservationsService.estimatePrixTotal).
+export function estimatePrice(params: {
+  roomTypeId: number;
+  dateArrivee: string;
+  dateDepart: string;
+  formule?: FormuleHebergement;
+}) {
+  const query = new URLSearchParams({
+    roomTypeId: String(params.roomTypeId),
+    dateArrivee: params.dateArrivee,
+    dateDepart: params.dateDepart,
+  });
+  if (params.formule) query.set('formule', params.formule);
+  return apiRequest<{ prixEstime: string }>(
+    `/reservations/estimation-prix?${query.toString()}`,
+  );
 }
 
 export function createReservation(input: CreateReservationInput) {
