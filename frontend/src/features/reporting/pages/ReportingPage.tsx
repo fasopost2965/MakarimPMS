@@ -1,16 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   exportGrandLivre,
   exportPoliceReport,
@@ -38,133 +37,217 @@ const LIGNE_LABEL: Record<keyof Omit<FinancialSummary, 'periode'>, string> = {
 };
 
 const RECOMMANDATION_LABEL: Record<RecommandationTarifaire, string> = {
-  HAUSSE: 'Hausse suggérée',
-  BAISSE: 'Baisse suggérée',
-  MAINTIEN: 'Stable',
+  HAUSSE: 'Hausse',
+  BAISSE: 'Baisse',
+  MAINTIEN: 'Maintien',
 };
 
 const RECOMMANDATION_VARIANT: Record<
   RecommandationTarifaire,
-  'default' | 'secondary' | 'destructive'
+  'success' | 'destructive' | 'outline'
 > = {
-  HAUSSE: 'default',
+  HAUSSE: 'success',
   BAISSE: 'destructive',
-  MAINTIEN: 'secondary',
+  MAINTIEN: 'outline',
 };
 
+function firstOfMonth() {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 // Module reporting (docs/modules/reporting.md, strictement lecture seule
-// côté backend, INV-REP-001) : synthèse fiscale, export du grand livre
-// (BR-REP-001), rapport de police journalier — et depuis CH-054, 3 écrans
-// pour des endpoints déjà réels côté backend mais jamais consommés côté
-// frontend jusqu'ici (détail des taxes/déclaration DGI, registre légal
-// police sur une plage de dates, prévision de revenu F3/Yield Management).
+// côté backend, INV-REP-001 ; refonte visuelle batch 3 design handoff,
+// Reporting.dc.html) : synthèse fiscale, export du grand livre (BR-REP-001),
+// détail des taxes/déclaration DGI, registre légal police, prévision de
+// revenu (F3/Yield Management) — désormais une plage de dates unique
+// partagée par les 4 sections (« Actualiser les rapports »), au lieu de 4
+// formulaires indépendants à dates propres. Le rapport de police « arrivées
+// du jour » (un seul jour, distinct du registre sur plage de dates) est
+// conservé en action secondaire compacte — le mockup ne le montre pas
+// explicitement mais rien ne justifie de retirer une capacité déjà réelle.
 export function ReportingPage() {
-  const [dateDebut, setDateDebut] = useState('');
-  const [dateFin, setDateFin] = useState('');
+  const [dateDebut, setDateDebut] = useState(firstOfMonth());
+  const [dateFin, setDateFin] = useState(today());
   const [summary, setSummary] = useState<FinancialSummary | null>(null);
+  const [taxes, setTaxes] = useState<TaxesReport | null>(null);
+  const [police, setPolice] = useState<PoliceRegisterEntry[] | null>(null);
+  const [yieldForecast, setYieldForecast] = useState<YieldForecast | null>(
+    null,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
 
-  const [policeDate, setPoliceDate] = useState('');
-  const [exportingPolice, setExportingPolice] = useState(false);
-  const [policeError, setPoliceError] = useState<string | null>(null);
+  const [exportingGrandLivre, setExportingGrandLivre] = useState(false);
+  const [exportingPoliceRegistre, setExportingPoliceRegistre] = useState(false);
+  const [policeDateJour, setPoliceDateJour] = useState('');
+  const [exportingPoliceJour, setExportingPoliceJour] = useState(false);
+  const [policeJourError, setPoliceJourError] = useState<string | null>(null);
+  const [roomTypeFilter, setRoomTypeFilter] = useState('ALL');
 
-  const canQuery = dateDebut && dateFin;
+  const canQuery = Boolean(dateDebut && dateFin);
 
-  async function handleSummary() {
+  async function handleRefresh() {
     if (!canQuery) return;
     setLoading(true);
     setError(null);
-    try {
-      setSummary(await getFinancialSummary(dateDebut, dateFin));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur');
-    } finally {
-      setLoading(false);
+    const results = await Promise.allSettled([
+      getFinancialSummary(dateDebut, dateFin),
+      getTaxesReport(dateDebut, dateFin),
+      getPoliceRegister(dateDebut, dateFin),
+      getYieldForecast(dateDebut, dateFin),
+    ]);
+    const [summaryRes, taxesRes, policeRes, yieldRes] = results;
+    if (summaryRes.status === 'fulfilled') setSummary(summaryRes.value);
+    if (taxesRes.status === 'fulfilled') setTaxes(taxesRes.value);
+    if (policeRes.status === 'fulfilled') setPolice(policeRes.value);
+    if (yieldRes.status === 'fulfilled') setYieldForecast(yieldRes.value);
+    const failed = results.filter((r) => r.status === 'rejected');
+    if (failed.length > 0) {
+      setError(
+        `${failed.length} rapport(s) n'ont pas pu être chargés — réessayez.`,
+      );
     }
+    setLoading(false);
   }
 
-  async function handleExport() {
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void handleRefresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleExportGrandLivre() {
     if (!canQuery) return;
-    setExporting(true);
-    setError(null);
+    setExportingGrandLivre(true);
     try {
       await exportGrandLivre(dateDebut, dateFin);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
-      setExporting(false);
+      setExportingGrandLivre(false);
     }
   }
 
-  async function handlePoliceExport() {
-    if (!policeDate) return;
-    setExportingPolice(true);
-    setPoliceError(null);
+  async function handleExportPoliceRegistre() {
+    if (!canQuery) return;
+    setExportingPoliceRegistre(true);
     try {
-      await exportPoliceReport(policeDate);
-    } catch (err) {
-      setPoliceError(err instanceof Error ? err.message : 'Erreur');
+      await exportPoliceRegister(dateDebut, dateFin);
     } finally {
-      setExportingPolice(false);
+      setExportingPoliceRegistre(false);
     }
   }
+
+  async function handleExportPoliceJour() {
+    if (!policeDateJour) return;
+    setExportingPoliceJour(true);
+    setPoliceJourError(null);
+    try {
+      await exportPoliceReport(policeDateJour);
+    } catch (err) {
+      setPoliceJourError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setExportingPoliceJour(false);
+    }
+  }
+
+  const roomTypeOptions = useMemo(
+    () => yieldForecast?.typesChambre.map((tc) => tc.nom) ?? [],
+    [yieldForecast],
+  );
+  const filteredTypesChambre = useMemo(
+    () =>
+      (yieldForecast?.typesChambre ?? []).filter(
+        (tc) => roomTypeFilter === 'ALL' || tc.nom === roomTypeFilter,
+      ),
+    [yieldForecast, roomTypeFilter],
+  );
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
-      <div className="flex max-w-lg flex-col gap-3 rounded-md border p-4">
-        <p className="text-sm font-medium">Synthèse fiscale</p>
-        <div className="flex gap-2">
-          <div className="flex flex-1 flex-col gap-1.5">
-            <Label htmlFor="dateDebut">Début</Label>
-            <Input
-              id="dateDebut"
-              type="date"
-              value={dateDebut}
-              onChange={(e) => setDateDebut(e.target.value)}
-            />
-          </div>
-          <div className="flex flex-1 flex-col gap-1.5">
-            <Label htmlFor="dateFin">Fin</Label>
-            <Input
-              id="dateFin"
-              type="date"
-              value={dateFin}
-              onChange={(e) => setDateFin(e.target.value)}
-            />
-          </div>
+    <div className="flex h-full flex-col gap-6 overflow-auto p-6">
+      <div className="bg-card flex flex-wrap items-end gap-3 rounded-lg border p-4">
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="dateDebut" className="text-xs font-normal">
+            Du
+          </Label>
+          <Input
+            id="dateDebut"
+            type="date"
+            value={dateDebut}
+            onChange={(e) => setDateDebut(e.target.value)}
+          />
         </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="dateFin" className="text-xs font-normal">
+            Au
+          </Label>
+          <Input
+            id="dateFin"
+            type="date"
+            value={dateFin}
+            onChange={(e) => setDateFin(e.target.value)}
+          />
+        </div>
+        <Button
+          size="sm"
+          disabled={!canQuery || loading}
+          onClick={() => void handleRefresh()}
+        >
+          {loading ? 'Actualisation…' : 'Actualiser les rapports'}
+        </Button>
+        <span className="text-muted-foreground ml-auto text-xs">
+          Module strictement en lecture — aucune donnée d'exploitation n'est
+          modifiée depuis cet écran.
+        </span>
+      </div>
 
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            disabled={!canQuery || loading}
-            onClick={handleSummary}
-          >
-            {loading ? 'Calcul…' : 'Calculer'}
-          </Button>
+      {error && <p className="text-destructive text-sm">{error}</p>}
+
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-muted-foreground text-xs font-bold tracking-wide uppercase">
+            Résumé financier — {dateDebut} au {dateFin}
+          </span>
           <Button
             size="sm"
             variant="outline"
-            disabled={!canQuery || exporting}
-            onClick={handleExport}
+            disabled={!canQuery || exportingGrandLivre}
+            onClick={() => void handleExportGrandLivre()}
           >
-            {exporting ? 'Export…' : 'Exporter le grand livre (CSV)'}
+            {exportingGrandLivre ? 'Export…' : 'Exporter le grand livre (CSV)'}
           </Button>
         </div>
-
-        {error && <p className="text-destructive text-sm">{error}</p>}
-
         {summary && (
-          <div className="mt-2 flex flex-col gap-1 rounded bg-gray-50 p-2 text-sm">
+          <div className="grid grid-cols-3 gap-3">
             {(Object.keys(LIGNE_LABEL) as (keyof typeof LIGNE_LABEL)[]).map(
               (key) => (
-                <div key={key} className="flex justify-between">
-                  <span className="text-muted-foreground">
+                <div
+                  key={key}
+                  className={`flex flex-col gap-2 rounded-lg border p-4 ${
+                    key === 'soldeBrutEncaisse'
+                      ? 'border-primary/30 bg-primary/5'
+                      : ''
+                  }`}
+                >
+                  <span
+                    className={`text-[10.5px] font-bold tracking-wide uppercase ${
+                      key === 'soldeBrutEncaisse'
+                        ? 'text-primary'
+                        : 'text-muted-foreground'
+                    }`}
+                  >
                     {LIGNE_LABEL[key]}
                   </span>
-                  <span className="font-mono">{summary[key]} MAD</span>
+                  <span
+                    className={`text-xl font-bold tracking-tight ${
+                      key === 'soldeBrutEncaisse' ? 'text-primary' : ''
+                    }`}
+                  >
+                    {summary[key]} MAD
+                  </span>
                 </div>
               ),
             )}
@@ -172,399 +255,237 @@ export function ReportingPage() {
         )}
       </div>
 
-      <TaxesReportCard />
-
-      <div className="flex max-w-lg flex-col gap-3 rounded-md border p-4">
-        <p className="text-sm font-medium">
-          Rapport de police (arrivées du jour)
-        </p>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="policeDate">Date</Label>
-          <Input
-            id="policeDate"
-            type="date"
-            value={policeDate}
-            onChange={(e) => setPoliceDate(e.target.value)}
-          />
-        </div>
-        <Button
-          size="sm"
-          className="w-fit"
-          disabled={!policeDate || exportingPolice}
-          onClick={handlePoliceExport}
-        >
-          {exportingPolice ? 'Export…' : 'Exporter (CSV)'}
-        </Button>
-        {policeError && (
-          <p className="text-destructive text-sm">{policeError}</p>
-        )}
-      </div>
-
-      <PoliceRegisterCard />
-
-      <YieldForecastCard />
-    </div>
-  );
-}
-
-// CH-054 — GET /reporting/taxes : détail par taxe collectée sur une plage
-// de dates, section Trésor isolée pour la déclaration DGI (sous-ensemble
-// collectePourTresor=true de `detail`, jamais une source distincte).
-function TaxesReportCard() {
-  const [dateDebut, setDateDebut] = useState('');
-  const [dateFin, setDateFin] = useState('');
-  const [report, setReport] = useState<TaxesReport | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleQuery() {
-    if (!dateDebut || !dateFin) return;
-    setLoading(true);
-    setError(null);
-    try {
-      setReport(await getTaxesReport(dateDebut, dateFin));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="flex max-w-2xl flex-col gap-3 rounded-md border p-4">
-      <p className="text-sm font-medium">
-        Détail des taxes collectées (déclaration DGI)
-      </p>
-      <div className="flex gap-2">
-        <div className="flex flex-1 flex-col gap-1.5">
-          <Label htmlFor="taxesDebut">Début</Label>
-          <Input
-            id="taxesDebut"
-            type="date"
-            value={dateDebut}
-            onChange={(e) => setDateDebut(e.target.value)}
-          />
-        </div>
-        <div className="flex flex-1 flex-col gap-1.5">
-          <Label htmlFor="taxesFin">Fin</Label>
-          <Input
-            id="taxesFin"
-            type="date"
-            value={dateFin}
-            onChange={(e) => setDateFin(e.target.value)}
-          />
-        </div>
-      </div>
-      <Button
-        size="sm"
-        className="w-fit"
-        disabled={!dateDebut || !dateFin || loading}
-        onClick={handleQuery}
-      >
-        {loading ? 'Calcul…' : 'Calculer'}
-      </Button>
-
-      {error && <p className="text-destructive text-sm">{error}</p>}
-
-      {report && (
-        <div className="flex flex-col gap-3">
-          {report.detail.length === 0 ? (
-            <p className="text-muted-foreground text-sm">
-              Aucune taxe collectée sur cette période.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Taxe</TableHead>
-                  <TableHead>Mode</TableHead>
-                  <TableHead>Trésor</TableHead>
-                  <TableHead className="text-right">Lignes</TableHead>
-                  <TableHead className="text-right">Montant</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {report.detail.map((t) => (
-                  <TableRow key={t.taxeId}>
-                    <TableCell>{t.type}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {t.mode}
-                    </TableCell>
-                    <TableCell>
-                      {t.collectePourTresor && (
-                        <Badge variant="secondary">Trésor</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">{t.nbLignes}</TableCell>
-                    <TableCell className="text-right font-mono">
-                      {t.montantCollecte} MAD
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-          <p className="text-muted-foreground text-xs">
-            Section Trésor (déclaration DGI) : {report.tresor.length} taxe(s)
-            sur {report.detail.length} — total{' '}
-            {report.tresor
-              .reduce((sum, t) => sum + Number(t.montantCollecte), 0)
-              .toFixed(2)}{' '}
-            MAD.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// CH-054 — GET /reporting/police-register : registre légal complet
-// (PoliceRecord) sur une plage de dates, distinct du "rapport de police"
-// ci-dessus qui ne couvre que les arrivées d'une seule journée.
-function PoliceRegisterCard() {
-  const [dateDebut, setDateDebut] = useState('');
-  const [dateFin, setDateFin] = useState('');
-  const [entries, setEntries] = useState<PoliceRegisterEntry[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const canQuery = Boolean(dateDebut && dateFin);
-
-  async function handleQuery() {
-    if (!canQuery) return;
-    setLoading(true);
-    setError(null);
-    try {
-      setEntries(await getPoliceRegister(dateDebut, dateFin));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleExport() {
-    if (!canQuery) return;
-    setExporting(true);
-    setError(null);
-    try {
-      await exportPoliceRegister(dateDebut, dateFin);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur');
-    } finally {
-      setExporting(false);
-    }
-  }
-
-  return (
-    <div className="flex max-w-3xl flex-col gap-3 rounded-md border p-4">
-      <p className="text-sm font-medium">
-        Registre légal des personnes hébergées (obligation DGSN)
-      </p>
-      <div className="flex gap-2">
-        <div className="flex flex-1 flex-col gap-1.5">
-          <Label htmlFor="registreDebut">Début</Label>
-          <Input
-            id="registreDebut"
-            type="date"
-            value={dateDebut}
-            onChange={(e) => setDateDebut(e.target.value)}
-          />
-        </div>
-        <div className="flex flex-1 flex-col gap-1.5">
-          <Label htmlFor="registreFin">Fin</Label>
-          <Input
-            id="registreFin"
-            type="date"
-            value={dateFin}
-            onChange={(e) => setDateFin(e.target.value)}
-          />
-        </div>
-      </div>
-      <div className="flex gap-2">
-        <Button size="sm" disabled={!canQuery || loading} onClick={handleQuery}>
-          {loading ? 'Chargement…' : 'Consulter'}
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!canQuery || exporting}
-          onClick={handleExport}
-        >
-          {exporting ? 'Export…' : 'Exporter (CSV)'}
-        </Button>
-      </div>
-
-      {error && <p className="text-destructive text-sm">{error}</p>}
-
-      {entries &&
-        (entries.length === 0 ? (
-          <p className="text-muted-foreground text-sm">
-            Aucune fiche de police sur cette période.
-          </p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Client</TableHead>
-                <TableHead>Chambre</TableHead>
-                <TableHead>Pièce</TableHead>
-                <TableHead>Nationalité</TableHead>
-                <TableHead>Arrivée</TableHead>
-                <TableHead>Départ</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {entries.map((e) => (
-                <TableRow key={e.id}>
-                  <TableCell>
-                    {e.guest.prenom} {e.guest.nom}
-                  </TableCell>
-                  <TableCell>{e.stay.room.numero}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {e.typePiece} — {e.numeroPiece}
-                  </TableCell>
-                  <TableCell>{e.nationalite}</TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {e.dateArrivee.slice(0, 10)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {e.dateDepart ? e.dateDepart.slice(0, 10) : '—'}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        ))}
-    </div>
-  );
-}
-
-// CH-054 (F3) — GET /reporting/yield-forecast : prévision d'occupation par
-// type de chambre et par jour, avec recommandation tarifaire indicative.
-// Purement consultatif (INV-REP-001) — n'écrit jamais sur SeasonRate,
-// aucune action de mise à jour tarifaire depuis cet écran.
-function YieldForecastCard() {
-  const [dateDebut, setDateDebut] = useState('');
-  const [dateFin, setDateFin] = useState('');
-  const [forecast, setForecast] = useState<YieldForecast | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleQuery() {
-    if (!dateDebut || !dateFin) return;
-    setLoading(true);
-    setError(null);
-    try {
-      setForecast(await getYieldForecast(dateDebut, dateFin));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="flex max-w-4xl flex-col gap-3 rounded-md border p-4">
-      <div>
-        <p className="text-sm font-medium">
-          Prévision de revenu (Yield Management)
-        </p>
-        <p className="text-muted-foreground text-xs">
-          Consultatif uniquement — la mise à jour effective de la grille
-          tarifaire reste une action manuelle dans Paramètres.
-        </p>
-      </div>
-      <div className="flex gap-2">
-        <div className="flex flex-1 flex-col gap-1.5">
-          <Label htmlFor="yieldDebut">Début</Label>
-          <Input
-            id="yieldDebut"
-            type="date"
-            value={dateDebut}
-            onChange={(e) => setDateDebut(e.target.value)}
-          />
-        </div>
-        <div className="flex flex-1 flex-col gap-1.5">
-          <Label htmlFor="yieldFin">Fin</Label>
-          <Input
-            id="yieldFin"
-            type="date"
-            value={dateFin}
-            onChange={(e) => setDateFin(e.target.value)}
-          />
-        </div>
-      </div>
-      <Button
-        size="sm"
-        className="w-fit"
-        disabled={!dateDebut || !dateFin || loading}
-        onClick={handleQuery}
-      >
-        {loading ? 'Calcul…' : 'Calculer'}
-      </Button>
-
-      {error && <p className="text-destructive text-sm">{error}</p>}
-
-      {forecast && (
-        <div className="flex flex-col gap-4">
-          {forecast.typesChambre.length === 0 ? (
-            <p className="text-muted-foreground text-sm">
-              Aucun type de chambre trouvé.
-            </p>
-          ) : (
-            forecast.typesChambre.map((tc) => (
-              <div key={tc.roomTypeId} className="flex flex-col gap-1.5">
-                <p className="text-sm font-medium">
-                  {tc.nom}{' '}
-                  <span className="text-muted-foreground font-normal">
-                    ({tc.totalChambres} chambre(s) — occupation moyenne{' '}
-                    {tc.tauxOccupationMoyen}%)
-                  </span>
-                </p>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead className="text-right">Occupation</TableHead>
-                      <TableHead className="text-right">Prix actuel</TableHead>
-                      <TableHead>Recommandation</TableHead>
-                      <TableHead className="text-right">Prix suggéré</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {tc.previsions.map((p) => (
-                      <TableRow key={p.date}>
-                        <TableCell className="whitespace-nowrap">
-                          {p.date}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {p.chambresOccupees}/{p.totalChambres} (
-                          {p.tauxOccupation}%)
-                        </TableCell>
-                        <TableCell className="text-right font-mono">
-                          {p.prixActuel} MAD
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={RECOMMANDATION_VARIANT[p.recommandation]}
-                          >
-                            {RECOMMANDATION_LABEL[p.recommandation]}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-mono">
-                          {p.prixSuggere} MAD
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+      <div className="flex flex-col gap-3">
+        <span className="text-muted-foreground text-xs font-bold tracking-wide uppercase">
+          Taxes collectées
+        </span>
+        <div className="grid grid-cols-2 items-start gap-4">
+          <div className="bg-card overflow-hidden rounded-lg border">
+            <div className="border-b px-4.5 py-3 text-sm font-semibold">
+              Part reversée au Trésor
+            </div>
+            <div className="overflow-x-auto">
+              <div className="bg-muted/60 text-muted-foreground grid min-w-[280px] grid-cols-[1fr_90px_60px] gap-2 px-4.5 py-2 text-[11px] font-bold">
+                <span>Type</span>
+                <span>Montant</span>
+                <span>Lignes</span>
               </div>
-            ))
+              {!taxes || taxes.tresor.length === 0 ? (
+                <p className="text-muted-foreground px-4.5 py-3 text-sm">
+                  Aucune taxe reversée au Trésor sur cette période.
+                </p>
+              ) : (
+                taxes.tresor.map((t) => (
+                  <div
+                    key={t.taxeId}
+                    className="grid min-w-[280px] grid-cols-[1fr_90px_60px] items-center gap-2 border-t px-4.5 py-2 text-sm"
+                  >
+                    <span>{t.type}</span>
+                    <span>{t.montantCollecte} MAD</span>
+                    <span>{t.nbLignes}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="bg-card overflow-hidden rounded-lg border">
+            <div className="border-b px-4.5 py-3 text-sm font-semibold">
+              Détail complet
+            </div>
+            <div className="overflow-x-auto">
+              <div className="bg-muted/60 text-muted-foreground grid min-w-[340px] grid-cols-[1fr_60px_90px_60px] gap-2 px-4.5 py-2 text-[11px] font-bold">
+                <span>Type</span>
+                <span>Trésor</span>
+                <span>Montant</span>
+                <span>Lignes</span>
+              </div>
+              {!taxes || taxes.detail.length === 0 ? (
+                <p className="text-muted-foreground px-4.5 py-3 text-sm">
+                  Aucune taxe collectée sur cette période.
+                </p>
+              ) : (
+                taxes.detail.map((t) => (
+                  <div
+                    key={t.taxeId}
+                    className="grid min-w-[340px] grid-cols-[1fr_60px_90px_60px] items-center gap-2 border-t px-4.5 py-2 text-sm"
+                  >
+                    <span>{t.type}</span>
+                    <span>{t.collectePourTresor ? 'Oui' : 'Non'}</span>
+                    <span>{t.montantCollecte} MAD</span>
+                    <span>{t.nbLignes}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-muted-foreground text-xs font-bold tracking-wide uppercase">
+            Prévision d'occupation &amp; recommandation tarifaire (Yield)
+          </span>
+          {roomTypeOptions.length > 0 && (
+            <Select
+              value={roomTypeFilter}
+              onValueChange={(v) => v && setRoomTypeFilter(v)}
+              items={[
+                { value: 'ALL', label: 'Tous les types de chambre' },
+                ...roomTypeOptions.map((nom) => ({ value: nom, label: nom })),
+              ]}
+            >
+              <SelectTrigger className="w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Tous les types de chambre</SelectItem>
+                {roomTypeOptions.map((nom) => (
+                  <SelectItem key={nom} value={nom}>
+                    {nom}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
         </div>
-      )}
+        <div className="bg-card overflow-hidden rounded-lg border">
+          <div className="overflow-x-auto">
+            <div className="bg-muted/60 text-muted-foreground grid min-w-[760px] grid-cols-[110px_1fr_110px_100px_110px_100px_110px] gap-2 px-4.5 py-2 text-[11px] font-bold">
+              <span>Date</span>
+              <span>Type de chambre</span>
+              <span>Occupation</span>
+              <span>Prix actuel</span>
+              <span>Recommandation</span>
+              <span>Ajustement</span>
+              <span>Prix suggéré</span>
+            </div>
+            {filteredTypesChambre.length === 0 ? (
+              <p className="text-muted-foreground px-4.5 py-3 text-sm">
+                Aucune prévision disponible.
+              </p>
+            ) : (
+              filteredTypesChambre.flatMap((tc) =>
+                tc.previsions.map((p) => (
+                  <div
+                    key={`${tc.roomTypeId}-${p.date}`}
+                    className="grid min-w-[760px] grid-cols-[110px_1fr_110px_100px_110px_100px_110px] items-center gap-2 border-t px-4.5 py-2 text-sm"
+                  >
+                    <span className="whitespace-nowrap">{p.date}</span>
+                    <span>{tc.nom}</span>
+                    <span>{p.tauxOccupation}%</span>
+                    <span>{p.prixActuel} MAD</span>
+                    <Badge
+                      variant={RECOMMANDATION_VARIANT[p.recommandation]}
+                      className="w-fit"
+                    >
+                      {RECOMMANDATION_LABEL[p.recommandation]}
+                    </Badge>
+                    <span>
+                      {p.recommandation === 'MAINTIEN'
+                        ? '—'
+                        : `${p.ajustementSuggerePct > 0 ? '+' : ''}${p.ajustementSuggerePct}%`}
+                    </span>
+                    <span>{p.prixSuggere} MAD</span>
+                  </div>
+                )),
+              )
+            )}
+          </div>
+        </div>
+        <p className="text-muted-foreground text-[11px]">
+          Recommandation purement indicative (seuils fixes : ≥80% hausse,
+          &lt;40% baisse) — aucune écriture automatique sur la grille tarifaire
+          ; toute application reste un acte humain dans Paramètres.
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-muted-foreground text-xs font-bold tracking-wide uppercase">
+            Registre de police — déclarations nuitées
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              type="date"
+              value={policeDateJour}
+              onChange={(e) => setPoliceDateJour(e.target.value)}
+              className="h-8 w-36"
+              title="Export des arrivées d'un seul jour"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!policeDateJour || exportingPoliceJour}
+              onClick={() => void handleExportPoliceJour()}
+            >
+              {exportingPoliceJour ? 'Export…' : 'Arrivées du jour (CSV)'}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!canQuery || exportingPoliceRegistre}
+              onClick={() => void handleExportPoliceRegistre()}
+            >
+              {exportingPoliceRegistre
+                ? 'Export…'
+                : 'Exporter le registre (CSV)'}
+            </Button>
+          </div>
+        </div>
+        {policeJourError && (
+          <p className="text-destructive text-sm">{policeJourError}</p>
+        )}
+        <div className="bg-card overflow-hidden rounded-lg border">
+          <div className="overflow-x-auto">
+            <div className="bg-muted/60 text-muted-foreground grid min-w-[750px] grid-cols-[150px_90px_80px_110px_100px_100px_110px] gap-2 px-4.5 py-2 text-[11px] font-bold">
+              <span>Client</span>
+              <span>Chambre</span>
+              <span>Pièce</span>
+              <span>Nationalité</span>
+              <span>Arrivée</span>
+              <span>Départ</span>
+              <span>Provenance</span>
+            </div>
+            {!police || police.length === 0 ? (
+              <p className="text-muted-foreground px-4.5 py-3 text-sm">
+                Aucune fiche de police sur cette période.
+              </p>
+            ) : (
+              police.map((e) => (
+                <div
+                  key={e.id}
+                  className="grid min-w-[750px] grid-cols-[150px_90px_80px_110px_100px_100px_110px] items-center gap-2 border-t px-4.5 py-2 text-sm"
+                >
+                  <span className="truncate">
+                    {e.guest.prenom} {e.guest.nom}
+                  </span>
+                  <span>{e.stay.room.numero}</span>
+                  <span className="text-muted-foreground text-xs">
+                    {e.typePiece}
+                  </span>
+                  <span>{e.nationalite}</span>
+                  <span className="whitespace-nowrap">
+                    {e.dateArrivee.slice(0, 10)}
+                  </span>
+                  <span className="whitespace-nowrap">
+                    {e.dateDepart ? e.dateDepart.slice(0, 10) : '—'}
+                  </span>
+                  <span className="text-muted-foreground truncate text-xs">
+                    {e.villeProvenance ?? e.paysProvenance ?? '—'}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+        <p className="text-muted-foreground text-[11px]">
+          Données personnelles sensibles — export réservé aux besoins
+          réglementaires (Sûreté nationale, ministère du Tourisme), consultation
+          soumise au même RBAC que l'écran.
+        </p>
+      </div>
     </div>
   );
 }

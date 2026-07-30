@@ -2,7 +2,8 @@ export type EvenementNotification =
   | 'RESERVATION_CONFIRMEE'
   | 'RAPPEL_J_MOINS_1'
   | 'POST_SEJOUR'
-  | 'SELF_CHECKIN_LIEN';
+  | 'SELF_CHECKIN_LIEN'
+  | 'FACTURE_EMISE';
 
 export type CanalNotification = 'EMAIL' | 'SMS' | 'WHATSAPP';
 
