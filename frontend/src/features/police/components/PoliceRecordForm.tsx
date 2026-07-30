@@ -24,10 +24,22 @@ const TYPE_PIECE_LABEL: Record<TypePiece, string> = {
   AUTRE: 'Autre',
 };
 
+// Signal de report OCR (CH-068, ScanIdentitePage) — chaque clic sur
+// « Reporter dans la fiche de police » crée un nouvel objet (identité
+// distincte à chaque report, même si les valeurs sont identiques au
+// précédent) pour que l'effet ci-dessous se redéclenche systématiquement.
+export interface OcrPrefill {
+  numeroPiece: string | null;
+  typePiece: TypePiece | null;
+  nationalite: string | null;
+  dateNaissance: string | null;
+}
+
 interface Props {
   stayId: number;
   reservationId: number | null;
   onSaved?: () => void;
+  ocrPrefill?: OcrPrefill | null;
 }
 
 interface FormState {
@@ -92,12 +104,18 @@ function formFromRecord(record: PoliceRecord): FormState {
 // @unique(stayId) côté backend), donc ce composant n'a pas de distinction
 // explicite "créer" vs "modifier" au niveau de l'appel — seulement au niveau
 // de l'affichage (bouton, message).
-export function PoliceRecordForm({ stayId, reservationId, onSaved }: Props) {
+export function PoliceRecordForm({
+  stayId,
+  reservationId,
+  onSaved,
+  ocrPrefill,
+}: Props) {
   const [loading, setLoading] = useState(true);
   const [record, setRecord] = useState<PoliceRecord | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [prefilledFromSelfCheckin, setPrefilledFromSelfCheckin] =
     useState(false);
+  const [prefilledFromOcr, setPrefilledFromOcr] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -126,6 +144,7 @@ export function PoliceRecordForm({ stayId, reservationId, onSaved }: Props) {
         setRecord(existing);
         setForm(formFromRecord(existing));
         setPrefilledFromSelfCheckin(false);
+        setPrefilledFromOcr(false);
         return;
       }
 
@@ -147,11 +166,13 @@ export function PoliceRecordForm({ stayId, reservationId, onSaved }: Props) {
             villeDestination: pending.villeDestination ?? '',
           });
           setPrefilledFromSelfCheckin(true);
+          setPrefilledFromOcr(false);
           return;
         }
       }
       setForm(EMPTY_FORM);
       setPrefilledFromSelfCheckin(false);
+      setPrefilledFromOcr(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur de chargement');
     } finally {
@@ -163,6 +184,25 @@ export function PoliceRecordForm({ stayId, reservationId, onSaved }: Props) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
+
+  // Un report OCR écrase toujours les champs correspondants (contrairement
+  // au pré-remplissage self check-in ci-dessus, déclenché passivement au
+  // chargement) — c'est une action explicite de l'utilisateur (clic sur
+  // « Reporter »), jamais automatique.
+  useEffect(() => {
+    if (!ocrPrefill) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setForm((f) => ({
+      ...f,
+      numeroPiece: ocrPrefill.numeroPiece || f.numeroPiece,
+      typePiece: ocrPrefill.typePiece ?? f.typePiece,
+      nationalite: ocrPrefill.nationalite || f.nationalite,
+      dateNaissance: ocrPrefill.dateNaissance || f.dateNaissance,
+    }));
+    setFieldErrors({});
+    setPrefilledFromSelfCheckin(false);
+    setPrefilledFromOcr(true);
+  }, [ocrPrefill]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -190,6 +230,7 @@ export function PoliceRecordForm({ stayId, reservationId, onSaved }: Props) {
       setRecord(saved);
       setForm(formFromRecord(saved));
       setPrefilledFromSelfCheckin(false);
+      setPrefilledFromOcr(false);
       onSaved?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur d'enregistrement");
@@ -226,6 +267,12 @@ export function PoliceRecordForm({ stayId, reservationId, onSaved }: Props) {
         <p className="text-muted-foreground text-xs">
           Champs pré-remplis depuis les informations soumises par le client
           (self check-in) — à vérifier avant enregistrement.
+        </p>
+      )}
+      {prefilledFromOcr && (
+        <p className="text-muted-foreground text-xs">
+          Champs mis à jour depuis la lecture OCR de la pièce — à vérifier avant
+          enregistrement.
         </p>
       )}
 
