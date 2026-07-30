@@ -1,4 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
+import {
+  CalendarPlus,
+  KeyRound,
+  Sparkles,
+  Wrench,
+  type LucideIcon,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { getDashboardResume } from '../api';
 import type { DashboardResume } from '../types';
 import { RoomsToCleanWidget } from '../components/RoomsToCleanWidget';
@@ -10,6 +18,25 @@ export type DashboardTarget =
 interface Props {
   onNavigate: (target: DashboardTarget) => void;
 }
+
+interface QuickAction {
+  label: string;
+  icon: LucideIcon;
+  target: DashboardTarget;
+}
+
+// Demande client (`/goal` du 2026-07-30) : « boutons d'action rapides pour
+// les tâches les plus fréquentes ». Portée volontairement limitée à une
+// navigation directe vers l'écran concerné (même mécanisme que le clic sur
+// une carte KPI ci-dessous) — ouvrir directement le formulaire de création
+// exigerait de faire passer un état d'ouverture à travers
+// ReservationsCalendarPage/CheckinPage, hors périmètre de ce lot.
+const QUICK_ACTIONS: QuickAction[] = [
+  { label: 'Nouvelle réservation', icon: CalendarPlus, target: 'reservations' },
+  { label: 'Check-in walk-in', icon: KeyRound, target: 'checkin' },
+  { label: 'Chambres à nettoyer', icon: Sparkles, target: 'housekeeping' },
+  { label: 'Signaler une panne', icon: Wrench, target: 'maintenance' },
+];
 
 interface KpiCardProps {
   label: string;
@@ -81,6 +108,21 @@ export function DashboardPage({ onNavigate }: Props) {
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
+      <div className="flex flex-wrap gap-2">
+        {QUICK_ACTIONS.map(({ label, icon: Icon, target }) => (
+          <Button
+            key={target}
+            id={`quick-action-${target}`}
+            type="button"
+            variant="secondary"
+            onClick={() => onNavigate(target)}
+          >
+            <Icon />
+            {label}
+          </Button>
+        ))}
+      </div>
+
       {loading && <p className="text-muted-foreground text-sm">Chargement…</p>}
       {error && <p className="text-destructive text-sm">{error}</p>}
 
