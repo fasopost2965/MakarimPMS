@@ -21,6 +21,7 @@ import { CheckAvailabilityDto } from './dto/check-availability.dto';
 import { CheckRoomAvailabilityDto } from './dto/check-room-availability.dto';
 import { CancelReservationDto } from './dto/cancel-reservation.dto';
 import { NoShowReservationDto } from './dto/no-show-reservation.dto';
+import { EstimatePriceDto } from './dto/estimate-price.dto';
 
 @ApiTags('reservations')
 @ApiBearerAuth()
@@ -56,6 +57,26 @@ export class ReservationsController {
   @Get('availability')
   checkRoomAvailability(@Query() dto: CheckRoomAvailabilityDto) {
     return this.reservationsService.checkRoomAvailability(dto);
+  }
+
+  // CH-061 (Lot #3 design) — permet aux formulaires réception (nouvelle
+  // réservation, check-in walk-in) d'afficher un prix avant confirmation.
+  // Route statique déclarée avant @Get(':id') pour ne jamais être capturée
+  // par ce dernier.
+  @RequirePermission('reservations', 'read')
+  @ApiOperation({
+    summary:
+      'Estimation de prix (type de chambre, dates, formule), sans créer de réservation',
+  })
+  @Get('estimation-prix')
+  async estimatePrice(@Query() dto: EstimatePriceDto) {
+    const prixEstime = await this.reservationsService.estimatePrixTotal(
+      dto.roomTypeId,
+      dto.dateArrivee,
+      dto.dateDepart,
+      dto.formule,
+    );
+    return { prixEstime: prixEstime.toString() };
   }
 
   @RequirePermission('reservations', 'write')

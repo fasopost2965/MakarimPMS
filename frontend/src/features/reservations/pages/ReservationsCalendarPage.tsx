@@ -17,10 +17,10 @@ import {
 import type { Reservation, Room } from '../types';
 import {
   CreateReservationDialog,
+  type CreateReservationConfirmInput,
   type CreateReservationSelection,
 } from '../components/CreateReservationDialog';
 import { ReservationDetailsDialog } from '../components/ReservationDetailsDialog';
-import type { GuestSelection } from '@/features/guests/components/GuestPicker';
 
 const VISIBLE_DAYS = 14;
 const ROW_HEIGHT = 44;
@@ -134,7 +134,7 @@ export function ReservationsCalendarPage() {
     window.addEventListener('mouseup', onMouseUp);
   }, []);
 
-  async function handleConfirmCreate(guestSelection: GuestSelection) {
+  async function handleConfirmCreate(input: CreateReservationConfirmInput) {
     if (!pendingSelection) return;
     setSubmitting(true);
     setSubmitError(null);
@@ -143,7 +143,7 @@ export function ReservationsCalendarPage() {
         roomId: pendingSelection.room.id,
         dateArrivee: pendingSelection.dateArrivee,
         dateDepart: pendingSelection.dateDepart,
-        ...guestSelection,
+        ...input,
       });
       setPendingSelection(null);
       await refetch();

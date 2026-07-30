@@ -164,4 +164,46 @@ describe('Reservations — tarification saisonnière (e2e)', () => {
     await prisma.roomNight.deleteMany({ where: { reservationId } });
     await prisma.reservation.delete({ where: { id: reservationId } });
   });
+
+  // CH-061 (Lot #3 design) — GET /reservations/estimation-prix expose la
+  // même fonction de calcul (calculatePrixTotal) sans créer de réservation,
+  // pour un aperçu de prix en direct côté formulaire réception.
+  describe('GET /reservations/estimation-prix', () => {
+    it('estime le prix nuit par nuit à cheval sur deux saisons, sans créer de réservation', async () => {
+      const res = await client.get('/api/reservations/estimation-prix').query({
+        roomTypeId,
+        dateArrivee: '2026-07-18',
+        dateDepart: '2026-07-22',
+      });
+
+      expect(res.status).toBe(200);
+      expect(Number((res.body as { prixEstime: string }).prixEstime)).toBe(
+        2 * PRIX_SAISON_1 + 2 * PRIX_SAISON_2,
+      );
+      // Preuve de rigueur (aucune réservation/RoomNight créée) : la table
+      // reste vide pour ce type de chambre isolé du seed.
+      const count = await prisma.reservation.count({
+        where: { roomId },
+      });
+      expect(count).toBe(0);
+    });
+
+    it('renvoie 404 pour un type de chambre inexistant', async () => {
+      const res = await client.get('/api/reservations/estimation-prix').query({
+        roomTypeId: 999999,
+        dateArrivee: '2026-07-18',
+        dateDepart: '2026-07-20',
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it('renvoie 400 si dateDepart n’est pas postérieure à dateArrivee', async () => {
+      const res = await client.get('/api/reservations/estimation-prix').query({
+        roomTypeId,
+        dateArrivee: '2026-07-20',
+        dateDepart: '2026-07-18',
+      });
+      expect(res.status).toBe(400);
+    });
+  });
 });

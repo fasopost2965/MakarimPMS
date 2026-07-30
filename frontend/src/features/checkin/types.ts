@@ -1,4 +1,9 @@
-import type { Guest, Reservation, Room } from '../reservations/types';
+import type {
+  FormuleHebergement,
+  Guest,
+  Reservation,
+  Room,
+} from '../reservations/types';
 import type { PoliceRecord } from '../police/types';
 
 export type StatutSejour = 'EN_COURS' | 'CHECKOUT';
@@ -55,6 +60,7 @@ export interface StayWithSolde extends Stay {
 export type WalkinCheckinInput = {
   roomId: number;
   dateCheckoutPrevue: string;
+  formule?: FormuleHebergement;
 } & (
   | { guestId: number; guest?: undefined }
   | {
