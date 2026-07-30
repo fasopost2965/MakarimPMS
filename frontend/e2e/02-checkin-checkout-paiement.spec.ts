@@ -31,10 +31,14 @@ test('check-in walk-in, check-out bloqué sur solde impayé, débloqué après p
   await page.locator('#guest-prenom').fill(guest.prenom);
   await page.getByRole('button', { name: 'Enregistrer le check-in' }).click();
 
-  // Le séjour walk-in apparaît désormais dans "Séjours en cours".
-  const stayRow = page.getByRole('button', {
-    name: new RegExp(`${guest.nom} ${guest.prenom} — chambre 501`),
-  });
+  // Le séjour walk-in apparaît désormais dans "Séjours en cours". CH-063 —
+  // la ligne (avatar initiales + nom + pill "Ch. 501") n'a plus le texte
+  // littéral « — chambre » entre nom et numéro, deux filtres `hasText`
+  // suffisent à l'identifier sans ambiguïté (nom généré unique par test).
+  const stayRow = page
+    .getByRole('button')
+    .filter({ hasText: guest.nom })
+    .filter({ hasText: '501' });
   await expect(stayRow).toBeVisible();
   await stayRow.click();
 
@@ -65,7 +69,7 @@ test('check-in walk-in, check-out bloqué sur solde impayé, débloqué après p
   // cet état. Remise à Libre & propre via l'écran ménage, même round-trip
   // que 03-housekeeping-statut.spec.ts.
   await gotoTab(page, 'housekeeping');
-  const roomCard = page.locator('div.border-l-4', { hasText: '501' });
+  const roomCard = page.locator('[role="button"]', { hasText: '501' });
   await roomCard.getByRole('combobox').click();
   await page.getByRole('option', { name: 'En nettoyage' }).click();
   await expect(roomCard.locator('[data-slot="badge"]')).toHaveText(

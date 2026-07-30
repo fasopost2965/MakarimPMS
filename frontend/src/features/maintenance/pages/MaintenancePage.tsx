@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Wrench } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,15 +36,41 @@ const PRIORITE_LABEL: Record<PrioriteTicket, string> = {
   URGENTE: 'Urgente',
 };
 
+// CH-063 (docs/design/design_handoff_exploitation_hotel) — alignement sur
+// l'échelle sémantique déjà utilisée ailleurs (Housekeeping, Réservations) :
+// Urgente=danger, Haute=alerte, Moyenne=info, Basse=neutre. L'ancien mapping
+// (secondary/default) ne distinguait pas visuellement Haute de Urgente.
 const PRIORITE_BADGE_VARIANT: Record<
   PrioriteTicket,
-  'default' | 'secondary' | 'destructive' | 'outline'
+  'secondary' | 'info' | 'warning' | 'destructive'
 > = {
-  BASSE: 'outline',
-  MOYENNE: 'secondary',
-  HAUTE: 'default',
+  BASSE: 'secondary',
+  MOYENNE: 'info',
+  HAUTE: 'warning',
   URGENTE: 'destructive',
 };
+
+const PRIORITE_DOT_CLASS: Record<PrioriteTicket, string> = {
+  BASSE: 'bg-muted-foreground',
+  MOYENNE: 'bg-info',
+  HAUTE: 'bg-warning',
+  URGENTE: 'bg-destructive',
+};
+
+// Classes statiques (Tailwind ne peut pas résoudre un nom de classe construit
+// dynamiquement par interpolation — les classes doivent apparaître en clair
+// dans le code source pour être détectées par le scanner JIT).
+const PRIORITE_ICON_BG_CLASS: Record<PrioriteTicket, string> = {
+  BASSE: 'bg-secondary text-secondary-foreground',
+  MOYENNE: 'bg-info/15 text-info',
+  HAUTE: 'bg-warning/15 text-warning',
+  URGENTE: 'bg-destructive/15 text-destructive',
+};
+
+function formatDateCourte(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+}
 
 const PHOTO_MAX_SIZE_MB = 5;
 const PHOTO_MAX_SIZE_BYTES = PHOTO_MAX_SIZE_MB * 1024 * 1024;
@@ -61,6 +88,7 @@ export function MaintenancePage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [resolvingId, setResolvingId] = useState<number | null>(null);
+  const [statutFilter, setStatutFilter] = useState<PrioriteTicket | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -115,9 +143,58 @@ export function MaintenancePage() {
     }
   }
 
+  const ouvertsParPriorite = useMemo(() => {
+    const counts = new Map<PrioriteTicket, number>();
+    for (const ticket of tickets) {
+      if (ticket.resoluAt) continue;
+      counts.set(ticket.priorite, (counts.get(ticket.priorite) ?? 0) + 1);
+    }
+    return counts;
+  }, [tickets]);
+
+  const filteredTickets = statutFilter
+    ? tickets.filter((t) => t.priorite === statutFilter)
+    : tickets;
+
   return (
     <div className="flex h-full flex-col gap-4 p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {PRIORITES.slice()
+            .reverse()
+            .map((priorite) => {
+              const active = statutFilter === priorite;
+              return (
+                <button
+                  key={priorite}
+                  type="button"
+                  onClick={() =>
+                    setStatutFilter((current) =>
+                      current === priorite ? null : priorite,
+                    )
+                  }
+                  className={`flex items-center gap-2 rounded-lg border px-3.5 py-2 text-xs transition-colors ${
+                    active
+                      ? 'border-primary bg-primary/10'
+                      : priorite === 'URGENTE' &&
+                          (ouvertsParPriorite.get('URGENTE') ?? 0) > 0
+                        ? 'border-destructive/30 bg-destructive/10'
+                        : 'bg-card hover:bg-muted/50'
+                  }`}
+                >
+                  <span
+                    className={`size-2 rounded-full ${PRIORITE_DOT_CLASS[priorite]}`}
+                  />
+                  <span className="text-sm font-bold">
+                    {ouvertsParPriorite.get(priorite) ?? 0}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {PRIORITE_LABEL[priorite]}
+                  </span>
+                </button>
+              );
+            })}
+        </div>
         <Button size="sm" onClick={() => setDialogOpen(true)}>
           + Nouveau ticket
         </Button>
@@ -131,59 +208,86 @@ export function MaintenancePage() {
       ) : tickets.length === 0 ? (
         <p className="text-muted-foreground text-sm">Aucun ticket.</p>
       ) : (
-        <div className="flex flex-col gap-2">
-          {tickets.map((ticket) => (
+        <div className="bg-card overflow-hidden rounded-lg border">
+          <div className="bg-muted/60 text-muted-foreground grid grid-cols-[44px_1fr_110px_110px_90px_110px] items-center gap-3 border-b px-4 py-2 text-[11px] font-bold tracking-wide uppercase">
+            <span />
+            <span>Ticket</span>
+            <span>Priorité</span>
+            <span>Assigné</span>
+            <span>Statut</span>
+            <span className="text-right">Action</span>
+          </div>
+
+          {filteredTickets.length === 0 && (
+            <p className="text-muted-foreground p-4 text-sm">
+              Aucun ticket pour ce filtre.
+            </p>
+          )}
+
+          {filteredTickets.map((ticket) => (
             <div
               key={ticket.id}
-              className="flex items-center justify-between gap-2 rounded-md border p-3"
+              className="hover:bg-muted/40 grid grid-cols-[44px_1fr_110px_110px_90px_110px] items-center gap-3 border-b px-4 py-2.5 text-sm last:border-b-0"
             >
-              <div className="flex items-center gap-3">
-                {ticket.photoUrl && (
-                  <button
-                    type="button"
-                    onClick={() => setViewingPhoto(ticket.photoUrl)}
-                    className="flex-shrink-0 rounded object-cover hover:opacity-80"
-                  >
-                    <img
-                      src={ticket.photoUrl}
-                      alt={`Ticket ${ticket.id}`}
-                      className="h-10 w-10 rounded object-cover"
-                    />
-                  </button>
-                )}
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium">
-                      {ticket.room
-                        ? `Chambre ${ticket.room.numero}`
-                        : 'Zone commune'}{' '}
-                      — {ticket.typePanne}
-                    </p>
-                    <Badge variant={PRIORITE_BADGE_VARIANT[ticket.priorite]}>
-                      {PRIORITE_LABEL[ticket.priorite]}
-                    </Badge>
-                    <Badge variant={ticket.resoluAt ? 'outline' : 'secondary'}>
-                      {ticket.resoluAt ? 'Résolu' : 'Ouvert'}
-                    </Badge>
-                  </div>
-                  {ticket.assigneA && (
-                    <p className="text-muted-foreground text-xs">
-                      Assigné à {ticket.assigneA}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {!ticket.resoluAt && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={resolvingId === ticket.id}
-                  onClick={() => handleResolve(ticket.id)}
+              {ticket.photoUrl ? (
+                <button
+                  type="button"
+                  onClick={() => setViewingPhoto(ticket.photoUrl)}
+                  className="flex-shrink-0 rounded hover:opacity-80"
                 >
-                  {resolvingId === ticket.id ? 'Résolution…' : 'Résoudre'}
-                </Button>
+                  <img
+                    src={ticket.photoUrl}
+                    alt={`Ticket ${ticket.id}`}
+                    className="size-9 rounded object-cover"
+                  />
+                </button>
+              ) : (
+                <span
+                  className={`flex size-9 items-center justify-center rounded-md ${
+                    ticket.resoluAt
+                      ? 'bg-muted text-muted-foreground'
+                      : PRIORITE_ICON_BG_CLASS[ticket.priorite]
+                  }`}
+                >
+                  <Wrench className="size-4" />
+                </span>
               )}
+              <span className="min-w-0 truncate font-medium">
+                {ticket.room ? `Chambre ${ticket.room.numero}` : 'Zone commune'}{' '}
+                — {ticket.typePanne}
+              </span>
+              <span>
+                <Badge variant={PRIORITE_BADGE_VARIANT[ticket.priorite]}>
+                  {PRIORITE_LABEL[ticket.priorite]}
+                </Badge>
+              </span>
+              <span className="text-muted-foreground truncate text-xs">
+                {ticket.assigneA ?? '—'}
+              </span>
+              <span>
+                <Badge variant={ticket.resoluAt ? 'success' : 'info'}>
+                  {ticket.resoluAt ? 'Résolu' : 'Ouvert'}
+                </Badge>
+              </span>
+              <span className="flex justify-end">
+                {ticket.resoluAt ? (
+                  <span
+                    className="text-muted-foreground text-xs"
+                    title={`Résolu le ${new Date(ticket.resoluAt).toLocaleString('fr-FR')}`}
+                  >
+                    {formatDateCourte(ticket.resoluAt)}
+                  </span>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={resolvingId === ticket.id}
+                    onClick={() => handleResolve(ticket.id)}
+                  >
+                    {resolvingId === ticket.id ? 'Résolution…' : 'Résoudre'}
+                  </Button>
+                )}
+              </span>
             </div>
           ))}
         </div>

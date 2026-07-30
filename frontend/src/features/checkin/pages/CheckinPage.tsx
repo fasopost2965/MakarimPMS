@@ -1,7 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
+import { AlertTriangle, Search } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { arrivalsToday, listRooms } from '../../reservations/api';
-import type { Reservation, Room } from '../../reservations/types';
+import type {
+  CanalReservation,
+  Reservation,
+  Room,
+} from '../../reservations/types';
 import {
   checkinFromReservation,
   checkinWalkIn,
@@ -12,6 +26,49 @@ import {
 import type { Stay, WalkinCheckinInput } from '../types';
 import { WalkinCheckinDialog } from '../components/WalkinCheckinDialog';
 import { StayDetailsDialog } from '../components/StayDetailsDialog';
+
+// CH-063 (docs/design/design_handoff_exploitation_hotel) — un séjour créé
+// via le check-in walk-in (StayService.checkinWalkIn) n'a jamais de
+// Reservation associée (reservationId reste null) : seul ce chemin produit
+// un séjour sans réservation, donc `reservation === null` désigne fidèlement
+// un walk-in, pas une valeur par défaut inventée.
+const CANAL_LABEL: Record<CanalReservation, string> = {
+  DIRECT: 'Direct',
+  WALK_IN: 'Walk-in',
+  BOOKING_COM: 'Booking.com',
+};
+const CANAL_TEXT_CLASS: Record<CanalReservation, string> = {
+  DIRECT: 'text-primary',
+  WALK_IN: 'text-warning',
+  BOOKING_COM: 'text-info',
+};
+const CANAL_AVATAR_CLASS: Record<CanalReservation, string> = {
+  DIRECT: 'bg-primary/15 text-primary',
+  WALK_IN: 'bg-warning/20 text-warning',
+  BOOKING_COM: 'bg-info/15 text-info',
+};
+
+function resolveCanal(reservation: Reservation | null): CanalReservation {
+  return reservation?.canal ?? 'WALK_IN';
+}
+
+function initials(nom: string, prenom: string) {
+  return `${nom.charAt(0)}${prenom.charAt(0)}`.toUpperCase();
+}
+
+function matchesSearch(
+  query: string,
+  guest: { nom: string; prenom: string },
+  roomNumero: string,
+) {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  return (
+    guest.nom.toLowerCase().includes(q) ||
+    guest.prenom.toLowerCase().includes(q) ||
+    roomNumero.toLowerCase().includes(q)
+  );
+}
 
 export function CheckinPage() {
   const [arrivals, setArrivals] = useState<Reservation[]>([]);
@@ -33,6 +90,39 @@ export function CheckinPage() {
   const [checkingOut, setCheckingOut] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [soldeDu, setSoldeDu] = useState<string | null>(null);
+
+  const [search, setSearch] = useState('');
+  const arrivalsRef = useRef<HTMLElement>(null);
+  const departsRef = useRef<HTMLElement>(null);
+  const staysRef = useRef<HTMLElement>(null);
+
+  const filteredArrivals = useMemo(
+    () => arrivals.filter((r) => matchesSearch(search, r.guest, r.room.numero)),
+    [arrivals, search],
+  );
+  const filteredDeparts = useMemo(
+    () => departs.filter((s) => matchesSearch(search, s.guest, s.room.numero)),
+    [departs, search],
+  );
+  const filteredStaysEnCours = useMemo(
+    () =>
+      staysEnCours.filter((s) => matchesSearch(search, s.guest, s.room.numero)),
+    [staysEnCours, search],
+  );
+
+  const departsSansFiche = departs.filter((s) => !s.policeRecord);
+  const staysSansFiche = staysEnCours.filter((s) => !s.policeRecord);
+  const alerteFichePoliceCount =
+    departsSansFiche.length + staysSansFiche.length;
+
+  function scrollToSection(ref: RefObject<HTMLElement | null>) {
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function scrollToFichePoliceAlerte() {
+    if (departsSansFiche.length > 0) scrollToSection(departsRef);
+    else if (staysSansFiche.length > 0) scrollToSection(staysRef);
+  }
 
   const refetch = useCallback(async () => {
     setLoading(true);
@@ -126,8 +216,63 @@ export function CheckinPage() {
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <div className="flex items-center justify-between">
-        <Button onClick={() => setWalkinOpen(true)}>+ Check-in walk-in</Button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => scrollToSection(arrivalsRef)}
+            className="border-info/30 bg-info/10 text-info flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-info/20"
+          >
+            <span className="text-sm font-bold">{arrivals.length}</span>
+            arrivée{arrivals.length > 1 ? 's' : ''} aujourd'hui
+          </button>
+          <button
+            type="button"
+            onClick={() => scrollToSection(departsRef)}
+            className="border-warning/30 bg-warning/10 text-warning flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-warning/20"
+          >
+            <span className="text-sm font-bold">{departs.length}</span>
+            départ{departs.length > 1 ? 's' : ''} aujourd'hui
+          </button>
+          <button
+            type="button"
+            onClick={() => scrollToSection(staysRef)}
+            className="border-success/30 bg-success/10 text-success flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-success/20"
+          >
+            <span className="text-sm font-bold">{staysEnCours.length}</span>
+            séjour{staysEnCours.length > 1 ? 's' : ''} en cours
+          </button>
+          <button
+            type="button"
+            onClick={scrollToFichePoliceAlerte}
+            disabled={alerteFichePoliceCount === 0}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+              alerteFichePoliceCount > 0
+                ? 'border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20'
+                : 'border-border text-muted-foreground'
+            }`}
+          >
+            <AlertTriangle className="size-3.5" />
+            <span className="text-sm font-bold">{alerteFichePoliceCount}</span>
+            fiche{alerteFichePoliceCount > 1 ? 's' : ''} police manquante
+            {alerteFichePoliceCount > 1 ? 's' : ''}
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher un client ou une chambre…"
+              className="w-64 pl-8"
+            />
+          </div>
+          <Button onClick={() => setWalkinOpen(true)}>
+            + Check-in walk-in
+          </Button>
+        </div>
       </div>
 
       {loadError && <p className="text-destructive text-sm">{loadError}</p>}
@@ -137,22 +282,46 @@ export function CheckinPage() {
         <p className="text-muted-foreground text-sm">Chargement…</p>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
-          <section className="bg-card flex flex-col gap-2 rounded-lg border p-4">
+          <section
+            ref={arrivalsRef}
+            className="bg-card flex flex-col gap-2 rounded-lg border p-4"
+          >
             <h2 className="text-xs font-bold">Arrivées du jour</h2>
-            {arrivals.length === 0 && (
+            {filteredArrivals.length === 0 && (
               <p className="text-muted-foreground text-sm">
-                Aucune arrivée prévue aujourd'hui.
+                {arrivals.length === 0
+                  ? "Aucune arrivée prévue aujourd'hui."
+                  : 'Aucun résultat pour cette recherche.'}
               </p>
             )}
             <ul className="flex flex-col gap-2">
-              {arrivals.map((reservation) => (
+              {filteredArrivals.map((reservation) => (
                 <li
                   key={reservation.id}
-                  className="border-l-info bg-background flex items-center justify-between rounded-md border border-l-4 p-2 text-sm"
+                  className="bg-background flex items-center justify-between gap-2 rounded-md border p-2 text-sm"
                 >
-                  <span>
-                    {reservation.guest.nom} {reservation.guest.prenom} — chambre{' '}
-                    {reservation.room.numero}
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span
+                      className={`flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${CANAL_AVATAR_CLASS[resolveCanal(reservation)]}`}
+                    >
+                      {initials(
+                        reservation.guest.nom,
+                        reservation.guest.prenom,
+                      )}
+                    </span>
+                    <span className="flex min-w-0 flex-col">
+                      <span className="truncate font-medium">
+                        {reservation.guest.nom} {reservation.guest.prenom}
+                      </span>
+                      <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
+                        <Badge variant="outline" className="h-4 px-1.5">
+                          Ch. {reservation.room.numero}
+                        </Badge>
+                        <span className={CANAL_TEXT_CLASS[reservation.canal]}>
+                          {CANAL_LABEL[reservation.canal]}
+                        </span>
+                      </span>
+                    </span>
                   </span>
                   <Button
                     size="sm"
@@ -168,34 +337,53 @@ export function CheckinPage() {
             </ul>
           </section>
 
-          <section className="bg-card flex flex-col gap-2 rounded-lg border p-4">
+          <section
+            ref={departsRef}
+            className="bg-card flex flex-col gap-2 rounded-lg border p-4"
+          >
             <h2 className="text-xs font-bold">Départs du jour</h2>
-            {departs.length === 0 && (
+            {filteredDeparts.length === 0 && (
               <p className="text-muted-foreground text-sm">
-                Aucun départ prévu aujourd'hui.
+                {departs.length === 0
+                  ? "Aucun départ prévu aujourd'hui."
+                  : 'Aucun résultat pour cette recherche.'}
               </p>
             )}
             <ul className="flex flex-col gap-2">
-              {departs.map((stay) => (
+              {filteredDeparts.map((stay) => (
                 <li key={stay.id}>
                   <button
                     type="button"
-                    className="border-l-warning bg-background hover:border-primary/50 flex w-full cursor-pointer items-center justify-between rounded-md border border-l-4 p-2 text-left text-sm transition-colors"
+                    className="bg-background hover:border-primary/50 flex w-full cursor-pointer items-center justify-between gap-2 rounded-md border p-2 text-left text-sm transition-colors"
                     onClick={() => openStay(stay)}
                   >
-                    <span>
-                      {stay.guest.nom} {stay.guest.prenom} — chambre{' '}
-                      {stay.room.numero}
-                      {!stay.policeRecord && (
-                        <span
-                          className="text-warning ml-2 text-xs"
-                          title="Fiche de police (registre légal DGSN) non renseignée"
-                        >
-                          ⚠ Fiche police manquante
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span
+                        className={`flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${CANAL_AVATAR_CLASS[resolveCanal(stay.reservation)]}`}
+                      >
+                        {initials(stay.guest.nom, stay.guest.prenom)}
+                      </span>
+                      <span className="flex min-w-0 flex-col gap-0.5">
+                        <span className="truncate font-medium">
+                          {stay.guest.nom} {stay.guest.prenom}
                         </span>
-                      )}
+                        <span className="flex items-center gap-1.5">
+                          <Badge variant="outline" className="h-4 px-1.5">
+                            Ch. {stay.room.numero}
+                          </Badge>
+                          {!stay.policeRecord && (
+                            <Badge
+                              variant="warning"
+                              title="Fiche de police (registre légal DGSN) non renseignée"
+                            >
+                              <AlertTriangle className="size-3" />
+                              Fiche police manquante
+                            </Badge>
+                          )}
+                        </span>
+                      </span>
                     </span>
-                    <span className="text-muted-foreground text-xs">
+                    <span className="text-muted-foreground shrink-0 text-xs">
                       Voir / check-out
                     </span>
                   </button>
@@ -204,34 +392,53 @@ export function CheckinPage() {
             </ul>
           </section>
 
-          <section className="bg-card flex flex-col gap-2 rounded-lg border p-4 md:col-span-2">
+          <section
+            ref={staysRef}
+            className="bg-card flex flex-col gap-2 rounded-lg border p-4 md:col-span-2"
+          >
             <h2 className="text-xs font-bold">Séjours en cours</h2>
-            {staysEnCours.length === 0 && (
+            {filteredStaysEnCours.length === 0 && (
               <p className="text-muted-foreground text-sm">
-                Aucun séjour en cours.
+                {staysEnCours.length === 0
+                  ? 'Aucun séjour en cours.'
+                  : 'Aucun résultat pour cette recherche.'}
               </p>
             )}
             <ul className="grid gap-2 md:grid-cols-2">
-              {staysEnCours.map((stay) => (
+              {filteredStaysEnCours.map((stay) => (
                 <li key={stay.id}>
                   <button
                     type="button"
-                    className="border-l-success bg-background hover:border-primary/50 flex w-full cursor-pointer items-center justify-between rounded-md border border-l-4 p-2 text-left text-sm transition-colors"
+                    className="bg-background hover:border-primary/50 flex w-full cursor-pointer items-center justify-between gap-2 rounded-md border p-2 text-left text-sm transition-colors"
                     onClick={() => openStay(stay)}
                   >
-                    <span>
-                      {stay.guest.nom} {stay.guest.prenom} — chambre{' '}
-                      {stay.room.numero}
-                      {!stay.policeRecord && (
-                        <span
-                          className="text-warning ml-2 text-xs"
-                          title="Fiche de police (registre légal DGSN) non renseignée"
-                        >
-                          ⚠ Fiche police manquante
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span
+                        className={`flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${CANAL_AVATAR_CLASS[resolveCanal(stay.reservation)]}`}
+                      >
+                        {initials(stay.guest.nom, stay.guest.prenom)}
+                      </span>
+                      <span className="flex min-w-0 flex-col gap-0.5">
+                        <span className="truncate font-medium">
+                          {stay.guest.nom} {stay.guest.prenom}
                         </span>
-                      )}
+                        <span className="flex items-center gap-1.5">
+                          <Badge variant="outline" className="h-4 px-1.5">
+                            Ch. {stay.room.numero}
+                          </Badge>
+                          {!stay.policeRecord && (
+                            <Badge
+                              variant="warning"
+                              title="Fiche de police (registre légal DGSN) non renseignée"
+                            >
+                              <AlertTriangle className="size-3" />
+                              Fiche police manquante
+                            </Badge>
+                          )}
+                        </span>
+                      </span>
                     </span>
-                    <span className="text-muted-foreground text-xs">
+                    <span className="text-muted-foreground shrink-0 text-xs">
                       Départ prévu {stay.dateCheckoutPrevue.slice(0, 10)}
                     </span>
                   </button>

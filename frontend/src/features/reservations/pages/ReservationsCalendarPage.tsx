@@ -11,6 +11,7 @@ import {
   addDays,
   formatDayLabel,
   getDateRange,
+  isSameDay,
   startOfDay,
   toISODate,
 } from '../date-utils';
@@ -25,6 +26,25 @@ import { ReservationDetailsDialog } from '../components/ReservationDetailsDialog
 const VISIBLE_DAYS = 14;
 const ROW_HEIGHT = 44;
 const LABEL_COL_WIDTH = 140;
+
+// CH-063 (docs/design/design_handoff_exploitation_hotel) — couleur de la
+// barre = canal de réservation, jamais recalculée : une seule légende (ici
+// et dans la toolbar) doit rester la source de vérité visuelle.
+const CANAL_LABEL: Record<Reservation['canal'], string> = {
+  DIRECT: 'Direct',
+  WALK_IN: 'Walk-in',
+  BOOKING_COM: 'Booking.com',
+};
+const CANAL_BAR_CLASS: Record<Reservation['canal'], string> = {
+  DIRECT: 'bg-primary text-primary-foreground',
+  WALK_IN: 'bg-gold text-gold-foreground',
+  BOOKING_COM: 'bg-info text-info-foreground',
+};
+const CANAL_DOT_CLASS: Record<Reservation['canal'], string> = {
+  DIRECT: 'bg-primary',
+  WALK_IN: 'bg-gold',
+  BOOKING_COM: 'bg-info',
+};
 
 interface Selecting {
   roomId: number;
@@ -225,7 +245,7 @@ export function ReservationsCalendarPage() {
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -246,6 +266,16 @@ export function ReservationsCalendarPage() {
             Semaine suivante →
           </Button>
         </div>
+        <div className="text-muted-foreground flex items-center gap-3.5 text-xs">
+          {(Object.keys(CANAL_LABEL) as Reservation['canal'][]).map((canal) => (
+            <span key={canal} className="flex items-center gap-1.5">
+              <span
+                className={`size-2.5 rounded-sm ${CANAL_DOT_CLASS[canal]}`}
+              />
+              {CANAL_LABEL[canal]}
+            </span>
+          ))}
+        </div>
       </div>
 
       {loadError && <p className="text-destructive text-sm">{loadError}</p>}
@@ -260,14 +290,24 @@ export function ReservationsCalendarPage() {
             <div className="bg-muted/50 border-b p-2 text-xs font-medium">
               Chambre
             </div>
-            {days.map((day, i) => (
-              <div
-                key={i}
-                className="bg-muted/50 border-b border-l p-2 text-center text-xs font-medium capitalize"
-              >
-                {formatDayLabel(day)}
-              </div>
-            ))}
+            {days.map((day, i) => {
+              const isToday = isSameDay(day, new Date());
+              const isWeekend = day.getUTCDay() === 0 || day.getUTCDay() === 6;
+              return (
+                <div
+                  key={i}
+                  className={`border-b border-l p-2 text-center text-xs font-medium capitalize ${
+                    isToday
+                      ? 'bg-primary/8 text-primary font-bold'
+                      : isWeekend
+                        ? 'bg-muted text-muted-foreground'
+                        : 'bg-muted/50'
+                  }`}
+                >
+                  {formatDayLabel(day)}
+                </div>
+              );
+            })}
 
             {/* Lignes chambres */}
             {rooms.map((room) => {
@@ -437,7 +477,7 @@ function ReservationBar({
           onView();
         }
       }}
-      className={`bg-primary text-primary-foreground absolute inset-y-0.5 left-0.5 z-10 flex cursor-grab items-center justify-between gap-1 truncate rounded px-2 text-xs active:cursor-grabbing ${disablePointerEvents ? 'pointer-events-none' : ''}`}
+      className={`absolute inset-y-0.5 left-0.5 z-10 flex cursor-grab items-center justify-between gap-1 truncate rounded px-2 text-xs active:cursor-grabbing ${CANAL_BAR_CLASS[reservation.canal]} ${disablePointerEvents ? 'pointer-events-none' : ''}`}
       style={{ width: `calc(${span * 100}% - 4px)` }}
       title={`${reservation.guest.nom} ${reservation.guest.prenom} — ${reservation.dateArrivee.slice(0, 10)} → ${reservation.dateDepart.slice(0, 10)} — ${reservation.prixTotalFinal} DH${reservation.ajustementManuel ? ' (ajusté)' : ''}`}
     >

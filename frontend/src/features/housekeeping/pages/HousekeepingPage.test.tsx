@@ -51,7 +51,7 @@ describe('HousekeepingPage — statuts pilotés par le système vs pilotables ma
       expect(screen.getByText('202')).toBeInTheDocument();
     });
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-    expect(screen.getByText('Libérée via le check-out')).toBeInTheDocument();
+    expect(screen.getByText('Libérée au check-out')).toBeInTheDocument();
   });
 
   it('remplace le sélecteur par un texte explicatif pour RESERVEE (piloté par le système)', async () => {
@@ -64,8 +64,6 @@ describe('HousekeepingPage — statuts pilotés par le système vs pilotables ma
       expect(screen.getByText('303')).toBeInTheDocument();
     });
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-    expect(
-      screen.getByText('Passera en Occupée au check-in'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('Occupée au check-in')).toBeInTheDocument();
   });
 });
