@@ -1,6 +1,11 @@
 import { clearLoggedInHint, getCsrfToken, setCsrfToken } from './token-storage';
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
+// `||` et non `??` : une chaîne vide (ARG Docker non renseigné au build, voir
+// frontend/Dockerfile) doit aussi retomber sur le fallback — `??` ne le fait
+// que pour null/undefined, jamais pour une chaîne vide, ce qui a produit en
+// déploiement réel une URL d'API RELATIVE (donc résolue vers l'origine du
+// frontend lui-même) plutôt que le fallback explicite ci-dessous.
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 // Déclenché quand le refresh échoue définitivement (refresh token absent,
 // expiré ou invalide) : l'App écoute cet événement pour renvoyer
