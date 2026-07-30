@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin:0; }
+    * { box-sizing: border-box; }
+    .navitem:hover { background: oklch(0.34 0.09 272); }
+    .navitem:focus-visible, .stat:focus-visible, .trow3:focus-visible, .nb:focus-visible { outline: 2px solid oklch(0.728 0.138 89.7); outline-offset: 2px; }
+    .trow3:hover { background: oklch(0.97 0.005 272); }
+    .nb:hover { filter: brightness(1.08); }
+    .thumb:hover { opacity: 0.85; }
+    .resolvebtn:hover { background: oklch(0.355 0.119 272.1); color: #fff; }
+  </style>
+</helmet>
+
+<div style="display:flex;height:100vh;width:100%;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:oklch(0.99 0.003 272);overflow:hidden;">
+
+  <!-- SIDEBAR -->
+  <aside style="width:240px;flex-shrink:0;background:oklch(0.288 0.091 271.8);color:oklch(0.99 0 0);display:flex;flex-direction:column;">
+    <div style="height:56px;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid oklch(0.34 0.09 272);">
+      <span style="width:28px;height:28px;border-radius:8px;background:oklch(0.728 0.138 89.7);color:oklch(0.2 0.03 90);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;">M</span>
+      <div style="min-width:0;">
+        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Makarim</div>
+        <div style="font-size:10px;color:oklch(0.99 0 0 / 0.6);letter-spacing:0.3px;">PMS Hôtel · Tétouan</div>
+      </div>
+    </div>
+
+    <nav style="flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:8px;">
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:oklch(0.99 0 0 / 0.6);display:flex;align-items:center;gap:6px;">Pilotage <span style="background:oklch(0.99 0 0 / 0.1);border-radius:4px;padding:0 4px;font-size:9px;font-weight:400;font-family:monospace;">1</span></div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+          Tableau de bord
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:oklch(0.728 0.138 89.7);display:flex;align-items:center;gap:6px;">Exploitation hôtel <span style="background:oklch(0.99 0 0 / 0.1);border-radius:4px;padding:0 4px;font-size:9px;font-weight:400;font-family:monospace;">6</span></div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 3v3M16 3v3"/></svg>
+          Réservations
+        </div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.5a9 9 0 1 1-4-7.4"/><path d="M21 3v6h-6"/></svg>
+          Check-in &amp; séjours
+        </div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 3v18M16 8h3M16 13h3"/></svg>
+          Scan pièce d'identité
+        </div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 4.3 4.7.5-3.5 3.2.9 4.6L12 13.4 7.9 15.6l.9-4.6L5.4 7.8l4.7-.5z"/></svg>
+          Housekeeping
+        </div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;background:oklch(0.34 0.09 272);box-shadow:inset 2px 0 0 oklch(0.728 0.138 89.7);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2z"/></svg>
+          Maintenance
+        </div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 3v6M11 3v6M7 6h4M15 3l-2 6 2 12"/></svg>
+          Restaurant
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:oklch(0.99 0 0 / 0.6);display:flex;align-items:center;gap:6px;">Clients &amp; partenaires <span style="background:oklch(0.99 0 0 / 0.1);border-radius:4px;padding:0 4px;font-size:9px;font-weight:400;font-family:monospace;">2</span></div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><path d="M2 21v-1a7 7 0 0 1 14 0v1M17 11a3 3 0 1 0 0-6M22 21v-1a5 5 0 0 0-4-4.9"/></svg>
+          Clients
+        </div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="9" width="7" height="12"/><rect x="13" y="3" width="7" height="18"/><path d="M7 13h1M7 17h1M16 7h1M16 11h1M16 15h1"/></svg>
+          Entreprises
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:oklch(0.99 0 0 / 0.6);display:flex;align-items:center;gap:6px;">Ressources &amp; stocks <span style="background:oklch(0.99 0 0 / 0.1);border-radius:4px;padding:0 4px;font-size:9px;font-weight:400;font-family:monospace;">2</span></div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
+          RH
+        </div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8l9-5 9 5-9 5-9-5z"/><path d="M3 8v8l9 5 9-5V8"/></svg>
+          Stock
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:oklch(0.99 0 0 / 0.6);display:flex;align-items:center;gap:6px;">Statistiques &amp; rapports <span style="background:oklch(0.99 0 0 / 0.1);border-radius:4px;padding:0 4px;font-size:9px;font-weight:400;font-family:monospace;">1</span></div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+          Reporting
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:oklch(0.99 0 0 / 0.6);display:flex;align-items:center;gap:6px;">Administration <span style="background:oklch(0.99 0 0 / 0.1);border-radius:4px;padding:0 4px;font-size:9px;font-weight:400;font-family:monospace;">3</span></div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+          Notifications
+        </div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+          Audit
+        </div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>
+          Paramètres
+        </div>
+      </div>
+    </nav>
+
+    <div style="border-top:1px solid oklch(0.34 0.09 272);padding:8px;">
+      <div style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.7);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M15 16l4-4-4-4M19 12H9"/></svg>
+        Replier
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div style="flex:1;display:flex;flex-direction:column;min-width:0;">
+    <header style="height:56px;flex-shrink:0;background:#fff;border-bottom:1px solid oklch(0.9 0.012 272);display:flex;align-items:center;justify-content:space-between;padding:0 20px;">
+      <h1 style="margin:0;font-size:15px;font-weight:600;color:oklch(0.22 0.02 272);">Maintenance</h1>
+      <div style="display:flex;align-items:center;gap:14px;">
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:oklch(0.48 0.02 272);border:1px solid oklch(0.9 0.012 272);border-radius:999px;padding:4px 10px;">
+          <span style="width:6px;height:6px;border-radius:999px;background:oklch(0.55 0.11 155);"></span>
+          En service depuis 08:02
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:oklch(0.35 0.02 272);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+          Déconnexion
+        </div>
+      </div>
+    </header>
+
+    <div class="content" style="flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:18px;min-width:0;">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;flex-shrink:0;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div class="stat" tabindex="0" style="display:flex;align-items:center;gap:8px;background:oklch(0.55 0.19 25 / 0.1);border:1px solid oklch(0.55 0.19 25 / 0.3);border-radius:8px;padding:8px 14px;cursor:pointer;">
+            <span style="width:8px;height:8px;border-radius:999px;background:oklch(0.55 0.19 25);"></span>
+            <span style="font-size:18px;font-weight:700;color:oklch(0.5 0.17 25);">1</span>
+            <span style="font-size:12px;color:oklch(0.5 0.12 25);">Urgente</span>
+          </div>
+          <div class="stat" tabindex="0" style="display:flex;align-items:center;gap:8px;background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:8px;padding:8px 14px;cursor:pointer;">
+            <span style="width:8px;height:8px;border-radius:999px;background:oklch(0.7 0.15 80);"></span>
+            <span style="font-size:18px;font-weight:700;color:oklch(0.22 0.02 272);">2</span>
+            <span style="font-size:12px;color:oklch(0.48 0.02 272);">Haute</span>
+          </div>
+          <div class="stat" tabindex="0" style="display:flex;align-items:center;gap:8px;background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:8px;padding:8px 14px;cursor:pointer;">
+            <span style="width:8px;height:8px;border-radius:999px;background:oklch(0.5 0.1 265);"></span>
+            <span style="font-size:18px;font-weight:700;color:oklch(0.22 0.02 272);">2</span>
+            <span style="font-size:12px;color:oklch(0.48 0.02 272);">Moyenne</span>
+          </div>
+          <div class="stat" tabindex="0" style="display:flex;align-items:center;gap:8px;background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:8px;padding:8px 14px;cursor:pointer;">
+            <span style="width:8px;height:8px;border-radius:999px;background:oklch(0.55 0.02 272);"></span>
+            <span style="font-size:18px;font-weight:700;color:oklch(0.22 0.02 272);">1</span>
+            <span style="font-size:12px;color:oklch(0.48 0.02 272);">Basse</span>
+          </div>
+        </div>
+        <button class="nb" style="display:flex;align-items:center;gap:8px;height:38px;padding:0 16px;border-radius:8px;background:oklch(0.355 0.119 272.1);border:none;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          Nouveau ticket
+        </button>
+      </div>
+
+      <div style="background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:10px;overflow:hidden;flex-shrink:0;">
+        <div style="display:grid;grid-template-columns:44px minmax(0,1fr) 100px 100px 90px 100px;min-width:0;background:oklch(0.96 0.006 272);border-bottom:1px solid oklch(0.9 0.012 272);padding:8px 16px;gap:12px;">
+          <span></span>
+          <span style="font-size:11px;font-weight:700;color:oklch(0.48 0.02 272);text-transform:uppercase;letter-spacing:0.3px;">Ticket</span>
+          <span style="font-size:11px;font-weight:700;color:oklch(0.48 0.02 272);text-transform:uppercase;letter-spacing:0.3px;">Priorité</span>
+          <span style="font-size:11px;font-weight:700;color:oklch(0.48 0.02 272);text-transform:uppercase;letter-spacing:0.3px;">Assigné</span>
+          <span style="font-size:11px;font-weight:700;color:oklch(0.48 0.02 272);text-transform:uppercase;letter-spacing:0.3px;">Statut</span>
+          <span style="font-size:11px;font-weight:700;color:oklch(0.48 0.02 272);text-transform:uppercase;letter-spacing:0.3px;text-align:right;">Action</span>
+        </div>
+
+        <div class="trow3" tabindex="0" style="display:grid;grid-template-columns:44px minmax(0,1fr) 100px 100px 90px 100px;min-width:0;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid oklch(0.96 0.006 272);cursor:pointer;">
+          <span class="thumb" style="width:38px;height:38px;border-radius:6px;background:oklch(0.55 0.19 25 / 0.12);display:flex;align-items:center;justify-content:center;cursor:pointer;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="oklch(0.5 0.17 25)" stroke-width="2"><path d="m21 15-5-5L5 21"/><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/></svg>
+          </span>
+          <div style="min-width:0;overflow:hidden;">
+            <div style="font-size:13px;font-weight:600;color:oklch(0.22 0.02 272);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Chambre 108 — Climatisation en panne</div>
+          </div>
+          <span style="display:inline-flex;background:oklch(0.55 0.19 25 / 0.15);color:oklch(0.5 0.17 25);border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:700;width:fit-content;">Urgente</span>
+          <span style="font-size:12px;color:oklch(0.35 0.02 272);">Youssef T.</span>
+          <span style="display:inline-flex;background:oklch(0.5 0.1 265 / 0.13);color:oklch(0.42 0.09 265);border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:700;width:fit-content;">Ouvert</span>
+          <button class="resolvebtn" style="justify-self:end;height:30px;padding:0 14px;border-radius:6px;background:#fff;border:1px solid oklch(0.355 0.119 272.1);color:oklch(0.355 0.119 272.1);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background 0.12s,color 0.12s;">Résoudre</button>
+        </div>
+
+        <div class="trow3" tabindex="0" style="display:grid;grid-template-columns:44px minmax(0,1fr) 100px 100px 90px 100px;min-width:0;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid oklch(0.96 0.006 272);cursor:pointer;">
+          <span class="thumb" style="width:38px;height:38px;border-radius:6px;background:oklch(0.94 0.008 272);display:flex;align-items:center;justify-content:center;cursor:pointer;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.02 272)" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2z"/></svg>
+          </span>
+          <div style="min-width:0;overflow:hidden;">
+            <div style="font-size:13px;font-weight:600;color:oklch(0.22 0.02 272);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Chambre 215 — Fuite robinetterie</div>
+          </div>
+          <span style="display:inline-flex;background:oklch(0.7 0.15 80 / 0.15);color:oklch(0.55 0.13 80);border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:700;width:fit-content;">Haute</span>
+          <span style="font-size:12px;color:oklch(0.7 0.01 272);">—</span>
+          <span style="display:inline-flex;background:oklch(0.5 0.1 265 / 0.13);color:oklch(0.42 0.09 265);border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:700;width:fit-content;">Ouvert</span>
+          <button class="resolvebtn" style="justify-self:end;height:30px;padding:0 14px;border-radius:6px;background:#fff;border:1px solid oklch(0.355 0.119 272.1);color:oklch(0.355 0.119 272.1);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background 0.12s,color 0.12s;">Résoudre</button>
+        </div>
+
+        <div class="trow3" tabindex="0" style="display:grid;grid-template-columns:44px minmax(0,1fr) 100px 100px 90px 100px;min-width:0;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid oklch(0.96 0.006 272);cursor:pointer;">
+          <span class="thumb" style="width:38px;height:38px;border-radius:6px;background:oklch(0.7 0.15 80 / 0.12);display:flex;align-items:center;justify-content:center;cursor:pointer;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.13 80)" stroke-width="2"><path d="m21 15-5-5L5 21"/><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/></svg>
+          </span>
+          <div style="min-width:0;overflow:hidden;">
+            <div style="font-size:13px;font-weight:600;color:oklch(0.22 0.02 272);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Chambre 302 — Ampoule à remplacer</div>
+          </div>
+          <span style="display:inline-flex;background:oklch(0.5 0.1 265 / 0.13);color:oklch(0.42 0.09 265);border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:700;width:fit-content;">Moyenne</span>
+          <span style="font-size:12px;color:oklch(0.35 0.02 272);">Youssef T.</span>
+          <span style="display:inline-flex;background:oklch(0.5 0.1 265 / 0.13);color:oklch(0.42 0.09 265);border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:700;width:fit-content;">Ouvert</span>
+          <button class="resolvebtn" style="justify-self:end;height:30px;padding:0 14px;border-radius:6px;background:#fff;border:1px solid oklch(0.355 0.119 272.1);color:oklch(0.355 0.119 272.1);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background 0.12s,color 0.12s;">Résoudre</button>
+        </div>
+
+        <div class="trow3" tabindex="0" style="display:grid;grid-template-columns:44px minmax(0,1fr) 100px 100px 90px 100px;min-width:0;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid oklch(0.96 0.006 272);cursor:pointer;">
+          <span class="thumb" style="width:38px;height:38px;border-radius:6px;background:oklch(0.94 0.008 272);display:flex;align-items:center;justify-content:center;cursor:pointer;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.02 272)" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2z"/></svg>
+          </span>
+          <div style="min-width:0;overflow:hidden;">
+            <div style="font-size:13px;font-weight:600;color:oklch(0.22 0.02 272);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Zone commune — Ascenseur bruyant</div>
+          </div>
+          <span style="display:inline-flex;background:oklch(0.7 0.15 80 / 0.15);color:oklch(0.55 0.13 80);border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:700;width:fit-content;">Haute</span>
+          <span style="font-size:12px;color:oklch(0.7 0.01 272);">—</span>
+          <span style="display:inline-flex;background:oklch(0.5 0.1 265 / 0.13);color:oklch(0.42 0.09 265);border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:700;width:fit-content;">Ouvert</span>
+          <button class="resolvebtn" style="justify-self:end;height:30px;padding:0 14px;border-radius:6px;background:#fff;border:1px solid oklch(0.355 0.119 272.1);color:oklch(0.355 0.119 272.1);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background 0.12s,color 0.12s;">Résoudre</button>
+        </div>
+
+        <div class="trow3" tabindex="0" style="display:grid;grid-template-columns:44px minmax(0,1fr) 100px 100px 90px 100px;min-width:0;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid oklch(0.96 0.006 272);cursor:pointer;">
+          <span class="thumb" style="width:38px;height:38px;border-radius:6px;background:oklch(0.94 0.008 272);display:flex;align-items:center;justify-content:center;cursor:pointer;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.02 272)" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2z"/></svg>
+          </span>
+          <div style="min-width:0;overflow:hidden;">
+            <div style="font-size:13px;font-weight:600;color:oklch(0.22 0.02 272);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Chambre 110 — Poignée de porte cassée</div>
+          </div>
+          <span style="display:inline-flex;background:oklch(0.94 0.008 272);color:oklch(0.48 0.02 272);border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:700;width:fit-content;">Basse</span>
+          <span style="font-size:12px;color:oklch(0.35 0.02 272);">Youssef T.</span>
+          <span style="display:inline-flex;background:oklch(0.5 0.1 265 / 0.13);color:oklch(0.42 0.09 265);border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:700;width:fit-content;">Ouvert</span>
+          <button class="resolvebtn" style="justify-self:end;height:30px;padding:0 14px;border-radius:6px;background:#fff;border:1px solid oklch(0.355 0.119 272.1);color:oklch(0.355 0.119 272.1);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background 0.12s,color 0.12s;">Résoudre</button>
+        </div>
+
+        <div class="trow3" tabindex="0" style="display:grid;grid-template-columns:44px minmax(0,1fr) 100px 100px 90px 100px;min-width:0;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid oklch(0.96 0.006 272);cursor:pointer;">
+          <span class="thumb" style="width:38px;height:38px;border-radius:6px;background:oklch(0.94 0.008 272);display:flex;align-items:center;justify-content:center;cursor:pointer;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.02 272)" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2z"/></svg>
+          </span>
+          <div style="min-width:0;overflow:hidden;">
+            <div style="font-size:13px;font-weight:600;color:oklch(0.4 0.1 155);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Chambre 204 — Prise électrique défectueuse</div>
+          </div>
+          <span style="display:inline-flex;background:oklch(0.5 0.1 265 / 0.13);color:oklch(0.42 0.09 265);border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:700;width:fit-content;">Moyenne</span>
+          <span style="font-size:12px;color:oklch(0.35 0.02 272);">Youssef T.</span>
+          <span style="display:inline-flex;background:oklch(0.55 0.11 155 / 0.15);color:oklch(0.4 0.1 155);border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:700;width:fit-content;">Résolu</span>
+          <span style="justify-self:end;font-size:11.5px;color:oklch(0.48 0.02 272);">28/07</span>
+        </div>
+
+        <div class="trow3" tabindex="0" style="display:grid;grid-template-columns:44px minmax(0,1fr) 100px 100px 90px 100px;min-width:0;align-items:center;gap:12px;padding:10px 16px;cursor:pointer;">
+          <span class="thumb" style="width:38px;height:38px;border-radius:6px;background:oklch(0.94 0.008 272);display:flex;align-items:center;justify-content:center;cursor:pointer;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.02 272)" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2z"/></svg>
+          </span>
+          <div style="min-width:0;overflow:hidden;">
+            <div style="font-size:13px;font-weight:600;color:oklch(0.4 0.1 155);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Chambre 301 — Climatisation bruyante</div>
+          </div>
+          <span style="display:inline-flex;background:oklch(0.94 0.008 272);color:oklch(0.48 0.02 272);border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:700;width:fit-content;">Basse</span>
+          <span style="font-size:12px;color:oklch(0.35 0.02 272);">Karim L.</span>
+          <span style="display:inline-flex;background:oklch(0.55 0.11 155 / 0.15);color:oklch(0.4 0.1 155);border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:700;width:fit-content;">Résolu</span>
+          <span style="justify-self:end;font-size:11.5px;color:oklch(0.48 0.02 272);">26/07</span>
+        </div>
+      </div>
+
+      <p style="font-size:12px;color:oklch(0.48 0.02 272);margin:0;flex-shrink:0;">Un ticket urgent bloque automatiquement la chambre en maintenance. À la résolution, la chambre repasse par « À nettoyer » avant de redevenir vendable — jamais directement libre.</p>
+
+    </div>
+  </div>
+</div>
+
+</x-dc>
+</body>
+</html>

@@ -45,6 +45,8 @@
     --color-warning: var(--warning);
     --color-info-foreground: var(--info-foreground);
     --color-info: var(--info);
+    --color-violet-foreground: var(--violet-foreground);
+    --color-violet: var(--violet);
     /* Or de la marque (étoiles du logo) — accent volontairement séparé du
        primary/accent shadcn standard (qui restent des tons neutres de
        hover/surface) pour ne jamais dégrader le contraste des composants
@@ -98,6 +100,13 @@
     --warning-foreground: oklch(0.2 0.03 80);
     --info: oklch(0.5 0.1 265);
     --info-foreground: oklch(0.98 0.01 265);
+    /* CH-063 (handoff design_handoff_exploitation_hotel) — seul ajout hors
+       palette existante : distingue EN_NETTOYAGE (en cours) de A_NETTOYER
+       (--warning, en attente) sur la grille Housekeeping, deux statuts
+       manuels adjacents que --warning seul ne différenciait pas visuellement
+       dans la nouvelle table dense à puces. */
+    --violet: oklch(0.5 0.14 300);
+    --violet-foreground: oklch(0.98 0.01 300);
     --chart-1: oklch(0.355 0.119 272.1);
     --chart-2: oklch(0.728 0.138 89.7);
     --chart-3: oklch(0.55 0.11 155);
@@ -155,6 +164,8 @@
     --warning-foreground: oklch(0.2 0.03 80);
     --info: oklch(0.68 0.1 260);
     --info-foreground: oklch(0.18 0.02 260);
+    --violet: oklch(0.62 0.14 300);
+    --violet-foreground: oklch(0.18 0.03 300);
     --chart-1: oklch(0.445 0.136 273);
     --chart-2: oklch(0.728 0.138 89.7);
     --chart-3: oklch(0.65 0.12 155);

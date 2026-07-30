@@ -19,6 +19,10 @@ const badgeVariants = cva(
         warning:
           'bg-warning/10 text-warning focus-visible:ring-warning/20 dark:bg-warning/20 [a]:hover:bg-warning/20',
         info: 'bg-info/10 text-info focus-visible:ring-info/20 dark:bg-info/20 [a]:hover:bg-info/20',
+        // CH-063 — distingue EN_NETTOYAGE (en cours) de A_NETTOYER
+        // (warning, en attente) sur la grille Housekeeping.
+        violet:
+          'bg-violet/10 text-violet focus-visible:ring-violet/20 dark:bg-violet/20 [a]:hover:bg-violet/20',
         outline:
           'border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground',
         ghost:
