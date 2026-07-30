@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin:0; }
+    * { box-sizing: border-box; }
+    .navitem:hover { background: oklch(0.34 0.09 272); }
+    .navitem:focus-visible, .qa:focus-visible, .kpi:focus-visible { outline: 2px solid oklch(0.728 0.138 89.7); outline-offset: 2px; }
+    .kpi:hover { border-color: oklch(0.355 0.119 272.1 / 0.4); box-shadow: 0 4px 14px oklch(0.22 0.05 272 / 0.1); transform: translateY(-1px); }
+    .kpi { transition: box-shadow 0.15s var(--ease,ease-out), transform 0.15s, border-color 0.15s; }
+    .qa:hover { background: oklch(0.9 0.015 272); }
+    .qa:active { transform: scale(0.98); }
+  </style>
+</helmet>
+
+<div style="display:flex;height:100vh;width:100%;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:oklch(0.99 0.003 272);overflow:hidden;">
+
+  <!-- SIDEBAR -->
+  <aside style="width:240px;flex-shrink:0;background:oklch(0.288 0.091 271.8);color:oklch(0.99 0 0);display:flex;flex-direction:column;">
+    <div style="height:56px;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid oklch(0.34 0.09 272);">
+      <span style="width:28px;height:28px;border-radius:8px;background:oklch(0.728 0.138 89.7);color:oklch(0.2 0.03 90);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;">M</span>
+      <div style="min-width:0;">
+        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Makarim</div>
+        <div style="font-size:10px;color:oklch(0.99 0 0 / 0.6);letter-spacing:0.3px;">PMS Hôtel · Tétouan</div>
+      </div>
+    </div>
+
+    <nav style="flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:8px;">
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:oklch(0.728 0.138 89.7);">
+          <span style="display:flex;align-items:center;gap:6px;">Pilotage <span style="background:oklch(0.99 0 0 / 0.1);border-radius:4px;padding:0 4px;font-size:9px;font-weight:400;font-family:monospace;">1</span></span>
+        </div>
+<div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;background:oklch(0.34 0.09 272);box-shadow:inset 2px 0 0 oklch(0.728 0.138 89.7);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+          Tableau de bord
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:oklch(0.99 0 0 / 0.6);display:flex;align-items:center;gap:6px;">Exploitation hôtel <span style="background:oklch(0.99 0 0 / 0.1);border-radius:4px;padding:0 4px;font-size:9px;font-weight:400;font-family:monospace;">6</span></div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 3v3M16 3v3"/></svg>
+          Réservations
+        </div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.5a9 9 0 1 1-4-7.4"/><path d="M21 3v6h-6"/></svg>
+          Check-in &amp; séjours
+        </div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 3v18M16 8h3M16 13h3"/></svg>
+          Scan pièce d'identité
+        </div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 4.3 4.7.5-3.5 3.2.9 4.6L12 13.4 7.9 15.6l.9-4.6L5.4 7.8l4.7-.5z"/></svg>
+          Housekeeping
+        </div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2z"/></svg>
+          Maintenance
+        </div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 3v6M11 3v6M7 6h4M15 3l-2 6 2 12"/></svg>
+          Restaurant
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:oklch(0.99 0 0 / 0.6);display:flex;align-items:center;gap:6px;">Clients &amp; partenaires <span style="background:oklch(0.99 0 0 / 0.1);border-radius:4px;padding:0 4px;font-size:9px;font-weight:400;font-family:monospace;">2</span></div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><path d="M2 21v-1a7 7 0 0 1 14 0v1M17 11a3 3 0 1 0 0-6M22 21v-1a5 5 0 0 0-4-4.9"/></svg>
+          Clients
+        </div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="9" width="7" height="12"/><rect x="13" y="3" width="7" height="18"/><path d="M7 13h1M7 17h1M16 7h1M16 11h1M16 15h1"/></svg>
+          Entreprises
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:oklch(0.99 0 0 / 0.6);display:flex;align-items:center;gap:6px;">Ressources &amp; stocks <span style="background:oklch(0.99 0 0 / 0.1);border-radius:4px;padding:0 4px;font-size:9px;font-weight:400;font-family:monospace;">2</span></div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
+          RH
+        </div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8l9-5 9 5-9 5-9-5z"/><path d="M3 8v8l9 5 9-5V8"/></svg>
+          Stock
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:oklch(0.99 0 0 / 0.6);display:flex;align-items:center;gap:6px;">Statistiques &amp; rapports <span style="background:oklch(0.99 0 0 / 0.1);border-radius:4px;padding:0 4px;font-size:9px;font-weight:400;font-family:monospace;">1</span></div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+          Reporting
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:oklch(0.99 0 0 / 0.6);display:flex;align-items:center;gap:6px;">Administration <span style="background:oklch(0.99 0 0 / 0.1);border-radius:4px;padding:0 4px;font-size:9px;font-weight:400;font-family:monospace;">3</span></div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+          Notifications
+        </div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+          Audit
+        </div>
+        <div tabindex="0" class="navitem" style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.85);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>
+          Paramètres
+        </div>
+      </div>
+    </nav>
+
+    <div style="border-top:1px solid oklch(0.34 0.09 272);padding:8px;">
+      <div style="display:flex;align-items:center;gap:10px;padding:0 10px;min-height:40px;border-radius:6px;font-size:13px;font-weight:500;color:oklch(0.99 0 0 / 0.7);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M15 16l4-4-4-4M19 12H9"/></svg>
+        Replier
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div style="flex:1;display:flex;flex-direction:column;min-width:0;">
+    <header style="height:56px;flex-shrink:0;background:#fff;border-bottom:1px solid oklch(0.9 0.012 272);display:flex;align-items:center;justify-content:space-between;padding:0 20px;">
+      <h1 style="margin:0;font-size:15px;font-weight:600;color:oklch(0.22 0.02 272);">Tableau de bord</h1>
+      <div style="display:flex;align-items:center;gap:14px;">
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:oklch(0.48 0.02 272);border:1px solid oklch(0.9 0.012 272);border-radius:999px;padding:4px 10px;">
+          <span style="width:6px;height:6px;border-radius:999px;background:oklch(0.55 0.11 155);"></span>
+          En service depuis 08:02
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:oklch(0.35 0.02 272);cursor:pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+          Déconnexion
+        </div>
+      </div>
+    </header>
+
+    <div style="flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:20px;">
+
+      <div style="display:flex;flex-wrap:wrap;gap:10px;">
+        <button class="qa" style="display:flex;align-items:center;gap:8px;height:44px;padding:0 16px;border-radius:8px;background:oklch(0.94 0.015 272);border:none;font-size:13px;font-weight:500;color:oklch(0.25 0.02 272);cursor:pointer;font-family:inherit;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 3v3M16 3v3M12 12v6M9 15h6"/></svg>
+          Nouvelle réservation
+        </button>
+        <button class="qa" style="display:flex;align-items:center;gap:8px;height:44px;padding:0 16px;border-radius:8px;background:oklch(0.94 0.015 272);border:none;font-size:13px;font-weight:500;color:oklch(0.25 0.02 272);cursor:pointer;font-family:inherit;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="15" r="4"/><path d="M9.5 12.5L20 2M17 6l3 3M13 10l3 3"/></svg>
+          Check-in walk-in
+        </button>
+        <button class="qa" style="display:flex;align-items:center;gap:8px;height:44px;padding:0 16px;border-radius:8px;background:oklch(0.94 0.015 272);border:none;font-size:13px;font-weight:500;color:oklch(0.25 0.02 272);cursor:pointer;font-family:inherit;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 4.3 4.7.5-3.5 3.2.9 4.6L12 13.4 7.9 15.6l.9-4.6L5.4 7.8l4.7-.5z"/></svg>
+          Chambres à nettoyer
+        </button>
+        <button class="qa" style="display:flex;align-items:center;gap:8px;height:44px;padding:0 16px;border-radius:8px;background:oklch(0.94 0.015 272);border:none;font-size:13px;font-weight:500;color:oklch(0.25 0.02 272);cursor:pointer;font-family:inherit;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2z"/></svg>
+          Signaler une panne
+        </button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+        <div class="kpi" role="button" tabindex="0" style="background:oklch(0.355 0.119 272.1 / 0.06);border:1px solid oklch(0.355 0.119 272.1 / 0.25);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:8px;cursor:pointer;">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:10.5px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:oklch(0.355 0.119 272.1);">Taux d'occupation</span>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="oklch(0.355 0.119 272.1)" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 3v3M16 3v3M3 9h18"/></svg>
+          </div>
+          <span style="font-size:28px;font-weight:700;color:oklch(0.355 0.119 272.1);letter-spacing:-0.3px;">78%</span>
+          <div style="height:5px;border-radius:999px;background:oklch(0.355 0.119 272.1 / 0.15);overflow:hidden;">
+            <div style="height:100%;width:78%;border-radius:999px;background:oklch(0.355 0.119 272.1);"></div>
+          </div>
+          <span style="font-size:12px;color:oklch(0.48 0.02 272);">39 / 50 chambres occupées</span>
+        </div>
+        <div class="kpi" role="button" tabindex="0" style="background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:8px;cursor:pointer;">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:10.5px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:oklch(0.48 0.02 272);">Arrivées aujourd'hui</span>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.02 272)" stroke-width="2"><path d="M4 12h11M11 7l5 5-5 5M20 5v14"/></svg>
+          </div>
+          <span style="font-size:28px;font-weight:700;color:oklch(0.22 0.02 272);letter-spacing:-0.3px;">12</span>
+          <span style="font-size:12px;color:oklch(0.48 0.02 272);">Check-in prévus</span>
+        </div>
+        <div class="kpi" role="button" tabindex="0" style="background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:8px;cursor:pointer;">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:10.5px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:oklch(0.48 0.02 272);">Départs aujourd'hui</span>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.02 272)" stroke-width="2"><path d="M20 12H9M13 7l-5 5 5 5M4 5v14"/></svg>
+          </div>
+          <span style="font-size:28px;font-weight:700;color:oklch(0.22 0.02 272);letter-spacing:-0.3px;">8</span>
+          <span style="font-size:12px;color:oklch(0.48 0.02 272);">Check-out prévus</span>
+        </div>
+        <div class="kpi" role="button" tabindex="0" style="background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:8px;cursor:pointer;">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:10.5px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:oklch(0.48 0.02 272);">Chambres à nettoyer</span>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="oklch(0.7 0.15 80)" stroke-width="2"><path d="M12 3l1.9 4.3 4.7.5-3.5 3.2.9 4.6L12 13.4 7.9 15.6l.9-4.6L5.4 7.8l4.7-.5z"/></svg>
+          </div>
+          <span style="font-size:28px;font-weight:700;color:oklch(0.22 0.02 272);letter-spacing:-0.3px;">5</span>
+          <span style="font-size:12px;color:oklch(0.48 0.02 272);">dont 2 en cours</span>
+        </div>
+        <div style="background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:8px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:10.5px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:oklch(0.48 0.02 272);">Encaissé aujourd'hui</span>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.11 155)" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+          </div>
+          <span style="font-size:28px;font-weight:700;color:oklch(0.22 0.02 272);letter-spacing:-0.3px;">14 250 MAD</span>
+          <span style="font-size:12px;color:oklch(0.48 0.02 272);">Paiements du jour</span>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div style="background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h3 style="margin:0;font-size:13px;font-weight:700;color:oklch(0.22 0.02 272);">Chambres à nettoyer</h3>
+            <span style="font-size:12px;color:oklch(0.355 0.119 272.1);font-weight:500;cursor:pointer;">Voir le ménage →</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            <span style="display:inline-flex;align-items:center;gap:4px;background:oklch(0.7 0.15 80 / 0.18);color:oklch(0.4 0.1 80);border-radius:6px;padding:3px 8px;font-size:12px;font-weight:600;">204 <span style="font-size:10px;font-weight:400;opacity:0.85;">À nettoyer</span></span>
+            <span style="display:inline-flex;align-items:center;gap:4px;background:oklch(0.7 0.15 80 / 0.18);color:oklch(0.4 0.1 80);border-radius:6px;padding:3px 8px;font-size:12px;font-weight:600;">211 <span style="font-size:10px;font-weight:400;opacity:0.85;">À nettoyer</span></span>
+            <span style="display:inline-flex;align-items:center;gap:4px;background:oklch(0.7 0.15 80 / 0.18);color:oklch(0.4 0.1 80);border-radius:6px;padding:3px 8px;font-size:12px;font-weight:600;">108 <span style="font-size:10px;font-weight:400;opacity:0.85;">En nettoyage</span></span>
+            <span style="display:inline-flex;align-items:center;gap:4px;background:oklch(0.7 0.15 80 / 0.18);color:oklch(0.4 0.1 80);border-radius:6px;padding:3px 8px;font-size:12px;font-weight:600;">305 <span style="font-size:10px;font-weight:400;opacity:0.85;">À nettoyer</span></span>
+            <span style="display:inline-flex;align-items:center;gap:4px;background:oklch(0.7 0.15 80 / 0.18);color:oklch(0.4 0.1 80);border-radius:6px;padding:3px 8px;font-size:12px;font-weight:600;">312 <span style="font-size:10px;font-weight:400;opacity:0.85;">En nettoyage</span></span>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h3 style="margin:0;font-size:13px;font-weight:700;color:oklch(0.22 0.02 272);">Tickets de maintenance ouverts</h3>
+            <span style="font-size:12px;color:oklch(0.355 0.119 272.1);font-weight:500;cursor:pointer;">Voir la maintenance →</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;font-size:12.5px;color:oklch(0.25 0.02 272);">
+              <span>Ch. 108 — Climatisation en panne</span>
+              <span style="background:oklch(0.55 0.19 25 / 0.15);color:oklch(0.5 0.17 25);border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;">URGENTE</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;font-size:12.5px;color:oklch(0.25 0.02 272);">
+              <span>Ch. 215 — Fuite robinetterie</span>
+              <span style="background:oklch(0.7 0.15 80 / 0.2);color:oklch(0.4 0.1 80);border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;">HAUTE</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;font-size:12.5px;color:oklch(0.25 0.02 272);">
+              <span>Ch. 302 — Ampoule à remplacer</span>
+              <span style="background:oklch(0.5 0.1 265 / 0.15);color:oklch(0.42 0.09 265);border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;">MOYENNE</span>
+            </div>
+            <span style="font-size:12px;color:oklch(0.48 0.02 272);">+ 2 autre(s)</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+</x-dc>
+</body>
+</html>

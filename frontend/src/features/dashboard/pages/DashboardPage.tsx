@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  Banknote,
+  Calendar,
   CalendarPlus,
   KeyRound,
+  LogIn,
+  LogOut,
   Sparkles,
   Wrench,
   type LucideIcon,
@@ -42,16 +46,33 @@ interface KpiCardProps {
   label: string;
   value: string;
   hint?: string;
+  icon: LucideIcon;
   onClick?: () => void;
   accent?: boolean;
+  // Taux d'occupation uniquement (docs/design/design_handoff_login_dashboard) —
+  // pourcentage 0-100 rendu en mini barre de progression, jamais recalculé
+  // ici : reflet direct de `resume.tauxOccupation` déjà fourni par le backend.
+  progress?: number;
 }
 
-function KpiCard({ label, value, hint, onClick, accent }: KpiCardProps) {
+function KpiCard({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  onClick,
+  accent,
+  progress,
+}: KpiCardProps) {
   const clickable = onClick !== undefined;
   return (
     <div
-      className={`bg-card flex flex-col gap-2 rounded-lg border p-4 transition-colors ${
-        clickable ? 'hover:border-primary/40 cursor-pointer' : ''
+      className={`group flex flex-col gap-2 rounded-lg border p-4 transition-[box-shadow,transform,border-color] duration-150 ${
+        accent ? 'bg-primary/[0.06] border-primary/25' : 'bg-card border-border'
+      } ${
+        clickable
+          ? 'hover:border-primary/40 cursor-pointer hover:-translate-y-px hover:shadow-[var(--shadow-card)] focus-visible:outline-gold focus-visible:outline-2 focus-visible:outline-offset-2'
+          : ''
       }`}
       onClick={onClick}
       onKeyDown={
@@ -67,14 +88,29 @@ function KpiCard({ label, value, hint, onClick, accent }: KpiCardProps) {
       role={clickable ? 'button' : undefined}
       tabIndex={clickable ? 0 : undefined}
     >
-      <p className="text-muted-foreground text-[10.5px] font-bold tracking-wide uppercase">
-        {label}
-      </p>
+      <div className="flex items-center justify-between">
+        <p
+          className={`text-[10.5px] font-bold tracking-wide uppercase ${accent ? 'text-primary' : 'text-muted-foreground'}`}
+        >
+          {label}
+        </p>
+        <Icon
+          className={`size-[15px] ${accent ? 'text-primary' : 'text-muted-foreground'}`}
+        />
+      </div>
       <p
         className={`text-2xl font-bold tracking-tight ${accent ? 'text-primary' : ''}`}
       >
         {value}
       </p>
+      {progress !== undefined && (
+        <div className="bg-primary/15 h-[5px] overflow-hidden rounded-full">
+          <div
+            className="bg-primary h-full rounded-full"
+            style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+          />
+        </div>
+      )}
       {hint && <p className="text-muted-foreground text-xs">{hint}</p>}
     </div>
   );
@@ -115,6 +151,7 @@ export function DashboardPage({ onNavigate }: Props) {
             id={`quick-action-${target}`}
             type="button"
             variant="secondary"
+            className="h-11"
             onClick={() => onNavigate(target)}
           >
             <Icon />
@@ -132,27 +169,36 @@ export function DashboardPage({ onNavigate }: Props) {
             label="Taux d'occupation"
             value={`${resume.tauxOccupation}%`}
             hint={`${resume.chambresOccupees} / ${resume.totalChambres} chambres occupées`}
+            icon={Calendar}
+            progress={resume.tauxOccupation}
             onClick={() => onNavigate('housekeeping')}
             accent
           />
           <KpiCard
             label="Arrivées aujourd'hui"
             value={String(resume.arriveesAujourdhui)}
+            hint="Check-in prévus"
+            icon={LogIn}
             onClick={() => onNavigate('checkin')}
           />
           <KpiCard
             label="Départs aujourd'hui"
             value={String(resume.departsAujourdhui)}
+            hint="Check-out prévus"
+            icon={LogOut}
             onClick={() => onNavigate('checkin')}
           />
           <KpiCard
             label="Chambres à nettoyer"
             value={String(resume.chambresANettoyer)}
+            icon={Sparkles}
             onClick={() => onNavigate('housekeeping')}
           />
           <KpiCard
             label="Encaissé aujourd'hui"
             value={`${resume.encaisseAujourdhui} MAD`}
+            hint="Paiements du jour"
+            icon={Banknote}
           />
         </div>
       )}
