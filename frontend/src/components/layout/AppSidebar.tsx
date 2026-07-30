@@ -1,7 +1,12 @@
-import { useEffect } from 'react';
-import { ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { NAV_ITEMS } from './nav-items';
+import { NAV_CATEGORIES, NAV_ITEMS, type NavCategoryKey } from './nav-items';
 import type { Tab } from '@/App';
 
 interface Props {
@@ -28,16 +33,22 @@ interface Props {
   logoUrl?: string | null;
 }
 
-// Navigation principale (sidebar repliable) — remplace l'ancienne rangée de
-// boutons horizontale, devenue trop étroite à 11 modules. Palette "Ardoise &
-// Laiton" pilotée exclusivement via les tokens --sidebar-* (index.css), donc
-// ce composant ne code aucune couleur en dur.
+// Navigation principale (sidebar repliable, par catégories) — remplace la
+// liste plate à 14 entrées (chantier design 2026-07-30, demande client :
+// « réorganiser les menus des modules, ajouter des sous-modules pour aérer
+// et rendre la navigation plus fluide », Audit relégué en fin de liste).
+// Groupement en 6 catégories (nav-items.ts, NAV_CATEGORIES), chacune
+// repliable indépendamment — la catégorie de l'onglet actif reste toujours
+// dépliée, même si l'utilisateur l'avait repliée manuellement. Palette
+// "Ardoise & Laiton" pilotée exclusivement via les tokens --sidebar-*
+// (index.css), donc ce composant ne code aucune couleur en dur.
 //
 // CH-011 — gating RBAC minimal (granularité onglet entier, RD-009) : un
 // onglet n'est rendu que si `permissions` contient la permission déclarée
 // dans NAV_ITEMS. Purement cosmétique/UX — le vrai contrôle d'accès reste
 // PermissionsGuard côté serveur (docs/governance/REGISTRE_CHANTIERS.md,
-// CH-011 : "Impact sécurité : Faible").
+// CH-011 : "Impact sécurité : Faible"). Une catégorie entièrement vidée par
+// le filtrage RBAC (aucun item visible) n'est pas rendue du tout.
 export function AppSidebar({
   activeTab,
   onNavigate,
@@ -57,6 +68,17 @@ export function AppSidebar({
   // uniquement) — voir commentaire sur la prop `mobileOpen` ci-dessus.
   const showLabels = !collapsed || mobileOpen;
 
+  // Catégories repliées par l'utilisateur (toutes dépliées par défaut —
+  // l'hôtel a peu de modules par catégorie, pas besoin de tout masquer au
+  // premier rendu).
+  const [collapsedCategories, setCollapsedCategories] = useState<
+    Set<NavCategoryKey>
+  >(new Set());
+
+  const activeCategory = NAV_ITEMS.find(
+    (item) => item.tab === activeTab,
+  )?.category;
+
   useEffect(() => {
     if (!mobileOpen) return;
     function handleKeyDown(e: KeyboardEvent) {
@@ -65,6 +87,18 @@ export function AppSidebar({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [mobileOpen, onMobileClose]);
+
+  function toggleCategory(key: NavCategoryKey) {
+    setCollapsedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
 
   function handleNavigate(tab: Tab) {
     onNavigate(tab);
@@ -118,29 +152,79 @@ export function AppSidebar({
           )}
         </div>
 
-        <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
-          {visibleItems.map(({ tab, label, icon: Icon }) => {
-            const active = tab === activeTab;
+        <nav className="flex flex-1 flex-col gap-2 overflow-y-auto p-2">
+          {NAV_CATEGORIES.map((category) => {
+            const categoryItems = visibleItems.filter(
+              (item) => item.category === category.key,
+            );
+            if (categoryItems.length === 0) return null;
+
+            const isCollapsed =
+              collapsedCategories.has(category.key) &&
+              category.key !== activeCategory;
+            const hasActiveItem = categoryItems.some(
+              (item) => item.tab === activeTab,
+            );
+
             return (
-              <button
-                key={tab}
-                id={`nav-${tab}`}
-                type="button"
-                title={showLabels ? undefined : label}
-                aria-current={active ? 'page' : undefined}
-                onClick={() => handleNavigate(tab)}
-                className={cn(
-                  'flex min-h-11 items-center gap-2.5 rounded-md px-2.5 text-sm font-medium transition-colors',
-                  'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-                  active
-                    ? 'bg-sidebar-accent text-sidebar-accent-foreground shadow-[inset_2px_0_0_var(--sidebar-primary)]'
-                    : 'text-sidebar-foreground/85',
-                  !showLabels && 'justify-center px-0',
+              <div key={category.key} className="flex flex-col gap-0.5">
+                {showLabels ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleCategory(category.key)}
+                    aria-expanded={!isCollapsed}
+                    className={cn(
+                      'text-sidebar-foreground/60 hover:text-sidebar-foreground flex w-full items-center justify-between rounded-sm px-2.5 py-1.5 text-[10px] font-bold tracking-wider uppercase transition-colors',
+                      hasActiveItem && 'text-sidebar-primary font-extrabold',
+                    )}
+                  >
+                    <span className="flex items-center gap-1.5 truncate">
+                      <span>{category.label}</span>
+                      <span className="bg-sidebar-foreground/10 text-sidebar-foreground/70 rounded px-1 font-mono text-[9px] font-normal">
+                        {categoryItems.length}
+                      </span>
+                    </span>
+                    {isCollapsed ? (
+                      <ChevronRight className="size-3 shrink-0 opacity-70" />
+                    ) : (
+                      <ChevronDown className="size-3 shrink-0 opacity-70" />
+                    )}
+                  </button>
+                ) : (
+                  <div className="border-sidebar-border/50 mx-2 my-1 border-t" />
                 )}
-              >
-                <Icon className="size-4 shrink-0" />
-                {showLabels && <span className="truncate">{label}</span>}
-              </button>
+
+                {(!isCollapsed || !showLabels) && (
+                  <div className="flex flex-col gap-0.5 pl-0.5">
+                    {categoryItems.map(({ tab, label, icon: Icon }) => {
+                      const active = tab === activeTab;
+                      return (
+                        <button
+                          key={tab}
+                          id={`nav-${tab}`}
+                          type="button"
+                          title={showLabels ? undefined : label}
+                          aria-current={active ? 'page' : undefined}
+                          onClick={() => handleNavigate(tab)}
+                          className={cn(
+                            'flex min-h-10 items-center gap-2.5 rounded-md px-2.5 text-sm font-medium transition-colors',
+                            'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                            active
+                              ? 'bg-sidebar-accent text-sidebar-accent-foreground shadow-[inset_2px_0_0_var(--sidebar-primary)]'
+                              : 'text-sidebar-foreground/85',
+                            !showLabels && 'justify-center px-0',
+                          )}
+                        >
+                          <Icon className="size-4 shrink-0" />
+                          {showLabels && (
+                            <span className="truncate">{label}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>
