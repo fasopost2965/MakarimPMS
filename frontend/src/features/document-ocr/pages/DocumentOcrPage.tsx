@@ -44,6 +44,23 @@ function typePieceFromFormat(
   return null;
 }
 
+// Barrière explicite avant affichage (défense en profondeur, au-delà du
+// simple commentaire explicatif déjà présent avant CH-068 — insuffisant
+// pour CodeQL js/xss-through-dom, qui a re-signalé l'alerte "nouvelle" dès
+// que ce fichier a été retouché) : previewUrl vient exclusivement de
+// URL.createObjectURL(fichier) juste au-dessus, jamais du contenu ni du nom
+// du fichier choisi, mais on le revalide quand même ici — seul un blob:
+// généré par le navigateur est jamais rendu, n'importe quelle autre valeur
+// (même hypothétique) est rejetée.
+function toSafeBlobUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'blob:' ? parsed.href : null;
+  } catch {
+    return null;
+  }
+}
+
 // CH-068 (batch 3 design handoff, ScanIdentite.dc.html) — combine le scan
 // OCR (F5, déjà existant) et la fiche de police (CH-003, déjà existante,
 // jusqu'ici uniquement accessible séjour par séjour depuis
@@ -92,6 +109,11 @@ export function DocumentOcrPage() {
   const selectedStay = useMemo(
     () => stays.find((s) => String(s.id) === selectedStayId) ?? null,
     [stays, selectedStayId],
+  );
+
+  const safePreviewUrl = useMemo(
+    () => (previewUrl ? toSafeBlobUrl(previewUrl) : null),
+    [previewUrl],
   );
 
   function handleFileChange(f: File | null) {
@@ -181,20 +203,9 @@ export function DocumentOcrPage() {
             onChange={handleFileChange}
             hint="JPEG/PNG/WebP, 8 Mo max — zone MRZ visible et nette"
           />
-          {previewUrl && (
-            // previewUrl vient exclusivement de URL.createObjectURL(fichier)
-            // ci-dessus — une URL blob:<origine>/<uuid> générée par le
-            // navigateur, jamais dérivée du contenu ni du nom du fichier
-            // choisi. Faux positif déjà analysé et documenté (commit
-            // a95a328, PR #21) : CodeQL (js/xss-through-dom) confond
-            // l'objet File lu depuis l'<input type="file"> avec du texte
-            // DOM attaquant-contrôlé, mais aucune chaîne issue du fichier
-            // n'atteint jamais cet attribut. Suppression explicite ci-dessous
-            // (sinon réapparaît comme "nouvelle" alerte à chaque diff
-            // touchant cette ligne, la simple documentation ne suffit pas).
-            // codeql[js/xss-through-dom]
+          {safePreviewUrl && (
             <img
-              src={previewUrl}
+              src={safePreviewUrl}
               alt="Aperçu du document"
               className="max-h-48 w-fit rounded-md border object-contain"
             />
