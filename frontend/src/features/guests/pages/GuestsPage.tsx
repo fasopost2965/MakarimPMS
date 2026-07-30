@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
+import { Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,13 +12,6 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   createGuest,
   getGuestFactures,
@@ -50,23 +44,34 @@ const CATEGORIE_LABEL: Record<CategorieClient, string> = {
   BLACKLIST: 'Liste noire',
 };
 
+// Batch 3 (docs/design/design_handoff_batch3/Clients.dc.html) — pastilles
+// colorées par catégorie CRM, alignées sur les tokens sémantiques existants
+// (warning=or pour VIP, info=bleu-violet pour Agence, destructive=rouge pour
+// Liste noire) plutôt que d'introduire de nouvelles couleurs par écran.
 const CATEGORIE_BADGE_VARIANT: Record<
   CategorieClient,
-  'default' | 'secondary' | 'destructive' | 'outline'
+  'outline' | 'warning' | 'brand' | 'info' | 'destructive'
 > = {
   STANDARD: 'outline',
-  VIP: 'default',
-  ENTREPRISE: 'secondary',
-  AGENCE: 'secondary',
+  VIP: 'warning',
+  ENTREPRISE: 'brand',
+  AGENCE: 'info',
   BLACKLIST: 'destructive',
 };
 
-// Écran CRM (cahier des charges §5.7, Phase 2) : recherche/liste des clients,
-// fiche client (historique des séjours, factures) et changement de catégorie
-// avec motif obligatoire (trace d'audit dédiée GuestCategoryLog côté
-// backend — CLAUDE.md règle 4). BLACKLIST est la seule catégorie à effet
-// bloquant réel, appliqué au moment de la réservation/du check-in via
-// GuestPicker, pas ici.
+function formatClientDepuis(createdAt: string) {
+  return new Date(createdAt).toLocaleDateString('fr-FR', {
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+// Écran CRM (cahier des charges §5.7, Phase 2 ; refonte visuelle batch 3
+// design handoff, Clients.dc.html) : recherche/liste des clients, fiche
+// client (historique des séjours, factures) et changement de catégorie avec
+// motif obligatoire (trace d'audit dédiée GuestCategoryLog côté backend —
+// CLAUDE.md règle 4). BLACKLIST est la seule catégorie à effet bloquant réel,
+// appliqué au moment de la réservation/du check-in via GuestPicker, pas ici.
 export function GuestsPage() {
   const [query, setQuery] = useState('');
   const [guests, setGuests] = useState<Guest[]>([]);
@@ -116,24 +121,26 @@ export function GuestsPage() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-4 p-6">
-      <div className="flex items-center justify-between">
+    <div className="flex h-full flex-col gap-5 overflow-auto p-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="relative max-w-sm flex-1">
+          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Rechercher un client (nom, téléphone, pièce d'identité…)"
+            className="pl-9"
+          />
+        </div>
         <Button size="sm" onClick={() => setCreateOpen(true)}>
           + Nouveau client
         </Button>
       </div>
 
-      <Input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="Rechercher un client (nom, téléphone, pièce d'identité…)"
-        className="max-w-sm"
-      />
-
       {loadError && <p className="text-destructive text-sm">{loadError}</p>}
 
-      <div className="grid flex-1 grid-cols-2 gap-4 overflow-hidden">
-        <div className="flex flex-col gap-2 overflow-auto">
+      <div className="grid grid-cols-[340px_1fr] items-start gap-4">
+        <div className="flex flex-col gap-2">
           {loading ? (
             <p className="text-muted-foreground text-sm">Chargement…</p>
           ) : guests.length === 0 ? (
@@ -144,21 +151,24 @@ export function GuestsPage() {
                 key={guest.id}
                 type="button"
                 onClick={() => setSelected(guest)}
-                className={`hover:bg-muted flex items-center justify-between gap-2 rounded-md border p-3 text-left ${
-                  selected?.id === guest.id ? 'border-primary' : ''
+                className={`bg-card flex items-center justify-between gap-2 rounded-lg border p-3 text-left transition-colors hover:shadow-sm ${
+                  selected?.id === guest.id
+                    ? 'border-primary ring-primary/20 ring-1'
+                    : 'hover:border-muted-foreground/30'
                 }`}
               >
-                <div>
-                  <p className="text-sm font-medium">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">
                     {guest.nom} {guest.prenom}
                   </p>
-                  {guest.telephone && (
-                    <p className="text-muted-foreground text-xs">
-                      {guest.telephone}
-                    </p>
-                  )}
+                  <p className="text-muted-foreground mt-0.5 truncate text-xs">
+                    {guest.telephone ?? 'Aucun téléphone renseigné'}
+                  </p>
                 </div>
-                <Badge variant={CATEGORIE_BADGE_VARIANT[guest.categorie]}>
+                <Badge
+                  variant={CATEGORIE_BADGE_VARIANT[guest.categorie]}
+                  className="shrink-0"
+                >
                   {CATEGORIE_LABEL[guest.categorie]}
                 </Badge>
               </button>
@@ -166,15 +176,17 @@ export function GuestsPage() {
           )}
         </div>
 
-        <div className="overflow-auto">
-          {selected && (
-            <GuestDetail
-              key={selected.id}
-              guest={selected}
-              onCategorieChanged={handleGuestUpdated}
-            />
-          )}
-        </div>
+        {selected ? (
+          <GuestDetail
+            key={selected.id}
+            guest={selected}
+            onCategorieChanged={handleGuestUpdated}
+          />
+        ) : (
+          <div className="bg-card text-muted-foreground rounded-lg border p-8 text-center text-sm">
+            Sélectionnez un client dans la liste pour voir sa fiche.
+          </div>
+        )}
       </div>
 
       <Dialog
@@ -249,59 +261,81 @@ function GuestDetail({ guest, onCategorieChanged }: GuestDetailProps) {
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-md border p-4">
-      <div>
-        <h2 className="text-lg font-medium">
-          {guest.nom} {guest.prenom}
-        </h2>
-        <p className="text-muted-foreground text-sm">
-          {[guest.telephone, guest.email, guest.pieceIdentite]
-            .filter(Boolean)
-            .join(' · ') || 'Aucune coordonnée renseignée'}
-        </p>
+    <div className="bg-card flex flex-col gap-4 rounded-lg border p-5">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-bold">
+              {guest.nom} {guest.prenom}
+            </h2>
+            <Badge variant={CATEGORIE_BADGE_VARIANT[guest.categorie]}>
+              {CATEGORIE_LABEL[guest.categorie]}
+            </Badge>
+          </div>
+          <p className="text-muted-foreground mt-1 text-xs">
+            {[
+              guest.telephone,
+              guest.email,
+              guest.pieceIdentite,
+              guest.nationalite,
+            ]
+              .filter(Boolean)
+              .join(' · ') || 'Aucune coordonnée renseignée'}
+          </p>
+        </div>
+        <span className="text-muted-foreground text-xs whitespace-nowrap">
+          Client depuis {formatClientDepuis(guest.createdAt)}
+        </span>
       </div>
 
       <form
-        className="flex items-end gap-2"
+        className="bg-muted/40 flex flex-col gap-3 rounded-md border p-3.5"
         onSubmit={(e) => void handleSaveCategorie(e)}
       >
-        <div className="flex flex-1 flex-col gap-1.5">
-          <Label htmlFor="categorie">Catégorie</Label>
-          <Select
-            value={categorie}
-            onValueChange={(v) => v && setCategorie(v as CategorieClient)}
-            items={CATEGORIES.map((c) => ({
-              value: c,
-              label: CATEGORIE_LABEL[c],
-            }))}
+        <span className="text-muted-foreground text-[11px] font-bold tracking-wide uppercase">
+          Changer la catégorie CRM
+        </span>
+        <div className="flex flex-wrap gap-2">
+          {CATEGORIES.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setCategorie(c)}
+              className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                categorie === c
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'bg-card hover:bg-muted text-muted-foreground'
+              }`}
+            >
+              {CATEGORIE_LABEL[c]}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="flex min-w-[200px] flex-1 flex-col gap-1.5">
+            <Label htmlFor="motif" className="text-xs font-normal">
+              Motif (obligatoire, tracé dans l'audit)
+            </Label>
+            <Input
+              id="motif"
+              value={motif}
+              onChange={(e) => setMotif(e.target.value)}
+              placeholder="Ex. Séjours répétés, incident réglé…"
+            />
+          </div>
+          <Button
+            type="submit"
+            size="sm"
+            variant="outline"
+            disabled={saving || !motif.trim() || categorie === guest.categorie}
           >
-            <SelectTrigger id="categorie" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CATEGORIES.map((c) => (
-                <SelectItem key={c} value={c}>
-                  {CATEGORIE_LABEL[c]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            {saving ? 'Enregistrement…' : 'Enregistrer'}
+          </Button>
         </div>
-        <div className="flex flex-1 flex-col gap-1.5">
-          <Label htmlFor="motif">Motif</Label>
-          <Input
-            id="motif"
-            value={motif}
-            onChange={(e) => setMotif(e.target.value)}
-            placeholder="Obligatoire"
-          />
-        </div>
-        <Button
-          type="submit"
-          disabled={saving || !motif.trim() || categorie === guest.categorie}
-        >
-          {saving ? 'Enregistrement…' : 'Changer'}
-        </Button>
+        <p className="text-muted-foreground text-[11px]">
+          Basculer vers/depuis <strong>Liste noire</strong> requiert le rôle
+          Administrateur — consigné automatiquement dans le journal d'audit.
+        </p>
       </form>
       {saveError && <p className="text-destructive text-sm">{saveError}</p>}
 
@@ -309,41 +343,82 @@ function GuestDetail({ guest, onCategorieChanged }: GuestDetailProps) {
         <p className="text-muted-foreground text-sm">Chargement…</p>
       ) : (
         <>
-          <div>
-            <h3 className="mb-1 text-sm font-medium">Historique des séjours</h3>
-            {historique.length === 0 ? (
-              <p className="text-muted-foreground text-xs">Aucun séjour.</p>
-            ) : (
-              <ul className="flex flex-col gap-1">
-                {historique.map((stay) => (
-                  <li key={stay.id} className="text-xs">
-                    Chambre {stay.room.numero} — du{' '}
-                    {stay.dateCheckin.slice(0, 10)} au{' '}
-                    {(stay.dateCheckoutReelle ?? stay.dateCheckoutPrevue).slice(
-                      0,
-                      10,
-                    )}{' '}
-                    ({stay.statut})
-                  </li>
-                ))}
-              </ul>
-            )}
+          <div className="flex flex-col gap-2">
+            <span className="text-muted-foreground text-[11px] font-bold tracking-wide uppercase">
+              Historique des séjours
+            </span>
+            <div className="overflow-hidden rounded-md border">
+              <div className="bg-muted/60 text-muted-foreground grid grid-cols-[80px_1fr_1fr_100px] gap-2 px-3.5 py-2 text-[11px] font-bold">
+                <span>Chambre</span>
+                <span>Arrivée</span>
+                <span>Départ</span>
+                <span>Statut</span>
+              </div>
+              {historique.length === 0 ? (
+                <p className="text-muted-foreground border-t px-3.5 py-3 text-xs">
+                  Aucun séjour.
+                </p>
+              ) : (
+                historique.map((stay) => (
+                  <div
+                    key={stay.id}
+                    className="grid grid-cols-[80px_1fr_1fr_100px] items-center gap-2 border-t px-3.5 py-2 text-xs"
+                  >
+                    <span className="font-medium">{stay.room.numero}</span>
+                    <span>{stay.dateCheckin.slice(0, 10)}</span>
+                    <span>
+                      {(
+                        stay.dateCheckoutReelle ?? stay.dateCheckoutPrevue
+                      ).slice(0, 10)}
+                    </span>
+                    <Badge
+                      variant={
+                        stay.statut === 'EN_COURS' ? 'success' : 'outline'
+                      }
+                      className="w-fit"
+                    >
+                      {stay.statut === 'EN_COURS' ? 'En cours' : 'Terminé'}
+                    </Badge>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
 
-          <div>
-            <h3 className="mb-1 text-sm font-medium">Factures</h3>
-            {factures.length === 0 ? (
-              <p className="text-muted-foreground text-xs">Aucune facture.</p>
-            ) : (
-              <ul className="flex flex-col gap-1">
-                {factures.map((invoice) => (
-                  <li key={invoice.id} className="text-xs">
-                    {invoice.numero} — {invoice.montantTotal} MAD (
-                    {invoice.statut})
-                  </li>
-                ))}
-              </ul>
-            )}
+          <div className="flex flex-col gap-2">
+            <span className="text-muted-foreground text-[11px] font-bold tracking-wide uppercase">
+              Factures
+            </span>
+            <div className="overflow-hidden rounded-md border">
+              <div className="bg-muted/60 text-muted-foreground grid grid-cols-[1fr_120px_110px] gap-2 px-3.5 py-2 text-[11px] font-bold">
+                <span>Numéro</span>
+                <span>Montant</span>
+                <span>Statut</span>
+              </div>
+              {factures.length === 0 ? (
+                <p className="text-muted-foreground border-t px-3.5 py-3 text-xs">
+                  Aucune facture.
+                </p>
+              ) : (
+                factures.map((invoice) => (
+                  <div
+                    key={invoice.id}
+                    className="grid grid-cols-[1fr_120px_110px] items-center gap-2 border-t px-3.5 py-2 text-xs"
+                  >
+                    <span>{invoice.numero}</span>
+                    <span>{invoice.montantTotal} MAD</span>
+                    <Badge
+                      variant={
+                        invoice.statut === 'EMISE' ? 'success' : 'destructive'
+                      }
+                      className="w-fit"
+                    >
+                      {invoice.statut === 'EMISE' ? 'Émise' : 'Avoir émis'}
+                    </Badge>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </>
       )}
@@ -395,56 +470,59 @@ function CreateGuestForm({
           });
         }}
       >
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="nom">Nom</Label>
-          <Input
-            id="nom"
-            value={nom}
-            onChange={(e) => setNom(e.target.value)}
-            required
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="prenom">Prénom</Label>
-          <Input
-            id="prenom"
-            value={prenom}
-            onChange={(e) => setPrenom(e.target.value)}
-            required
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="pieceIdentite">Pièce d'identité</Label>
-          <Input
-            id="pieceIdentite"
-            value={pieceIdentite}
-            onChange={(e) => setPieceIdentite(e.target.value)}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="nationalite">Nationalité</Label>
-          <Input
-            id="nationalite"
-            value={nationalite}
-            onChange={(e) => setNationalite(e.target.value)}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="telephone">Téléphone</Label>
-          <Input
-            id="telephone"
-            value={telephone}
-            onChange={(e) => setTelephone(e.target.value)}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="nom">Nom</Label>
+            <Input
+              id="nom"
+              value={nom}
+              onChange={(e) => setNom(e.target.value)}
+              required
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="prenom">Prénom</Label>
+            <Input
+              id="prenom"
+              value={prenom}
+              onChange={(e) => setPrenom(e.target.value)}
+              required
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="pieceIdentite">Pièce d'identité</Label>
+            <Input
+              id="pieceIdentite"
+              value={pieceIdentite}
+              onChange={(e) => setPieceIdentite(e.target.value)}
+              placeholder="CNIE ou Passeport"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="nationalite">Nationalité</Label>
+            <Input
+              id="nationalite"
+              value={nationalite}
+              onChange={(e) => setNationalite(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="telephone">Téléphone</Label>
+            <Input
+              id="telephone"
+              value={telephone}
+              onChange={(e) => setTelephone(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="preferences">Préférences</Label>
@@ -452,6 +530,7 @@ function CreateGuestForm({
             id="preferences"
             value={preferences}
             onChange={(e) => setPreferences(e.target.value)}
+            placeholder="Ex. étage élevé, oreiller ferme…"
           />
         </div>
 
@@ -477,6 +556,11 @@ function CreateGuestForm({
         )}
 
         {error && <p className="text-destructive text-sm">{error}</p>}
+
+        <p className="text-muted-foreground text-xs">
+          Nationalité obligatoire (fiche de police) — la pièce d'identité (CNIE
+          ou Passeport) reste requise avant tout check-in, même si absente ici.
+        </p>
 
         <DialogFooter>
           <Button
