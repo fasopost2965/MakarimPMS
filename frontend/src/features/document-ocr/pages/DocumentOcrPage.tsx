@@ -185,11 +185,14 @@ export function DocumentOcrPage() {
             // previewUrl vient exclusivement de URL.createObjectURL(fichier)
             // ci-dessus — une URL blob:<origine>/<uuid> générée par le
             // navigateur, jamais dérivée du contenu ni du nom du fichier
-            // choisi. Un scanner statique (CodeQL, "DOM text reinterpreted
-            // as HTML") peut signaler ce flux en confondant l'objet File lu
-            // depuis l'<input type="file"> avec du texte DOM
-            // attaquant-contrôlé — mais aucune chaîne issue du fichier
-            // n'atteint jamais cet attribut.
+            // choisi. Faux positif déjà analysé et documenté (commit
+            // a95a328, PR #21) : CodeQL (js/xss-through-dom) confond
+            // l'objet File lu depuis l'<input type="file"> avec du texte
+            // DOM attaquant-contrôlé, mais aucune chaîne issue du fichier
+            // n'atteint jamais cet attribut. Suppression explicite ci-dessous
+            // (sinon réapparaît comme "nouvelle" alerte à chaque diff
+            // touchant cette ligne, la simple documentation ne suffit pas).
+            // codeql[js/xss-through-dom]
             <img
               src={previewUrl}
               alt="Aperçu du document"
