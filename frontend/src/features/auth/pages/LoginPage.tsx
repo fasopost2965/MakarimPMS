@@ -65,68 +65,95 @@ export function LoginPage({
   }
 
   return (
-    <div className="flex h-screen items-center justify-center p-6">
-      <div className="flex w-full max-w-sm flex-col gap-6">
-        <div className="flex flex-col items-center gap-2 text-center">
-          {logoUrl && (
+    <div className="bg-muted flex h-screen items-center justify-center p-6">
+      <div className="bg-card flex w-full max-w-[420px] flex-col overflow-hidden rounded-xl shadow-[var(--shadow-elevated)]">
+        {/* Liseré de marque marine → or — seul élément sans équivalent
+            shadcn/ui existant, cf. docs/design/design_handoff_login_dashboard. */}
+        <div
+          className="h-1.5 shrink-0"
+          style={{
+            background: 'linear-gradient(90deg, var(--primary), var(--gold))',
+          }}
+        />
+
+        <div className="flex items-center gap-2.5 px-9 pt-8">
+          {logoUrl ? (
             <img
               src={logoUrl}
               alt="Logo"
-              className="h-16 w-16 object-contain"
+              className="size-[34px] shrink-0 rounded-[9px] object-contain"
             />
+          ) : (
+            <span className="bg-primary text-gold flex size-[34px] shrink-0 items-center justify-center rounded-[9px] text-[15px] font-bold">
+              M
+            </span>
           )}
-          <h1 className="text-xl font-semibold">
+          <span className="text-[15px] font-semibold">
             {raisonSociale ?? 'Hôtel Makarim'}
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            Système de gestion hôtelière
-          </p>
+          </span>
         </div>
 
-        {roles.length > 0 && (
-          <div className="flex flex-wrap justify-center gap-1">
-            {roles.map((role) => (
-              <Badge key={role.id} variant="outline">
-                {role.nom}
-              </Badge>
-            ))}
-          </div>
-        )}
+        <form onSubmit={handleSubmit} className="flex flex-col px-9 pt-5 pb-9">
+          <h1 className="mb-0.5 text-[21px] font-semibold">Connexion</h1>
+          <p className="text-muted-foreground mb-5 text-[13px]">
+            Entrez vos identifiants pour continuer
+          </p>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="email">Email</Label>
+          {roles.length > 0 && (
+            <div className="mb-[22px] flex flex-wrap gap-1.5">
+              {roles.map((role) => (
+                <Badge
+                  key={role.id}
+                  variant="outline"
+                  className="bg-primary/10 text-primary border-transparent"
+                >
+                  {role.nom}
+                </Badge>
+              ))}
+            </div>
+          )}
+
+          <div className="mb-4 flex flex-col gap-1.5">
+            <Label htmlFor="email" className="text-[13px]">
+              Email
+            </Label>
             <Input
               id="email"
               type="email"
               autoComplete="username"
+              placeholder="vous@hotelmakarim.com"
+              className="bg-muted/40 h-10"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
             />
           </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="motDePasse">Mot de passe</Label>
+          <div className="mb-6 flex flex-col gap-1.5">
+            <Label htmlFor="motDePasse" className="text-[13px]">
+              Mot de passe
+            </Label>
             <Input
               id="motDePasse"
               type="password"
               autoComplete="current-password"
+              placeholder="••••••••"
+              className="bg-muted/40 h-10"
               value={motDePasse}
               onChange={(e) => setMotDePasse(e.target.value)}
               required
             />
           </div>
 
-          {error && <p className="text-destructive text-sm">{error}</p>}
+          {error && <p className="text-destructive mb-4 text-sm">{error}</p>}
 
-          <Button type="submit" disabled={submitting}>
+          <Button type="submit" disabled={submitting} className="h-[42px]">
             {submitting ? 'Connexion…' : 'Se connecter'}
           </Button>
 
           <Button
             type="button"
             variant="link"
-            className="self-center"
+            className="mt-4 self-center"
             onClick={onForgotPassword}
           >
             Mot de passe oublié ?
