@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,15 +17,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Tabs, TabsList, TabsPanel, TabsTrigger } from '@/components/ui/tabs';
 import { toastManager } from '@/components/ui/toast';
 import { listRooms } from '../../reservations/api';
 import type { Room } from '../../reservations/types';
@@ -37,12 +28,24 @@ import {
 } from '../api';
 import type { StockItem, StockMovement } from '../types';
 
-type StockView = 'articles' | 'mouvements';
+function isToday(iso: string) {
+  const d = new Date(iso);
+  const now = new Date();
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
+}
 
-// Inventaire (docs/modules/stock.md) : consultation des niveaux (avec badge
-// d'alerte sous seuil, BR-STK-002), réassort manuel, historique des
-// mouvements. Le décompte automatique du kit d'accueil au ménage validé
-// (BR-STK-001) n'a pas d'action manuelle — il se produit côté backend.
+// Inventaire (docs/modules/stock.md ; refonte visuelle batch 3 design
+// handoff, Stock.dc.html) : page unique à sections empilées (KPI, articles,
+// journal des mouvements), remplace l'ancien commutateur d'onglets Articles/
+// Mouvements — même convention que HrPage/GuestsPage. Consultation des
+// niveaux (avec badge d'alerte sous seuil, BR-STK-002), réassort manuel,
+// historique des mouvements. Le décompte automatique du kit d'accueil au
+// ménage validé (BR-STK-001) n'a pas d'action manuelle — il se produit côté
+// backend.
 export function StockPage() {
   const [items, setItems] = useState<StockItem[]>([]);
   const [movements, setMovements] = useState<StockMovement[]>([]);
@@ -53,7 +56,22 @@ export function StockPage() {
   );
   const [sortingOutItem, setSortingOutItem] = useState<StockItem | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
-  const [view, setView] = useState<StockView>('articles');
+
+  const kpi = useMemo(() => {
+    const sousSeuil = items.filter((i) => i.sousSeuilAlerte).length;
+    const entreesAujourdhui = movements
+      .filter((m) => m.typeMouvement === 'ENTREE' && isToday(m.createdAt))
+      .reduce((sum, m) => sum + m.quantite, 0);
+    const sortiesAujourdhui = movements
+      .filter((m) => m.typeMouvement === 'SORTIE' && isToday(m.createdAt))
+      .reduce((sum, m) => sum + m.quantite, 0);
+    return {
+      total: items.length,
+      sousSeuil,
+      entreesAujourdhui,
+      sortiesAujourdhui,
+    };
+  }, [items, movements]);
 
   const refetch = useCallback(async () => {
     setLoading(true);
@@ -80,112 +98,181 @@ export function StockPage() {
   }, [refetch]);
 
   return (
-    <div className="flex h-full flex-col gap-4 p-6">
+    <div className="flex h-full flex-col gap-5 overflow-auto p-6">
       {loadError && <p className="text-destructive text-sm">{loadError}</p>}
 
       {loading ? (
         <p className="text-muted-foreground text-sm">Chargement…</p>
       ) : (
-        <Tabs
-          value={view}
-          onValueChange={(v) => v && setView(v as StockView)}
-          className="flex flex-1 flex-col gap-4"
-        >
-          <TabsList className="w-fit">
-            <TabsTrigger value="articles">Articles</TabsTrigger>
-            <TabsTrigger value="mouvements">Mouvements</TabsTrigger>
-          </TabsList>
-
-          <TabsPanel value="articles">
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {items.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex flex-col gap-2 rounded-md border p-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium">{item.libelle}</p>
-                    {item.sousSeuilAlerte && (
-                      <Badge variant="destructive">Sous le seuil</Badge>
-                    )}
-                  </div>
-                  <p className="text-muted-foreground text-xs">
-                    {item.code} — {item.quantiteDisponible} {item.uniteMesure}{' '}
-                    (seuil {item.seuilAlerte})
-                  </p>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setReplenishingItem(item)}
-                    >
-                      Réassort
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setSortingOutItem(item)}
-                    >
-                      Sortie
-                    </Button>
-                  </div>
-                </div>
-              ))}
+        <>
+          <div className="grid grid-cols-4 gap-3">
+            <div className="flex flex-col gap-2 rounded-lg border p-4">
+              <span className="text-muted-foreground text-[10.5px] font-bold tracking-wide uppercase">
+                Articles suivis
+              </span>
+              <span className="text-2xl font-bold tracking-tight">
+                {kpi.total}
+              </span>
             </div>
-          </TabsPanel>
+            <div
+              className={`flex flex-col gap-2 rounded-lg border p-4 ${
+                kpi.sousSeuil > 0 ? 'border-destructive/40' : ''
+              }`}
+            >
+              <span
+                className={`text-[10.5px] font-bold tracking-wide uppercase ${
+                  kpi.sousSeuil > 0
+                    ? 'text-destructive'
+                    : 'text-muted-foreground'
+                }`}
+              >
+                Sous seuil critique
+              </span>
+              <span
+                className={`text-2xl font-bold tracking-tight ${
+                  kpi.sousSeuil > 0 ? 'text-destructive' : ''
+                }`}
+              >
+                {kpi.sousSeuil}
+              </span>
+            </div>
+            <div className="flex flex-col gap-2 rounded-lg border p-4">
+              <span className="text-muted-foreground text-[10.5px] font-bold tracking-wide uppercase">
+                Entrées aujourd'hui
+              </span>
+              <span className="text-success text-2xl font-bold tracking-tight">
+                {kpi.entreesAujourdhui}
+              </span>
+            </div>
+            <div className="flex flex-col gap-2 rounded-lg border p-4">
+              <span className="text-muted-foreground text-[10.5px] font-bold tracking-wide uppercase">
+                Sorties aujourd'hui
+              </span>
+              <span className="text-2xl font-bold tracking-tight">
+                {kpi.sortiesAujourdhui}
+              </span>
+            </div>
+          </div>
 
-          <TabsPanel value="mouvements">
-            {movements.length === 0 ? (
-              <p className="text-muted-foreground text-sm">Aucun mouvement.</p>
-            ) : (
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Mouvement</TableHead>
-                      <TableHead className="text-right">Quantité</TableHead>
-                      <TableHead>Article</TableHead>
-                      <TableHead>Chambre</TableHead>
-                      <TableHead>Motif</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {movements.map((m) => (
-                      <TableRow key={m.id}>
-                        <TableCell className="text-muted-foreground whitespace-nowrap">
-                          {new Date(m.createdAt).toLocaleString('fr-FR')}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              m.typeMouvement === 'ENTREE'
-                                ? 'default'
-                                : 'secondary'
-                            }
-                          >
-                            {m.typeMouvement === 'ENTREE' ? 'Entrée' : 'Sortie'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-mono">
-                          {m.typeMouvement === 'ENTREE' ? '+' : '−'}
-                          {m.quantite}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {m.stockItem?.libelle ?? `Article #${m.stockItemId}`}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {m.room ? `Chambre ${m.room.numero}` : '—'}
-                        </TableCell>
-                        <TableCell>{m.motif}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+          <div className="bg-card overflow-hidden rounded-lg border">
+            <div className="border-b px-4.5 py-3.5">
+              <span className="text-muted-foreground text-xs font-bold tracking-wide uppercase">
+                Articles en stock
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <div className="bg-muted/60 text-muted-foreground grid min-w-[720px] grid-cols-[110px_minmax(150px,2fr)_90px_70px_70px_90px_100px_150px] gap-2 px-4.5 py-2 text-[11px] font-bold">
+                <span>Code</span>
+                <span>Libellé</span>
+                <span>Disponible</span>
+                <span>Seuil</span>
+                <span>Unité</span>
+                <span>Kit accueil</span>
+                <span>Statut</span>
+                <span className="text-right">Action</span>
               </div>
-            )}
-          </TabsPanel>
-        </Tabs>
+              {items.length === 0 ? (
+                <p className="text-muted-foreground px-4.5 py-3 text-sm">
+                  Aucun article.
+                </p>
+              ) : (
+                items.map((item) => (
+                  <div
+                    key={item.id}
+                    className="grid min-w-[720px] grid-cols-[110px_minmax(150px,2fr)_90px_70px_70px_90px_100px_150px] items-center gap-2 border-t px-4.5 py-2.5 text-sm"
+                  >
+                    <span className="text-muted-foreground truncate font-mono text-xs">
+                      {item.code}
+                    </span>
+                    <span className="truncate">{item.libelle}</span>
+                    <span>{item.quantiteDisponible}</span>
+                    <span>{item.seuilAlerte}</span>
+                    <span className="text-muted-foreground text-xs">
+                      {item.uniteMesure}
+                    </span>
+                    <span className="text-muted-foreground text-xs">
+                      {item.kitAccueil ? 'Oui' : 'Non'}
+                    </span>
+                    <Badge
+                      variant={item.sousSeuilAlerte ? 'destructive' : 'success'}
+                      className="w-fit"
+                    >
+                      {item.sousSeuilAlerte ? 'Sous seuil' : 'OK'}
+                    </Badge>
+                    <div className="flex justify-end gap-3">
+                      <button
+                        type="button"
+                        className="text-primary text-xs font-semibold hover:underline"
+                        onClick={() => setReplenishingItem(item)}
+                      >
+                        Réassort
+                      </button>
+                      <button
+                        type="button"
+                        className="text-primary text-xs font-semibold hover:underline"
+                        onClick={() => setSortingOutItem(item)}
+                      >
+                        Sortie
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="bg-card overflow-hidden rounded-lg border">
+            <div className="border-b px-4.5 py-3.5">
+              <span className="text-muted-foreground text-xs font-bold tracking-wide uppercase">
+                Journal des mouvements
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <div className="bg-muted/60 text-muted-foreground grid min-w-[720px] grid-cols-[130px_90px_minmax(0,1fr)_90px_minmax(0,1fr)] gap-2 px-4.5 py-2 text-[11px] font-bold">
+                <span>Date</span>
+                <span>Type</span>
+                <span>Article</span>
+                <span>Quantité</span>
+                <span>Motif</span>
+              </div>
+              {movements.length === 0 ? (
+                <p className="text-muted-foreground px-4.5 py-3 text-sm">
+                  Aucun mouvement.
+                </p>
+              ) : (
+                movements.map((m) => (
+                  <div
+                    key={m.id}
+                    className="grid min-w-[720px] grid-cols-[130px_90px_minmax(0,1fr)_90px_minmax(0,1fr)] items-center gap-2 border-t px-4.5 py-2.5 text-sm"
+                  >
+                    <span className="text-muted-foreground text-xs whitespace-nowrap">
+                      {new Date(m.createdAt).toLocaleString('fr-FR')}
+                    </span>
+                    <Badge
+                      variant={
+                        m.typeMouvement === 'ENTREE' ? 'success' : 'outline'
+                      }
+                      className="w-fit"
+                    >
+                      {m.typeMouvement === 'ENTREE' ? 'Entrée' : 'Sortie'}
+                    </Badge>
+                    <span className="text-muted-foreground truncate">
+                      {m.stockItem?.libelle ?? `Article #${m.stockItemId}`}
+                    </span>
+                    <span className="font-mono">
+                      {m.typeMouvement === 'ENTREE' ? '+' : '−'}
+                      {m.quantite}
+                    </span>
+                    <span className="text-muted-foreground truncate text-xs">
+                      {m.motif}
+                      {m.room ? ` — Chambre ${m.room.numero}` : ''}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </>
       )}
 
       <Dialog
