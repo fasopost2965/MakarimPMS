@@ -41,6 +41,11 @@ const MaintenancePage = lazy(() =>
     default: m.MaintenancePage,
   })),
 );
+const RestaurantPage = lazy(() =>
+  import('@/features/restaurant/pages/RestaurantPage').then((m) => ({
+    default: m.RestaurantPage,
+  })),
+);
 const GuestsPage = lazy(() =>
   import('@/features/guests/pages/GuestsPage').then((m) => ({
     default: m.GuestsPage,
@@ -100,6 +105,7 @@ export type Tab =
   | 'checkin'
   | 'housekeeping'
   | 'maintenance'
+  | 'restaurant'
   | 'guests'
   | 'companies'
   | 'parameters'
@@ -314,6 +320,7 @@ function App() {
               {tab === 'checkin' && <CheckinPage />}
               {tab === 'housekeeping' && <HousekeepingPage />}
               {tab === 'maintenance' && <MaintenancePage />}
+              {tab === 'restaurant' && <RestaurantPage />}
               {tab === 'guests' && <GuestsPage />}
               {tab === 'companies' && <CompaniesPage />}
               {tab === 'parameters' && <ParametersPage />}

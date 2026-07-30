@@ -307,7 +307,7 @@ function HotelIdentitySection() {
       </div>
 
       {saveError && <p className="text-destructive text-sm">{saveError}</p>}
-      {saved && <p className="text-sm text-emerald-600">Enregistré.</p>}
+      {saved && <p className="text-success text-sm">Enregistré.</p>}
 
       <Button
         type="submit"

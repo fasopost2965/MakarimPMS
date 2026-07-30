@@ -93,7 +93,7 @@ export function DiffViewer({ before, after, className }: DiffViewerProps) {
                   className={cn(
                     'text-xs',
                     changed
-                      ? 'font-medium text-emerald-600 dark:text-emerald-400'
+                      ? 'text-success font-medium'
                       : 'text-muted-foreground',
                   )}
                 >

@@ -19,6 +19,9 @@ import type { Folio, Invoice } from '../types';
 const TYPE_LIGNE_LABEL: Record<string, string> = {
   HEBERGEMENT: 'Hébergement',
   EXTRA: 'Extra',
+  // F11 (docs/modules/restaurant.md) — note restaurant écrite directement
+  // en folio par le module restaurant, jamais via ce composant.
+  RESTAURANT: 'Restaurant',
   TAXE_SEJOUR: 'Taxe de séjour',
   PAIEMENT: 'Paiement',
 };
@@ -213,14 +216,34 @@ export function BillingTabContent({
                 folio.lignes.map((ligne) => (
                   <div key={ligne.id} className="flex flex-col gap-1 text-sm">
                     <div className="flex items-center justify-between gap-2">
-                      <span
-                        className={
-                          ligne.annulee
-                            ? 'text-muted-foreground line-through'
-                            : 'text-muted-foreground'
-                        }
-                      >
-                        {TYPE_LIGNE_LABEL[ligne.type] || ligne.type}
+                      <span className="flex items-center gap-1.5">
+                        {/* F11 — distingue au premier coup d'oeil les notes
+                            saisies depuis le module restaurant (compte
+                            RESTAURATEUR) des autres lignes du folio,
+                            plutôt qu'un libellé muted identique aux autres
+                            types. Toujours affichée, même annulée (comme
+                            les autres libellés de type ci-dessous) — seul
+                            le style barré change. */}
+                        {ligne.type === 'RESTAURANT' ? (
+                          <Badge
+                            variant={ligne.annulee ? 'secondary' : 'info'}
+                            className={
+                              ligne.annulee ? 'line-through' : undefined
+                            }
+                          >
+                            Restaurant
+                          </Badge>
+                        ) : (
+                          <span
+                            className={
+                              ligne.annulee
+                                ? 'text-muted-foreground line-through'
+                                : 'text-muted-foreground'
+                            }
+                          >
+                            {TYPE_LIGNE_LABEL[ligne.type] || ligne.type}
+                          </span>
+                        )}
                       </span>
                       <div className="flex items-center gap-2">
                         <span

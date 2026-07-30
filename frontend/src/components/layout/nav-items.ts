@@ -12,6 +12,7 @@ import {
   Sparkles,
   UserRound,
   Users,
+  UtensilsCrossed,
   Wrench,
   type LucideIcon,
 } from 'lucide-react';
@@ -108,6 +109,17 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Wrench,
     category: 'exploitation',
     permission: 'maintenance:read',
+  },
+  {
+    tab: 'restaurant',
+    label: 'Restaurant',
+    icon: UtensilsCrossed,
+    // F11 (docs/modules/restaurant.md, RD-025) — comme document-ocr
+    // ci-dessus, ce module n'a qu'une seule permission (restaurant:write,
+    // toutes les routes de RestaurantController l'exigent) : pas de
+    // restaurant:read distinct à gater dessus.
+    category: 'exploitation',
+    permission: 'restaurant:write',
   },
   {
     tab: 'guests',

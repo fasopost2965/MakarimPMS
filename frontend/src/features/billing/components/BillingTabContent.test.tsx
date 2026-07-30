@@ -99,6 +99,59 @@ describe('BillingTabContent — affichage financier (montants, libellés, statut
   });
 });
 
+// F11 — la note restaurant (TypeLigneFolio.RESTAURANT) doit se distinguer
+// visuellement des autres lignes du folio (badge coloré au lieu du libellé
+// muted générique partagé par les autres types), pour que la réception
+// l'identifie sans avoir à ouvrir chaque ligne — jamais un doublon du même
+// texte (le libellé de type et le badge ne doivent pas tous deux afficher
+// "Restaurant" côte à côte).
+describe('BillingTabContent — badge Restaurant (F11)', () => {
+  it('affiche un badge Restaurant coloré (pas un libellé muted comme les autres types), distinct entre ligne active et annulée', async () => {
+    vi.mocked(listFoliosByStay).mockResolvedValue([
+      {
+        ...folioFixture,
+        lignes: [
+          ...folioFixture.lignes,
+          {
+            id: 4,
+            type: 'RESTAURANT',
+            libelle: 'Dîner du 30/07',
+            montant: '150.00',
+            tauxTva: '0',
+            annulee: false,
+            createdAt: ISO,
+          },
+          {
+            id: 5,
+            type: 'RESTAURANT',
+            libelle: 'Petit-déjeuner (erreur de saisie)',
+            montant: '50.00',
+            tauxTva: '0',
+            annulee: true,
+            motifAnnulation: 'Corrigée — montant erroné',
+            createdAt: ISO,
+          },
+        ],
+      },
+    ]);
+    render(<BillingTabContent stayId={42} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('150.00 MAD')).toBeInTheDocument();
+    });
+
+    // Une seule instance par ligne (pas de doublon "Restaurant Restaurant") :
+    // 2 lignes RESTAURANT (une active, une annulée) → 2 occurrences du texte.
+    const restaurantLabels = screen.getAllByText('Restaurant');
+    expect(restaurantLabels).toHaveLength(2);
+    // La ligne active a le badge coloré "info" (bg-info/10), l'annulée
+    // bascule sur "secondary" + barré — jamais confondue avec une facture
+    // Restaurant toujours active.
+    expect(restaurantLabels[0].className).toContain('bg-info');
+    expect(restaurantLabels[1].className).toContain('line-through');
+  });
+});
+
 // CH-040/CH-053 — le bouton d'annulation doit refléter exactement la garde
 // backend (BR-AUD-002 : seules les lignes EXTRA non déjà annulées) plutôt
 // que d'être visible partout et de dépendre du 409 pour se corriger.

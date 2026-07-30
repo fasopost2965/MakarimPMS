@@ -1,6 +1,6 @@
 export interface FolioLine {
   id: number;
-  type: 'HEBERGEMENT' | 'EXTRA' | 'TAXE_SEJOUR' | 'PAIEMENT';
+  type: 'HEBERGEMENT' | 'EXTRA' | 'RESTAURANT' | 'TAXE_SEJOUR' | 'PAIEMENT';
   libelle: string;
   montant: string;
   tauxTva: string;

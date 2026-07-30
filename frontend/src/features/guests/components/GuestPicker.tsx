@@ -253,7 +253,7 @@ export function GuestPicker({ onChange }: GuestPickerProps) {
         />
       </div>
       {duplicates.length > 0 && (
-        <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
+        <div className="border-warning/50 bg-warning/10 text-warning rounded-md border p-2 text-xs">
           <p className="font-medium">
             Client(s) potentiellement déjà en base (email/téléphone similaire) :
           </p>

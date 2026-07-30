@@ -148,7 +148,7 @@ export function DocumentOcrPage() {
           </div>
 
           {result.avertissement && (
-            <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-sm text-amber-700 dark:text-amber-400">
+            <p className="border-warning/40 bg-warning/10 text-warning rounded-md border p-2 text-sm">
               {result.avertissement}
             </p>
           )}

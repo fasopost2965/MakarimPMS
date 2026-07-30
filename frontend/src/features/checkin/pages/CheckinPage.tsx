@@ -188,7 +188,7 @@ export function CheckinPage() {
                       {stay.room.numero}
                       {!stay.policeRecord && (
                         <span
-                          className="text-amber-600 ml-2 text-xs"
+                          className="text-warning ml-2 text-xs"
                           title="Fiche de police (registre légal DGSN) non renseignée"
                         >
                           ⚠ Fiche police manquante
@@ -224,7 +224,7 @@ export function CheckinPage() {
                       {stay.room.numero}
                       {!stay.policeRecord && (
                         <span
-                          className="text-amber-600 ml-2 text-xs"
+                          className="text-warning ml-2 text-xs"
                           title="Fiche de police (registre légal DGSN) non renseignée"
                         >
                           ⚠ Fiche police manquante
