@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
+import { Search } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -24,12 +26,20 @@ import type {
   CreateCompanyInput,
 } from '../types';
 
+function formatPartenaireDepuis(createdAt: string) {
+  return new Date(createdAt).toLocaleDateString('fr-FR', {
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
 // Écran Comptes entreprise / City Ledger (cahier des charges §5.7, "Comptes
-// entreprise"). Annuaire autonome : aucune donnée de compte courant réelle
-// n'existe encore (aucun séjour/facture n'est rattaché à une société dans
-// cette itération, voir le commentaire sur le modèle Company côté backend)
-// — le bloc "compte courant" affiche donc un texte statique honnête plutôt
-// qu'un chiffre calculé à partir de rien.
+// entreprise" ; refonte visuelle batch 3 design handoff, Entreprises.dc.html).
+// Annuaire autonome : aucune donnée de compte courant réelle n'existe encore
+// (aucun séjour/facture n'est rattaché à une société dans cette itération,
+// voir le commentaire sur le modèle Company côté backend) — le bloc "compte
+// courant" affiche donc un texte statique honnête plutôt qu'un chiffre
+// calculé à partir de rien.
 export function CompaniesPage() {
   const [query, setQuery] = useState('');
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -81,24 +91,26 @@ export function CompaniesPage() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-4 p-6">
-      <div className="flex items-center justify-between">
+    <div className="flex h-full flex-col gap-5 overflow-auto p-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="relative max-w-sm flex-1">
+          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Rechercher une entreprise (raison sociale, ICE…)"
+            className="pl-9"
+          />
+        </div>
         <Button size="sm" onClick={() => setCreateOpen(true)}>
           + Nouvelle entreprise
         </Button>
       </div>
 
-      <Input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="Rechercher une entreprise (raison sociale, ICE…)"
-        className="max-w-sm"
-      />
-
       {loadError && <p className="text-destructive text-sm">{loadError}</p>}
 
-      <div className="grid flex-1 grid-cols-2 gap-4 overflow-hidden">
-        <div className="flex flex-col gap-2 overflow-auto">
+      <div className="flex items-start gap-4">
+        <div className="flex min-w-0 flex-none basis-[280px] flex-col gap-2">
           {loading ? (
             <p className="text-muted-foreground text-sm">Chargement…</p>
           ) : companies.length === 0 ? (
@@ -109,31 +121,55 @@ export function CompaniesPage() {
                 key={company.id}
                 type="button"
                 onClick={() => setSelected(company)}
-                className={`hover:bg-muted flex flex-col items-start gap-0.5 rounded-md border p-3 text-left ${
-                  selected?.id === company.id ? 'border-primary' : ''
+                className={`bg-card flex items-center justify-between gap-2 rounded-lg border p-3 text-left transition-colors hover:shadow-sm ${
+                  selected?.id === company.id
+                    ? 'border-primary ring-primary/20 ring-1'
+                    : 'hover:border-muted-foreground/30'
                 }`}
               >
-                <p className="text-sm font-medium">{company.raisonSociale}</p>
-                {company.ice && (
-                  <p className="text-muted-foreground text-xs">
-                    ICE {company.ice}
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">
+                    {company.raisonSociale}
                   </p>
-                )}
+                  <p className="text-muted-foreground mt-0.5 truncate text-xs">
+                    {company.ice ? `ICE ${company.ice}` : 'Aucune fiche ICE'}
+                  </p>
+                </div>
+                <Badge
+                  variant={company.ice ? 'success' : 'warning'}
+                  className="shrink-0"
+                >
+                  {company.ice ? 'ICE renseigné' : 'ICE manquant'}
+                </Badge>
               </button>
             ))
           )}
         </div>
 
-        <div className="overflow-auto">
-          {selected && (
+        <div className="min-w-0 flex-1">
+          {selected ? (
             <CompanyDetail
               key={selected.id}
               company={selected}
               onCompanyUpdated={handleCompanyUpdated}
             />
+          ) : (
+            <div className="bg-card text-muted-foreground rounded-lg border p-8 text-center text-sm">
+              Sélectionnez une entreprise dans la liste pour voir sa fiche.
+            </div>
           )}
         </div>
       </div>
+
+      {selected && (
+        <div className="bg-muted/40 rounded-lg border p-4">
+          <p className="text-sm font-semibold">Compte courant</p>
+          <p className="text-muted-foreground mt-1.5 text-xs leading-relaxed">
+            0,00 MAD — aucun mouvement enregistré. Le rattachement des séjours
+            et factures aux comptes entreprise arrive dans une itération future.
+          </p>
+        </div>
+      )}
 
       <Dialog
         open={createOpen}
@@ -230,19 +266,25 @@ function CompanyDetail({ company, onCompanyUpdated }: CompanyDetailProps) {
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-md border p-4">
+    <div className="bg-card flex flex-col gap-4 rounded-lg border p-5">
       <div>
-        <h2 className="text-lg font-medium">{company.raisonSociale}</h2>
-        {company.ice && (
-          <p className="text-muted-foreground text-sm">ICE {company.ice}</p>
-        )}
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-bold">{company.raisonSociale}</h2>
+          <Badge variant={company.ice ? 'success' : 'warning'}>
+            {company.ice ? 'ICE renseigné' : 'ICE manquant'}
+          </Badge>
+        </div>
+        <p className="text-muted-foreground mt-1 text-xs">
+          {company.ice ? `ICE ${company.ice} · ` : ''}Entreprise partenaire
+          depuis {formatPartenaireDepuis(company.createdAt)}
+        </p>
       </div>
 
       <form
-        className="flex flex-col gap-3"
+        className="flex flex-wrap items-end gap-3"
         onSubmit={(e) => void handleSave(e)}
       >
-        <div className="flex flex-col gap-1.5">
+        <div className="flex min-w-[160px] flex-1 flex-col gap-1.5">
           <Label htmlFor="conditionsPaiement">Conditions de paiement</Label>
           <Input
             id="conditionsPaiement"
@@ -251,7 +293,7 @@ function CompanyDetail({ company, onCompanyUpdated }: CompanyDetailProps) {
             placeholder="Ex. 30 jours"
           />
         </div>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex min-w-[160px] flex-1 flex-col gap-1.5">
           <Label htmlFor="plafondCredit">Limite de crédit (MAD)</Label>
           <Input
             id="plafondCredit"
@@ -263,38 +305,30 @@ function CompanyDetail({ company, onCompanyUpdated }: CompanyDetailProps) {
             placeholder="Non définie"
           />
         </div>
-        <div className="flex flex-col gap-1.5">
-          {/* Pas de <Label> : rien à associer, ce n'est pas un contrôle de
-              formulaire (jsx-a11y/label-has-associated-control, CH-029). */}
-          <p className="text-sm leading-none font-medium">Compte courant</p>
-          <p className="text-muted-foreground text-sm">
-            0,00 MAD — aucun mouvement enregistré. Le rattachement des séjours
-            et factures aux comptes entreprise sera ajouté dans un module futur.
-          </p>
-        </div>
-
-        {saveError && <p className="text-destructive text-sm">{saveError}</p>}
-
         <Button
           type="submit"
           size="sm"
+          variant="outline"
           disabled={saving}
-          className="self-start"
+          className="shrink-0"
         >
           {saving ? 'Enregistrement…' : 'Enregistrer'}
         </Button>
       </form>
+      {saveError && <p className="text-destructive text-sm">{saveError}</p>}
 
-      <div>
-        <h3 className="mb-2 text-sm font-medium">Contacts</h3>
+      <div className="flex flex-col gap-2">
+        <span className="text-muted-foreground text-[11px] font-bold tracking-wide uppercase">
+          Contacts
+        </span>
         {company.contacts.length === 0 ? (
           <p className="text-muted-foreground text-xs">Aucun contact.</p>
         ) : (
-          <ul className="mb-2 flex flex-col gap-1">
+          <div className="flex flex-col gap-1.5">
             {company.contacts.map((contact) => (
-              <li
+              <div
                 key={contact.id}
-                className="flex items-center justify-between gap-2 text-xs"
+                className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs"
               >
                 <span>
                   {contact.nom}
@@ -302,22 +336,21 @@ function CompanyDetail({ company, onCompanyUpdated }: CompanyDetailProps) {
                   {contact.telephone ? ` — ${contact.telephone}` : ''}
                   {contact.email ? ` — ${contact.email}` : ''}
                 </span>
-                <Button
+                <button
                   type="button"
-                  size="sm"
-                  variant="outline"
+                  className="text-destructive shrink-0 font-semibold hover:underline disabled:opacity-50"
                   disabled={removingContactId === contact.id}
                   onClick={() => void handleRemoveContact(contact.id)}
                 >
                   Retirer
-                </Button>
-              </li>
+                </button>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
 
         <form
-          className="flex flex-wrap items-end gap-2"
+          className="mt-1 flex flex-wrap items-end gap-2"
           onSubmit={(e) => {
             e.preventDefault();
             if (!contactNom) return;
@@ -356,7 +389,9 @@ function CompanyDetail({ company, onCompanyUpdated }: CompanyDetailProps) {
           <Button
             type="submit"
             size="sm"
+            variant="outline"
             disabled={addingContact || !contactNom}
+            className="shrink-0"
           >
             {addingContact ? 'Ajout…' : '+ Contact'}
           </Button>

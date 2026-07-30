@@ -23,6 +23,12 @@ const badgeVariants = cva(
         // (warning, en attente) sur la grille Housekeeping.
         violet:
           'bg-violet/10 text-violet focus-visible:ring-violet/20 dark:bg-violet/20 [a]:hover:bg-violet/20',
+        // Batch 3 (docs/design/design_handoff_batch3) — teinte douce de
+        // --primary, utilisée pour la catégorie CRM ENTREPRISE (GuestsPage) :
+        // le variant "default" plein contraste trop fort à côté des pastilles
+        // success/warning/info déjà pastel de ce même écran.
+        brand:
+          'bg-primary/10 text-primary focus-visible:ring-primary/20 dark:bg-primary/20 [a]:hover:bg-primary/20',
         outline:
           'border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground',
         ghost:
