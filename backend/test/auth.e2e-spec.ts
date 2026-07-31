@@ -447,6 +447,49 @@ describe('Auth — JWT, rôles et permissions (e2e)', () => {
     });
   });
 
+  // Handoff design final, lot 6 — matrice RBAC en lecture seule
+  // (docs/design/design_handoff_final/screens/Parametres.dc.html).
+  describe('Matrice RBAC (GET /auth/rbac-matrix)', () => {
+    it('renvoie 401 sans token', async () => {
+      const res = await request(server()).get('/api/auth/rbac-matrix');
+      expect(res.status).toBe(401);
+    });
+
+    it('renvoie 403 pour un rôle sans parameters:read (ex. Gouvernante)', async () => {
+      const token = await loginAs(server(), 'gouvernante');
+      const client = authedRequest(server(), token);
+      const res = await client.get('/api/auth/rbac-matrix');
+      expect(res.status).toBe(403);
+    });
+
+    it("renvoie la matrice réelle (modules + rôles + actions) pour l'Administrateur", async () => {
+      const token = await loginAs(server(), 'admin');
+      const client = authedRequest(server(), token);
+      const res = await client.get('/api/auth/rbac-matrix');
+      expect(res.status).toBe(200);
+      const body = res.body as {
+        modules: string[];
+        roles: {
+          nom: string;
+          actionsParModule: Record<string, string[]>;
+        }[];
+      };
+      expect(body.modules).toEqual(expect.arrayContaining(['housekeeping']));
+      const admin = body.roles.find((r) => r.nom === 'Administrateur');
+      expect(admin).toBeDefined();
+      // L'Administrateur a bien accès en écriture à housekeeping (seed.ts).
+      expect(admin!.actionsParModule.housekeeping).toEqual(
+        expect.arrayContaining(['write']),
+      );
+      const gouvernante = body.roles.find((r) => r.nom === 'Gouvernante');
+      expect(gouvernante).toBeDefined();
+      // Gouvernante n'a jamais accès à billing (seed.ts) — tableau vide,
+      // preuve que la matrice reflète bien l'absence de droit, pas
+      // seulement leur présence.
+      expect(gouvernante!.actionsParModule.billing).toEqual([]);
+    });
+  });
+
   // CH-011 — alimente le gating RBAC frontend (filtrage de NAV_ITEMS par
   // permission déclarée, granularité onglet entier — voir
   // docs/governance/REGISTRE_DECISIONS.md RD-009).

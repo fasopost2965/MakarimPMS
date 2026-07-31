@@ -5,6 +5,7 @@ import type {
   CreateChannelRoomTypeMappingInput,
   CreateSeasonRateInput,
   HotelConfig,
+  RbacMatrix,
   SeasonRate,
   TaxRateConfig,
   UpdateHotelConfigInput,
@@ -82,4 +83,8 @@ export function deleteChannelMapping(id: number, motif: string) {
     method: 'DELETE',
     body: JSON.stringify({ motif }),
   });
+}
+
+export function getRbacMatrix() {
+  return apiRequest<RbacMatrix>('/auth/rbac-matrix');
 }

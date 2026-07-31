@@ -5,6 +5,7 @@ import {
   Globe2,
   Percent,
   BedDouble,
+  ShieldCheck,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,7 @@ import {
   deleteChannelMapping,
   deleteSeasonRate,
   getHotelConfig,
+  getRbacMatrix,
   listChannelMappings,
   listSeasonRates,
   listTaxRates,
@@ -39,6 +41,7 @@ import type {
   CreateChannelRoomTypeMappingInput,
   CreateSeasonRateInput,
   HotelConfig,
+  RbacMatrix,
   SeasonRate,
   TaxRateConfig,
   UpdateSeasonRateInput,
@@ -94,6 +97,7 @@ const SUBNAV_ITEMS: SubNavItem[] = [
   { id: 'tarifs', label: 'Grille tarifaire', icon: CalendarRange },
   { id: 'canaux', label: 'Canaux OTA', icon: Globe2 },
   { id: 'chambres', label: 'Chambres & types', icon: BedDouble },
+  { id: 'roles', label: 'Rôles & permissions', icon: ShieldCheck },
 ];
 
 // Paramétrage de l'hôtel : identité légale, TVA/taxe de séjour, grille
@@ -154,6 +158,9 @@ export function ParametersPage() {
                 <RoomsSection />
               </div>
             </div>
+          </section>
+          <section id="roles" className="scroll-mt-4">
+            <RbacMatrixSection />
           </section>
         </div>
       </div>
@@ -1313,6 +1320,131 @@ function ChannelManagerSection() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+type NiveauAcces = 'none' | 'read' | 'write' | 'total';
+
+const NIVEAU_LABEL: Record<NiveauAcces, string> = {
+  none: 'Aucun accès',
+  read: 'Lecture',
+  write: 'Écriture',
+  total: 'Total (validation/suppression)',
+};
+
+const NIVEAU_DOT_CLASS: Record<NiveauAcces, string> = {
+  none: 'border-border border',
+  read: 'bg-info',
+  write: 'bg-primary',
+  total: 'bg-warning',
+};
+
+function niveauAcces(actions: string[]): NiveauAcces {
+  if (actions.length === 0) return 'none';
+  if (actions.some((a) => a !== 'read' && a !== 'write')) return 'total';
+  if (actions.includes('write')) return 'write';
+  return 'read';
+}
+
+// Handoff design final, lot 6 (Parametres.dc.html, matrice RBAC) —
+// lecture seule stricte : aucune case n'est cliquable, aucune mutation
+// possible depuis cet écran (INV : le seul chemin d'écriture de
+// RolePermission reste `backend/prisma/seed.ts`, CLAUDE.md « RBAC »).
+// Contrairement au mockup, les rôles/modules affichés sont les vrais
+// (7 rôles seedés, 15 modules réels) — jamais les libellés d'exemple
+// « Réception/Housekeep./Direction » du mockup, qui ne correspondent à
+// aucun rôle réel de ce projet.
+function RbacMatrixSection() {
+  const [matrix, setMatrix] = useState<RbacMatrix | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoading(true);
+    getRbacMatrix()
+      .then(setMatrix)
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : 'Erreur de chargement'),
+      )
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="bg-card overflow-hidden rounded-lg border">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4.5 py-3.5">
+        <span className="text-muted-foreground text-xs font-bold tracking-wide uppercase">
+          Rôles &amp; permissions — matrice d'accès par module
+        </span>
+        <div className="flex flex-wrap items-center gap-3.5 text-[11px]">
+          {(Object.keys(NIVEAU_LABEL) as NiveauAcces[]).map((niveau) => (
+            <span key={niveau} className="flex items-center gap-1.5">
+              <span
+                className={`size-2.5 rounded-full ${NIVEAU_DOT_CLASS[niveau]}`}
+              />
+              {NIVEAU_LABEL[niveau]}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {loading && (
+        <p className="text-muted-foreground p-4.5 text-sm">Chargement…</p>
+      )}
+      {error && <p className="text-destructive p-4.5 text-sm">{error}</p>}
+
+      {matrix && (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] border-collapse text-xs">
+            <thead>
+              <tr>
+                <th className="bg-muted/60 text-muted-foreground sticky left-0 border-b px-4 py-2.5 text-left font-bold tracking-wide uppercase">
+                  Module
+                </th>
+                {matrix.roles.map((role) => (
+                  <th
+                    key={role.id}
+                    className="bg-muted/60 text-muted-foreground border-b border-l px-2 py-2.5 text-center font-bold tracking-wide uppercase"
+                  >
+                    {role.nom}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {matrix.modules.map((module) => (
+                <tr key={module}>
+                  <td className="bg-card sticky left-0 border-b px-4 py-2.5 font-medium">
+                    {module}
+                  </td>
+                  {matrix.roles.map((role) => {
+                    const niveau = niveauAcces(
+                      role.actionsParModule[module] ?? [],
+                    );
+                    return (
+                      <td
+                        key={role.id}
+                        className="border-b border-l px-2 py-2.5 text-center"
+                        title={NIVEAU_LABEL[niveau]}
+                      >
+                        <span
+                          className={`inline-block size-2.5 rounded-full ${NIVEAU_DOT_CLASS[niveau]}`}
+                        />
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="text-muted-foreground border-t px-4.5 py-3 text-[11px]">
+        Lecture seule — reflet direct des permissions en base. Toute
+        modification se fait exclusivement via le fichier de seed
+        (`backend/prisma/seed.ts`), jamais depuis cet écran.
+      </p>
     </div>
   );
 }
