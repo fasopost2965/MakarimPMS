@@ -17,6 +17,7 @@ import {
   getGuestFactures,
   getGuestHistorique,
   searchGuests,
+  updateGuest,
   updateGuestCategorie,
 } from '../api';
 import type {
@@ -221,6 +222,12 @@ function GuestDetail({ guest, onCategorieChanged }: GuestDetailProps) {
   const [motif, setMotif] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [editingPreferences, setEditingPreferences] = useState(false);
+  const [preferencesDraft, setPreferencesDraft] = useState(
+    guest.preferences ?? '',
+  );
+  const [savingPreferences, setSavingPreferences] = useState(false);
+  const [preferencesError, setPreferencesError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -260,6 +267,23 @@ function GuestDetail({ guest, onCategorieChanged }: GuestDetailProps) {
     }
   }
 
+  async function handleSavePreferences(e: FormEvent) {
+    e.preventDefault();
+    setPreferencesError(null);
+    setSavingPreferences(true);
+    try {
+      const updated = await updateGuest(guest.id, {
+        preferences: preferencesDraft.trim() || undefined,
+      });
+      onCategorieChanged(updated);
+      setEditingPreferences(false);
+    } catch (err) {
+      setPreferencesError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setSavingPreferences(false);
+    }
+  }
+
   return (
     <div className="bg-card flex flex-col gap-4 rounded-lg border p-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -286,6 +310,79 @@ function GuestDetail({ guest, onCategorieChanged }: GuestDetailProps) {
         <span className="text-muted-foreground text-xs whitespace-nowrap">
           Client depuis {formatClientDepuis(guest.createdAt)}
         </span>
+      </div>
+
+      {/* Handoff design final, lot 5 (Clients.dc.html, vue 360) — le
+          mockup présente des « préférences » comme des pastilles
+          distinctes (étage élevé, oreiller ferme…), mais Guest.preferences
+          reste un unique champ texte libre côté backend (pas de structure
+          type de chambre/étage/allergies séparée) : affichage honnête en
+          pastilles obtenues par simple découpage sur virgule du texte
+          existant, jamais de champs structurés inventés. */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground text-[11px] font-bold tracking-wide uppercase">
+            Préférences
+          </span>
+          {!editingPreferences && (
+            <button
+              type="button"
+              onClick={() => {
+                setPreferencesDraft(guest.preferences ?? '');
+                setPreferencesError(null);
+                setEditingPreferences(true);
+              }}
+              className="text-primary text-xs font-medium hover:underline"
+            >
+              Modifier
+            </button>
+          )}
+        </div>
+        {editingPreferences ? (
+          <form
+            className="flex flex-col gap-2"
+            onSubmit={(e) => void handleSavePreferences(e)}
+          >
+            <Input
+              value={preferencesDraft}
+              onChange={(e) => setPreferencesDraft(e.target.value)}
+              placeholder="Ex. étage élevé, oreiller ferme, régime sans gluten…"
+            />
+            {preferencesError && (
+              <p className="text-destructive text-xs">{preferencesError}</p>
+            )}
+            <div className="flex gap-2">
+              <Button type="submit" size="sm" disabled={savingPreferences}>
+                {savingPreferences ? 'Enregistrement…' : 'Enregistrer'}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setEditingPreferences(false)}
+                disabled={savingPreferences}
+              >
+                Annuler
+              </Button>
+            </div>
+          </form>
+        ) : guest.preferences ? (
+          <div className="flex flex-wrap gap-1.5">
+            {guest.preferences
+              .split(',')
+              .map((p) => p.trim())
+              .filter(Boolean)
+              .map((p, i) => (
+                <Badge key={i} variant="info">
+                  {p}
+                </Badge>
+              ))}
+          </div>
+        ) : (
+          <p className="text-muted-foreground text-xs">
+            Aucune préférence renseignée.
+          </p>
+        )}
       </div>
 
       <form
