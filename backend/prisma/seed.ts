@@ -22,6 +22,11 @@ async function main() {
   await prisma.refreshToken.deleteMany();
   await prisma.passwordResetToken.deleteMany();
   await prisma.loginLog.deleteMany();
+  // Lot 8 — PurchaseOrder référence User par FK non-cascade (createdById/
+  // validatedById), même raison que RefreshToken ci-dessus : doit être vidée
+  // avant user.deleteMany(). PurchaseOrderLine référence PurchaseOrder.
+  await prisma.purchaseOrderLine.deleteMany();
+  await prisma.purchaseOrder.deleteMany();
   await prisma.user.deleteMany();
   await prisma.rolePermission.deleteMany();
   await prisma.permission.deleteMany();
@@ -68,6 +73,10 @@ async function main() {
   // ligne 606).
   await prisma.stockMovement.deleteMany();
   await prisma.stockItem.deleteMany();
+  // Lot 8 — Supplier référencé par PurchaseOrder (déjà vidée plus haut,
+  // avant user.deleteMany()) ; aucune donnée de référence ne recrée
+  // Supplier ici, même convention que StockItem ci-dessus.
+  await prisma.supplier.deleteMany();
   await prisma.room.deleteMany();
   await prisma.rateRestriction.deleteMany();
   // Dette technique #6 (nouvelle occurrence, découverte en préparant
@@ -445,6 +454,8 @@ async function main() {
     // le rôle dédié RESTAURATEUR, pas de réutilisation d'une permission
     // existante (contrairement à police/companies).
     'restaurant',
+    // Lot 8 (Handoff final) — bons de commande fournisseur (économat).
+    'purchase-orders',
   ] as const;
   const ALL_ACTIONS = ['read', 'write', 'delete', 'export'] as const;
 
@@ -474,6 +485,15 @@ async function main() {
   // l'Administrateur, même convention que guests:blacklist/payments:refund.
   permissions['checkin:force-checkout'] = await prisma.permission.create({
     data: { module: 'checkin', action: 'force-checkout' },
+  });
+  // Lot 8 — validation d'un bon de commande (Direction uniquement) :
+  // purchase-orders:write couvre la création/modification/soumission par
+  // l'auteur (Économat), mais l'engagement financier vis-à-vis du
+  // fournisseur (mockup : « Validé par (Direction) ») est une action
+  // distincte réservée à l'Administrateur, même famille que
+  // guests:blacklist/payments:refund/checkin:force-checkout.
+  permissions['purchase-orders:valider'] = await prisma.permission.create({
+    data: { module: 'purchase-orders', action: 'valider' },
   });
 
   const rolesData: Array<{
@@ -537,6 +557,12 @@ async function main() {
         'stock:read',
         'stock:write',
         'rooms:read',
+        // Lot 8 — la Gouvernante joue le rôle « Économat » du mockup (elle
+        // gère déjà le réassort de linge/consommables via stock:write) :
+        // elle établit des bons de commande, jamais ne les valide
+        // (purchase-orders:valider réservé à l'Administrateur ci-dessous).
+        'purchase-orders:read',
+        'purchase-orders:write',
       ],
     },
     {
@@ -567,6 +593,10 @@ async function main() {
         'reporting:read',
         'reporting:export',
         'rooms:read',
+        // Lot 8 — lecture seule : suivi budgétaire des bons de commande
+        // (montants engagés), jamais d'écriture (le Comptable ne crée ni ne
+        // valide un bon, ce sont l'Économat/Gouvernante et la Direction).
+        'purchase-orders:read',
       ],
     },
     {

@@ -69,6 +69,11 @@ const StockPage = lazy(() =>
     default: m.StockPage,
   })),
 );
+const PurchaseOrdersPage = lazy(() =>
+  import('@/features/purchase-orders/pages/PurchaseOrdersPage').then((m) => ({
+    default: m.PurchaseOrdersPage,
+  })),
+);
 const ReportingPage = lazy(() =>
   import('@/features/reporting/pages/ReportingPage').then((m) => ({
     default: m.ReportingPage,
@@ -111,6 +116,7 @@ export type Tab =
   | 'parameters'
   | 'hr'
   | 'stock'
+  | 'purchase-orders'
   | 'reporting'
   | 'notifications'
   | 'audit'
@@ -332,6 +338,7 @@ function App() {
               {tab === 'parameters' && <ParametersPage />}
               {tab === 'hr' && <HrPage />}
               {tab === 'stock' && <StockPage />}
+              {tab === 'purchase-orders' && <PurchaseOrdersPage />}
               {tab === 'reporting' && <ReportingPage />}
               {tab === 'notifications' && <NotificationsPage />}
               {tab === 'audit' && <AuditPage />}
