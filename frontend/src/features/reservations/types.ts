@@ -1,4 +1,9 @@
-export type CanalReservation = 'WALK_IN' | 'DIRECT' | 'BOOKING_COM';
+// F10 (channel-manager) a étendu l'enum Prisma avec EXPEDIA/AIRBNB — ce
+// type était resté à l'ancien sous-ensemble (BOOKING_COM seul), alors que
+// `POST /reservations` (staff) accepte déjà n'importe quelle valeur de
+// l'enum backend en `canal`. Corrigé ici (Lot #7) pour rester synchrone.
+export type CanalReservation =
+  'WALK_IN' | 'DIRECT' | 'BOOKING_COM' | 'EXPEDIA' | 'AIRBNB';
 // CH-061 (Lot #3 design) — jusqu'ici saisie uniquement via Paramètres
 // (grille tarifaire des types de chambre), jamais exposée dans les
 // formulaires de création (réservation, walk-in) malgré son support
