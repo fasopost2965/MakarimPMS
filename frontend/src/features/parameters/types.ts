@@ -90,3 +90,15 @@ export interface CreateChannelRoomTypeMappingInput {
   roomTypeId: number;
   motif: string;
 }
+
+// Handoff design final, lot 6 (Parametres.dc.html, matrice RBAC) — reflet
+// en lecture seule de RolePermission (backend), jamais une source de
+// vérité distincte.
+export interface RbacMatrix {
+  modules: string[];
+  roles: {
+    id: number;
+    nom: string;
+    actionsParModule: Record<string, string[]>;
+  }[];
+}

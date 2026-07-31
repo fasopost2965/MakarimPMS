@@ -329,6 +329,50 @@ ${resetLink ? `<p>Ou cliquez sur ce lien pour préremplir le code : <a href="${r
     return roles;
   }
 
+  // Handoff design final, lot 6 (Parametres.dc.html, matrice RBAC) —
+  // lecture seule, jamais une source de vérité alternative : reflet direct
+  // de RolePermission (backend/prisma/schema.prisma), la même table que
+  // PermissionsGuard vérifie à chaque requête. Aucune agrégation par
+  // "niveau" (lecture/écriture/total) n'est stockée en base — calculée ici
+  // à la volée à partir des actions réellement présentes.
+  async getRbacMatrix() {
+    const [roles, permissions] = await Promise.all([
+      this.prisma.role.findMany({
+        select: {
+          id: true,
+          nom: true,
+          permissions: {
+            select: { permission: { select: { module: true, action: true } } },
+          },
+        },
+        orderBy: { nom: 'asc' },
+      }),
+      this.prisma.permission.findMany({
+        select: { module: true, action: true },
+      }),
+    ]);
+
+    const modules = [...new Set(permissions.map((p) => p.module))].sort();
+
+    return {
+      modules,
+      roles: roles.map((role) => ({
+        id: role.id,
+        nom: role.nom,
+        actionsParModule: modules.reduce<Record<string, string[]>>(
+          (acc, module) => {
+            acc[module] = role.permissions
+              .map((rp) => rp.permission)
+              .filter((p) => p.module === module)
+              .map((p) => p.action);
+            return acc;
+          },
+          {},
+        ),
+      })),
+    };
+  }
+
   private async issueTokens(payload: AuthenticatedUser) {
     // Cast via `unknown` : @nestjs/jwt type expiresIn en littéral template
     // ("15m", "7d"...) alors que ConfigService.get renvoie un `string`

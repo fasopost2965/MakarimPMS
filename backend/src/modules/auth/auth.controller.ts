@@ -15,6 +15,7 @@ import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { AuthService } from './auth.service';
 import {
@@ -139,6 +140,20 @@ export class AuthController {
   @Get('roles-actifs')
   rolesActifs() {
     return this.authService.rolesActifs();
+  }
+
+  // Handoff design final, lot 6 — matrice RBAC en lecture seule (écran
+  // Paramètres). Réutilise `parameters:read` (même convention que
+  // channel-manager mappings, RD-024) : configuration exceptionnelle
+  // réservée à l'Administrateur, pas une opération métier quotidienne.
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Matrice RBAC en lecture seule (rôles × modules × actions)',
+  })
+  @RequirePermission('parameters', 'read')
+  @Get('rbac-matrix')
+  rbacMatrix() {
+    return this.authService.getRbacMatrix();
   }
 
   // CH-011 — pas de @RequirePermission ici : tout utilisateur authentifié
