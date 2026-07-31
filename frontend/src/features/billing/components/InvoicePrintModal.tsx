@@ -93,6 +93,29 @@ export function InvoicePrintModal({
 
   if (!invoice) return null;
 
+  // Handoff design final, lot 7 (FactureClient.dc.html) — réconciliation
+  // avec CH-042. Écarts assumés vis-à-vis du mockup, documentés plutôt que
+  // fabriqués : pas de colonne Qté/PU (FolioLine ne stocke qu'un montant
+  // total par ligne, jamais une quantité/prix unitaire séparés) ; pas de
+  // badge de statut « Payée » (dupliquerait le calcul de solde côté
+  // client — computeSoldeDu, backend/src/modules/stay/utils/solde.ts,
+  // reste la seule fonction autorisée à le faire) ; pas de RIB (aucun
+  // champ de ce type dans HotelConfig). **Sous-total/TVA du mockup
+  // délibérément écarté après vérification empirique** (pas seulement
+  // supposé) : `FolioLine.tauxTva` vaut toujours 0 en base pour toute
+  // ligne réelle (constaté par requête SQL directe) — la TVA réelle
+  // n'est appliquée qu'au moment du calcul de `Invoice.montantTotal`
+  // (`calculateInvoiceTotal`, par type de ligne) et jamais réécrite sur
+  // la `FolioLine` elle-même. Afficher un sous-total/TVA dérivés de ce
+  // champ aurait affiché « TVA : 0,00 MAD » à côté d'un Total TTC qui
+  // l'inclut réellement — exactement la divergence que CH-042 s'interdit
+  // déjà. Seul un écart réellement comblé avec des données déjà
+  // présentes, jamais recalculées : le mode de règlement le plus récent
+  // (`invoice.payments`, déjà chargé, jamais une nouvelle requête).
+  const dernierPaiement = [...invoice.payments].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  )[0];
+
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
@@ -101,37 +124,52 @@ export function InvoicePrintModal({
         </DialogHeader>
 
         <div id="facture-imprimable" className="flex flex-col gap-6 p-2">
-          <div className="flex flex-col gap-1">
-            {hotelConfig?.logoUrl && (
-              <img
-                src={hotelConfig.logoUrl}
-                alt="Logo"
-                className="h-12 w-12 object-contain"
-              />
-            )}
-            <h2 className="text-lg font-bold">
-              {hotelConfig?.raisonSociale || 'Hôtel'}
-            </h2>
-            {hotelConfig?.adresse && (
-              <p className="text-muted-foreground text-sm">
-                {hotelConfig.adresse}
-              </p>
-            )}
-            {(hotelConfig?.ice ||
-              hotelConfig?.rc ||
-              hotelConfig?.identifiantFiscal) && (
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col gap-1">
+              {hotelConfig?.logoUrl && (
+                <img
+                  src={hotelConfig.logoUrl}
+                  alt="Logo"
+                  className="h-12 w-12 object-contain"
+                />
+              )}
+              <h2 className="text-lg font-bold">
+                {hotelConfig?.raisonSociale || 'Hôtel'}
+              </h2>
+              {hotelConfig?.adresse && (
+                <p className="text-muted-foreground text-sm">
+                  {hotelConfig.adresse}
+                </p>
+              )}
+              {(hotelConfig?.ice ||
+                hotelConfig?.rc ||
+                hotelConfig?.identifiantFiscal) && (
+                <p className="text-muted-foreground text-xs">
+                  {[
+                    hotelConfig.ice ? `ICE: ${hotelConfig.ice}` : null,
+                    hotelConfig.rc ? `RC: ${hotelConfig.rc}` : null,
+                    hotelConfig.identifiantFiscal
+                      ? `IF: ${hotelConfig.identifiantFiscal}`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' — ')}
+                </p>
+              )}
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="text-primary text-lg font-bold">FACTURE</p>
+              <p className="text-sm font-medium">N° {invoice.numero}</p>
               <p className="text-muted-foreground text-xs">
-                {[
-                  hotelConfig.ice ? `ICE: ${hotelConfig.ice}` : null,
-                  hotelConfig.rc ? `RC: ${hotelConfig.rc}` : null,
-                  hotelConfig.identifiantFiscal
-                    ? `IF: ${hotelConfig.identifiantFiscal}`
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(' — ')}
+                Émise le{' '}
+                {new Date(invoice.createdAt).toLocaleDateString('fr-FR')}
               </p>
-            )}
+              {invoice.statut === 'ANNULEE_PAR_AVOIR' && (
+                <p className="text-destructive mt-1 text-xs font-bold">
+                  Annulée par avoir
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4 text-sm">
@@ -198,6 +236,13 @@ export function InvoicePrintModal({
               </div>
             </div>
           </div>
+
+          {dernierPaiement && (
+            <p className="text-muted-foreground border-t pt-3 text-xs">
+              Règlement {dernierPaiement.moyen} le{' '}
+              {new Date(dernierPaiement.createdAt).toLocaleDateString('fr-FR')}.
+            </p>
+          )}
         </div>
 
         <DialogFooter>
