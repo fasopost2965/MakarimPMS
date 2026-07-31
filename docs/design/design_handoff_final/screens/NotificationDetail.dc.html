@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin:0; }
+    * { box-sizing: border-box; }
+    .notirow:hover { background: oklch(0.97 0.005 272); }
+    .notirow.active { background: oklch(0.355 0.119 272.1 / 0.06); }
+    .actionlink:hover { text-decoration: underline; }
+    .bell:hover { background: oklch(0.94 0.008 272); }
+  </style>
+</helmet>
+
+<div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:oklch(0.97 0.005 272);min-height:100vh;padding:0;">
+
+  <!-- Sample header, bell opens the panel below -->
+  <header style="height:56px;background:#fff;border-bottom:1px solid oklch(0.9 0.012 272);display:flex;align-items:center;justify-content:space-between;padding:0 20px;position:relative;">
+    <h1 style="margin:0;font-size:15px;font-weight:600;color:oklch(0.22 0.02 272);">Tableau de bord</h1>
+    <div style="display:flex;align-items:center;gap:16px;">
+      <div class="bell" style="position:relative;width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="oklch(0.35 0.02 272)" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+        <span style="position:absolute;top:4px;right:5px;width:8px;height:8px;border-radius:999px;background:oklch(0.55 0.19 25);border:1.5px solid #fff;"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:oklch(0.35 0.02 272);">
+        <span style="width:26px;height:26px;border-radius:999px;background:oklch(0.355 0.119 272.1);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;">SR</span>
+        Sara R.
+      </div>
+    </div>
+
+    <!-- Flyout panel -->
+    <div style="position:absolute;top:60px;right:20px;width:460px;background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:12px;box-shadow:0 20px 50px oklch(0.22 0.05 272 / 0.18);overflow:hidden;z-index:10;display:flex;flex-direction:column;max-height:560px;">
+
+      <div style="padding:14px 16px;border-bottom:1px solid oklch(0.94 0.008 272);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+        <span style="font-size:13.5px;font-weight:700;color:oklch(0.22 0.02 272);">Notifications</span>
+        <span class="actionlink" style="font-size:12px;font-weight:600;color:oklch(0.355 0.119 272.1);cursor:pointer;">Tout marquer comme lu</span>
+      </div>
+
+      <div style="overflow-y:auto;flex-shrink:0;max-height:220px;">
+        <div class="notirow active" style="display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid oklch(0.96 0.006 272);cursor:pointer;">
+          <span style="width:8px;height:8px;border-radius:999px;background:oklch(0.55 0.19 25);flex-shrink:0;margin-top:6px;"></span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:12.5px;font-weight:700;color:oklch(0.22 0.02 272);">Ticket urgent — Chambre 108</div>
+            <div style="font-size:11.5px;color:oklch(0.55 0.02 272);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Climatisation en panne, signalé par la réception</div>
+          </div>
+          <span style="font-size:10.5px;color:oklch(0.6 0.02 272);white-space:nowrap;flex-shrink:0;">il y a 20 min</span>
+        </div>
+        <div class="notirow" style="display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid oklch(0.96 0.006 272);cursor:pointer;">
+          <span style="width:8px;height:8px;border-radius:999px;background:oklch(0.55 0.19 25);flex-shrink:0;margin-top:6px;"></span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:12.5px;font-weight:700;color:oklch(0.22 0.02 272);">Paiement refusé — Réservation RES-3391</div>
+            <div style="font-size:11.5px;color:oklch(0.55 0.02 272);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Code banque 51, provision insuffisante</div>
+          </div>
+          <span style="font-size:10.5px;color:oklch(0.6 0.02 272);white-space:nowrap;flex-shrink:0;">il y a 1h</span>
+        </div>
+        <div class="notirow" style="display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid oklch(0.96 0.006 272);cursor:pointer;opacity:0.6;">
+          <span style="width:8px;height:8px;flex-shrink:0;margin-top:6px;"></span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:12.5px;font-weight:600;color:oklch(0.22 0.02 272);">Envoi WhatsApp échoué</div>
+            <div style="font-size:11.5px;color:oklch(0.55 0.02 272);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Modèle « Réservation confirmée » — +33 6 12 34 56 78</div>
+          </div>
+          <span style="font-size:10.5px;color:oklch(0.6 0.02 272);white-space:nowrap;flex-shrink:0;">Hier</span>
+        </div>
+        <div class="notirow" style="display:flex;gap:10px;padding:12px 16px;cursor:pointer;opacity:0.6;">
+          <span style="width:8px;height:8px;flex-shrink:0;margin-top:6px;"></span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:12.5px;font-weight:600;color:oklch(0.22 0.02 272);">Stock bas — Serviettes de bain</div>
+            <div style="font-size:11.5px;color:oklch(0.55 0.02 272);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Seuil de réapprovisionnement atteint (12 restantes)</div>
+          </div>
+          <span style="font-size:10.5px;color:oklch(0.6 0.02 272);white-space:nowrap;flex-shrink:0;">Hier</span>
+        </div>
+      </div>
+
+      <!-- Expanded detail of selected notification -->
+      <div style="border-top:2px solid oklch(0.9 0.012 272);background:oklch(0.98 0.004 272);padding:16px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;">
+        <div style="display:flex;align-items:center;justify-content:between;gap:8px;">
+          <span style="display:inline-flex;background:oklch(0.55 0.19 25 / 0.15);color:oklch(0.5 0.17 25);border-radius:999px;padding:3px 10px;font-size:10.5px;font-weight:700;">Urgente · Maintenance</span>
+        </div>
+        <div style="font-size:14px;font-weight:700;color:oklch(0.22 0.02 272);">Ticket urgent — Chambre 108</div>
+        <div style="font-size:12.5px;color:oklch(0.35 0.02 272);line-height:1.5;">Climatisation en panne, signalée par la réception il y a 20 minutes. Chambre occupée jusqu'au 02/08 — coordonner l'accès technicien avec la réception avant intervention.</div>
+        <div style="display:flex;gap:16px;font-size:11.5px;color:oklch(0.55 0.02 272);">
+          <span>Créé le 30/07 à 09:42</span>
+          <span>Assigné : Youssef T.</span>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:2px;">
+          <button style="flex:1;height:34px;border-radius:7px;background:oklch(0.355 0.119 272.1);border:none;color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">Voir le ticket</button>
+          <button style="flex:1;height:34px;border-radius:7px;background:#fff;border:1px solid oklch(0.9 0.012 272);color:oklch(0.35 0.02 272);font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">Marquer comme lu</button>
+        </div>
+      </div>
+
+      <div style="padding:10px 16px;border-top:1px solid oklch(0.94 0.008 272);text-align:center;flex-shrink:0;">
+        <span class="actionlink" style="font-size:12px;font-weight:600;color:oklch(0.355 0.119 272.1);cursor:pointer;">Voir toutes les notifications</span>
+      </div>
+    </div>
+  </header>
+
+  <div style="padding:80px 40px;max-width:600px;">
+    <p style="font-size:12.5px;color:oklch(0.48 0.02 272);">Clic sur la cloche du header (présente sur tous les écrans) ouvre ce panneau : liste des notifications non lues en haut, détail de l'élément sélectionné épinglé en bas avec ses actions directes (ouvrir le module concerné, marquer comme lu). Le badge disparaît une fois toutes les notifications lues.</p>
+  </div>
+</div>
+
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin:0; }
+    * { box-sizing: border-box; }
+    .ticketrow:active { background: oklch(0.94 0.008 272); }
+    .chip { cursor:pointer; }
+    .bigbtn:active { filter: brightness(0.95); }
+  </style>
+</helmet>
+
+<div style="padding:40px;background:oklch(0.97 0.005 272);min-height:100vh;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;display:flex;flex-direction:column;gap:20px;">
+  <div>
+    <h1 style="margin:0 0 4px;font-size:18px;font-weight:700;color:oklch(0.22 0.02 272);">Maintenance — app mobile technicien</h1>
+    <p style="margin:0;font-size:13px;color:oklch(0.48 0.02 272);max-width:640px;">Vue terrain pour l'équipe technique : file de tickets assignés triés par priorité, puis détail d'un ticket avec photo et actions rapides.</p>
+  </div>
+
+  <div style="display:flex;gap:36px;flex-wrap:wrap;align-items:flex-start;">
+
+    <!-- SCREEN 1: ticket list -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:oklch(0.355 0.119 272.1);">Écran 1 — Mes tickets</span>
+      <x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" hint-size="412px,892px">
+        <div style="display:flex;flex-direction:column;height:100%;background:oklch(0.99 0.003 272);">
+
+          <div style="background:oklch(0.288 0.091 271.8);color:#fff;padding:14px 18px 16px;flex-shrink:0;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="width:32px;height:32px;border-radius:999px;background:oklch(0.728 0.138 89.7);color:oklch(0.2 0.03 90);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;">{{ initials }}</span>
+                <div>
+                  <div style="font-size:15px;font-weight:700;">Mes tickets</div>
+                  <div style="font-size:11.5px;color:oklch(0.99 0 0 / 0.65);">{{ techName }} · Équipe technique</div>
+                </div>
+              </div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/></svg>
+            </div>
+          </div>
+
+          <sc-if value="{{ offline }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:8px;background:oklch(0.7 0.15 80 / 0.15);color:oklch(0.55 0.13 80);padding:8px 18px;font-size:12px;font-weight:600;flex-shrink:0;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0 1 19 12.55M5 12.55a10.94 10.94 0 0 1 5.17-2.39M10.71 5.05A16 16 0 0 1 22.58 9M1.42 9a15.91 15.91 0 0 1 4.7-2.88M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg>
+              Hors ligne — les mises à jour se synchroniseront à la reconnexion
+            </div>
+          </sc-if>
+
+          <div style="display:flex;gap:8px;padding:12px 18px;flex-shrink:0;overflow-x:auto;">
+            <span class="chip" style="padding:6px 14px;border-radius:999px;font-size:12.5px;font-weight:600;background:oklch(0.355 0.119 272.1);color:#fff;white-space:nowrap;">Ouverts · 4</span>
+            <span class="chip" style="padding:6px 14px;border-radius:999px;font-size:12.5px;font-weight:600;background:oklch(0.94 0.008 272);color:oklch(0.35 0.02 272);white-space:nowrap;">Urgents · 1</span>
+            <span class="chip" style="padding:6px 14px;border-radius:999px;font-size:12.5px;font-weight:600;background:oklch(0.94 0.008 272);color:oklch(0.35 0.02 272);white-space:nowrap;">Résolus · 2</span>
+          </div>
+
+          <div style="flex:1;overflow-y:auto;padding:0 10px 12px;display:flex;flex-direction:column;gap:8px;">
+
+            <div class="ticketrow" style="display:flex;align-items:center;gap:12px;background:oklch(0.55 0.19 25 / 0.06);border:1.5px solid oklch(0.55 0.19 25 / 0.35);border-radius:10px;padding:12px 14px;">
+              <span style="width:40px;height:40px;border-radius:8px;background:oklch(0.55 0.19 25 / 0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="oklch(0.5 0.17 25)" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 2.5 18a2 2 0 0 0 1.8 3h15.4a2 2 0 0 0 1.8-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+              </span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13.5px;font-weight:600;color:oklch(0.22 0.02 272);">Chambre 108 — Climatisation</div>
+                <div style="font-size:11.5px;color:oklch(0.55 0.02 272);">Assigné à vous · il y a 20 min</div>
+              </div>
+              <span style="background:oklch(0.55 0.19 25 / 0.15);color:oklch(0.5 0.17 25);border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;white-space:nowrap;">Urgente</span>
+            </div>
+
+            <div class="ticketrow" style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:10px;padding:12px 14px;">
+              <span style="width:40px;height:40px;border-radius:8px;background:oklch(0.7 0.15 80 / 0.13);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.13 80)" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2z"/></svg>
+              </span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13.5px;font-weight:600;color:oklch(0.22 0.02 272);">Chambre 215 — Fuite robinetterie</div>
+                <div style="font-size:11.5px;color:oklch(0.55 0.02 272);">Non assigné · il y a 1h</div>
+              </div>
+              <span style="background:oklch(0.7 0.15 80 / 0.15);color:oklch(0.55 0.13 80);border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;white-space:nowrap;">Haute</span>
+            </div>
+
+            <div class="ticketrow" style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:10px;padding:12px 14px;">
+              <span style="width:40px;height:40px;border-radius:8px;background:oklch(0.94 0.008 272);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.02 272)" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2z"/></svg>
+              </span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13.5px;font-weight:600;color:oklch(0.22 0.02 272);">Chambre 302 — Ampoule</div>
+                <div style="font-size:11.5px;color:oklch(0.55 0.02 272);">Assigné à vous · il y a 3h</div>
+              </div>
+              <span style="background:oklch(0.5 0.1 265 / 0.13);color:oklch(0.42 0.09 265);border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;white-space:nowrap;">Moyenne</span>
+            </div>
+
+            <div class="ticketrow" style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:10px;padding:12px 14px;">
+              <span style="width:40px;height:40px;border-radius:8px;background:oklch(0.94 0.008 272);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.02 272)" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2z"/></svg>
+              </span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13.5px;font-weight:600;color:oklch(0.22 0.02 272);">Chambre 110 — Poignée cassée</div>
+                <div style="font-size:11.5px;color:oklch(0.55 0.02 272);">Assigné à vous · il y a 5h</div>
+              </div>
+              <span style="background:oklch(0.94 0.008 272);color:oklch(0.48 0.02 272);border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;white-space:nowrap;">Basse</span>
+            </div>
+
+            <div style="padding:10px 8px 2px;font-size:11px;font-weight:700;color:oklch(0.55 0.02 272);text-transform:uppercase;letter-spacing:0.4px;">Résolus récemment</div>
+            <div class="ticketrow" style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:10px;padding:12px 14px;opacity:0.75;">
+              <span style="width:40px;height:40px;border-radius:8px;background:oklch(0.55 0.11 155 / 0.13);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="oklch(0.4 0.1 155)" stroke-width="2.2"><path d="M20 6 9 17l-5-5"/></svg>
+              </span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13.5px;font-weight:600;color:oklch(0.4 0.1 155);">Chambre 204 — Prise électrique</div>
+                <div style="font-size:11.5px;color:oklch(0.55 0.02 272);">Résolu le 28/07</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;border-top:1px solid oklch(0.9 0.012 272);padding:8px 4px;flex-shrink:0;background:#fff;">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;color:oklch(0.355 0.119 272.1);">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2z"/></svg>
+              <span style="font-size:9.5px;font-weight:600;">Tickets</span>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;color:oklch(0.55 0.02 272);">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+              <span style="font-size:9.5px;font-weight:600;">Historique</span>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;color:oklch(0.55 0.02 272);">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              <span style="font-size:9.5px;font-weight:600;">Nouveau</span>
+            </div>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <!-- SCREEN 2: ticket detail -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:oklch(0.355 0.119 272.1);">Écran 2 — Détail ticket</span>
+      <x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" hint-size="412px,892px">
+        <div style="display:flex;flex-direction:column;height:100%;background:oklch(0.99 0.003 272);">
+
+          <div style="background:oklch(0.55 0.19 25);color:#fff;padding:14px 18px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"><path d="m15 18-6-6 6-6"/></svg>
+            <span style="background:#fff;color:oklch(0.5 0.17 25);font-size:12px;font-weight:700;border-radius:5px;padding:3px 8px;">Urgente</span>
+            <span style="font-size:15px;font-weight:600;">Chambre 108</span>
+          </div>
+
+          <div style="flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:16px;">
+            <div>
+              <div style="font-size:15px;font-weight:700;color:oklch(0.22 0.02 272);">Climatisation en panne</div>
+              <div style="font-size:12.5px;color:oklch(0.55 0.02 272);margin-top:2px;">Signalé par Réception · il y a 20 min</div>
+            </div>
+
+            <div style="background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:10px;padding:12px 14px;font-size:13px;color:oklch(0.35 0.02 272);line-height:1.5;">
+              Le client rapporte que la climatisation ne démarre plus depuis ce matin. Chambre occupée jusqu'au 02/08 — accès à coordonner avec la réception.
+            </div>
+
+            <div>
+              <span style="font-size:12px;font-weight:700;color:oklch(0.35 0.02 272);text-transform:uppercase;letter-spacing:0.3px;">Photo</span>
+              <div style="margin-top:6px;height:140px;border:1.5px dashed oklch(0.8 0.01 272);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:oklch(0.55 0.02 272);">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="oklch(0.6 0.015 272)" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+                <span style="font-size:12px;">Ajouter une photo</span>
+              </div>
+            </div>
+
+            <div style="display:flex;gap:16px;font-size:12px;color:oklch(0.48 0.02 272);background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:10px;padding:12px 14px;">
+              <div><div style="font-weight:700;color:oklch(0.22 0.02 272);">Priorité</div>Urgente</div>
+              <div><div style="font-weight:700;color:oklch(0.22 0.02 272);">Statut</div>Ouvert</div>
+              <div><div style="font-weight:700;color:oklch(0.22 0.02 272);">Assigné</div>{{ techName }}</div>
+            </div>
+
+            <button class="bigbtn" style="height:46px;border:none;border-radius:10px;background:oklch(0.355 0.119 272.1);color:#fff;font-size:14px;font-weight:700;font-family:inherit;">Prendre en charge</button>
+            <button class="bigbtn" style="height:46px;border:1.5px solid oklch(0.4 0.1 155 / 0.4);border-radius:10px;background:oklch(0.55 0.11 155 / 0.08);color:oklch(0.4 0.1 155);font-size:13.5px;font-weight:700;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6 9 17l-5-5"/></svg>
+              Marquer résolu
+            </button>
+          </div>
+        </div>
+      </x-import>
+    </div>
+  </div>
+
+  <p style="font-size:11.5px;color:oklch(0.48 0.02 272);margin:0;">À la résolution, la chambre repasse automatiquement en « À nettoyer » côté Housekeeping avant de redevenir vendable.</p>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1000, &quot;height&quot;: 940}, &quot;techName&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;Youssef T.&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;offline&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const techName = this.props.techName ?? 'Youssef T.';
+    const initials = techName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    return {
+      techName,
+      initials,
+      offline: this.props.offline ?? false,
+    };
+  }
+}
+</script>
+</body>
+</html>

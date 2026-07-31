@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin:0; }
+    * { box-sizing: border-box; }
+    .roomrow:active { background: oklch(0.94 0.008 272); }
+    .chip { cursor:pointer; }
+    .bigbtn:active { filter: brightness(0.95); }
+    .checkopt:active { background: oklch(0.96 0.006 272); }
+  </style>
+</helmet>
+
+<div style="padding:40px;background:oklch(0.97 0.005 272);min-height:100vh;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;display:flex;flex-direction:column;gap:20px;">
+  <div>
+    <h1 style="margin:0 0 4px;font-size:18px;font-weight:700;color:oklch(0.22 0.02 272);">Housekeeping — app mobile équipier</h1>
+    <p style="margin:0;font-size:13px;color:oklch(0.48 0.02 272);max-width:640px;">Vue terrain pour les femmes/valets de chambre : liste des chambres assignées puis détail d'une chambre avec checklist de statut. Fonctionne hors-ligne (synchronisation différée) et n'affiche aucune donnée client (RGPD).</p>
+  </div>
+
+  <div style="display:flex;gap:36px;flex-wrap:wrap;align-items:flex-start;">
+
+    <!-- SCREEN 1: room list -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:oklch(0.355 0.119 272.1);">Écran 1 — Mes chambres</span>
+      <x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" hint-size="412px,892px">
+        <div style="display:flex;flex-direction:column;height:100%;background:oklch(0.99 0.003 272);">
+
+          <div style="background:oklch(0.288 0.091 271.8);color:#fff;padding:14px 18px 16px;flex-shrink:0;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="width:32px;height:32px;border-radius:999px;background:oklch(0.728 0.138 89.7);color:oklch(0.2 0.03 90);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;">{{ initials }}</span>
+                <div>
+                  <div style="font-size:15px;font-weight:700;">Mes chambres</div>
+                  <div style="font-size:11.5px;color:oklch(0.99 0 0 / 0.65);">{{ agentName }} · Étages 1–2</div>
+                </div>
+              </div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/></svg>
+            </div>
+          </div>
+
+          <sc-if value="{{ offline }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:8px;background:oklch(0.7 0.15 80 / 0.15);color:oklch(0.55 0.13 80);padding:8px 18px;font-size:12px;font-weight:600;flex-shrink:0;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0 1 19 12.55M5 12.55a10.94 10.94 0 0 1 5.17-2.39M10.71 5.05A16 16 0 0 1 22.58 9M1.42 9a15.91 15.91 0 0 1 4.7-2.88M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg>
+              Hors ligne — les statuts se synchroniseront à la reconnexion
+            </div>
+          </sc-if>
+
+          <div style="display:flex;gap:8px;padding:12px 18px;flex-shrink:0;overflow-x:auto;">
+            <span class="chip" style="padding:6px 14px;border-radius:999px;font-size:12.5px;font-weight:600;background:oklch(0.355 0.119 272.1);color:#fff;white-space:nowrap;">Toutes · 6</span>
+            <span class="chip" style="padding:6px 14px;border-radius:999px;font-size:12.5px;font-weight:600;background:oklch(0.94 0.008 272);color:oklch(0.35 0.02 272);white-space:nowrap;">À nettoyer · 2</span>
+            <span class="chip" style="padding:6px 14px;border-radius:999px;font-size:12.5px;font-weight:600;background:oklch(0.94 0.008 272);color:oklch(0.35 0.02 272);white-space:nowrap;">Faites · 4</span>
+          </div>
+
+          <div style="flex:1;overflow-y:auto;padding:0 10px 12px;display:flex;flex-direction:column;gap:8px;">
+
+            <div style="padding:6px 8px 2px;font-size:11px;font-weight:700;color:oklch(0.55 0.02 272);text-transform:uppercase;letter-spacing:0.4px;">Étage 1</div>
+            <div class="roomrow" style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:10px;padding:12px 14px;">
+              <span style="width:40px;height:40px;border-radius:8px;background:oklch(0.94 0.008 272);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:oklch(0.35 0.02 272);flex-shrink:0;">101</span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13.5px;font-weight:600;color:oklch(0.22 0.02 272);">Standard</div>
+                <div style="font-size:11.5px;color:oklch(0.55 0.02 272);">il y a 12 min</div>
+              </div>
+              <span style="background:oklch(0.7 0.15 80 / 0.15);color:oklch(0.55 0.13 80);border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;white-space:nowrap;">À nettoyer</span>
+            </div>
+            <div class="roomrow" style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:10px;padding:12px 14px;">
+              <span style="width:40px;height:40px;border-radius:8px;background:oklch(0.94 0.008 272);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:oklch(0.35 0.02 272);flex-shrink:0;">103</span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13.5px;font-weight:600;color:oklch(0.22 0.02 272);">Standard</div>
+                <div style="font-size:11.5px;color:oklch(0.55 0.02 272);">Contrôlée il y a 1h40</div>
+              </div>
+              <span style="background:oklch(0.55 0.11 155 / 0.15);color:oklch(0.4 0.1 155);border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;white-space:nowrap;">Libre &amp; propre</span>
+            </div>
+
+            <div style="padding:10px 8px 2px;font-size:11px;font-weight:700;color:oklch(0.55 0.02 272);text-transform:uppercase;letter-spacing:0.4px;">Étage 2</div>
+            <div class="roomrow" style="display:flex;align-items:center;gap:12px;background:oklch(0.7 0.15 80 / 0.06);border:1.5px solid oklch(0.7 0.15 80 / 0.4);border-radius:10px;padding:12px 14px;">
+              <span style="width:40px;height:40px;border-radius:8px;background:oklch(0.728 0.138 89.7);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:oklch(0.2 0.03 90);flex-shrink:0;">205</span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13.5px;font-weight:600;color:oklch(0.22 0.02 272);">Deluxe</div>
+                <div style="font-size:11.5px;color:oklch(0.55 0.02 272);">il y a 40 min · Départ 11h</div>
+              </div>
+              <span style="background:oklch(0.7 0.15 80 / 0.15);color:oklch(0.55 0.13 80);border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;white-space:nowrap;">À nettoyer</span>
+            </div>
+            <div class="roomrow" style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:10px;padding:12px 14px;">
+              <span style="width:40px;height:40px;border-radius:8px;background:oklch(0.94 0.008 272);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:oklch(0.35 0.02 272);flex-shrink:0;">203</span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13.5px;font-weight:600;color:oklch(0.22 0.02 272);">Deluxe</div>
+                <div style="font-size:11.5px;color:oklch(0.55 0.02 272);">Contrôlée il y a 3h05</div>
+              </div>
+              <span style="background:oklch(0.55 0.11 155 / 0.15);color:oklch(0.4 0.1 155);border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;white-space:nowrap;">Libre &amp; propre</span>
+            </div>
+            <div class="roomrow" style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:10px;padding:12px 14px;">
+              <span style="width:40px;height:40px;border-radius:8px;background:oklch(0.94 0.008 272);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:oklch(0.35 0.02 272);flex-shrink:0;">206</span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13.5px;font-weight:600;color:oklch(0.22 0.02 272);">Deluxe</div>
+                <div style="font-size:11.5px;color:oklch(0.55 0.02 272);">Contrôlée il y a 5h10</div>
+              </div>
+              <span style="background:oklch(0.55 0.11 155 / 0.15);color:oklch(0.4 0.1 155);border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;white-space:nowrap;">Libre &amp; propre</span>
+            </div>
+            <div class="roomrow" style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:10px;padding:12px 14px;">
+              <span style="width:40px;height:40px;border-radius:8px;background:oklch(0.55 0.19 25 / 0.13);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:oklch(0.5 0.17 25);flex-shrink:0;">302</span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13.5px;font-weight:600;color:oklch(0.22 0.02 272);">Suite</div>
+                <div style="font-size:11.5px;color:oklch(0.55 0.02 272);">Bloquée depuis 1j</div>
+              </div>
+              <span style="background:oklch(0.55 0.19 25 / 0.15);color:oklch(0.5 0.17 25);border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;white-space:nowrap;">Maintenance</span>
+            </div>
+          </div>
+
+          <div style="display:flex;border-top:1px solid oklch(0.9 0.012 272);padding:8px 4px;flex-shrink:0;background:#fff;">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;color:oklch(0.355 0.119 272.1);">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 3v3M16 3v3"/></svg>
+              <span style="font-size:9.5px;font-weight:600;">Chambres</span>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;color:oklch(0.55 0.02 272);">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+              <span style="font-size:9.5px;font-weight:600;">Historique</span>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;color:oklch(0.55 0.02 272);">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2z"/></svg>
+              <span style="font-size:9.5px;font-weight:600;">Signaler</span>
+            </div>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <!-- SCREEN 2: room detail -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:oklch(0.355 0.119 272.1);">Écran 2 — Détail chambre 205</span>
+      <x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" hint-size="412px,892px">
+        <div style="display:flex;flex-direction:column;height:100%;background:oklch(0.99 0.003 272);">
+
+          <div style="background:oklch(0.355 0.119 272.1);color:#fff;padding:14px 18px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"><path d="m15 18-6-6 6-6"/></svg>
+            <span style="background:oklch(0.728 0.138 89.7);color:oklch(0.2 0.03 90);font-size:12px;font-weight:700;border-radius:5px;padding:3px 8px;">205</span>
+            <span style="font-size:15px;font-weight:600;">Deluxe · Étage 2</span>
+          </div>
+
+          <div style="flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:16px;">
+            <div style="display:flex;gap:16px;font-size:12px;color:oklch(0.48 0.02 272);background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:10px;padding:12px 14px;">
+              <div><div style="font-weight:700;color:oklch(0.22 0.02 272);">Départ</div>11h00</div>
+              <div><div style="font-weight:700;color:oklch(0.22 0.02 272);">Arrivée</div>15h00</div>
+              <div><div style="font-weight:700;color:oklch(0.22 0.02 272);">Type</div>2 pers.</div>
+            </div>
+
+            <div>
+              <span style="font-size:12px;font-weight:700;color:oklch(0.35 0.02 272);text-transform:uppercase;letter-spacing:0.3px;">Statut de la chambre</span>
+              <div style="margin-top:6px;display:flex;flex-direction:column;background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:10px;overflow:hidden;">
+                <div class="checkopt" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid oklch(0.94 0.008 272);">
+                  <span style="width:19px;height:19px;border-radius:5px;border:2px solid oklch(0.55 0.11 155);flex-shrink:0;"></span>
+                  <span style="flex:1;font-size:13.5px;color:oklch(0.22 0.02 272);">Chambre prête (libre &amp; propre)</span>
+                </div>
+                <div class="checkopt" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid oklch(0.94 0.008 272);background:oklch(0.7 0.15 80 / 0.08);">
+                  <span style="width:19px;height:19px;border-radius:5px;border:2px solid oklch(0.55 0.13 80);background:oklch(0.7 0.15 80);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>
+                  </span>
+                  <span style="flex:1;font-size:13.5px;font-weight:700;color:oklch(0.22 0.02 272);">À nettoyer</span>
+                </div>
+                <div class="checkopt" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid oklch(0.94 0.008 272);">
+                  <span style="width:19px;height:19px;border-radius:5px;border:2px solid oklch(0.5 0.14 300);flex-shrink:0;"></span>
+                  <span style="flex:1;font-size:13.5px;color:oklch(0.22 0.02 272);">En nettoyage</span>
+                </div>
+                <div class="checkopt" style="display:flex;align-items:center;gap:10px;padding:12px 14px;">
+                  <span style="width:19px;height:19px;border-radius:5px;border:2px solid oklch(0.55 0.19 25);flex-shrink:0;"></span>
+                  <span style="flex:1;font-size:13.5px;color:oklch(0.22 0.02 272);">Hors service (maintenance)</span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <span style="font-size:12px;font-weight:700;color:oklch(0.35 0.02 272);text-transform:uppercase;letter-spacing:0.3px;">Note (optionnel)</span>
+              <div style="margin-top:6px;background:#fff;border:1px solid oklch(0.9 0.012 272);border-radius:10px;padding:12px 14px;font-size:13px;color:oklch(0.6 0.015 272);min-height:56px;">Ajouter une remarque pour la réception…</div>
+            </div>
+
+            <button class="bigbtn" style="height:46px;border:none;border-radius:10px;background:oklch(0.355 0.119 272.1);color:#fff;font-size:14px;font-weight:700;font-family:inherit;">Valider le statut</button>
+            <button class="bigbtn" style="height:46px;border:1.5px solid oklch(0.55 0.19 25 / 0.4);border-radius:10px;background:oklch(0.55 0.19 25 / 0.08);color:oklch(0.5 0.17 25);font-size:13.5px;font-weight:700;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2z"/></svg>
+              Signaler un problème (crée un ticket maintenance)
+            </button>
+          </div>
+        </div>
+      </x-import>
+    </div>
+  </div>
+
+  <p style="font-size:11.5px;color:oklch(0.48 0.02 272);margin:0;">Aucune donnée client (nom, contact) affichée — restriction RGPD/CRM. Sélection unique du statut (machine à états). « Signaler un problème » ouvre un ticket dans le module Maintenance avec la chambre pré-remplie.</p>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1000, &quot;height&quot;: 940}, &quot;agentName&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;Fatima Z.&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;offline&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const agentName = this.props.agentName ?? 'Fatima Z.';
+    const initials = agentName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    return {
+      agentName,
+      initials,
+      offline: this.props.offline ?? false,
+    };
+  }
+}
+</script>
+</body>
+</html>
