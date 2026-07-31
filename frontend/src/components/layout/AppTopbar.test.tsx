@@ -11,6 +11,8 @@ describe('AppTopbar — CH-034', () => {
         activeTab="stock"
         onLogout={vi.fn()}
         onOpenMobileNav={vi.fn()}
+        onNavigate={vi.fn()}
+        permissions={null}
       />,
     );
     expect(screen.getByRole('heading', { name: 'Stock' })).toBeInTheDocument();
@@ -23,6 +25,8 @@ describe('AppTopbar — CH-034', () => {
         activeTab="dashboard"
         onLogout={vi.fn()}
         onOpenMobileNav={onOpenMobileNav}
+        onNavigate={vi.fn()}
+        permissions={null}
       />,
     );
     fireEvent.click(

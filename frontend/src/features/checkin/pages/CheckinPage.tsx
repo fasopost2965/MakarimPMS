@@ -10,6 +10,7 @@ import { AlertTriangle, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { toastManager } from '@/components/ui/toast';
 import { arrivalsToday, listRooms } from '../../reservations/api';
 import type {
   CanalReservation,
@@ -60,6 +61,24 @@ function resolveCanal(reservation: Reservation | null): CanalReservation {
 
 function initials(nom: string, prenom: string) {
   return `${nom.charAt(0)}${prenom.charAt(0)}`.toUpperCase();
+}
+
+// Handoff design final, lot 3 (MicroInteractionCheckin.dc.html) — le mockup
+// anime un toggle de démo (chambre Réservée ↔ Occupée) sans action serveur
+// réelle. Ici le check-in est une vraie mutation, jamais réversible en un
+// clic (INV-SEJ-*), donc la micro-interaction se traduit par une
+// confirmation immédiate et honnête (même convention que le toast de
+// réassort stock, CH-032 : « une confirmation dit ce qui s'est passé »)
+// plutôt qu'un état togglable fictif.
+function notifyCheckinDone(
+  guest: { nom: string; prenom: string },
+  room: { numero: string },
+) {
+  toastManager.add({
+    title: 'Check-in effectué',
+    description: `${guest.prenom} ${guest.nom} — Chambre ${room.numero} à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`,
+    type: 'success',
+  });
 }
 
 function matchesSearch(
@@ -179,7 +198,8 @@ export function CheckinPage() {
     setActionError(null);
     setCheckingInReservationId(reservationId);
     try {
-      await checkinFromReservation(reservationId);
+      const stay = await checkinFromReservation(reservationId);
+      notifyCheckinDone(stay.guest, stay.room);
       await refetch();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Erreur de check-in');
@@ -192,7 +212,8 @@ export function CheckinPage() {
     setWalkinSubmitting(true);
     setWalkinError(null);
     try {
-      await checkinWalkIn(input);
+      const stay = await checkinWalkIn(input);
+      notifyCheckinDone(stay.guest, stay.room);
       setWalkinOpen(false);
       await refetch();
     } catch (err) {
