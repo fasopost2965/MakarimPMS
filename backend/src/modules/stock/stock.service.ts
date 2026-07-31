@@ -32,6 +32,18 @@ export class StockService {
     }));
   }
 
+  // Façade en lecture seule pour un module tiers (Lot 8, purchase-orders)
+  // qui a besoin de vérifier qu'un stockItemId référencé sur une ligne de
+  // bon de commande existe réellement — jamais de Prisma direct sur
+  // StockItem depuis un autre module (CLAUDE.md, frontières de module).
+  async findByIdOrThrow(id: number) {
+    const item = await this.prisma.stockItem.findUnique({ where: { id } });
+    if (!item || item.deletedAt) {
+      throw new NotFoundException(`Article de stock ${id} introuvable.`);
+    }
+    return item;
+  }
+
   // CH-052 (docs/execution/PLAN_FRONTEND_PARITE_ADMIN.md §2) — inclut
   // l'article/la chambre pour affichage lisible côté frontend (libellé,
   // numéro de chambre) plutôt que de forcer un second aller-retour réseau

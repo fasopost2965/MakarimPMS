@@ -9,6 +9,7 @@ import {
   Package,
   ScanLine,
   Settings,
+  ShoppingCart,
   Sparkles,
   UserRound,
   Users,
@@ -148,6 +149,13 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Package,
     category: 'ressources',
     permission: 'stock:read',
+  },
+  {
+    tab: 'purchase-orders',
+    label: 'Bons de commande',
+    icon: ShoppingCart,
+    category: 'ressources',
+    permission: 'purchase-orders:read',
   },
   {
     tab: 'reporting',

@@ -30,6 +30,7 @@ import { BookingEngineModule } from './modules/booking-engine/booking-engine.mod
 import { DocumentOcrModule } from './modules/document-ocr/document-ocr.module';
 import { ChannelManagerModule } from './modules/channel-manager/channel-manager.module';
 import { RestaurantModule } from './modules/restaurant/restaurant.module';
+import { PurchaseOrdersModule } from './modules/purchase-orders/purchase-orders.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { CsrfGuard } from './common/guards/csrf.guard';
@@ -100,6 +101,7 @@ import { CsrfGuard } from './common/guards/csrf.guard';
     DocumentOcrModule,
     ChannelManagerModule,
     RestaurantModule,
+    PurchaseOrdersModule,
   ],
   controllers: [AppController],
   providers: [

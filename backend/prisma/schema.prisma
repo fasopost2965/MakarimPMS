@@ -739,25 +739,27 @@ model RolePermission {
 }
 
 model User {
-  id                Int                  @id @default(autoincrement())
-  nom               String
-  email             String               @unique
-  motDePasseHash    String
-  roleId            Int
-  role              Role                 @relation(fields: [roleId], references: [id])
-  actif             Boolean              @default(true)
-  createdAt         DateTime             @default(now())
-  loginLogs         LoginLog[]
-  passwordResets    PasswordResetToken[]
-  refreshTokens     RefreshToken[]
-  auditLogs         AuditLog[]
+  id                      Int                  @id @default(autoincrement())
+  nom                     String
+  email                   String               @unique
+  motDePasseHash          String
+  roleId                  Int
+  role                    Role                 @relation(fields: [roleId], references: [id])
+  actif                   Boolean              @default(true)
+  createdAt               DateTime             @default(now())
+  loginLogs               LoginLog[]
+  passwordResets          PasswordResetToken[]
+  refreshTokens           RefreshToken[]
+  auditLogs               AuditLog[]
   // Profil RH (module 5.11) : au plus un Employee par compte de connexion.
-  employee          Employee?
+  employee                Employee?
   // Bulletins de paie validés par cet utilisateur en tant que responsable RH.
-  paySlipsValidated PaySlip[]
-  stockMovements    StockMovement[]
+  paySlipsValidated       PaySlip[]
+  stockMovements          StockMovement[]
+  purchaseOrdersCreated   PurchaseOrder[]      @relation("PurchaseOrderCreatedBy")
+  purchaseOrdersValidated PurchaseOrder[]      @relation("PurchaseOrderValidatedBy")
   // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
-  deletedAt         DateTime?
+  deletedAt               DateTime?
 
   @@index([deletedAt])
 }
@@ -975,18 +977,19 @@ enum TypeMouvementStock {
 }
 
 model StockItem {
-  id                 Int             @id @default(autoincrement())
-  code               String          @unique
+  id                 Int                 @id @default(autoincrement())
+  code               String              @unique
   libelle            String
-  quantiteDisponible Int             @default(0)
+  quantiteDisponible Int                 @default(0)
   seuilAlerte        Int
   uniteMesure        String
   // Marque les articles du kit d'accueil standard (savons, shampoings...)
   // soumis au décompte automatique de BR-STK-001. Les autres articles
   // (linge, fournitures) ne sont mouvementés que manuellement (réassort).
-  kitAccueil         Boolean         @default(false)
+  kitAccueil         Boolean             @default(false)
   movements          StockMovement[]
-  createdAt          DateTime        @default(now())
+  purchaseOrderLines PurchaseOrderLine[]
+  createdAt          DateTime            @default(now())
   deletedAt          DateTime?
 
   @@index([deletedAt])
@@ -1015,6 +1018,86 @@ model StockMovement {
 
   @@index([stockItemId])
   @@index([createdAt])
+}
+
+// ------------------------------------------------------------------
+// Lot 8 (Handoff final) — Bons de commande fournisseur (économat)
+// ------------------------------------------------------------------
+
+// Aucun concept de fournisseur n'existait avant ce chantier — le seul champ
+// apparenté était StockMovement.referenceFournisseur, un texte libre saisi
+// à la main lors d'un réassort. Supplier est ici un carnet d'adresses
+// minimal (aucune donnée fiscale fournisseur type ICE/RC : ce projet n'a
+// jamais eu besoin de déclarer une TVA déductible sur achats, seulement la
+// TVA collectée côté client — docs/modules/parameters.md).
+model Supplier {
+  id             Int             @id @default(autoincrement())
+  nom            String
+  adresse        String?
+  email          String?
+  telephone      String?
+  purchaseOrders PurchaseOrder[]
+  createdAt      DateTime        @default(now())
+  deletedAt      DateTime?
+
+  @@index([deletedAt])
+}
+
+enum StatutBonCommande {
+  BROUILLON
+  EN_ATTENTE_VALIDATION
+  VALIDEE
+  ANNULEE
+}
+
+// Un bon de commande engage l'hôtel sur des quantités/prix vis-à-vis d'un
+// fournisseur (mockup BonCommandeFournisseur.dc.html : « Établi par
+// (Économat) » / « Validé par (Direction) »). createdBy = l'auteur
+// (Gouvernante ou Administrateur, purchase-orders:write) ; validatedBy =
+// toujours l'Administrateur (purchase-orders:valider, action dédiée
+// distincte de write — même famille que guests:blacklist/payments:refund).
+// Pas de champ « reçu »/quantités livrées : aucune réception effective
+// n'est modélisée dans cette itération (voir PurchaseOrdersService,
+// section réception non automatisée).
+model PurchaseOrder {
+  id                     Int                 @id @default(autoincrement())
+  numero                 String              @unique
+  supplierId             Int
+  supplier               Supplier            @relation(fields: [supplierId], references: [id])
+  statut                 StatutBonCommande   @default(BROUILLON)
+  demandeur              String
+  dateLivraisonSouhaitee DateTime?
+  lignes                 PurchaseOrderLine[]
+  createdById            Int
+  createdBy              User                @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id])
+  validatedById          Int?
+  validatedBy            User?               @relation("PurchaseOrderValidatedBy", fields: [validatedById], references: [id])
+  validatedAt            DateTime?
+  createdAt              DateTime            @default(now())
+  deletedAt              DateTime?
+
+  @@index([deletedAt])
+  @@index([supplierId])
+  @@index([statut])
+}
+
+// stockItemId optionnel : une ligne peut référencer un article de stock
+// existant (réassort de linge/consommables déjà suivis) ou décrire un achat
+// hors nomenclature stock (ex. petit équipement) via reference/designation
+// en texte libre — jamais de StockItem fabriqué pour forcer le lien.
+model PurchaseOrderLine {
+  id              Int           @id @default(autoincrement())
+  purchaseOrderId Int
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  stockItemId     Int?
+  stockItem       StockItem?    @relation(fields: [stockItemId], references: [id])
+  reference       String?
+  designation     String
+  quantite        Int
+  prixUnitaire    Decimal       @db.Decimal(10, 2)
+  montant         Decimal       @db.Decimal(10, 2)
+
+  @@index([purchaseOrderId])
 }
 
 // ------------------------------------------------------------------
@@ -1169,6 +1252,13 @@ enum AuditEntity {
   // d'extras (BillingService.cancelFolioLine), distincte de `Folio` pour un
   // targetId précis (l'id de la ligne, pas celui du folio parent).
   FolioLine
+  // Lot 8 (Handoff final) — module purchase-orders (économat). `Supplier`
+  // reste dans l'enum (posé dès la première migration de ce chantier) mais
+  // n'est en pratique jamais utilisé par PurchaseOrdersService — voir le
+  // commentaire équivalent sur AuditAction : un simple carnet d'adresses,
+  // même statut que Company (guests), n'est pas audité.
+  Supplier
+  PurchaseOrder
 }
 
 enum AuditAction {
@@ -1228,6 +1318,20 @@ enum AuditAction {
   // (RD-F11-03), distinct de FORCE_CHECKOUT (solde impayé) pour ne pas
   // confondre les deux causes de forçage dans l'audit.
   FORCE_CHECKOUT_RESTAURANT
+  // Lot 8 (Handoff final) — module purchase-orders (économat).
+  // CREATE_SUPPLIER/UPDATE_SUPPLIER/DELETE_SUPPLIER restent posées (première
+  // migration de ce chantier) mais ne sont en pratique jamais écrites par
+  // PurchaseOrdersService : Supplier est un simple carnet d'adresses (même
+  // statut que Company dans guests), non audité — seul PurchaseOrder engage
+  // réellement l'hôtel financièrement.
+  CREATE_SUPPLIER
+  UPDATE_SUPPLIER
+  DELETE_SUPPLIER
+  CREATE_PURCHASE_ORDER
+  UPDATE_PURCHASE_ORDER
+  SUBMIT_PURCHASE_ORDER
+  VALIDATE_PURCHASE_ORDER
+  CANCEL_PURCHASE_ORDER
 }
 
 // ------------------------------------------------------------------
