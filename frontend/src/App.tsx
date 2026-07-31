@@ -301,6 +301,8 @@ function App() {
           activeTab={tab}
           onLogout={handleLogout}
           onOpenMobileNav={() => setMobileNavOpen(true)}
+          onNavigate={setTab}
+          permissions={permissions}
         />
         <div className="flex-1 overflow-auto">
           {/* CH-031 — une erreur de rendu dans l'onglet actif ne doit plus
