@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Package } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog,
   DialogContent,
@@ -102,7 +105,39 @@ export function StockPage() {
       {loadError && <p className="text-destructive text-sm">{loadError}</p>}
 
       {loading ? (
-        <p className="text-muted-foreground text-sm">Chargement…</p>
+        <div className="flex flex-col gap-5">
+          <div className="grid grid-cols-4 gap-3">
+            {Array.from({ length: 4 }, (_, i) => (
+              <div
+                key={i}
+                className="flex flex-col gap-2 rounded-lg border p-4"
+              >
+                <Skeleton className="h-2.5 w-24" />
+                <Skeleton className="h-7 w-14" />
+              </div>
+            ))}
+          </div>
+          <div className="bg-card overflow-hidden rounded-lg border">
+            <div className="border-b px-4.5 py-3.5">
+              <Skeleton className="h-3 w-32" />
+            </div>
+            {['70%', '55%', '85%', '60%', '75%', '50%'].map((w, i) => (
+              <div
+                key={i}
+                className="grid min-w-[720px] grid-cols-[110px_minmax(150px,2fr)_90px_70px_70px_90px_100px_150px] items-center gap-2 border-t px-4.5 py-2.5"
+              >
+                <Skeleton className="h-3.5 w-14" />
+                <Skeleton className="h-3.5" style={{ width: w }} />
+                <Skeleton className="h-3.5 w-10" />
+                <Skeleton className="h-3.5 w-8" />
+                <Skeleton className="h-3.5 w-8" />
+                <Skeleton className="h-3.5 w-8" />
+                <Skeleton className="h-5 w-16 rounded-full" />
+                <Skeleton className="ml-auto h-6 w-20 rounded-md" />
+              </div>
+            ))}
+          </div>
+        </div>
       ) : (
         <>
           <div className="grid grid-cols-4 gap-3">
@@ -172,9 +207,12 @@ export function StockPage() {
                 <span className="text-right">Action</span>
               </div>
               {items.length === 0 ? (
-                <p className="text-muted-foreground px-4.5 py-3 text-sm">
-                  Aucun article.
-                </p>
+                <EmptyState
+                  className="rounded-none border-0 border-t"
+                  icon={<Package className="size-6" strokeWidth={1.7} />}
+                  title="Aucun article dans le magasin économat"
+                  description="Le stock ne contient encore aucune référence."
+                />
               ) : (
                 items.map((item) => (
                   <div

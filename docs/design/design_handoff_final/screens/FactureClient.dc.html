@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>doc-page:not(:defined){visibility:hidden}
+    * { box-sizing:border-box; }
+    body { margin:0; }
+  </style>
+  <script src="./doc-page.js"></script>
+</helmet>
+
+<doc-page size="a4">
+  <section class="page" style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;display:flex;flex-direction:column;padding:36px 42px;color:oklch(0.22 0.02 272);">
+
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;border-bottom:2px solid oklch(0.288 0.091 271.8);padding-bottom:18px;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span style="width:40px;height:40px;border-radius:9px;background:oklch(0.288 0.091 271.8);color:oklch(0.728 0.138 89.7);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;">M</span>
+        <div>
+          <div style="font-size:17px;font-weight:700;letter-spacing:0.2px;">Makarim Hôtel</div>
+          <div style="font-size:11px;color:oklch(0.48 0.02 272);">Avenue Al Massira, Tétouan, Maroc</div>
+          <div style="font-size:11px;color:oklch(0.48 0.02 272);">ICE 001234567000089 · RC 45231 · IF 12938102</div>
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:20px;font-weight:700;color:oklch(0.288 0.091 271.8);">FACTURE</div>
+        <div style="font-size:12px;color:oklch(0.48 0.02 272);margin-top:2px;">N° FA-2026-01184</div>
+        <div style="font-size:12px;color:oklch(0.48 0.02 272);">Émise le 30/07/2026</div>
+        <span style="display:inline-flex;margin-top:6px;background:oklch(0.55 0.11 155 / 0.15);color:oklch(0.4 0.1 155);border-radius:999px;padding:4px 12px;font-size:11.5px;font-weight:700;">Payée</span>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:20px;">
+      <div>
+        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:oklch(0.55 0.02 272);margin-bottom:4px;">Facturé à</div>
+        <div style="font-size:13px;font-weight:600;">Amina El Fassi</div>
+        <div style="font-size:12px;color:oklch(0.48 0.02 272);">amina.elfassi@email.com</div>
+        <div style="font-size:12px;color:oklch(0.48 0.02 272);">+212 661 22 33 44</div>
+      </div>
+      <div>
+        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:oklch(0.55 0.02 272);margin-bottom:4px;">Séjour</div>
+        <div style="font-size:12px;">Chambre 205 · Deluxe</div>
+        <div style="font-size:12px;color:oklch(0.48 0.02 272);">Arrivée 26/07/2026 · Départ 30/07/2026 (4 nuits)</div>
+        <div style="font-size:12px;color:oklch(0.48 0.02 272);">Réservation RES-3391</div>
+      </div>
+    </div>
+
+    <table style="width:100%;border-collapse:collapse;margin-top:24px;font-size:12.5px;">
+      <thead>
+        <tr style="background:oklch(0.96 0.006 272);">
+          <th style="text-align:left;padding:9px 10px;font-size:10.5px;text-transform:uppercase;letter-spacing:0.3px;color:oklch(0.48 0.02 272);border-bottom:1px solid oklch(0.9 0.012 272);">Désignation</th>
+          <th style="text-align:right;padding:9px 10px;font-size:10.5px;text-transform:uppercase;letter-spacing:0.3px;color:oklch(0.48 0.02 272);border-bottom:1px solid oklch(0.9 0.012 272);">Qté</th>
+          <th style="text-align:right;padding:9px 10px;font-size:10.5px;text-transform:uppercase;letter-spacing:0.3px;color:oklch(0.48 0.02 272);border-bottom:1px solid oklch(0.9 0.012 272);">PU (MAD)</th>
+          <th style="text-align:right;padding:9px 10px;font-size:10.5px;text-transform:uppercase;letter-spacing:0.3px;color:oklch(0.48 0.02 272);border-bottom:1px solid oklch(0.9 0.012 272);">Total (MAD)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td style="padding:9px 10px;border-bottom:1px solid oklch(0.96 0.006 272);">Chambre Deluxe — nuitée</td><td style="text-align:right;padding:9px 10px;border-bottom:1px solid oklch(0.96 0.006 272);">4</td><td style="text-align:right;padding:9px 10px;border-bottom:1px solid oklch(0.96 0.006 272);">950,00</td><td style="text-align:right;padding:9px 10px;border-bottom:1px solid oklch(0.96 0.006 272);">3 800,00</td></tr>
+        <tr><td style="padding:9px 10px;border-bottom:1px solid oklch(0.96 0.006 272);">Petit-déjeuner buffet</td><td style="text-align:right;padding:9px 10px;border-bottom:1px solid oklch(0.96 0.006 272);">8</td><td style="text-align:right;padding:9px 10px;border-bottom:1px solid oklch(0.96 0.006 272);">80,00</td><td style="text-align:right;padding:9px 10px;border-bottom:1px solid oklch(0.96 0.006 272);">640,00</td></tr>
+        <tr><td style="padding:9px 10px;border-bottom:1px solid oklch(0.96 0.006 272);">Restaurant — dîner (28/07)</td><td style="text-align:right;padding:9px 10px;border-bottom:1px solid oklch(0.96 0.006 272);">1</td><td style="text-align:right;padding:9px 10px;border-bottom:1px solid oklch(0.96 0.006 272);">340,00</td><td style="text-align:right;padding:9px 10px;border-bottom:1px solid oklch(0.96 0.006 272);">340,00</td></tr>
+        <tr><td style="padding:9px 10px;border-bottom:1px solid oklch(0.96 0.006 272);">Blanchisserie</td><td style="text-align:right;padding:9px 10px;border-bottom:1px solid oklch(0.96 0.006 272);">1</td><td style="text-align:right;padding:9px 10px;border-bottom:1px solid oklch(0.96 0.006 272);">120,00</td><td style="text-align:right;padding:9px 10px;border-bottom:1px solid oklch(0.96 0.006 272);">120,00</td></tr>
+        <tr><td style="padding:9px 10px;">Taxe de séjour</td><td style="text-align:right;padding:9px 10px;">4</td><td style="text-align:right;padding:9px 10px;">15,00</td><td style="text-align:right;padding:9px 10px;">60,00</td></tr>
+      </tbody>
+    </table>
+
+    <div style="display:flex;justify-content:flex-end;margin-top:14px;">
+      <div style="width:260px;font-size:12.5px;">
+        <div style="display:flex;justify-content:space-between;padding:5px 0;color:oklch(0.48 0.02 272);"><span>Sous-total</span><span>4 960,00 MAD</span></div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0;color:oklch(0.48 0.02 272);"><span>TVA (10%)</span><span>496,00 MAD</span></div>
+        <div style="display:flex;justify-content:space-between;padding:9px 0;margin-top:4px;border-top:2px solid oklch(0.288 0.091 271.8);font-size:15px;font-weight:700;color:oklch(0.288 0.091 271.8);"><span>Total TTC</span><span>5 456,00 MAD</span></div>
+      </div>
+    </div>
+
+    <div style="margin-top:auto;padding-top:18px;border-top:1px solid oklch(0.9 0.012 272);display:flex;justify-content:space-between;font-size:11px;color:oklch(0.55 0.02 272);">
+      <div>Réglé par carte bancaire le 30/07/2026 · Merci de votre séjour.</div>
+      <div>Makarim Hôtel · RIB 007 780 0001234567890012 34</div>
+    </div>
+  </section>
+</doc-page>
+
+</x-dc>
+</body>
+</html>

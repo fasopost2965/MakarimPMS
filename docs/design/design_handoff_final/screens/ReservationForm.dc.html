@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin:0; }
+    * { box-sizing: border-box; }
+    .pill:focus-visible, .primarybtn:focus-visible, .ghostbtn:focus-visible, .gcard:focus-visible, .closebtn:focus-visible { outline: 2px solid oklch(0.728 0.138 89.7); outline-offset: 2px; }
+    .primarybtn:hover { background: oklch(0.3 0.1 272.1); }
+    .ghostbtn:hover { background: oklch(0.96 0.006 272); }
+    .closebtn:hover { background: oklch(0.94 0.008 272); }
+    .gcard:hover { border-color: oklch(0.8 0.02 272); }
+    .pill.sel { background: oklch(0.355 0.119 272.1); color: #fff; border-color: oklch(0.355 0.119 272.1); }
+  </style>
+</helmet>
+
+<div style="width:760px;max-height:88vh;overflow-y:auto;background:#fff;border-radius:14px;box-shadow:0 20px 60px oklch(0.22 0.05 272 / 0.25);font-family:system-ui,-apple-system,'Segoe UI',sans-serif;">
+
+  <!-- Header -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid oklch(0.9 0.012 272);position:sticky;top:0;background:#fff;border-radius:14px 14px 0 0;">
+    <div>
+      <h2 style="margin:0;font-size:17px;font-weight:700;color:oklch(0.22 0.02 272);">Nouvelle réservation</h2>
+      <p style="margin:2px 0 0;font-size:12px;color:oklch(0.55 0.02 272);">Canal, client, chambre et tarification en une seule fiche.</p>
+    </div>
+    <span class="closebtn" style="width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:oklch(0.48 0.02 272);">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </span>
+  </div>
+
+  <div style="padding:22px 24px;display:flex;flex-direction:column;gap:22px;">
+
+    <!-- Canal -->
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:oklch(0.35 0.02 272);">Canal</span>
+      <div style="display:flex;gap:8px;">
+        <span class="pill sel" tabindex="0" style="border:1px solid oklch(0.9 0.012 272);border-radius:8px;padding:7px 16px;font-size:12.5px;font-weight:600;cursor:pointer;">Walk-in</span>
+        <span class="pill" tabindex="0" style="border:1px solid oklch(0.9 0.012 272);border-radius:8px;padding:7px 16px;font-size:12.5px;font-weight:600;cursor:pointer;color:oklch(0.35 0.02 272);">Direct (téléphone/email)</span>
+        <span class="pill" tabindex="0" style="border:1px solid oklch(0.9 0.012 272);border-radius:8px;padding:7px 16px;font-size:12.5px;font-weight:600;cursor:pointer;color:oklch(0.35 0.02 272);">Booking.com</span>
+      </div>
+    </div>
+
+    <!-- Client -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:oklch(0.35 0.02 272);">Client</span>
+        <div style="display:inline-flex;background:oklch(0.94 0.008 272);border-radius:8px;padding:2px;">
+          <span class="pill sel" style="padding:5px 12px;border-radius:6px;font-size:11.5px;font-weight:600;cursor:pointer;border:none;">Client existant</span>
+          <span class="pill" style="padding:5px 12px;border-radius:6px;font-size:11.5px;font-weight:600;cursor:pointer;border:none;color:oklch(0.48 0.02 272);">Nouveau client</span>
+        </div>
+      </div>
+
+      <div style="position:relative;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.02 272)" stroke-width="2" style="position:absolute;left:11px;top:50%;transform:translateY(-50%);"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" value="El Fassi" placeholder="Nom, téléphone, pièce d'identité…" style="width:100%;height:38px;border:1px solid oklch(0.9 0.012 272);border-radius:8px;padding:0 12px 0 32px;font-size:13px;font-family:inherit;" />
+      </div>
+      <div class="gcard" tabindex="0" style="border:1px solid oklch(0.355 0.119 272.1);border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:oklch(0.355 0.119 272.1 / 0.05);">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:oklch(0.22 0.02 272);">El Fassi Karim</div>
+          <div style="font-size:11.5px;color:oklch(0.55 0.02 272);">+212 661 22 33 44 · CNIE AB123456</div>
+        </div>
+        <span style="display:inline-flex;background:oklch(0.728 0.138 89.7 / 0.18);color:oklch(0.5 0.1 89.7);border-radius:999px;padding:3px 9px;font-size:10.5px;font-weight:700;">VIP</span>
+      </div>
+      <p style="margin:0;font-size:11px;color:oklch(0.55 0.02 272);">Un client Liste noire déclenche une alerte de blocage à la confirmation — dérogation possible, réservée à l'Administrateur, journalisée dans l'audit.</p>
+    </div>
+
+    <!-- Chambre & dates -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:oklch(0.35 0.02 272);">Chambre &amp; dates</span>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:11.5px;color:oklch(0.35 0.02 272);font-weight:500;">Type de chambre</label>
+          <select style="height:36px;border:1px solid oklch(0.9 0.012 272);border-radius:6px;padding:0 10px;font-size:13px;font-family:inherit;background:#fff;">
+            <option>Standard — dès 620 MAD/nuit</option>
+            <option selected>Supérieure — dès 820 MAD/nuit</option>
+            <option>Suite — dès 1 450 MAD/nuit</option>
+          </select>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:11.5px;color:oklch(0.35 0.02 272);font-weight:500;">Chambre</label>
+          <select style="height:36px;border:1px solid oklch(0.9 0.012 272);border-radius:6px;padding:0 10px;font-size:13px;font-family:inherit;background:#fff;">
+            <option>204 — libre</option>
+            <option selected>206 — libre</option>
+            <option>208 — libre</option>
+          </select>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:11.5px;color:oklch(0.35 0.02 272);font-weight:500;">Arrivée</label>
+          <input type="date" value="2026-08-02" style="height:36px;border:1px solid oklch(0.9 0.012 272);border-radius:6px;padding:0 10px;font-size:13px;font-family:inherit;" />
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:11.5px;color:oklch(0.35 0.02 272);font-weight:500;">Départ</label>
+          <input type="date" value="2026-08-05" style="height:36px;border:1px solid oklch(0.9 0.012 272);border-radius:6px;padding:0 10px;font-size:13px;font-family:inherit;" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Formule -->
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:oklch(0.35 0.02 272);">Formule d'hébergement</span>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+        <span class="pill sel" tabindex="0" style="text-align:center;border:1px solid oklch(0.9 0.012 272);border-radius:8px;padding:9px 4px;font-size:12px;font-weight:600;cursor:pointer;">Logement seul</span>
+        <span class="pill" tabindex="0" style="text-align:center;border:1px solid oklch(0.9 0.012 272);border-radius:8px;padding:9px 4px;font-size:12px;font-weight:600;cursor:pointer;color:oklch(0.35 0.02 272);">+ Petit-déj.</span>
+        <span class="pill" tabindex="0" style="text-align:center;border:1px solid oklch(0.9 0.012 272);border-radius:8px;padding:9px 4px;font-size:12px;font-weight:600;cursor:pointer;color:oklch(0.35 0.02 272);">Demi-pension</span>
+        <span class="pill" tabindex="0" style="text-align:center;border:1px solid oklch(0.9 0.012 272);border-radius:8px;padding:9px 4px;font-size:12px;font-weight:600;cursor:pointer;color:oklch(0.35 0.02 272);">Pension complète</span>
+      </div>
+    </div>
+
+    <!-- Tarification -->
+    <div style="background:oklch(0.98 0.004 272);border:1px solid oklch(0.9 0.012 272);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px;">
+      <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:oklch(0.35 0.02 272);">Tarification</span>
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;color:oklch(0.35 0.02 272);">
+        <span>820 MAD × 3 nuits (Supérieure, grille standard)</span><span>2 460 MAD</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:13.5px;font-weight:700;color:oklch(0.22 0.02 272);padding-top:6px;border-top:1px solid oklch(0.9 0.012 272);">
+        <span>Prix calculé</span><span>2 460 MAD</span>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:oklch(0.35 0.02 272);margin-top:4px;">
+        <input type="checkbox" style="width:16px;height:16px;" /> Ajustement manuel du prix final
+      </label>
+      <div style="display:grid;grid-template-columns:140px 1fr;gap:10px;align-items:end;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:11px;color:oklch(0.35 0.02 272);font-weight:500;">Prix final (MAD)</label>
+          <input type="number" value="2460" disabled style="height:34px;border:1px solid oklch(0.9 0.012 272);border-radius:6px;padding:0 10px;font-size:12.5px;font-family:inherit;background:oklch(0.96 0.006 272);color:oklch(0.5 0.02 272);" />
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:11px;color:oklch(0.35 0.02 272);font-weight:500;">Motif de l'ajustement (obligatoire si modifié)</label>
+          <input type="text" placeholder="Ex. Tarif négocié agence Voyages Atlas" disabled style="height:34px;border:1px solid oklch(0.9 0.012 272);border-radius:6px;padding:0 10px;font-size:12.5px;font-family:inherit;background:oklch(0.96 0.006 272);" />
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Footer -->
+  <div style="display:flex;justify-content:flex-end;gap:10px;padding:16px 24px;border-top:1px solid oklch(0.9 0.012 272);position:sticky;bottom:0;background:#fff;border-radius:0 0 14px 14px;">
+    <button class="ghostbtn" style="height:38px;padding:0 18px;border-radius:8px;background:#fff;border:1px solid oklch(0.9 0.012 272);color:oklch(0.35 0.02 272);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Annuler</button>
+    <button class="primarybtn" style="height:38px;padding:0 18px;border-radius:8px;background:oklch(0.355 0.119 272.1);border:none;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Créer la réservation</button>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:800,&quot;height&quot;:900}}"></script>
+</body>
+</html>

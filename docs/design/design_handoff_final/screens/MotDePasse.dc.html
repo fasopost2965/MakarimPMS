@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin:0; background:oklch(0.96 0.006 272); }
+    a { color: oklch(0.355 0.119 272.1); }
+    a:hover { color: oklch(0.288 0.091 271.8); }
+    input::placeholder { color: oklch(0.6 0.01 272); }
+  </style>
+</helmet>
+
+<div style="min-height:100vh;width:100%;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;padding:24px;gap:32px;flex-wrap:wrap;">
+
+  <!-- Mot de passe oublié -->
+  <div style="width:100%;max-width:420px;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px oklch(0.22 0.05 272 / 0.18);background:#fff;display:flex;flex-direction:column;">
+    <div style="height:6px;background:linear-gradient(90deg, oklch(0.355 0.119 272.1), oklch(0.728 0.138 89.7));"></div>
+    <div style="display:flex;align-items:center;gap:10px;padding:32px 36px 0;">
+      <div style="width:34px;height:34px;border-radius:9px;background:oklch(0.355 0.119 272.1);display:flex;align-items:center;justify-content:center;color:oklch(0.728 0.138 89.7);font-weight:700;font-size:15px;flex-shrink:0;">M</div>
+      <span style="font-size:15px;font-weight:600;color:oklch(0.22 0.02 272);">Hôtel Makarim</span>
+    </div>
+    <form style="display:flex;flex-direction:column;padding:20px 36px 36px;">
+      <h1 style="margin:0 0 3px;font-size:21px;font-weight:600;color:oklch(0.22 0.02 272);">Mot de passe oublié</h1>
+      <p style="margin:0 0 20px;font-size:13px;color:oklch(0.48 0.02 272);">Un lien de réinitialisation sera envoyé par email si le compte existe.</p>
+
+      <label for="email" style="font-size:13px;font-weight:500;color:oklch(0.25 0.02 272);margin-bottom:5px;">Email</label>
+      <input id="email" type="email" placeholder="vous@hotelmakarim.com" style="height:40px;border:1px solid oklch(0.9 0.012 272);border-radius:8px;margin-bottom:20px;background:oklch(0.98 0.005 272);padding:0 12px;font-size:14px;color:oklch(0.22 0.02 272);box-sizing:border-box;outline:none;font-family:inherit;" />
+
+      <button type="submit" style="height:42px;border:none;border-radius:8px;background:oklch(0.355 0.119 272.1);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">Envoyer le lien</button>
+
+      <div style="margin-top:16px;background:oklch(0.94 0.008 272);border-radius:8px;padding:10px 12px;">
+        <p style="margin:0;font-size:12px;color:oklch(0.48 0.02 272);">Message identique que le compte existe ou non — aucune information sur l'existence d'un email n'est jamais révélée.</p>
+      </div>
+
+      <a href="#" style="margin-top:16px;font-size:13px;text-align:center;text-decoration:none;">← Retour à la connexion</a>
+    </form>
+  </div>
+
+  <!-- Réinitialisation -->
+  <div style="width:100%;max-width:420px;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px oklch(0.22 0.05 272 / 0.18);background:#fff;display:flex;flex-direction:column;">
+    <div style="height:6px;background:linear-gradient(90deg, oklch(0.355 0.119 272.1), oklch(0.728 0.138 89.7));"></div>
+    <div style="display:flex;align-items:center;gap:10px;padding:32px 36px 0;">
+      <div style="width:34px;height:34px;border-radius:9px;background:oklch(0.355 0.119 272.1);display:flex;align-items:center;justify-content:center;color:oklch(0.728 0.138 89.7);font-weight:700;font-size:15px;flex-shrink:0;">M</div>
+      <span style="font-size:15px;font-weight:600;color:oklch(0.22 0.02 272);">Hôtel Makarim</span>
+    </div>
+    <form style="display:flex;flex-direction:column;padding:20px 36px 36px;">
+      <h1 style="margin:0 0 3px;font-size:21px;font-weight:600;color:oklch(0.22 0.02 272);">Nouveau mot de passe</h1>
+      <p style="margin:0 0 20px;font-size:13px;color:oklch(0.48 0.02 272);">Lien reçu par email — valable une durée limitée, à usage unique.</p>
+
+      <label for="pwd1" style="font-size:13px;font-weight:500;color:oklch(0.25 0.02 272);margin-bottom:5px;">Nouveau mot de passe</label>
+      <input id="pwd1" type="password" placeholder="••••••••" style="height:40px;border:1px solid oklch(0.9 0.012 272);border-radius:8px;margin-bottom:6px;background:oklch(0.98 0.005 272);padding:0 12px;font-size:14px;color:oklch(0.22 0.02 272);box-sizing:border-box;outline:none;font-family:inherit;" />
+      <p style="margin:0 0 16px;font-size:11.5px;color:oklch(0.55 0.02 272);">Minimum 8 caractères, avec majuscule, chiffre et caractère spécial.</p>
+
+      <label for="pwd2" style="font-size:13px;font-weight:500;color:oklch(0.25 0.02 272);margin-bottom:5px;">Confirmer le mot de passe</label>
+      <input id="pwd2" type="password" placeholder="••••••••" style="height:40px;border:1px solid oklch(0.9 0.012 272);border-radius:8px;margin-bottom:24px;background:oklch(0.98 0.005 272);padding:0 12px;font-size:14px;color:oklch(0.22 0.02 272);box-sizing:border-box;outline:none;font-family:inherit;" />
+
+      <button type="submit" style="height:42px;border:none;border-radius:8px;background:oklch(0.355 0.119 272.1);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">Réinitialiser le mot de passe</button>
+
+      <div style="margin-top:16px;background:oklch(0.55 0.19 25 / 0.08);border:1px solid oklch(0.55 0.19 25 / 0.3);border-radius:8px;padding:10px 12px;">
+        <p style="margin:0;font-size:12px;color:oklch(0.5 0.17 25);">Lien expiré ou déjà utilisé ? Refaites une demande depuis « Mot de passe oublié ».</p>
+      </div>
+    </form>
+  </div>
+
+</div>
+
+</x-dc>
+</body>
+</html>

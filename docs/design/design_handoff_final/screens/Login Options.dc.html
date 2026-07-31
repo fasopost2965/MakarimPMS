@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <style>
+    @keyframes fadeIn { from { opacity:0; transform:translateY(6px);} to {opacity:1; transform:translateY(0);} }
+    body { margin:0; background:#f1f1f4; }
+    a { color: oklch(0.355 0.119 272.1); }
+    a:hover { color: oklch(0.288 0.091 271.8); }
+  </style>
+</helmet>
+
+<section style="max-width:1500px;margin:0 auto;padding:32px 24px 8px;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;">
+  <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:20px;">
+    <h2 style="margin:0;font-size:20px;color:oklch(0.22 0.02 272);">Écran de connexion — 3 pistes</h2>
+    <span style="color:oklch(0.48 0.02 272);font-size:14px;">Hôtel Makarim · identité Marine &amp; Or · valide-en une, on enchaîne sur les autres écrans</span>
+  </div>
+
+  <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start;">
+
+    <!-- OPTION 1A -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <a id="1a" href="#1a" style="text-decoration:none;background:oklch(0.355 0.119 272.1);color:#fff;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;">1a</a>
+        <span style="font-size:13px;color:oklch(0.35 0.02 272);font-weight:500;">Split — panneau de marque</span>
+      </div>
+      <div style="width:760px;height:520px;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px oklch(0.22 0.05 272 / 0.18);display:flex;background:#fff;">
+        <div style="width:42%;background:linear-gradient(160deg, oklch(0.288 0.091 271.8), oklch(0.22 0.07 272));position:relative;display:flex;flex-direction:column;justify-content:space-between;padding:36px 32px;color:#fff;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:36px;height:36px;border-radius:10px;background:oklch(0.728 0.138 89.7);display:flex;align-items:center;justify-content:center;font-weight:700;color:oklch(0.2 0.03 90);font-size:15px;">M</div>
+            <span style="font-size:15px;font-weight:600;letter-spacing:0.2px;">Hôtel Makarim</span>
+          </div>
+          <div>
+            <p style="margin:0 0 10px;font-size:22px;line-height:1.35;font-weight:600;max-width:230px;">Une gestion hôtelière fluide, du hall à la comptabilité.</p>
+            <div style="display:flex;gap:6px;">
+              <span style="width:22px;height:2px;background:oklch(0.728 0.138 89.7);display:inline-block;"></span>
+              <span style="width:6px;height:2px;background:oklch(0.5 0.04 272);display:inline-block;"></span>
+              <span style="width:6px;height:2px;background:oklch(0.5 0.04 272);display:inline-block;"></span>
+            </div>
+          </div>
+          <p style="margin:0;font-size:12px;color:oklch(0.75 0.02 272);">© 2026 Hôtel Makarim · Tétouan</p>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:44px 48px;">
+          <h1 style="margin:0 0 4px;font-size:22px;font-weight:600;color:oklch(0.22 0.02 272);">Connexion</h1>
+          <p style="margin:0 0 22px;font-size:13px;color:oklch(0.48 0.02 272);">Accédez à votre espace de travail</p>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;">
+            <span style="border:1px solid oklch(0.9 0.012 272);border-radius:999px;padding:3px 10px;font-size:11px;color:oklch(0.35 0.02 272);">Réception</span>
+            <span style="border:1px solid oklch(0.9 0.012 272);border-radius:999px;padding:3px 10px;font-size:11px;color:oklch(0.35 0.02 272);">Gouvernante</span>
+            <span style="border:1px solid oklch(0.9 0.012 272);border-radius:999px;padding:3px 10px;font-size:11px;color:oklch(0.35 0.02 272);">Direction</span>
+          </div>
+          <label style="font-size:12px;font-weight:500;color:oklch(0.25 0.02 272);margin-bottom:4px;">Email</label>
+          <div style="height:38px;border:1px solid oklch(0.9 0.012 272);border-radius:8px;margin-bottom:14px;background:oklch(0.99 0.003 272);"></div>
+          <label style="font-size:12px;font-weight:500;color:oklch(0.25 0.02 272);margin-bottom:4px;">Mot de passe</label>
+          <div style="height:38px;border:1px solid oklch(0.9 0.012 272);border-radius:8px;margin-bottom:20px;background:oklch(0.99 0.003 272);"></div>
+          <div style="height:40px;border-radius:8px;background:oklch(0.355 0.119 272.1);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;">Se connecter</div>
+          <span style="margin-top:14px;font-size:12px;text-align:center;color:oklch(0.355 0.119 272.1);">Mot de passe oublié ?</span>
+        </div>
+      </div>
+      <p style="font-size:12px;color:oklch(0.48 0.02 272);max-width:760px;margin:2px 0 0;">Panneau marine à gauche (message + logo), formulaire clair à droite. Ton "produit pro" — proche des SaaS hôteliers premium, met en avant les rôles disponibles.</p>
+    </div>
+
+    <!-- OPTION 1B -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <a id="1b" href="#1b" style="text-decoration:none;background:oklch(0.355 0.119 272.1);color:#fff;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;">1b</a>
+        <span style="font-size:13px;color:oklch(0.35 0.02 272);font-weight:500;">Plein fond marine — carte flottante</span>
+      </div>
+      <div style="width:520px;height:520px;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px oklch(0.22 0.05 272 / 0.18);background:radial-gradient(circle at 30% 20%, oklch(0.34 0.09 272), oklch(0.16 0.05 272) 70%);display:flex;align-items:center;justify-content:center;padding:20px;">
+        <div style="width:100%;max-width:380px;background:oklch(0.99 0.003 272);border-radius:16px;padding:36px 32px;box-shadow:0 8px 24px oklch(0.22 0.05 272 / 0.3);">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:22px;">
+            <div style="width:52px;height:52px;border-radius:14px;background:oklch(0.355 0.119 272.1);display:flex;align-items:center;justify-content:center;">
+              <span style="color:oklch(0.728 0.138 89.7);font-size:22px;font-weight:700;">★</span>
+            </div>
+            <h1 style="margin:0;font-size:18px;font-weight:600;color:oklch(0.22 0.02 272);">Hôtel Makarim</h1>
+            <p style="margin:0;font-size:12px;color:oklch(0.48 0.02 272);">Système de gestion hôtelière</p>
+          </div>
+          <label style="font-size:12px;font-weight:500;color:oklch(0.25 0.02 272);margin-bottom:4px;display:block;">Email</label>
+          <div style="height:36px;border:1px solid oklch(0.9 0.012 272);border-radius:8px;margin-bottom:12px;"></div>
+          <label style="font-size:12px;font-weight:500;color:oklch(0.25 0.02 272);margin-bottom:4px;display:block;">Mot de passe</label>
+          <div style="height:36px;border:1px solid oklch(0.9 0.012 272);border-radius:8px;margin-bottom:18px;"></div>
+          <div style="height:38px;border-radius:8px;background:oklch(0.355 0.119 272.1);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;margin-bottom:12px;">Se connecter</div>
+          <span style="display:block;text-align:center;font-size:12px;color:oklch(0.355 0.119 272.1);">Mot de passe oublié ?</span>
+        </div>
+      </div>
+      <p style="font-size:12px;color:oklch(0.48 0.02 272);max-width:520px;margin:2px 0 0;">Toute la page en marine profond (façon écran d'accueil "hôtel de nuit"), carte de connexion centrée. Plus feutré/luxe, logo remplacé par l'étoile du blason.</p>
+    </div>
+
+    <!-- OPTION 1C -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <a id="1c" href="#1c" style="text-decoration:none;background:oklch(0.355 0.119 272.1);color:#fff;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;">1c</a>
+        <span style="font-size:13px;color:oklch(0.35 0.02 272);font-weight:500;">Épuré — barre de marque haute, dense produit</span>
+      </div>
+      <div style="width:480px;height:520px;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px oklch(0.22 0.05 272 / 0.18);background:#fff;display:flex;flex-direction:column;">
+        <div style="height:6px;background:linear-gradient(90deg, oklch(0.355 0.119 272.1), oklch(0.728 0.138 89.7));"></div>
+        <div style="display:flex;align-items:center;gap:10px;padding:24px 28px 0;">
+          <div style="width:30px;height:30px;border-radius:8px;background:oklch(0.355 0.119 272.1);display:flex;align-items:center;justify-content:center;color:oklch(0.728 0.138 89.7);font-weight:700;font-size:14px;">M</div>
+          <span style="font-size:14px;font-weight:600;color:oklch(0.22 0.02 272);">Hôtel Makarim</span>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:8px 28px 32px;">
+          <h1 style="margin:0 0 2px;font-size:19px;font-weight:600;color:oklch(0.22 0.02 272);">Connexion</h1>
+          <p style="margin:0 0 18px;font-size:12px;color:oklch(0.48 0.02 272);">Entrez vos identifiants pour continuer</p>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px;">
+            <span style="background:oklch(0.94 0.015 272);color:oklch(0.355 0.119 272.1);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:500;">Réception</span>
+            <span style="background:oklch(0.94 0.015 272);color:oklch(0.355 0.119 272.1);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:500;">Gouvernante</span>
+            <span style="background:oklch(0.94 0.015 272);color:oklch(0.355 0.119 272.1);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:500;">Maintenance</span>
+            <span style="background:oklch(0.94 0.015 272);color:oklch(0.355 0.119 272.1);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:500;">Direction</span>
+          </div>
+          <label style="font-size:12px;font-weight:500;color:oklch(0.25 0.02 272);margin-bottom:4px;">Email</label>
+          <div style="height:36px;border:1px solid oklch(0.9 0.012 272);border-radius:6px;margin-bottom:12px;background:oklch(0.95 0.008 272);"></div>
+          <label style="font-size:12px;font-weight:500;color:oklch(0.25 0.02 272);margin-bottom:4px;">Mot de passe</label>
+          <div style="height:36px;border:1px solid oklch(0.9 0.012 272);border-radius:6px;margin-bottom:18px;background:oklch(0.95 0.008 272);"></div>
+          <div style="height:38px;border-radius:6px;background:oklch(0.355 0.119 272.1);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;">Se connecter</div>
+          <span style="margin-top:12px;font-size:12px;text-align:center;color:oklch(0.355 0.119 272.1);">Mot de passe oublié ?</span>
+        </div>
+      </div>
+      <p style="font-size:12px;color:oklch(0.48 0.02 272);max-width:480px;margin:2px 0 0;">Carte blanche, fine barre marine/or en tête, rôles en pastilles pleines. Le plus dense/produit, proche du style Booking.com référencé dans le design system du repo.</p>
+    </div>
+
+  </div>
+</section>
+
+</x-dc>
+</body>
+</html>
