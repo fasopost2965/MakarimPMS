@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ErrorState } from '@/components/ui/error-state';
 import { FileUpload } from '@/components/ui/file-upload';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
   SelectContent,
@@ -221,7 +223,14 @@ export function DocumentOcrPage() {
           <p className="text-muted-foreground text-[11px]">
             Seuls CNIE et Passeport portent une zone MRZ lisible par ce scanner.
           </p>
-          {error && <p className="text-destructive text-sm">{error}</p>}
+          {error && (
+            <ErrorState
+              title="Échec du scan"
+              description={error}
+              onRetry={fichier ? handleScan : undefined}
+              retryLabel="Reprendre le scan"
+            />
+          )}
         </div>
 
         <div className="flex flex-col gap-3">
@@ -329,7 +338,7 @@ export function DocumentOcrPage() {
           <div className="flex max-w-sm flex-col gap-1.5">
             <Label htmlFor="stay-picker">Séjour en cours</Label>
             {staysLoading ? (
-              <p className="text-muted-foreground text-sm">Chargement…</p>
+              <Skeleton className="h-9 w-full" />
             ) : staysError ? (
               <p className="text-destructive text-sm">{staysError}</p>
             ) : stays.length === 0 ? (
