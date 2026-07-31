@@ -34,16 +34,22 @@ const CANAL_LABEL: Record<Reservation['canal'], string> = {
   DIRECT: 'Direct',
   WALK_IN: 'Walk-in',
   BOOKING_COM: 'Booking.com',
+  EXPEDIA: 'Expedia',
+  AIRBNB: 'Airbnb',
 };
 const CANAL_BAR_CLASS: Record<Reservation['canal'], string> = {
   DIRECT: 'bg-primary text-primary-foreground',
   WALK_IN: 'bg-gold text-gold-foreground',
   BOOKING_COM: 'bg-info text-info-foreground',
+  EXPEDIA: 'bg-warning text-warning-foreground',
+  AIRBNB: 'bg-violet text-violet-foreground',
 };
 const CANAL_DOT_CLASS: Record<Reservation['canal'], string> = {
   DIRECT: 'bg-primary',
   WALK_IN: 'bg-gold',
   BOOKING_COM: 'bg-info',
+  EXPEDIA: 'bg-warning',
+  AIRBNB: 'bg-violet',
 };
 
 interface Selecting {
@@ -73,6 +79,7 @@ export function ReservationsCalendarPage() {
   const daysRef = useRef<Date[]>([]);
   const [pendingSelection, setPendingSelection] =
     useState<CreateReservationSelection | null>(null);
+  const [manualCreateOpen, setManualCreateOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -155,17 +162,37 @@ export function ReservationsCalendarPage() {
   }, []);
 
   async function handleConfirmCreate(input: CreateReservationConfirmInput) {
-    if (!pendingSelection) return;
+    const { prixTotalFinal, motifAjustement, ...createInput } = input;
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await createReservation({
-        roomId: pendingSelection.room.id,
-        dateArrivee: pendingSelection.dateArrivee,
-        dateDepart: pendingSelection.dateDepart,
-        ...input,
-      });
+      const reservation = await createReservation(createInput);
+      // CreateReservationDto n'a pas de champ prixTotalFinal (voir
+      // CreateReservationConfirmInput) : l'ajustement manuel du mockup
+      // s'enchaîne donc en un second appel PATCH, sur la réservation qui
+      // vient d'être créée. Si ce second appel échoue, la réservation
+      // existe déjà (non ajustée) — message d'erreur distinct pour ne pas
+      // laisser croire à un échec total.
+      if (prixTotalFinal !== undefined && motifAjustement !== undefined) {
+        try {
+          await updateReservation(reservation.id, {
+            prixTotalFinal,
+            motifAjustement,
+          });
+        } catch (patchErr) {
+          setPendingSelection(null);
+          setManualCreateOpen(false);
+          await refetch();
+          setSubmitError(
+            `Réservation créée mais ajustement du prix échoué : ${
+              patchErr instanceof Error ? patchErr.message : 'Erreur'
+            }`,
+          );
+          return;
+        }
+      }
       setPendingSelection(null);
+      setManualCreateOpen(false);
       await refetch();
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Erreur de création');
@@ -264,6 +291,9 @@ export function ReservationsCalendarPage() {
             onClick={() => setWindowStart((d) => addDays(d, 7))}
           >
             Semaine suivante →
+          </Button>
+          <Button onClick={() => setManualCreateOpen(true)}>
+            + Nouvelle réservation
           </Button>
         </div>
         <div className="text-muted-foreground flex items-center gap-3.5 text-xs">
@@ -419,9 +449,12 @@ export function ReservationsCalendarPage() {
       </p>
 
       <CreateReservationDialog
+        open={pendingSelection !== null || manualCreateOpen}
         selection={pendingSelection}
+        rooms={rooms}
         onClose={() => {
           setPendingSelection(null);
+          setManualCreateOpen(false);
           setSubmitError(null);
         }}
         onConfirm={handleConfirmCreate}

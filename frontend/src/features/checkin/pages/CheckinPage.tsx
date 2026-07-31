@@ -36,16 +36,22 @@ const CANAL_LABEL: Record<CanalReservation, string> = {
   DIRECT: 'Direct',
   WALK_IN: 'Walk-in',
   BOOKING_COM: 'Booking.com',
+  EXPEDIA: 'Expedia',
+  AIRBNB: 'Airbnb',
 };
 const CANAL_TEXT_CLASS: Record<CanalReservation, string> = {
   DIRECT: 'text-primary',
   WALK_IN: 'text-warning',
   BOOKING_COM: 'text-info',
+  EXPEDIA: 'text-warning',
+  AIRBNB: 'text-violet',
 };
 const CANAL_AVATAR_CLASS: Record<CanalReservation, string> = {
   DIRECT: 'bg-primary/15 text-primary',
   WALK_IN: 'bg-warning/20 text-warning',
   BOOKING_COM: 'bg-info/15 text-info',
+  EXPEDIA: 'bg-warning/20 text-warning',
+  AIRBNB: 'bg-violet/15 text-violet',
 };
 
 function resolveCanal(reservation: Reservation | null): CanalReservation {
