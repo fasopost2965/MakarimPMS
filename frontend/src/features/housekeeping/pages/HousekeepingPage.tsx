@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -95,6 +95,8 @@ const ALL_STATUSES = 'ALL';
 const ALL_FLOORS = 'ALL';
 const NO_FLOOR = 'NO_FLOOR';
 
+type LoadMode = 'initial' | 'refresh' | 'status-update';
+
 function floorLabel(etage: number | null) {
   return etage === null ? 'Sans étage renseigné' : `Étage ${etage}`;
 }
@@ -103,6 +105,9 @@ export function HousekeepingPage() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [updatingRoomId, setUpdatingRoomId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [historyRoom, setHistoryRoom] = useState<Room | null>(null);
@@ -111,31 +116,67 @@ export function HousekeepingPage() {
   >(ALL_STATUSES);
   const [floorFilter, setFloorFilter] = useState(ALL_FLOORS);
   const [roomSearch, setRoomSearch] = useState('');
+  const requestSequence = useRef(0);
+  const initialRequestId = useRef<number | null>(null);
+  const refreshRequestId = useRef<number | null>(null);
 
-  const refetch = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
+  const loadRooms = useCallback(async (mode: LoadMode) => {
+    const requestId = ++requestSequence.current;
+    if (mode === 'initial') {
+      initialRequestId.current = requestId;
+      setLoading(true);
+      setLoadError(null);
+    } else if (mode === 'refresh') {
+      refreshRequestId.current = requestId;
+      setRefreshing(true);
+      setRefreshError(null);
+    }
+
     try {
-      setRooms(await listRooms());
+      const nextRooms = await listRooms();
+      if (requestId !== requestSequence.current) return false;
+
+      setRooms(nextRooms);
+      setLastUpdatedAt(new Date());
+      return true;
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Erreur de chargement');
+      if (requestId !== requestSequence.current) return false;
+
+      const message =
+        err instanceof Error ? err.message : 'Erreur de chargement';
+      if (mode === 'initial') setLoadError(message);
+      else if (mode === 'refresh') setRefreshError(message);
+      else throw err;
+      return false;
     } finally {
-      setLoading(false);
+      if (initialRequestId.current === requestId) {
+        initialRequestId.current = null;
+        setLoading(false);
+      }
+      if (refreshRequestId.current === requestId) {
+        refreshRequestId.current = null;
+        setRefreshing(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    // Chargement au montage, pas de condition de course (un seul fetch).
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void refetch();
-  }, [refetch]);
+    void loadRooms('initial');
+
+    return () => {
+      requestSequence.current += 1;
+      initialRequestId.current = null;
+      refreshRequestId.current = null;
+    };
+  }, [loadRooms]);
 
   async function handleChange(roomId: number, statut: StatutChambre) {
     setActionError(null);
     setUpdatingRoomId(roomId);
     try {
       await updateRoomStatus(roomId, statut);
-      await refetch();
+      await loadRooms('status-update');
     } catch (err) {
       setActionError(
         err instanceof Error ? err.message : 'Erreur de mise à jour du statut',
@@ -223,7 +264,7 @@ export function HousekeepingPage() {
         <ErrorState
           title="Impossible de charger les chambres"
           description={loadError}
-          onRetry={() => void refetch()}
+          onRetry={() => void loadRooms('initial')}
         />
       ) : (
         <>
@@ -337,13 +378,53 @@ export function HousekeepingPage() {
             </Button>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-muted-foreground text-sm" aria-live="polite">
               {filteredRooms.length}{' '}
               {filteredRooms.length > 1 ? 'chambres' : 'chambre'} sur{' '}
               {rooms.length}
             </p>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <p className="text-muted-foreground text-xs" aria-live="polite">
+                {lastUpdatedAt
+                  ? `Dernière mise à jour réussie : ${lastUpdatedAt.toLocaleString(
+                      'fr-FR',
+                      {
+                        dateStyle: 'short',
+                        timeStyle: 'medium',
+                      },
+                    )}`
+                  : 'Aucune mise à jour réussie'}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void loadRooms('refresh')}
+                disabled={refreshing}
+              >
+                {refreshing ? 'Actualisation…' : 'Actualiser'}
+              </Button>
+            </div>
           </div>
+
+          {refreshError && (
+            <div
+              className="border-destructive/40 bg-destructive/5 flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"
+              role="alert"
+            >
+              <p className="text-destructive text-sm">
+                Échec de l’actualisation : {refreshError}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void loadRooms('refresh')}
+                disabled={refreshing}
+              >
+                Réessayer l’actualisation
+              </Button>
+            </div>
+          )}
 
           {rooms.length === 0 ? (
             <EmptyState

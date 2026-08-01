@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Room } from '../../reservations/types';
 
@@ -10,7 +10,7 @@ vi.mock('../api', () => ({
 }));
 
 import { HousekeepingPage } from './HousekeepingPage';
-import { getRoomStatusHistory, listRooms } from '../api';
+import { getRoomStatusHistory, listRooms, updateRoomStatus } from '../api';
 
 function room(overrides: Partial<Room>): Room {
   return {
@@ -22,6 +22,23 @@ function room(overrides: Partial<Room>): Room {
     roomType: { id: 1, nom: 'Single', prixBase: '400', capacite: 1 },
     ...overrides,
   };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function formattedTimestamp(date: Date) {
+  return date.toLocaleString('fr-FR', {
+    dateStyle: 'short',
+    timeStyle: 'medium',
+  });
 }
 
 async function chooseFilter(
@@ -39,6 +56,29 @@ beforeEach(() => {
 });
 
 describe('HousekeepingPage — filtres et indicateurs', () => {
+  it('distingue le chargement initial avant la première réponse', async () => {
+    const initialLoad = deferred<Room[]>();
+    vi.mocked(listRooms).mockReturnValue(initialLoad.promise);
+
+    render(<HousekeepingPage />);
+
+    expect(screen.getByText('Chargement des chambres…')).toHaveAttribute(
+      'role',
+      'status',
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Actualiser' }),
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      initialLoad.resolve([room({ numero: '101' })]);
+    });
+
+    expect(
+      await screen.findByRole('button', { name: 'Actualiser' }),
+    ).toBeEnabled();
+  });
+
   it('combine le statut, l’étage et la recherche par numéro', async () => {
     const user = userEvent.setup();
     vi.mocked(listRooms).mockResolvedValue([
@@ -235,6 +275,192 @@ describe('HousekeepingPage — filtres et indicateurs', () => {
     expect(
       await screen.findByText('Aucun historique pour la chambre 101'),
     ).toBeInTheDocument();
+  });
+
+  it('affiche la date de la dernière mise à jour après le chargement initial', async () => {
+    vi.mocked(listRooms).mockResolvedValue([room({ numero: '101' })]);
+
+    render(<HousekeepingPage />);
+
+    await screen.findByText('1 chambre sur 1');
+    expect(
+      screen.getByText(/Dernière mise à jour réussie :/),
+    ).toBeInTheDocument();
+    expect(listRooms).toHaveBeenCalledTimes(1);
+  });
+
+  it('conserve la liste et les filtres pendant une actualisation manuelle', async () => {
+    const user = userEvent.setup();
+    const refresh = deferred<Room[]>();
+    vi.mocked(listRooms)
+      .mockResolvedValueOnce([
+        room({ id: 1, numero: '101' }),
+        room({ id: 2, numero: '202' }),
+      ])
+      .mockReturnValueOnce(refresh.promise);
+
+    render(<HousekeepingPage />);
+    await screen.findByText('2 chambres sur 2');
+    await user.type(screen.getByLabelText('Numéro de chambre'), '101');
+    await user.click(screen.getByRole('button', { name: 'Actualiser' }));
+
+    expect(
+      screen.getByRole('button', {
+        name: 'Voir l’historique de la chambre 101',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Chargement des chambres…'),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Numéro de chambre')).toHaveValue('101');
+    expect(
+      screen.getByRole('button', { name: 'Actualisation…' }),
+    ).toBeDisabled();
+
+    await act(async () => {
+      refresh.resolve([
+        room({ id: 1, numero: '101' }),
+        room({ id: 2, numero: '202' }),
+      ]);
+    });
+
+    expect(screen.getByRole('button', { name: 'Actualiser' })).toBeEnabled();
+    expect(screen.getByLabelText('Numéro de chambre')).toHaveValue('101');
+    expect(screen.getByText('1 chambre sur 2')).toBeInTheDocument();
+  });
+
+  it('conserve les données et la date après une erreur locale puis permet de réessayer', async () => {
+    const user = userEvent.setup();
+    vi.mocked(listRooms)
+      .mockResolvedValueOnce([room({ numero: '101' })])
+      .mockRejectedValueOnce(new Error('Réseau indisponible'))
+      .mockResolvedValueOnce([room({ numero: '101' })]);
+
+    render(<HousekeepingPage />);
+    await screen.findByText('1 chambre sur 1');
+    const initialTimestamp = screen.getByText(
+      /Dernière mise à jour réussie :/,
+    ).textContent;
+
+    await user.click(screen.getByRole('button', { name: 'Actualiser' }));
+
+    expect(
+      await screen.findByText('Échec de l’actualisation : Réseau indisponible'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {
+        name: 'Voir l’historique de la chambre 101',
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Dernière mise à jour réussie :/).textContent).toBe(
+      initialTimestamp,
+    );
+
+    await user.click(
+      screen.getByRole('button', { name: 'Réessayer l’actualisation' }),
+    );
+
+    expect(
+      await screen.findByRole('button', { name: 'Actualiser' }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByText(/Échec de l’actualisation/),
+    ).not.toBeInTheDocument();
+    expect(listRooms).toHaveBeenCalledTimes(3);
+  });
+
+  it('met à jour la date uniquement après une actualisation réussie', async () => {
+    const initialDate = new Date('2026-08-01T10:00:00.000Z');
+    const refreshedDate = new Date('2026-08-01T11:30:00.000Z');
+    vi.useFakeTimers();
+
+    try {
+      vi.setSystemTime(initialDate);
+      vi.mocked(listRooms).mockResolvedValue([room({ numero: '101' })]);
+      render(<HousekeepingPage />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(
+        screen.getByText(
+          `Dernière mise à jour réussie : ${formattedTimestamp(initialDate)}`,
+        ),
+      ).toBeInTheDocument();
+
+      vi.setSystemTime(refreshedDate);
+      fireEvent.click(screen.getByRole('button', { name: 'Actualiser' }));
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(
+        screen.getByText(
+          `Dernière mise à jour réussie : ${formattedTimestamp(refreshedDate)}`,
+        ),
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ignore une réponse d’actualisation devenue obsolète après une transition', async () => {
+    const user = userEvent.setup();
+    const staleRefresh = deferred<Room[]>();
+    vi.mocked(updateRoomStatus).mockResolvedValue(
+      room({ id: 1, numero: '101', statut: 'EN_NETTOYAGE' }),
+    );
+    vi.mocked(listRooms)
+      .mockResolvedValueOnce([
+        room({ id: 1, numero: '101', statut: 'LIBRE_PROPRE' }),
+      ])
+      .mockReturnValueOnce(staleRefresh.promise)
+      .mockResolvedValueOnce([
+        room({ id: 1, numero: '101', statut: 'EN_NETTOYAGE' }),
+      ]);
+
+    render(<HousekeepingPage />);
+    await screen.findByText('1 chambre sur 1');
+    await user.click(screen.getByRole('button', { name: 'Actualiser' }));
+    await user.click(
+      screen.getByLabelText('Changer le statut de la chambre 101'),
+    );
+    await user.click(
+      await screen.findByRole('option', { name: 'En nettoyage' }),
+    );
+
+    expect(
+      await screen.findByLabelText('En nettoyage : 1'),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      staleRefresh.resolve([
+        room({ id: 1, numero: '101', statut: 'LIBRE_PROPRE' }),
+      ]);
+    });
+
+    expect(screen.getByLabelText('En nettoyage : 1')).toBeInTheDocument();
+    expect(screen.getByLabelText('Propres : 0')).toBeInTheDocument();
+  });
+
+  it('ne déclenche aucune actualisation automatique', async () => {
+    vi.useFakeTimers();
+    vi.mocked(listRooms).mockResolvedValue([room({ numero: '101' })]);
+
+    try {
+      render(<HousekeepingPage />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(listRooms).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        vi.advanceTimersByTime(60_000);
+      });
+
+      expect(listRooms).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
