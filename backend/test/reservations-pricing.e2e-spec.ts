@@ -177,9 +177,24 @@ describe('Reservations — tarification saisonnière (e2e)', () => {
       });
 
       expect(res.status).toBe(200);
-      expect(Number((res.body as { prixEstime: string }).prixEstime)).toBe(
+      const body = res.body as {
+        prixEstime: string;
+        detail: {
+          nombreNuits: number;
+          hebergement: string;
+          supplementFormule: string;
+          totalEstime: string;
+        };
+      };
+      expect(Number(body.prixEstime)).toBe(
         2 * PRIX_SAISON_1 + 2 * PRIX_SAISON_2,
       );
+      expect(body.detail).toEqual({
+        nombreNuits: 4,
+        hebergement: String(2 * PRIX_SAISON_1 + 2 * PRIX_SAISON_2),
+        supplementFormule: '0',
+        totalEstime: String(2 * PRIX_SAISON_1 + 2 * PRIX_SAISON_2),
+      });
       // Preuve de rigueur (aucune réservation/RoomNight créée) : la table
       // reste vide pour ce type de chambre isolé du seed.
       const count = await prisma.reservation.count({

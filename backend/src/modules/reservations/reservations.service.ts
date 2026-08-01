@@ -45,6 +45,13 @@ type ReservationWithIncludes = Prisma.ReservationGetPayload<{
   include: typeof RESERVATION_INCLUDE;
 }>;
 
+export interface ReservationPriceEstimate {
+  nombreNuits: number;
+  hebergement: Prisma.Decimal;
+  supplementFormule: Prisma.Decimal;
+  totalEstime: Prisma.Decimal;
+}
+
 @Injectable()
 export class ReservationsService {
   constructor(
@@ -70,12 +77,12 @@ export class ReservationsService {
   // prixFormule × nbPersonnes × nbNuits) — nbPersonnes = RoomType.capacite,
   // seule notion d'occupation du schéma (pas de champ "nombre d'adultes"
   // sur Reservation).
-  private async calculatePrixTotal(
+  private async calculatePrixDetail(
     tx: Prisma.TransactionClient,
     roomTypeId: number,
     nights: Date[],
     formule: FormuleHebergement,
-  ) {
+  ): Promise<ReservationPriceEstimate> {
     const roomType = await tx.roomType.findUnique({
       where: { id: roomTypeId },
     });
@@ -100,7 +107,25 @@ export class ReservationsService {
       nights.length,
       roomType.capacite,
     );
-    return hebergement.add(formuleTotal);
+    return {
+      nombreNuits: nights.length,
+      hebergement,
+      supplementFormule: formuleTotal,
+      // Les taxes configurables sont appliquées par Billing à la facturation,
+      // pas au stade de la réservation. Ce total est donc une estimation du
+      // prix d'hébergement, jamais présenté comme un total TTC.
+      totalEstime: hebergement.add(formuleTotal),
+    };
+  }
+
+  private async calculatePrixTotal(
+    tx: Prisma.TransactionClient,
+    roomTypeId: number,
+    nights: Date[],
+    formule: FormuleHebergement,
+  ) {
+    return (await this.calculatePrixDetail(tx, roomTypeId, nights, formule))
+      .totalEstime;
   }
 
   // F4 — façade publique de calculatePrixTotal pour le Booking Engine
@@ -118,6 +143,17 @@ export class ReservationsService {
     this.assertDateRangeValid(dateArrivee, dateDepart);
     const nights = getNightsBetween(dateArrivee, dateDepart);
     return this.calculatePrixTotal(this.prisma, roomTypeId, nights, formule);
+  }
+
+  async estimatePrixDetail(
+    roomTypeId: number,
+    dateArrivee: string,
+    dateDepart: string,
+    formule: FormuleHebergement = FormuleHebergement.BED_AND_BREAKFAST,
+  ) {
+    this.assertDateRangeValid(dateArrivee, dateDepart);
+    const nights = getNightsBetween(dateArrivee, dateDepart);
+    return this.calculatePrixDetail(this.prisma, roomTypeId, nights, formule);
   }
 
   // B5 — restrictions tarifaires (min stay / stop sale). Chargées via le

@@ -11,6 +11,7 @@ export type GuestSelection = { guestId: number } | { guest: CreateGuestInput };
 
 interface GuestPickerProps {
   onChange: (selection: GuestSelection | null) => void;
+  onDisplayChange?: (displayName: string | null) => void;
 }
 
 const CATEGORIE_LABEL: Record<Guest['categorie'], string> = {
@@ -27,7 +28,7 @@ const CATEGORIE_LABEL: Record<Guest['categorie'], string> = {
 // Rapporte la sélection via onChange à chaque changement, plutôt que de la
 // posséder — le parent décide quand elle est utilisable (bouton "Créer"
 // désactivé tant que onChange(null) est le dernier appel).
-export function GuestPicker({ onChange }: GuestPickerProps) {
+export function GuestPicker({ onChange, onDisplayChange }: GuestPickerProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Guest[]>([]);
   const [searching, setSearching] = useState(false);
@@ -69,6 +70,7 @@ export function GuestPicker({ onChange }: GuestPickerProps) {
     setQuery('');
     setResults([]);
     onChange({ guestId: guest.id });
+    onDisplayChange?.(`${guest.prenom} ${guest.nom}`);
   }
 
   function clearSelection() {
@@ -93,6 +95,9 @@ export function GuestPicker({ onChange }: GuestPickerProps) {
             },
           }
         : null,
+    );
+    onDisplayChange?.(
+      next.nom && next.prenom ? `${next.prenom} ${next.nom}` : null,
     );
   }
 

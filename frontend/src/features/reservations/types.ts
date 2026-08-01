@@ -108,6 +108,22 @@ export interface UpdateReservationInput {
   motifAjustement?: string;
 }
 
+export interface ReservationPriceEstimate {
+  prixEstime: string;
+  detail: {
+    nombreNuits: number;
+    hebergement: string;
+    supplementFormule: string;
+    totalEstime: string;
+  };
+}
+
+export interface RoomAvailability {
+  disponible: boolean;
+  datesConflit: string[];
+  motifIndisponibilite?: string;
+}
+
 // CH-007 (F6, self-checkin) — réponse de POST /reservations/:id/self-checkin-link.
 export interface SelfCheckinLink {
   token: string;

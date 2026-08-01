@@ -3,7 +3,9 @@ import type {
   CreateReservationInput,
   FormuleHebergement,
   Reservation,
+  ReservationPriceEstimate,
   Room,
+  RoomAvailability,
   SelfCheckinLink,
   SelfCheckinPending,
   UpdateReservationInput,
@@ -27,6 +29,40 @@ export function listReservations(params?: { du?: string; au?: string }) {
   return apiRequest<Reservation[]>(`/reservations${qs ? `?${qs}` : ''}`);
 }
 
+export function listAvailableRooms(params: {
+  dateArrivee: string;
+  dateDepart: string;
+  roomTypeId?: number;
+}) {
+  const query = new URLSearchParams({
+    dateDebut: params.dateArrivee,
+    dateFin: params.dateDepart,
+  });
+  if (params.roomTypeId !== undefined) {
+    query.set('roomTypeId', String(params.roomTypeId));
+  }
+  return apiRequest<Room[]>(`/reservations/disponibilites?${query.toString()}`);
+}
+
+export function checkRoomAvailability(params: {
+  roomId: number;
+  dateArrivee: string;
+  dateDepart: string;
+  excludeReservationId?: number;
+}) {
+  const query = new URLSearchParams({
+    roomId: String(params.roomId),
+    dateArrivee: params.dateArrivee,
+    dateDepart: params.dateDepart,
+  });
+  if (params.excludeReservationId !== undefined) {
+    query.set('excludeReservationId', String(params.excludeReservationId));
+  }
+  return apiRequest<RoomAvailability>(
+    `/reservations/availability?${query.toString()}`,
+  );
+}
+
 // CH-061 (Lot #3 design) — aperçu de prix en direct côté formulaire
 // réception, avant confirmation (ne crée rien). Réutilise le même calcul
 // que la création réelle (ReservationsService.estimatePrixTotal).
@@ -42,7 +78,7 @@ export function estimatePrice(params: {
     dateDepart: params.dateDepart,
   });
   if (params.formule) query.set('formule', params.formule);
-  return apiRequest<{ prixEstime: string }>(
+  return apiRequest<ReservationPriceEstimate>(
     `/reservations/estimation-prix?${query.toString()}`,
   );
 }

@@ -70,13 +70,23 @@ export class ReservationsController {
   })
   @Get('estimation-prix')
   async estimatePrice(@Query() dto: EstimatePriceDto) {
-    const prixEstime = await this.reservationsService.estimatePrixTotal(
+    const estimate = await this.reservationsService.estimatePrixDetail(
       dto.roomTypeId,
       dto.dateArrivee,
       dto.dateDepart,
       dto.formule,
     );
-    return { prixEstime: prixEstime.toString() };
+    return {
+      // Compatibilité obligatoire avec le formulaire walk-in et les clients
+      // existants de cette route.
+      prixEstime: estimate.totalEstime.toString(),
+      detail: {
+        nombreNuits: estimate.nombreNuits,
+        hebergement: estimate.hebergement.toString(),
+        supplementFormule: estimate.supplementFormule.toString(),
+        totalEstime: estimate.totalEstime.toString(),
+      },
+    };
   }
 
   @RequirePermission('reservations', 'write')
