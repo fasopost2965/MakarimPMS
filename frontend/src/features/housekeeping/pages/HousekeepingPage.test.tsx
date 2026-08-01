@@ -233,7 +233,7 @@ describe('HousekeepingPage — filtres et indicateurs', () => {
 
     expect(getRoomStatusHistory).toHaveBeenCalledWith(1);
     expect(
-      await screen.findByText('Aucun changement de statut enregistré.'),
+      await screen.findByText('Aucun historique pour la chambre 101'),
     ).toBeInTheDocument();
   });
 });
