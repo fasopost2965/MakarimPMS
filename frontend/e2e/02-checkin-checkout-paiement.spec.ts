@@ -69,15 +69,13 @@ test('check-in walk-in, check-out bloqué sur solde impayé, débloqué après p
   // cet état. Remise à Libre & propre via l'écran ménage, même round-trip
   // que 03-housekeeping-statut.spec.ts.
   await gotoTab(page, 'housekeeping');
-  const roomCard = page.locator('[role="button"]', { hasText: '501' });
-  await roomCard.getByRole('combobox').click();
+  const statusSelect = page.getByRole('combobox', {
+    name: 'Changer le statut de la chambre 501',
+  });
+  await statusSelect.click();
   await page.getByRole('option', { name: 'En nettoyage' }).click();
-  await expect(roomCard.locator('[data-slot="badge"]')).toHaveText(
-    'En nettoyage',
-  );
-  await roomCard.getByRole('combobox').click();
+  await expect(statusSelect).toContainText('En nettoyage');
+  await statusSelect.click();
   await page.getByRole('option', { name: 'Libre & propre' }).click();
-  await expect(roomCard.locator('[data-slot="badge"]')).toHaveText(
-    'Libre & propre',
-  );
+  await expect(statusSelect).toContainText('Libre & propre');
 });
