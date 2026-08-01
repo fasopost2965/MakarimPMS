@@ -3,10 +3,13 @@ import type { CreateMaintenanceTicketInput, MaintenanceTicket } from './types';
 
 export { listRooms } from '../reservations/api';
 
-export function listTickets(params?: { ouvert?: boolean }) {
+export function listTickets(params?: { ouvert?: boolean; roomId?: number }) {
   const query = new URLSearchParams();
   if (params?.ouvert !== undefined) {
     query.set('ouvert', String(params.ouvert));
+  }
+  if (params?.roomId !== undefined) {
+    query.set('roomId', String(params.roomId));
   }
   const qs = query.toString();
   return apiRequest<MaintenanceTicket[]>(
