@@ -14,6 +14,10 @@ export function listTickets(params?: { ouvert?: boolean }) {
   );
 }
 
+export function getTicket(id: number) {
+  return apiRequest<MaintenanceTicket>(`/maintenance-tickets/${id}`);
+}
+
 export function createTicket(input: CreateMaintenanceTicketInput) {
   return apiRequest<MaintenanceTicket>('/maintenance-tickets', {
     method: 'POST',
