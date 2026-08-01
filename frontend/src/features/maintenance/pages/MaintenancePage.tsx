@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Wrench } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { FileUpload } from '@/components/ui/file-upload';
@@ -20,6 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { createTicket, listRooms, listTickets, resolveTicket } from '../api';
+import { MaintenanceTicketDetailDialog } from '../components/MaintenanceTicketDetailDialog';
 import type {
   CreateMaintenanceTicketInput,
   MaintenanceTicket,
@@ -74,6 +77,12 @@ function formatDateCourte(iso: string) {
 
 const PHOTO_MAX_SIZE_MB = 5;
 const PHOTO_MAX_SIZE_BYTES = PHOTO_MAX_SIZE_MB * 1024 * 1024;
+const ALL_PRIORITIES = 'ALL';
+const ALL_STATUSES = 'ALL';
+const OPEN_STATUS = 'OPEN';
+const RESOLVED_STATUS = 'RESOLVED';
+const ALL_ROOMS = 'ALL';
+const COMMON_AREA = 'COMMON_AREA';
 
 // Module maintenance simplifié (cahier des charges §5.8, Phase 2) : liste
 // des tickets, création (chambre optionnelle — bloque automatiquement la
@@ -84,44 +93,68 @@ const PHOTO_MAX_SIZE_BYTES = PHOTO_MAX_SIZE_MB * 1024 * 1024;
 export function MaintenancePage() {
   const [tickets, setTickets] = useState<MaintenanceTicket[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [ticketsLoading, setTicketsLoading] = useState(true);
+  const [ticketsError, setTicketsError] = useState<string | null>(null);
+  const [roomsLoading, setRoomsLoading] = useState(true);
+  const [roomsError, setRoomsError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [resolvingId, setResolvingId] = useState<number | null>(null);
-  const [statutFilter, setStatutFilter] = useState<PrioriteTicket | null>(null);
+  const [priorityFilter, setPriorityFilter] = useState<
+    PrioriteTicket | typeof ALL_PRIORITIES
+  >(ALL_PRIORITIES);
+  const [statusFilter, setStatusFilter] = useState<
+    typeof ALL_STATUSES | typeof OPEN_STATUS | typeof RESOLVED_STATUS
+  >(ALL_STATUSES);
+  const [roomFilter, setRoomFilter] = useState(ALL_ROOMS);
+  const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
+  const [detailTicketId, setDetailTicketId] = useState<number | null>(null);
 
-  const refetch = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
+  const refetchTickets = useCallback(async () => {
+    setTicketsLoading(true);
+    setTicketsError(null);
     try {
-      const [ticketsData, roomsData] = await Promise.all([
-        listTickets(),
-        listRooms(),
-      ]);
-      setTickets(ticketsData);
-      setRooms(roomsData);
+      setTickets(await listTickets());
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Erreur de chargement');
+      setTicketsError(
+        err instanceof Error ? err.message : 'Erreur de chargement des tickets',
+      );
     } finally {
-      setLoading(false);
+      setTicketsLoading(false);
+    }
+  }, []);
+
+  const refetchRooms = useCallback(async () => {
+    setRoomsLoading(true);
+    setRoomsError(null);
+    try {
+      setRooms(await listRooms());
+    } catch (err) {
+      setRoomsError(
+        err instanceof Error
+          ? err.message
+          : 'Erreur de chargement des chambres',
+      );
+    } finally {
+      setRoomsLoading(false);
     }
   }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void refetch();
-  }, [refetch]);
+    void refetchTickets();
+    void refetchRooms();
+  }, [refetchRooms, refetchTickets]);
 
   async function handleResolve(id: number) {
     setActionError(null);
     setResolvingId(id);
     try {
       await resolveTicket(id);
-      await refetch();
+      await refetchTickets();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -135,7 +168,7 @@ export function MaintenancePage() {
     try {
       await createTicket(input);
       setDialogOpen(false);
-      await refetch();
+      await refetchTickets();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -152,25 +185,81 @@ export function MaintenancePage() {
     return counts;
   }, [tickets]);
 
-  const filteredTickets = statutFilter
-    ? tickets.filter((t) => t.priorite === statutFilter)
-    : tickets;
+  const ticketRooms = useMemo(() => {
+    const byId = new Map<number, Room>();
+    for (const ticket of tickets) {
+      if (ticket.room) byId.set(ticket.room.id, ticket.room);
+    }
+    return [...byId.values()].sort((a, b) =>
+      a.numero.localeCompare(b.numero, undefined, { numeric: true }),
+    );
+  }, [tickets]);
+
+  const filteredTickets = useMemo(() => {
+    const normalizedSearch = search.trim().toLocaleLowerCase('fr-FR');
+
+    return tickets.filter((ticket) => {
+      const matchesPriority =
+        priorityFilter === ALL_PRIORITIES || ticket.priorite === priorityFilter;
+      const matchesStatus =
+        statusFilter === ALL_STATUSES ||
+        (statusFilter === OPEN_STATUS
+          ? ticket.resoluAt === null
+          : ticket.resoluAt !== null);
+      const matchesRoom =
+        roomFilter === ALL_ROOMS ||
+        (roomFilter === COMMON_AREA
+          ? ticket.roomId === null
+          : ticket.roomId === Number(roomFilter));
+      const searchableValues = [
+        ticket.typePanne,
+        ticket.room?.numero ?? '',
+        ticket.assigneA ?? '',
+        String(ticket.id),
+      ];
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        searchableValues.some((value) =>
+          value.toLocaleLowerCase('fr-FR').includes(normalizedSearch),
+        );
+
+      return matchesPriority && matchesStatus && matchesRoom && matchesSearch;
+    });
+  }, [priorityFilter, roomFilter, search, statusFilter, tickets]);
+
+  const filtersActive =
+    priorityFilter !== ALL_PRIORITIES ||
+    statusFilter !== ALL_STATUSES ||
+    roomFilter !== ALL_ROOMS ||
+    search.trim().length > 0;
+
+  function resetFilters() {
+    setPriorityFilter(ALL_PRIORITIES);
+    setStatusFilter(ALL_STATUSES);
+    setRoomFilter(ALL_ROOMS);
+    setSearch('');
+  }
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
+        <div
+          className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+          aria-label="Tickets ouverts par priorité"
+        >
           {PRIORITES.slice()
             .reverse()
             .map((priorite) => {
-              const active = statutFilter === priorite;
+              const active = priorityFilter === priorite;
               return (
                 <button
                   key={priorite}
                   type="button"
+                  aria-pressed={active}
+                  aria-label={`${PRIORITE_LABEL[priorite]} : ${ouvertsParPriorite.get(priorite) ?? 0} tickets ouverts`}
                   onClick={() =>
-                    setStatutFilter((current) =>
-                      current === priorite ? null : priorite,
+                    setPriorityFilter((current) =>
+                      current === priorite ? ALL_PRIORITIES : priorite,
                     )
                   }
                   className={`flex items-center gap-2 rounded-lg border px-3.5 py-2 text-xs transition-colors ${
@@ -184,6 +273,7 @@ export function MaintenancePage() {
                 >
                   <span
                     className={`size-2 rounded-full ${PRIORITE_DOT_CLASS[priorite]}`}
+                    aria-hidden="true"
                   />
                   <span className="text-sm font-bold">
                     {ouvertsParPriorite.get(priorite) ?? 0}
@@ -200,17 +290,160 @@ export function MaintenancePage() {
         </Button>
       </div>
 
-      {loadError && <p className="text-destructive text-sm">{loadError}</p>}
       {actionError && <p className="text-destructive text-sm">{actionError}</p>}
 
-      {loading ? (
-        <p className="text-muted-foreground text-sm">Chargement…</p>
+      <div className="bg-card grid gap-3 rounded-lg border p-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1.5fr_auto] lg:items-end">
+        <div className="grid gap-1.5">
+          <Label htmlFor="maintenance-priority-filter">Priorité</Label>
+          <Select
+            value={priorityFilter}
+            onValueChange={(value) =>
+              value &&
+              setPriorityFilter(value as PrioriteTicket | typeof ALL_PRIORITIES)
+            }
+            items={[
+              { value: ALL_PRIORITIES, label: 'Toutes les priorités' },
+              ...PRIORITES.map((priority) => ({
+                value: priority,
+                label: PRIORITE_LABEL[priority],
+              })),
+            ]}
+          >
+            <SelectTrigger id="maintenance-priority-filter" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_PRIORITIES}>
+                Toutes les priorités
+              </SelectItem>
+              {PRIORITES.map((priority) => (
+                <SelectItem key={priority} value={priority}>
+                  {PRIORITE_LABEL[priority]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="grid gap-1.5">
+          <Label htmlFor="maintenance-status-filter">Statut</Label>
+          <Select
+            value={statusFilter}
+            onValueChange={(value) =>
+              value &&
+              setStatusFilter(
+                value as
+                  | typeof ALL_STATUSES
+                  | typeof OPEN_STATUS
+                  | typeof RESOLVED_STATUS,
+              )
+            }
+            items={[
+              { value: ALL_STATUSES, label: 'Tous les statuts' },
+              { value: OPEN_STATUS, label: 'Ouverts' },
+              { value: RESOLVED_STATUS, label: 'Résolus' },
+            ]}
+          >
+            <SelectTrigger id="maintenance-status-filter" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_STATUSES}>Tous les statuts</SelectItem>
+              <SelectItem value={OPEN_STATUS}>Ouverts</SelectItem>
+              <SelectItem value={RESOLVED_STATUS}>Résolus</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="grid gap-1.5">
+          <Label htmlFor="maintenance-room-filter">Chambre</Label>
+          <Select
+            value={roomFilter}
+            onValueChange={(value) => value && setRoomFilter(value)}
+            items={[
+              { value: ALL_ROOMS, label: 'Toutes les chambres' },
+              { value: COMMON_AREA, label: 'Zone commune' },
+              ...ticketRooms.map((room) => ({
+                value: String(room.id),
+                label: `Chambre ${room.numero}`,
+              })),
+            ]}
+          >
+            <SelectTrigger id="maintenance-room-filter" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_ROOMS}>Toutes les chambres</SelectItem>
+              <SelectItem value={COMMON_AREA}>Zone commune</SelectItem>
+              {ticketRooms.map((room) => (
+                <SelectItem key={room.id} value={String(room.id)}>
+                  Chambre {room.numero}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="grid gap-1.5 sm:col-span-2 lg:col-span-1">
+          <Label htmlFor="maintenance-search">Recherche</Label>
+          <Input
+            id="maintenance-search"
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Panne, chambre, assigné ou identifiant"
+          />
+        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          className="sm:col-span-2 lg:col-span-4 lg:justify-self-end"
+          onClick={resetFilters}
+          disabled={!filtersActive}
+        >
+          Réinitialiser
+        </Button>
+      </div>
+
+      <p className="text-muted-foreground text-sm" aria-live="polite">
+        {filteredTickets.length}{' '}
+        {filteredTickets.length > 1 ? 'tickets' : 'ticket'} sur {tickets.length}
+      </p>
+
+      {ticketsError && (
+        <ErrorState
+          title="Impossible de charger les tickets"
+          description={ticketsError}
+          onRetry={() => void refetchTickets()}
+        />
+      )}
+
+      {ticketsLoading && tickets.length === 0 ? (
+        <p className="text-muted-foreground text-sm" role="status">
+          Chargement des tickets…
+        </p>
       ) : tickets.length === 0 ? (
-        <p className="text-muted-foreground text-sm">Aucun ticket.</p>
+        !ticketsError ? (
+          <EmptyState
+            title="Aucun ticket de maintenance"
+            description="Aucun ticket n’est actuellement disponible."
+          />
+        ) : null
+      ) : filteredTickets.length === 0 ? (
+        <EmptyState
+          title="Aucun ticket ne correspond aux filtres"
+          description="Modifiez vos critères ou réinitialisez les filtres pour afficher les tickets."
+          action={
+            filtersActive
+              ? { label: 'Réinitialiser les filtres', onClick: resetFilters }
+              : undefined
+          }
+        />
       ) : (
         <div className="bg-card overflow-hidden rounded-lg border">
-          <div className="bg-muted/60 text-muted-foreground grid grid-cols-[44px_1fr_110px_110px_90px_110px] items-center gap-3 border-b px-4 py-2 text-[11px] font-bold tracking-wide uppercase">
-            <span />
+          <div className="bg-muted/60 text-muted-foreground hidden grid-cols-[44px_1fr_110px_110px_90px_110px] items-center gap-3 border-b px-4 py-2 text-[11px] font-bold tracking-wide uppercase md:grid">
+            <span aria-hidden="true" />
             <span>Ticket</span>
             <span>Priorité</span>
             <span>Assigné</span>
@@ -218,58 +451,59 @@ export function MaintenancePage() {
             <span className="text-right">Action</span>
           </div>
 
-          {filteredTickets.length === 0 && (
-            <p className="text-muted-foreground p-4 text-sm">
-              Aucun ticket pour ce filtre.
-            </p>
-          )}
-
           {filteredTickets.map((ticket) => (
             <div
               key={ticket.id}
-              className="hover:bg-muted/40 grid grid-cols-[44px_1fr_110px_110px_90px_110px] items-center gap-3 border-b px-4 py-2.5 text-sm last:border-b-0"
+              className="hover:bg-muted/40 grid grid-cols-[minmax(0,1fr)_minmax(110px,auto)] items-center gap-2 border-b px-4 py-3 text-sm last:border-b-0 md:grid-cols-[44px_1fr_110px_110px_90px_110px] md:gap-3 md:py-2.5"
             >
               {ticket.photoUrl ? (
                 <button
                   type="button"
                   onClick={() => setViewingPhoto(ticket.photoUrl)}
-                  className="flex-shrink-0 rounded hover:opacity-80"
+                  className="col-start-1 row-start-1 w-fit flex-shrink-0 rounded hover:opacity-80 focus-visible:ring-2 md:col-auto md:row-auto"
+                  aria-label={`Voir la photo du ticket ${ticket.id}`}
                 >
                   <img
                     src={ticket.photoUrl}
-                    alt={`Ticket ${ticket.id}`}
+                    alt=""
                     className="size-9 rounded object-cover"
                   />
                 </button>
               ) : (
                 <span
-                  className={`flex size-9 items-center justify-center rounded-md ${
+                  className={`col-start-1 row-start-1 flex size-9 items-center justify-center rounded-md md:col-auto md:row-auto ${
                     ticket.resoluAt
                       ? 'bg-muted text-muted-foreground'
                       : PRIORITE_ICON_BG_CLASS[ticket.priorite]
                   }`}
+                  aria-hidden="true"
                 >
                   <Wrench className="size-4" />
                 </span>
               )}
-              <span className="min-w-0 truncate font-medium">
+              <button
+                type="button"
+                onClick={() => setDetailTicketId(ticket.id)}
+                className="col-start-1 row-start-2 min-w-0 truncate rounded text-left font-medium outline-none hover:underline focus-visible:ring-2 md:col-auto md:row-auto"
+                aria-label={`Voir le détail du ticket ${ticket.id}`}
+              >
                 {ticket.room ? `Chambre ${ticket.room.numero}` : 'Zone commune'}{' '}
                 — {ticket.typePanne}
-              </span>
-              <span>
+              </button>
+              <span className="col-start-1 row-start-3 md:col-auto md:row-auto">
                 <Badge variant={PRIORITE_BADGE_VARIANT[ticket.priorite]}>
                   {PRIORITE_LABEL[ticket.priorite]}
                 </Badge>
               </span>
-              <span className="text-muted-foreground truncate text-xs">
+              <span className="text-muted-foreground col-start-1 row-start-4 truncate text-xs md:col-auto md:row-auto">
                 {ticket.assigneA ?? '—'}
               </span>
-              <span>
+              <span className="col-start-2 row-start-1 justify-self-end md:col-auto md:row-auto md:justify-self-auto">
                 <Badge variant={ticket.resoluAt ? 'success' : 'info'}>
                   {ticket.resoluAt ? 'Résolu' : 'Ouvert'}
                 </Badge>
               </span>
-              <span className="flex justify-end">
+              <span className="col-start-2 row-span-3 row-start-2 flex justify-end md:col-auto md:row-auto md:row-span-1">
                 {ticket.resoluAt ? (
                   <span
                     className="text-muted-foreground text-xs"
@@ -301,6 +535,9 @@ export function MaintenancePage() {
           {dialogOpen && (
             <CreateTicketForm
               rooms={rooms}
+              roomsLoading={roomsLoading}
+              roomsError={roomsError}
+              onRetryRooms={() => void refetchRooms()}
               onClose={() => setDialogOpen(false)}
               onConfirm={handleCreate}
               submitting={submitting}
@@ -309,6 +546,11 @@ export function MaintenancePage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <MaintenanceTicketDetailDialog
+        ticketId={detailTicketId}
+        onClose={() => setDetailTicketId(null)}
+      />
 
       <Dialog
         open={viewingPhoto !== null}
@@ -339,6 +581,9 @@ export function MaintenancePage() {
 
 interface CreateTicketFormProps {
   rooms: Room[];
+  roomsLoading: boolean;
+  roomsError: string | null;
+  onRetryRooms: () => void;
   onClose: () => void;
   onConfirm: (input: CreateMaintenanceTicketInput) => void;
   submitting: boolean;
@@ -347,6 +592,9 @@ interface CreateTicketFormProps {
 
 function CreateTicketForm({
   rooms,
+  roomsLoading,
+  roomsError,
+  onRetryRooms,
   onClose,
   onConfirm,
   submitting,
@@ -413,6 +661,20 @@ function CreateTicketForm({
           });
         }}
       >
+        {roomsLoading && rooms.length === 0 && (
+          <p className="text-muted-foreground text-sm" role="status">
+            Chargement des chambres…
+          </p>
+        )}
+
+        {roomsError && (
+          <ErrorState
+            title="Impossible de charger les chambres"
+            description={roomsError}
+            onRetry={onRetryRooms}
+          />
+        )}
+
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="room">Chambre (optionnel)</Label>
           <Select
