@@ -88,6 +88,8 @@ export class StayService {
           );
         }
 
+        await this.guestsService.assertNotBlacklisted(reservation.guestId, tx);
+
         const stay = await tx.stay.create({
           data: {
             reservationId: reservation.id,

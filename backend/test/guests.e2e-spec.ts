@@ -103,6 +103,9 @@ describe('Guests / CRM (e2e)', () => {
     await prisma.folio.deleteMany({
       where: { stay: { room: { roomTypeId } } },
     });
+    await prisma.reservationDeposit.deleteMany({
+      where: { reservation: { room: { roomTypeId } } },
+    });
     await prisma.roomNight.deleteMany({ where: { room: { roomTypeId } } });
     await prisma.roomStatusLog.deleteMany({ where: { room: { roomTypeId } } });
     await prisma.stay.deleteMany({ where: { room: { roomTypeId } } });
@@ -397,6 +400,116 @@ describe('Guests / CRM (e2e)', () => {
     });
     expect(res.status).toBe(409);
   });
+
+  it('check-in réservation avec client devenu BLACKLIST → 409 sans effet partiel', async () => {
+    const guest = await receptionClient.post('/api/guests').send({
+      nom: 'TEST-GUEST-Blacklisted',
+      prenom: 'ReservationCheckin',
+    });
+    const guestId = (guest.body as GuestResponse).id;
+    const roomId = await createRoom();
+    const dateArrivee = new Date(Date.now() + 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    const dateDepart = new Date(Date.now() + 3 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+
+    const created = await receptionClient.post('/api/reservations').send({
+      roomId,
+      dateArrivee,
+      dateDepart,
+      guestId,
+    });
+    expect(created.status).toBe(201);
+    const reservationId = (created.body as ReservationResponse).id;
+    const deposit = await prisma.reservationDeposit.create({
+      data: {
+        reservationId,
+        montant: '250.00',
+        moyen: 'CARTE',
+        statut: 'ENCAISSE',
+        idempotencyKey: `test-guest-blacklist-checkin-${reservationId}`,
+      },
+    });
+    const roomBefore = await prisma.room.findUniqueOrThrow({
+      where: { id: roomId },
+    });
+
+    const blacklisted = await adminClient
+      .patch(`/api/guests/${guestId}/categorie`)
+      .send({
+        categorie: 'BLACKLIST',
+        motif: 'Client blacklisté après création de la réservation',
+      });
+    expect(blacklisted.status).toBe(200);
+
+    const staysBefore = await prisma.stay.count({
+      where: { reservationId },
+    });
+    const res = await receptionClient
+      .post(`/api/checkin/${reservationId}`)
+      .send();
+    expect(res.status).toBe(409);
+    expect((res.body as { message: string }).message).toContain('liste noire');
+
+    expect(await prisma.stay.count({ where: { reservationId } })).toBe(
+      staysBefore,
+    );
+    const reservationAfter = await prisma.reservation.findUniqueOrThrow({
+      where: { id: reservationId },
+    });
+    expect(reservationAfter.statut).toBe('CONFIRMEE');
+    const roomAfter = await prisma.room.findUniqueOrThrow({
+      where: { id: roomId },
+    });
+    expect(roomAfter.statut).toBe(roomBefore.statut);
+    const depositAfter = await prisma.reservationDeposit.findUniqueOrThrow({
+      where: { id: deposit.id },
+    });
+    expect(depositAfter.statut).toBe('ENCAISSE');
+    expect(depositAfter.imputeAuFolioId).toBeNull();
+  });
+
+  it.each(['STANDARD', 'VIP'] as const)(
+    'check-in réservation avec client %s → 201',
+    async (categorie) => {
+      const guest = await receptionClient.post('/api/guests').send({
+        nom: `TEST-GUEST-${categorie}`,
+        prenom: 'ReservationCheckin',
+      });
+      const guestId = (guest.body as GuestResponse).id;
+      if (categorie === 'VIP') {
+        const updated = await receptionClient
+          .patch(`/api/guests/${guestId}/categorie`)
+          .send({
+            categorie,
+            motif: 'Préparation du test de non-régression check-in VIP',
+          });
+        expect(updated.status).toBe(200);
+      }
+
+      const roomId = await createRoom();
+      const reservation = await receptionClient.post('/api/reservations').send({
+        roomId,
+        dateArrivee: new Date(Date.now() + 86_400_000)
+          .toISOString()
+          .slice(0, 10),
+        dateDepart: new Date(Date.now() + 3 * 86_400_000)
+          .toISOString()
+          .slice(0, 10),
+        guestId,
+      });
+      expect(reservation.status).toBe(201);
+      const reservationId = (reservation.body as ReservationResponse).id;
+
+      const checkin = await receptionClient
+        .post(`/api/checkin/${reservationId}`)
+        .send();
+      expect(checkin.status).toBe(201);
+      expect((checkin.body as StayResponse).guestId).toBe(guestId);
+    },
+  );
 
   it('GET /guests/:id/historique retourne les séjours du client', async () => {
     const guest = await receptionClient.post('/api/guests').send({
