@@ -32,6 +32,16 @@ export function OpenMaintenanceWidget({ onNavigate }: Props) {
 
   if (tickets === null) return null;
 
+  const urgentCount = tickets.filter(
+    (ticket) => ticket.priorite === 'URGENTE',
+  ).length;
+  // Deux filtres préservent l'ordre renvoyé par l'API à priorité égale :
+  // seules les urgences sont déplacées devant les autres tickets ouverts.
+  const orderedTickets = [
+    ...tickets.filter((ticket) => ticket.priorite === 'URGENTE'),
+    ...tickets.filter((ticket) => ticket.priorite !== 'URGENTE'),
+  ];
+
   return (
     <div className="bg-card flex flex-col gap-3 rounded-lg border p-4">
       <div className="flex items-center justify-between">
@@ -46,30 +56,37 @@ export function OpenMaintenanceWidget({ onNavigate }: Props) {
       </div>
       {tickets.length === 0 ? (
         <p className="text-muted-foreground text-xs">
-          Aucun ticket ouvert pour le moment.
+          Aucune intervention ouverte ou urgente pour le moment.
         </p>
       ) : (
-        <ul className="flex flex-col gap-1.5">
-          {tickets.slice(0, 5).map((ticket) => (
-            <li
-              key={ticket.id}
-              className="flex items-center justify-between gap-2 text-xs"
-            >
-              <span className="truncate">
-                {ticket.room ? `Ch. ${ticket.room.numero} — ` : ''}
-                {ticket.typePanne}
-              </span>
-              <Badge variant={PRIORITE_VARIANT[ticket.priorite]}>
-                {ticket.priorite}
-              </Badge>
-            </li>
-          ))}
-          {tickets.length > 5 && (
-            <li className="text-muted-foreground text-xs">
-              + {tickets.length - 5} autre(s)
-            </li>
-          )}
-        </ul>
+        <>
+          <p className="text-muted-foreground text-xs" aria-live="polite">
+            {urgentCount === 0
+              ? 'Aucune intervention urgente'
+              : `${urgentCount} intervention${urgentCount > 1 ? 's' : ''} urgente${urgentCount > 1 ? 's' : ''}`}
+          </p>
+          <ul className="flex flex-col gap-1.5">
+            {orderedTickets.slice(0, 5).map((ticket) => (
+              <li
+                key={ticket.id}
+                className="flex items-center justify-between gap-2 text-xs"
+              >
+                <span className="truncate">
+                  {ticket.room ? `Ch. ${ticket.room.numero} — ` : ''}
+                  {ticket.typePanne}
+                </span>
+                <Badge variant={PRIORITE_VARIANT[ticket.priorite]}>
+                  {ticket.priorite}
+                </Badge>
+              </li>
+            ))}
+            {orderedTickets.length > 5 && (
+              <li className="text-muted-foreground text-xs">
+                + {orderedTickets.length - 5} autre(s)
+              </li>
+            )}
+          </ul>
+        </>
       )}
     </div>
   );

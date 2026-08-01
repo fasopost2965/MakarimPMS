@@ -11,6 +11,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ErrorState } from '@/components/ui/error-state';
+import { Skeleton } from '@/components/ui/skeleton';
 import { getDashboardResume } from '../api';
 import type { DashboardResume } from '../types';
 import { RoomsToCleanWidget } from '../components/RoomsToCleanWidget';
@@ -21,12 +23,14 @@ export type DashboardTarget =
 
 interface Props {
   onNavigate: (target: DashboardTarget) => void;
+  permissions: string[] | null;
 }
 
 interface QuickAction {
   label: string;
   icon: LucideIcon;
   target: DashboardTarget;
+  permission: string;
 }
 
 // Demande client (`/goal` du 2026-07-30) : « boutons d'action rapides pour
@@ -36,10 +40,30 @@ interface QuickAction {
 // exigerait de faire passer un état d'ouverture à travers
 // ReservationsCalendarPage/CheckinPage, hors périmètre de ce lot.
 const QUICK_ACTIONS: QuickAction[] = [
-  { label: 'Nouvelle réservation', icon: CalendarPlus, target: 'reservations' },
-  { label: 'Check-in walk-in', icon: KeyRound, target: 'checkin' },
-  { label: 'Chambres à nettoyer', icon: Sparkles, target: 'housekeeping' },
-  { label: 'Signaler une panne', icon: Wrench, target: 'maintenance' },
+  {
+    label: 'Nouvelle réservation',
+    icon: CalendarPlus,
+    target: 'reservations',
+    permission: 'reservations:write',
+  },
+  {
+    label: 'Check-in walk-in',
+    icon: KeyRound,
+    target: 'checkin',
+    permission: 'checkin:write',
+  },
+  {
+    label: 'Chambres à nettoyer',
+    icon: Sparkles,
+    target: 'housekeeping',
+    permission: 'housekeeping:read',
+  },
+  {
+    label: 'Signaler une panne',
+    icon: Wrench,
+    target: 'maintenance',
+    permission: 'maintenance:write',
+  },
 ];
 
 interface KpiCardProps {
@@ -120,7 +144,7 @@ function KpiCard({
 // KPI calculées côté backend en une seule requête (GET /dashboard/resume),
 // avec des liens rapides vers les écrans où l'action se passe réellement.
 // Pas de graphiques de tendance/prévisions ici — Phase 2.
-export function DashboardPage({ onNavigate }: Props) {
+export function DashboardPage({ onNavigate, permissions }: Props) {
   const [resume, setResume] = useState<DashboardResume | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -142,10 +166,16 @@ export function DashboardPage({ onNavigate }: Props) {
     void refetch();
   }, [refetch]);
 
+  const can = (permission: string) =>
+    permissions?.includes(permission) ?? false;
+  const quickActions = QUICK_ACTIONS.filter(({ permission }) =>
+    can(permission),
+  );
+
   return (
     <div className="flex h-full flex-col gap-4 p-6">
       <div className="flex flex-wrap gap-2">
-        {QUICK_ACTIONS.map(({ label, icon: Icon, target }) => (
+        {quickActions.map(({ label, icon: Icon, target }) => (
           <Button
             key={target}
             id={`quick-action-${target}`}
@@ -160,10 +190,25 @@ export function DashboardPage({ onNavigate }: Props) {
         ))}
       </div>
 
-      {loading && <p className="text-muted-foreground text-sm">Chargement…</p>}
-      {error && <p className="text-destructive text-sm">{error}</p>}
+      {loading && (
+        <div
+          aria-label="Chargement des indicateurs"
+          className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+        >
+          {Array.from({ length: 5 }, (_, index) => (
+            <Skeleton key={index} className="h-32" />
+          ))}
+        </div>
+      )}
+      {error && !loading && (
+        <ErrorState
+          title="Impossible de charger les indicateurs"
+          description={error}
+          onRetry={() => void refetch()}
+        />
+      )}
 
-      {resume && (
+      {resume && !loading && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <KpiCard
             label="Taux d'occupation"
@@ -171,7 +216,11 @@ export function DashboardPage({ onNavigate }: Props) {
             hint={`${resume.chambresOccupees} / ${resume.totalChambres} chambres occupées`}
             icon={Calendar}
             progress={resume.tauxOccupation}
-            onClick={() => onNavigate('housekeeping')}
+            onClick={
+              can('housekeeping:read')
+                ? () => onNavigate('housekeeping')
+                : undefined
+            }
             accent
           />
           <KpiCard
@@ -179,20 +228,28 @@ export function DashboardPage({ onNavigate }: Props) {
             value={String(resume.arriveesAujourdhui)}
             hint="Check-in prévus"
             icon={LogIn}
-            onClick={() => onNavigate('checkin')}
+            onClick={
+              can('checkin:read') ? () => onNavigate('checkin') : undefined
+            }
           />
           <KpiCard
             label="Départs aujourd'hui"
             value={String(resume.departsAujourdhui)}
             hint="Check-out prévus"
             icon={LogOut}
-            onClick={() => onNavigate('checkin')}
+            onClick={
+              can('checkin:read') ? () => onNavigate('checkin') : undefined
+            }
           />
           <KpiCard
             label="Chambres à nettoyer"
             value={String(resume.chambresANettoyer)}
             icon={Sparkles}
-            onClick={() => onNavigate('housekeeping')}
+            onClick={
+              can('housekeeping:read')
+                ? () => onNavigate('housekeeping')
+                : undefined
+            }
           />
           <KpiCard
             label="Encaissé aujourd'hui"
@@ -204,8 +261,12 @@ export function DashboardPage({ onNavigate }: Props) {
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <RoomsToCleanWidget onNavigate={() => onNavigate('housekeeping')} />
-        <OpenMaintenanceWidget onNavigate={() => onNavigate('maintenance')} />
+        {can('housekeeping:read') && (
+          <RoomsToCleanWidget onNavigate={() => onNavigate('housekeeping')} />
+        )}
+        {can('maintenance:read') && (
+          <OpenMaintenanceWidget onNavigate={() => onNavigate('maintenance')} />
+        )}
       </div>
     </div>
   );
