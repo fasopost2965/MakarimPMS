@@ -332,7 +332,7 @@ function App() {
                 <DashboardPage onNavigate={setTab} permissions={permissions} />
               )}
               {tab === 'reservations' && <ReservationsCalendarPage />}
-              {tab === 'checkin' && <CheckinPage />}
+              {tab === 'checkin' && <CheckinPage permissions={permissions} />}
               {tab === 'housekeeping' && <HousekeepingPage />}
               {tab === 'maintenance' && <MaintenancePage />}
               {tab === 'restaurant' && <RestaurantPage />}

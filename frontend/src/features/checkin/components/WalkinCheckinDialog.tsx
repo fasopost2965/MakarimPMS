@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { ErrorState } from '@/components/ui/error-state';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SelectSearch } from '@/components/ui/select-search';
@@ -23,6 +24,8 @@ import { estimatePrice } from '../../reservations/api';
 import { toISODate } from '../../reservations/date-utils';
 import type { FormuleHebergement, Room } from '../../reservations/types';
 import type { WalkinCheckinInput } from '../types';
+import type { CheckinGuestSummary, RoomAvailability } from '../types';
+import { checkRoomAvailability, getCheckinGuest } from '../api';
 
 // CH-061 (Lot #3 design) — même liste que CreateReservationDialog.
 const FORMULE_OPTIONS: { value: FormuleHebergement; label: string }[] = [
@@ -75,6 +78,7 @@ function WalkinForm({
   submitting,
   error,
 }: Omit<Props, 'open'>) {
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [roomId, setRoomId] = useState('');
   const [dateCheckoutPrevue, setDateCheckoutPrevue] = useState('');
   const [formule, setFormule] =
@@ -82,10 +86,56 @@ function WalkinForm({
   const [guestSelection, setGuestSelection] = useState<GuestSelection | null>(
     null,
   );
+  const [guestSummary, setGuestSummary] = useState<CheckinGuestSummary | null>(
+    null,
+  );
+  const [guestError, setGuestError] = useState<string | null>(null);
   const [prixEstime, setPrixEstime] = useState<string | null>(null);
   const [estimating, setEstimating] = useState(false);
+  const [availability, setAvailability] = useState<RoomAvailability | null>(
+    null,
+  );
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState<string | null>(
+    null,
+  );
+  const [availabilityRetry, setAvailabilityRetry] = useState(0);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const submitLockRef = useRef(false);
 
   const selectedRoom = rooms.find((room) => String(room.id) === roomId);
+  const today = toISODate(new Date());
+
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, [step]);
+
+  useEffect(() => {
+    if (error) submitLockRef.current = false;
+  }, [error]);
+
+  useEffect(() => {
+    if (!guestSelection || !('guestId' in guestSelection)) {
+      return;
+    }
+    let cancelled = false;
+    getCheckinGuest(guestSelection.guestId)
+      .then((guest) => {
+        if (!cancelled) setGuestSummary(guest);
+      })
+      .catch((reason) => {
+        if (!cancelled) {
+          setGuestError(
+            reason instanceof Error
+              ? reason.message
+              : 'Impossible de charger le client',
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [guestSelection]);
 
   // CH-061 (Lot #3 design) — arrivée = aujourd'hui (walk-in), seule la date
   // de départ est saisie par la réception.
@@ -100,7 +150,7 @@ function WalkinForm({
       try {
         const res = await estimatePrice({
           roomTypeId: selectedRoom.roomTypeId,
-          dateArrivee: toISODate(new Date()),
+          dateArrivee: today,
           dateDepart: dateCheckoutPrevue,
           formule,
         });
@@ -115,33 +165,141 @@ function WalkinForm({
     return () => {
       cancelled = true;
     };
-  }, [selectedRoom, dateCheckoutPrevue, formule]);
+  }, [selectedRoom, dateCheckoutPrevue, formule, today]);
+
+  useEffect(() => {
+    if (!selectedRoom || !dateCheckoutPrevue || dateCheckoutPrevue <= today) {
+      return;
+    }
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAvailabilityLoading(true);
+    setAvailabilityError(null);
+    setAvailability(null);
+    checkRoomAvailability({
+      roomId: selectedRoom.id,
+      dateArrivee: today,
+      dateDepart: dateCheckoutPrevue,
+    })
+      .then((result) => {
+        if (!cancelled) setAvailability(result);
+      })
+      .catch((reason) => {
+        if (!cancelled) {
+          setAvailabilityError(
+            reason instanceof Error
+              ? reason.message
+              : 'Vérification indisponible',
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAvailabilityLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [availabilityRetry, dateCheckoutPrevue, formule, selectedRoom, today]);
+
+  function invalidateAvailability() {
+    setAvailability(null);
+    setAvailabilityError(null);
+    setAvailabilityLoading(false);
+  }
+
+  function handleGuestChange(selection: GuestSelection | null) {
+    setGuestSelection(selection);
+    setGuestSummary(null);
+    setGuestError(null);
+  }
+
+  const guestLabel = guestSelection
+    ? 'guest' in guestSelection
+      ? `${guestSelection.guest.prenom} ${guestSelection.guest.nom}`
+      : guestSummary
+        ? `${guestSummary.prenom} ${guestSummary.nom}`
+        : 'Client existant sélectionné'
+    : 'Aucun client';
+  const datesValid = dateCheckoutPrevue > today;
+  const canConfirm =
+    guestSelection !== null &&
+    selectedRoom !== undefined &&
+    datesValid &&
+    availability?.disponible === true &&
+    prixEstime !== null &&
+    !submitting;
+  const stepValid =
+    step === 1
+      ? guestSelection !== null
+      : step === 2
+        ? selectedRoom !== undefined && datesValid
+        : canConfirm;
 
   return (
-    <>
+    <form
+      className="flex flex-col gap-5"
+      noValidate
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (step < 3) {
+          if (stepValid) setStep((step + 1) as 2 | 3);
+          return;
+        }
+        if (
+          !canConfirm ||
+          !selectedRoom ||
+          !guestSelection ||
+          submitLockRef.current
+        )
+          return;
+        submitLockRef.current = true;
+        onConfirm({
+          roomId: selectedRoom.id,
+          dateCheckoutPrevue,
+          formule,
+          ...guestSelection,
+        });
+      }}
+    >
       <DialogHeader>
-        <DialogTitle>Check-in walk-in</DialogTitle>
+        <DialogTitle ref={headingRef} tabIndex={-1}>
+          Check-in walk-in — étape {step} sur 3
+        </DialogTitle>
       </DialogHeader>
 
-      <form
-        className="flex flex-col gap-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!roomId || !dateCheckoutPrevue || !guestSelection) return;
-          onConfirm({
-            roomId: Number(roomId),
-            dateCheckoutPrevue,
-            formule,
-            ...guestSelection,
-          });
-        }}
-      >
+      <nav aria-label="Étapes du walk-in" className="grid grid-cols-3 gap-2">
+        {['Client', 'Chambre et séjour', 'Confirmation'].map((label, index) => {
+          const number = (index + 1) as 1 | 2 | 3;
+          return (
+            <button
+              key={label}
+              type="button"
+              aria-current={step === number ? 'step' : undefined}
+              disabled={number > step}
+              onClick={() => number < step && setStep(number)}
+              className="border-border aria-current:border-primary aria-current:text-primary rounded-md border px-2 py-2 text-xs font-medium disabled:opacity-50"
+            >
+              {number}. {label}
+            </button>
+          );
+        })}
+      </nav>
+
+      <section className={step === 1 ? 'flex flex-col gap-3' : 'hidden'}>
+        <GuestPicker onChange={handleGuestChange} />
+        {guestError && <p className="text-destructive text-sm">{guestError}</p>}
+      </section>
+
+      <section className={step === 2 ? 'flex flex-col gap-3' : 'hidden'}>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="room">Chambre</Label>
           <SelectSearch
             id="room"
             value={roomId}
-            onValueChange={setRoomId}
+            onValueChange={(value) => {
+              invalidateAvailability();
+              setRoomId(value);
+            }}
             placeholder="Chercher une chambre (numéro, type)…"
             emptyMessage="Aucune chambre ne correspond."
             items={rooms.map((room) => ({
@@ -157,7 +315,11 @@ function WalkinForm({
             id="dateCheckoutPrevue"
             type="date"
             value={dateCheckoutPrevue}
-            onChange={(e) => setDateCheckoutPrevue(e.target.value)}
+            min={today}
+            onChange={(event) => {
+              invalidateAvailability();
+              setDateCheckoutPrevue(event.target.value);
+            }}
             required
           />
         </div>
@@ -166,7 +328,11 @@ function WalkinForm({
           <Label htmlFor="formule">Formule</Label>
           <Select
             value={formule}
-            onValueChange={(v) => v && setFormule(v as FormuleHebergement)}
+            onValueChange={(value) => {
+              if (!value) return;
+              invalidateAvailability();
+              setFormule(value as FormuleHebergement);
+            }}
           >
             <SelectTrigger id="formule">
               <SelectValue>
@@ -198,30 +364,94 @@ function WalkinForm({
             </span>
           </div>
         )}
+      </section>
 
-        <GuestPicker onChange={setGuestSelection} />
+      <section className={step === 3 ? 'flex flex-col gap-4' : 'hidden'}>
+        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {[
+            ['Client', guestLabel],
+            [
+              'Chambre',
+              selectedRoom
+                ? `${selectedRoom.numero} — ${selectedRoom.roomType.nom}`
+                : '—',
+            ],
+            ['Statut chambre', selectedRoom?.statut ?? '—'],
+            ['Arrivée', today],
+            ['Départ prévu', dateCheckoutPrevue || '—'],
+            [
+              'Formule',
+              FORMULE_OPTIONS.find((option) => option.value === formule)
+                ?.label ?? formule,
+            ],
+            [
+              'Estimation',
+              prixEstime !== null
+                ? `${Number(prixEstime).toFixed(2)} MAD`
+                : 'Indisponible',
+            ],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-md border p-3">
+              <dt className="text-muted-foreground text-xs">{label}</dt>
+              <dd className="mt-1 text-sm font-medium">{value}</dd>
+            </div>
+          ))}
+        </dl>
+
+        {availabilityLoading ? (
+          <p className="text-muted-foreground text-sm">Vérification…</p>
+        ) : availabilityError ? (
+          <ErrorState
+            title="Disponibilité non vérifiée"
+            description={availabilityError}
+            onRetry={() => setAvailabilityRetry((value) => value + 1)}
+          />
+        ) : availability?.disponible ? (
+          <p className="text-success text-sm">
+            Vérification serveur positive. Le backend validera définitivement le
+            check-in.
+          </p>
+        ) : (
+          <p className="text-destructive text-sm">
+            Chambre indisponible
+            {availability?.motifIndisponibilite
+              ? ` : ${availability.motifIndisponibilite}`
+              : availability?.datesConflit.length
+                ? ` : conflit sur ${availability.datesConflit.join(', ')}`
+                : '.'}
+          </p>
+        )}
 
         {error && <p className="text-destructive text-sm">{error}</p>}
+      </section>
 
-        <DialogFooter>
+      <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onClose}
+          disabled={submitting}
+        >
+          Annuler
+        </Button>
+        {step > 1 && (
           <Button
             type="button"
             variant="outline"
-            onClick={onClose}
+            onClick={() => setStep((step - 1) as 1 | 2)}
             disabled={submitting}
           >
-            Annuler
+            Précédent
           </Button>
-          <Button
-            type="submit"
-            disabled={
-              submitting || !roomId || !dateCheckoutPrevue || !guestSelection
-            }
-          >
-            {submitting ? 'Enregistrement…' : 'Enregistrer le check-in'}
-          </Button>
-        </DialogFooter>
-      </form>
-    </>
+        )}
+        <Button type="submit" disabled={!stepValid || submitting}>
+          {step < 3
+            ? 'Continuer'
+            : submitting
+              ? 'Enregistrement…'
+              : 'Enregistrer le check-in'}
+        </Button>
+      </DialogFooter>
+    </form>
   );
 }

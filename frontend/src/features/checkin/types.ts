@@ -54,6 +54,38 @@ export interface StayWithSolde extends Stay {
   soldeDu: string;
 }
 
+export type CategorieClient =
+  'STANDARD' | 'VIP' | 'ENTREPRISE' | 'AGENCE' | 'BLACKLIST';
+
+export interface CheckinGuestSummary {
+  id: number;
+  nom: string;
+  prenom: string;
+  pieceIdentite: string | null;
+  nationalite: string | null;
+  telephone: string | null;
+  email: string | null;
+  categorie: CategorieClient;
+  preferences: string | null;
+}
+
+export interface RoomAvailability {
+  disponible: boolean;
+  datesConflit: string[];
+  motifIndisponibilite?: string;
+}
+
+export type StatutAcompte = 'EN_ATTENTE' | 'ENCAISSE' | 'IMPUTE' | 'REMBOURSE';
+
+export interface ReservationDeposit {
+  id: number;
+  reservationId: number;
+  montant: string;
+  moyen: 'ESPECES' | 'CARTE' | 'VIREMENT' | 'ACOMPTE';
+  statut: StatutAcompte;
+  createdAt: string;
+}
+
 // L'un des deux champs client est requis (module CRM 5.7) : guestId pour
 // réutiliser un client existant (déclenche le contrôle blacklist côté
 // serveur), guest pour en saisir un nouveau — voir GuestPicker.
