@@ -219,15 +219,16 @@ export function HousekeepingPage() {
                 {floorRooms.map((room) => (
                   <div
                     key={room.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setHistoryRoom(room)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') setHistoryRoom(room);
-                    }}
-                    className="hover:bg-muted/40 grid cursor-pointer grid-cols-[80px_1fr_170px_150px] items-center gap-2 border-b px-4 py-2.5 text-sm last:border-b-0"
+                    className="hover:bg-muted/40 grid grid-cols-[80px_1fr_170px_150px] items-center gap-2 border-b px-4 py-2.5 text-sm last:border-b-0"
                   >
-                    <span className="font-bold">{room.numero}</span>
+                    <button
+                      type="button"
+                      onClick={() => setHistoryRoom(room)}
+                      className="w-fit rounded font-bold underline-offset-2 outline-none hover:underline focus-visible:ring-2"
+                      aria-label={`Voir l’historique Housekeeping de la chambre ${room.numero}`}
+                    >
+                      {room.numero}
+                    </button>
                     <span className="text-muted-foreground text-xs">
                       {room.roomType.nom}
                     </span>
@@ -236,15 +237,7 @@ export function HousekeepingPage() {
                         {STATUT_LABEL[room.statut]}
                       </Badge>
                     </span>
-                    {/* Empêche l'ouverture de l'historique quand on
-                        manipule le select/action — pas un contrôle en
-                        lui-même, le Select qu'il contient gère déjà son
-                        propre clavier. */}
-                    {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */}
-                    <span
-                      className="flex justify-end"
-                      onClick={(e) => e.stopPropagation()}
-                    >
+                    <span className="flex justify-end">
                       {NON_MODIFIABLE_MANUELLEMENT[room.statut] ? (
                         <span className="text-muted-foreground text-right text-xs">
                           {NON_MODIFIABLE_MANUELLEMENT[room.statut]}

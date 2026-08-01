@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
 import { getRoomStatusHistory } from '../api';
 import type { RoomStatusLogEntry } from '../types';
 import type { StatutChambre } from '../../reservations/types';
@@ -32,52 +34,97 @@ export function RoomHistoryDialog({ roomId, roomNumero, onClose }: Props) {
   const [entries, setEntries] = useState<RoomStatusLogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestSequence = useRef(0);
 
-  useEffect(() => {
+  const loadHistory = useCallback(async () => {
     if (roomId === null) return;
-    let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoading(true);
 
+    const requestId = ++requestSequence.current;
+    setLoading(true);
     setError(null);
-    getRoomStatusHistory(roomId)
-      .then((data) => {
-        if (!cancelled) setEntries(data);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Erreur de chargement');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+    try {
+      const data = await getRoomStatusHistory(roomId);
+      if (requestId === requestSequence.current) {
+        setEntries(
+          [...data].sort((left, right) => {
+            const byDate =
+              new Date(right.createdAt).getTime() -
+              new Date(left.createdAt).getTime();
+            return byDate || right.id - left.id;
+          }),
+        );
+      }
+    } catch (err) {
+      if (requestId === requestSequence.current) {
+        setError(err instanceof Error ? err.message : 'Erreur de chargement');
+      }
+    } finally {
+      if (requestId === requestSequence.current) setLoading(false);
+    }
   }, [roomId]);
 
+  useEffect(() => {
+    if (roomId === null) {
+      requestSequence.current += 1;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEntries([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
+    setEntries([]);
+    void loadHistory();
+
+    return () => {
+      requestSequence.current += 1;
+    };
+  }, [loadHistory, roomId]);
+
+  function handleClose() {
+    requestSequence.current += 1;
+    onClose();
+  }
+
   return (
-    <Dialog open={roomId !== null} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
+    <Dialog
+      open={roomId !== null}
+      onOpenChange={(next) => !next && handleClose()}
+    >
+      <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             Historique des statuts — chambre {roomNumero}
           </DialogTitle>
         </DialogHeader>
+        <p className="text-muted-foreground text-sm">
+          Du plus récent au plus ancien
+        </p>
         {loading && (
-          <p className="text-muted-foreground text-sm">Chargement…</p>
-        )}
-        {error && <p className="text-destructive text-sm">{error}</p>}
-        {!loading && !error && entries.length === 0 && (
-          <p className="text-muted-foreground text-sm">
-            Aucun changement de statut enregistré.
+          <p className="text-muted-foreground text-sm" role="status">
+            Chargement de l’historique…
           </p>
         )}
-        {entries.length > 0 && (
-          <div className="flex max-h-80 flex-col gap-2 overflow-y-auto">
+        {!loading && error && (
+          <ErrorState
+            title="Impossible de charger l’historique"
+            description={error}
+            onRetry={() => void loadHistory()}
+          />
+        )}
+        {!loading && !error && entries.length === 0 && (
+          <EmptyState
+            title={`Aucun historique pour la chambre ${roomNumero ?? '—'}`}
+            description="Aucun changement de statut n’est enregistré pour cette chambre."
+          />
+        )}
+        {!loading && !error && entries.length > 0 && (
+          <ol
+            className="grid gap-2"
+            aria-label="Chronologie des statuts de la chambre"
+          >
             {entries.map((entry) => (
-              <div key={entry.id} className="rounded-md border p-2 text-sm">
+              <li key={entry.id} className="rounded-md border p-3 text-sm">
                 <p>
                   {STATUT_LABEL[entry.ancienStatut]} →{' '}
                   <span className="font-medium">
@@ -88,9 +135,9 @@ export function RoomHistoryDialog({ roomId, roomNumero, onClose }: Props) {
                   {new Date(entry.createdAt).toLocaleString('fr-FR')}
                   {entry.motif ? ` — ${entry.motif}` : ''}
                 </p>
-              </div>
+              </li>
             ))}
-          </div>
+          </ol>
         )}
       </DialogContent>
     </Dialog>

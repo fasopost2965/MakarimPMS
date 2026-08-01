@@ -1,14 +1,16 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { Room } from '../../reservations/types';
 
 vi.mock('../api', () => ({
   listRooms: vi.fn(),
   updateRoomStatus: vi.fn(),
+  getRoomStatusHistory: vi.fn(),
 }));
 
 import { HousekeepingPage } from './HousekeepingPage';
-import { listRooms } from '../api';
+import { getRoomStatusHistory, listRooms } from '../api';
 
 function room(overrides: Partial<Room>): Room {
   return {
@@ -20,6 +22,10 @@ function room(overrides: Partial<Room>): Room {
     ...overrides,
   };
 }
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 // CH-037 (docs/execution/PLAN_MISE_EN_PRODUCTION_BETA.md, Phase A) — ADR-003 :
 // RESERVEE/OCCUPEE/DEPART_PREVU sont pilotés exclusivement par le système
@@ -39,6 +45,29 @@ describe('HousekeepingPage — statuts pilotés par le système vs pilotables ma
     });
     expect(screen.getByRole('combobox')).toBeInTheDocument();
     expect(screen.queryByText(/check-in|check-out/i)).not.toBeInTheDocument();
+  });
+
+  it('ouvre l’historique au clavier sans affecter la liste si son chargement échoue', async () => {
+    const user = userEvent.setup();
+    vi.mocked(listRooms).mockResolvedValue([
+      room({ id: 2, numero: '202', statut: 'OCCUPEE' }),
+    ]);
+    vi.mocked(getRoomStatusHistory).mockRejectedValue(
+      new Error('Historique indisponible'),
+    );
+    render(<HousekeepingPage />);
+
+    const historyButton = await screen.findByRole('button', {
+      name: 'Voir l’historique Housekeeping de la chambre 202',
+    });
+    historyButton.focus();
+    await user.keyboard('{Enter}');
+
+    expect(
+      await screen.findByText('Impossible de charger l’historique'),
+    ).toBeInTheDocument();
+    expect(listRooms).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Libérée au check-out')).toBeInTheDocument();
   });
 
   it('remplace le sélecteur par un texte explicatif pour OCCUPEE (piloté par le système)', async () => {
