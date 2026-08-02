@@ -50,7 +50,19 @@ async function bootstrap() {
   app.use(
     helmet({
       contentSecurityPolicy:
-        process.env.NODE_ENV === 'production' ? undefined : false,
+        process.env.NODE_ENV === 'production'
+          ? undefined
+          : {
+              directives: {
+                defaultSrc: ["'self'"],
+                baseUri: ["'self'"],
+                objectSrc: ["'none'"],
+                frameAncestors: ["'self'"],
+                scriptSrc: ["'self'", "'unsafe-inline'"],
+                styleSrc: ["'self'", "'unsafe-inline'"],
+                imgSrc: ["'self'", 'data:'],
+              },
+            },
     }),
   );
   // CH-026(e) — requis pour lire les cookies httpOnly d'authentification
