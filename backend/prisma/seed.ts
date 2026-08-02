@@ -27,6 +27,11 @@ async function main() {
   // avant user.deleteMany(). PurchaseOrderLine référence PurchaseOrder.
   await prisma.purchaseOrderLine.deleteMany();
   await prisma.purchaseOrder.deleteMany();
+  // HK-P1-03A — les logs puis les tâches référencent User et Room avec des
+  // suppressions restrictives : les vider avant les comptes et chambres
+  // conserve le seed de développement rejouable.
+  await prisma.housekeepingTaskLog.deleteMany();
+  await prisma.housekeepingTask.deleteMany();
   await prisma.user.deleteMany();
   await prisma.rolePermission.deleteMany();
   await prisma.permission.deleteMany();
@@ -92,11 +97,46 @@ async function main() {
   // raisonnables pour le développement, pas des tarifs métier validés —
   // ajustables via une future route de configuration (module parameters).
   const roomTypesData = [
-    { nom: 'Single', prixBase: 400, capacite: 1, prixPetitDejeuner: 50, prixDemiPension: 150, prixPensionComplete: 220 },
-    { nom: 'Double', prixBase: 500, capacite: 2, prixPetitDejeuner: 50, prixDemiPension: 150, prixPensionComplete: 220 },
-    { nom: 'Triple', prixBase: 750, capacite: 3, prixPetitDejeuner: 50, prixDemiPension: 150, prixPensionComplete: 220 },
-    { nom: 'Suite', prixBase: 650, capacite: 2, prixPetitDejeuner: 50, prixDemiPension: 150, prixPensionComplete: 220 },
-    { nom: 'Quadruple', prixBase: 900, capacite: 4, prixPetitDejeuner: 50, prixDemiPension: 150, prixPensionComplete: 220 },
+    {
+      nom: 'Single',
+      prixBase: 400,
+      capacite: 1,
+      prixPetitDejeuner: 50,
+      prixDemiPension: 150,
+      prixPensionComplete: 220,
+    },
+    {
+      nom: 'Double',
+      prixBase: 500,
+      capacite: 2,
+      prixPetitDejeuner: 50,
+      prixDemiPension: 150,
+      prixPensionComplete: 220,
+    },
+    {
+      nom: 'Triple',
+      prixBase: 750,
+      capacite: 3,
+      prixPetitDejeuner: 50,
+      prixDemiPension: 150,
+      prixPensionComplete: 220,
+    },
+    {
+      nom: 'Suite',
+      prixBase: 650,
+      capacite: 2,
+      prixPetitDejeuner: 50,
+      prixDemiPension: 150,
+      prixPensionComplete: 220,
+    },
+    {
+      nom: 'Quadruple',
+      prixBase: 900,
+      capacite: 4,
+      prixPetitDejeuner: 50,
+      prixDemiPension: 150,
+      prixPensionComplete: 220,
+    },
   ];
   const roomTypes: Record<string, { id: number }> = {};
   for (const data of roomTypesData) {
@@ -322,14 +362,14 @@ async function main() {
       canal: 'EMAIL' as const,
       sujet: 'Votre arrivée demain — Hôtel Makarim',
       corps:
-        'Bonjour {{prenom}} {{nom}},\n\nPetit rappel : votre arrivée à l\'Hôtel Makarim est prévue demain {{dateArrivee}}, chambre {{chambre}}.\n\nÀ très bientôt.\n\nHôtel Makarim',
+        "Bonjour {{prenom}} {{nom}},\n\nPetit rappel : votre arrivée à l'Hôtel Makarim est prévue demain {{dateArrivee}}, chambre {{chambre}}.\n\nÀ très bientôt.\n\nHôtel Makarim",
     },
     {
       evenement: 'POST_SEJOUR' as const,
       canal: 'EMAIL' as const,
       sujet: 'Merci de votre séjour — Hôtel Makarim',
       corps:
-        'Bonjour {{prenom}} {{nom}},\n\nMerci d\'avoir séjourné avec nous jusqu\'au {{dateDepart}} (chambre {{chambre}}). Nous espérons vous revoir bientôt.\n\nHôtel Makarim',
+        "Bonjour {{prenom}} {{nom}},\n\nMerci d'avoir séjourné avec nous jusqu'au {{dateDepart}} (chambre {{chambre}}). Nous espérons vous revoir bientôt.\n\nHôtel Makarim",
     },
     {
       evenement: 'SELF_CHECKIN_LIEN' as const,
@@ -346,7 +386,7 @@ async function main() {
       canal: 'EMAIL' as const,
       sujet: 'Votre facture {{numero}} — Hôtel Makarim',
       corps:
-        'Bonjour,\n\nVeuillez trouver ci-joint votre facture {{numero}} d\'un montant de {{montant}} MAD.\n\nVous pouvez également la télécharger ici : {{lien_facture}}\n\nHôtel Makarim',
+        "Bonjour,\n\nVeuillez trouver ci-joint votre facture {{numero}} d'un montant de {{montant}} MAD.\n\nVous pouvez également la télécharger ici : {{lien_facture}}\n\nHôtel Makarim",
     },
     {
       evenement: 'FACTURE_EMISE' as const,
@@ -495,6 +535,12 @@ async function main() {
   permissions['purchase-orders:valider'] = await prisma.permission.create({
     data: { module: 'purchase-orders', action: 'valider' },
   });
+  // HK-P1-03A — contrôle final, refus et réouverture d'une tâche de ménage.
+  // Permission dédiée à la Gouvernante et à l'Administrateur, jamais déduite
+  // du nom de rôle dans le code applicatif.
+  permissions['housekeeping:control'] = await prisma.permission.create({
+    data: { module: 'housekeeping', action: 'control' },
+  });
 
   const rolesData: Array<{
     nom: string;
@@ -548,6 +594,7 @@ async function main() {
       permissionKeys: [
         'housekeeping:read',
         'housekeeping:write',
+        'housekeeping:control',
         'maintenance:read',
         // stock:read/write (RBAC_MATRIX.md §3, Sprint 12) — seule la
         // Gouvernante gère les consommables ménagers en plus de
