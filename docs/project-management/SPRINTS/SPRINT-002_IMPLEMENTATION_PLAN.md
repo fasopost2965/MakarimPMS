@@ -1,15 +1,58 @@
-# Sprint 002 — Plan de préparation Housekeeping & Maintenance
+# Sprint 002 — Plan d’implémentation Housekeeping & Maintenance
 
 ## 1. Identification
 
 - Mission : `MISSION-0009`
-- Type : analyse technique
-- Statut : proposition soumise à validation Product Owner et Architecte
-- Date de l'analyse : 1er août 2026
-- Référence du code analysé : `b6a9e58e827f24673db65a1239f573ceb0c2e13f`
+- Type : plan d’implémentation et suivi d’exécution
+- Statut : plan de référence validé — en cours d’exécution
+- Date de l’analyse initiale : 1er août 2026
+- Dernière mise à jour d’exécution : 2 août 2026
+- Référence historique du code analysé : `b6a9e58e827f24673db65a1239f573ceb0c2e13f`
+- Référence `main` confirmée à cette mise à jour : `1cb146b5fe23ab250f48c74771e15400f4848c96`
 - Modules : Housekeeping et Maintenance
 
 Ce document décrit l'état existant et propose un ordre d'évolution incrémental. Il ne constitue ni une décision fonctionnelle, ni une validation d'architecture. Toute évolution impliquant le schéma Prisma, un contrat API, le RBAC ou une règle métier devra faire l'objet d'une mission dédiée et d'une validation préalable.
+
+## 1.1 État d’exécution au 2 août 2026
+
+Le contenu d’analyse des sections 3 à 7 décrit la photographie du dépôt au SHA `b6a9e58e827f24673db65a1239f573ceb0c2e13f`. Les constats formulés au présent sur l’absence de `HousekeepingTask` doivent donc être lus comme historiques. Depuis cette analyse, la fondation de données HK-P1-03A a été fusionnée ; le service runtime, l’API, les intégrations et les interfaces restent à réaliser dans les sous-lots suivants.
+
+| Lot | État confirmé | Référence / suite |
+|---|---|---|
+| `MNT-P1-01` + `MNT-P1-05` | fusionnés | filtres et résilience Maintenance, PR #53 |
+| Historique Housekeeping par chambre | fusionné | MISSION-0013, PR #56 |
+| `HK-P1-01` | fusionné | filtres Housekeeping, PR #57 |
+| `HK-P1-02` | fusionné | actualisation manuelle Housekeeping, PR #58 |
+| Architecture `HK-P1-03` v1.1 | validée et fusionnée | document d’architecture, PR #59 |
+| `HK-P1-03A` | fusionné | schéma, migration, seed et reprise, PR #60 ; nouveau `main` `1cb146b5fe23ab250f48c74771e15400f4848c96` |
+| `MNT-P1-02` | réalisé, PR ouverte | PR #55 à actualiser, retester et revoir avant toute fusion |
+| `HK-P1-03B` | prochaine mission | service, machine à états, verrous et audit |
+| `HK-P1-03C` | en attente de B | API, checkout et réconciliation |
+| `HK-P1-03D` | en attente de C | interfaces desktop et mobile |
+| `HK-P1-03E` | en attente de B–D | validation intégrée, concurrence et E2E |
+| `HK-P1-04` | différé | à engager seulement après validation complète de A–E |
+
+### Découpage exécutable de HK-P1-03
+
+| Sous-lot | Responsabilité | Dépendance de démarrage |
+|---|---|---|
+| A — Fondation | schéma, migration, seed et backfill | terminée |
+| B — Domaine | service, transitions, concurrence, audit | A |
+| C — Intégrations | API, checkout, réconciliation | B |
+| D — Interfaces | desktop et mobile | C |
+| E — Validation | scénarios intégrés, concurrence, E2E | B à D terminés |
+
+Chaque sous-lot est une mission dédiée, sur une branche et une Pull Request distinctes. Aucune fusion ni opération sur le VPS n’est implicite.
+
+### Critères de clôture du Sprint 002
+
+Le Sprint 002 pourra être déclaré terminé lorsque :
+
+- HK-P1-03 A à E seront fusionnés après revue avec CI verte ;
+- les incréments P1 ouverts seront fusionnés ou explicitement différés par décision produit ;
+- la migration et le backfill auront été répétés sur une copie ou un environnement de préproduction avant le VPS ;
+- les transitions de chambre resteront centralisées et aucun nouveau flux ne contournera les règles métier ;
+- la documentation d’exploitation et de déploiement reflétera l’état réellement livré.
 
 ## 2. Synthèse exécutive
 
@@ -293,18 +336,18 @@ Les estimations sont relatives : `S` faible, `M` modérée, `L` importante, `XL`
 | `MNT-P3-02` | indicateurs de performance | historique structuré, délais et coûts fiables | `L` |
 | `MNT-P3-03` | calendrier technique | préventif et planification techniciens | `L` |
 
-## 8. Ordre recommandé des développements
+## 8. Ordre d’exécution actualisé
 
-1. Faire valider les définitions métier : tâche housekeeping, affectation, contrôle qualité, cycle d'intervention, délai, technicien et comportement d'une chambre occupée.
-2. Livrer les incréments sans changement de schéma : `HK-P1-01`, `MNT-P1-01`, `MNT-P1-05`, puis `MNT-P1-02` après clarification de l'historique attendu.
-3. Mesurer et sécuriser la réconciliation housekeeping avant d'ajouter un rafraîchissement périodique (`HK-P1-02`).
-4. Concevoir et valider la fondation HousekeepingTask (`HK-P1-03`) dans une mission d'architecture et de données dédiée.
-5. Construire la progression, la charge, l'historique et le contrôle qualité sur cette fondation (`HK-P1-04`, puis P2 Housekeeping).
-6. Concevoir le cycle de maintenance enrichi et les délais (`MNT-P1-03`, `MNT-P1-04`) dans des migrations additives séparées.
-7. Ajouter la planification et les intégrations coûts/Stock après validation de leurs responsabilités transactionnelles.
-8. N'engager les optimisations P3 qu'après collecte de données suffisamment fiables.
+1. Revoir puis fusionner `HK-P1-03B` : service métier, machine à états, verrous, concurrence et audit.
+2. Réaliser `HK-P1-03C` sur la fondation validée : API, création au checkout et réconciliation, sans dupliquer l’autorité de transition des chambres.
+3. Réaliser `HK-P1-03D` : interfaces desktop et mobile fondées sur les contrats stabilisés de C.
+4. Exécuter `HK-P1-03E` : validation intégrée, RBAC, scénarios de concurrence et E2E des flux Checkout → Housekeeping → Stock.
+5. Actualiser et revoir la PR #55 (`MNT-P1-02`) comme mission indépendante, sans la coupler aux sous-lots Housekeeping.
+6. N’engager `HK-P1-04` qu’après clôture de A–E et mesure de la stabilité opérationnelle.
+7. Concevoir ensuite les évolutions Maintenance structurantes (`MNT-P1-03`, `MNT-P1-04`) dans des migrations additives séparées.
+8. Réserver les capacités P2/P3 aux décisions produit ultérieures et aux données devenues suffisamment fiables.
 
-Cet ordre limite les changements couplés et évite de construire des interfaces sur des concepts métier encore absents. Il reste soumis aux priorités du Product Owner et aux validations de l'Architecte.
+L’ordre est piloté par les dépendances réelles : la couche domaine précède l’API, l’API précède les interfaces, puis la validation intégrée clôt la chaîne. Le travail Maintenance indépendant peut avancer en parallèle sur une branche distincte.
 
 ## 9. Risques techniques
 
@@ -360,8 +403,8 @@ Cet ordre limite les changements couplés et évite de construire des interfaces
 
 ## 13. Hors périmètre de ce document
 
-- aucune modification de code, contrat API, modèle Prisma, migration ou test ;
+- aucune modification de code applicatif, contrat API, modèle Prisma, migration ou test ;
 - aucune nouvelle règle métier ;
-- aucune décision sur les priorités produit ;
-- aucune correction de la documentation existante identifiée comme obsolète ;
+- aucune fusion de Pull Request ;
+- aucune migration, reprise de données ou opération sur le VPS ;
 - aucune implémentation des améliorations proposées.
