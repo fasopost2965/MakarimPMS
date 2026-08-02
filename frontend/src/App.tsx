@@ -8,7 +8,7 @@ import { ForgotPasswordPage } from '@/features/auth/pages/ForgotPasswordPage';
 import { me as fetchMe } from '@/features/auth/api';
 import { getBranding } from '@/features/parameters/api';
 import type { Branding } from '@/features/parameters/types';
-import defaultLogoUrl from '@/assets/brand/logo-makarim-source.jpg';
+import defaultLogoUrl from '@/assets/brand/logo-makarim-mark.png';
 
 // CH-030 (docs/audits/PHASE_11_FRONTEND_QUALITE.md §4.4) — chaque page de
 // premier niveau chargée à la demande plutôt qu'au premier login : un rôle
