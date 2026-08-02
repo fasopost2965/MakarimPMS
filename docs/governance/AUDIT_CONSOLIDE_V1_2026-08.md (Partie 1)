@@ -1,0 +1,225 @@
+# AUDIT CONSOLIDÉ V1
+## Projet : MakarimPMS
+Version : 1.0
+Date : 02 août 2026
+Statut : Référence de gouvernance
+
+---
+
+# 1. Objet du document
+
+Ce document constitue la référence technique et fonctionnelle du projet MakarimPMS à compter du 02/08/2026.
+
+Il remplace les multiples notes d'audit réalisées pendant les différentes phases du projet et centralise l'état réel du système.
+
+Ce document devra être mis à jour après chaque fusion importante.
+
+Il constitue la photographie officielle du projet.
+
+---
+
+# 2. Sources utilisées
+
+Les informations de ce document proviennent :
+
+- du code source actuel
+- des audits techniques
+- des audits frontend
+- du registre des chantiers
+- du registre des décisions
+- de la matrice de traçabilité
+- des plans backend
+- des plans frontend
+- des documents de gouvernance
+- des documents Housekeeping
+- des documents Maintenance
+- des documents Infrastructure
+- des workflows GitHub Actions
+- des scripts de déploiement
+- des scripts de sauvegarde
+- des PR fusionnées
+- des issues ouvertes
+
+En cas de conflit entre plusieurs documents, les règles suivantes s'appliquent :
+
+1. Code source
+2. Schema Prisma
+3. Migrations
+4. Registre des décisions
+5. Registre des chantiers
+6. Documentation
+
+---
+
+# 3. Résumé exécutif
+
+Le projet MakarimPMS a atteint un niveau de maturité élevé.
+
+L'architecture générale est stable.
+
+Les principaux domaines métiers sont implémentés.
+
+Le projet ne nécessite plus une refonte.
+
+La stratégie retenue est :
+
+- amélioration progressive
+- aucun redéveloppement inutile
+- maintien des règles métier
+- stabilité avant nouvelles fonctionnalités
+
+Les principaux travaux restants concernent :
+
+- Housekeeping Task Engine
+- Historique Maintenance
+- Synchronisation documentaire
+- Stabilisation CI/CD
+- Validation Go Live
+- Modernisation UX/UI
+
+---
+
+# 4. Architecture générale
+
+Architecture :
+
+Monorepo
+
+Backend :
+NestJS
+
+Frontend :
+React
+
+ORM :
+Prisma
+
+Base de données :
+MySQL
+
+Cache :
+Redis
+
+Documentation API :
+Swagger/OpenAPI
+
+Authentification :
+JWT
+
+Contrôle d'accès :
+RBAC
+
+Déploiement :
+Docker Compose
+
+Reverse Proxy :
+Nginx
+
+CI/CD :
+GitHub Actions
+
+---
+
+# 5. Principes d'architecture validés
+
+Les principes suivants sont officiellement retenus.
+
+## 5.1
+
+Le projet ne sera jamais réécrit.
+
+Toutes les évolutions sont incrémentales.
+
+---
+
+## 5.2
+
+La logique métier est prioritaire sur l'interface.
+
+---
+
+## 5.3
+
+Toute évolution doit être compatible avec les données existantes.
+
+---
+
+## 5.4
+
+Aucune duplication volontaire des règles métier.
+
+---
+
+## 5.5
+
+Un seul service est responsable d'une même règle métier.
+
+---
+
+## 5.6
+
+Les modules communiquent uniquement via leurs services.
+
+---
+
+## 5.7
+
+Aucun accès direct à la base pour contourner les services métier.
+
+---
+
+# 6. État général des modules
+
+| Module | État |
+|---------|------|
+| Auth | Stable |
+| RBAC | Stable |
+| Rooms | Stable |
+| Guests | Stable |
+| Reservations | Stable |
+| Stay | Stable |
+| Billing | Stable |
+| Payments | Stable |
+| Housekeeping | En évolution |
+| Maintenance | Stable |
+| Restaurant | Fonctionnel |
+| Inventory | Fonctionnel |
+| Reporting | Fonctionnel |
+| Notifications | Fonctionnel |
+| OCR | Fonctionnel |
+| Booking Engine | Fonctionnel |
+| Self Check-in | Fonctionnel |
+| Channel Manager | Partiellement validé |
+| HR | Partiellement implémenté |
+
+---
+
+# 7. Niveau de maturité
+
+Backend
+
+★★★★★
+
+Frontend
+
+★★★★☆
+
+Infrastructure
+
+★★★★☆
+
+Documentation
+
+★★★★☆
+
+Tests
+
+★★★★☆
+
+Sécurité
+
+★★★★☆
+
+Architecture
+
+★★★★★
