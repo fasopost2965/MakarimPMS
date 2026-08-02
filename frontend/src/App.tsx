@@ -8,6 +8,7 @@ import { ForgotPasswordPage } from '@/features/auth/pages/ForgotPasswordPage';
 import { me as fetchMe } from '@/features/auth/api';
 import { getBranding } from '@/features/parameters/api';
 import type { Branding } from '@/features/parameters/types';
+import defaultLogoUrl from '@/assets/brand/logo-makarim-mark.png';
 
 // CH-030 (docs/audits/PHASE_11_FRONTEND_QUALITE.md §4.4) — chaque page de
 // premier niveau chargée à la demande plutôt qu'au premier login : un rôle
@@ -158,6 +159,7 @@ function App() {
   // tant que non chargée : les deux consommateurs se rabattent sur un
   // fallback texte/icône, jamais de plantage sur un logo absent.
   const [branding, setBranding] = useState<Branding | null>(null);
+  const resolvedLogoUrl = branding?.logoUrl ?? defaultLogoUrl;
 
   useEffect(() => {
     getBranding()
@@ -168,11 +170,10 @@ function App() {
       });
   }, []);
 
-  // Favicon dynamique — reflète le logo configuré dès qu'il est chargé,
-  // sans dépendre d'un fichier statique committé (l'hôtel peut changer son
-  // logo à tout moment depuis Paramètres, voir ParametersPage).
+  // Favicon dynamique — reflète le logo configuré dès qu'il est chargé et
+  // utilise le logo officiel committé comme repli. L'hôtel peut toujours
+  // changer son logo depuis Paramètres, sans modifier le code.
   useEffect(() => {
-    if (!branding?.logoUrl) return;
     const link =
       document.querySelector<HTMLLinkElement>('link[rel="icon"]') ??
       (() => {
@@ -181,8 +182,8 @@ function App() {
         document.head.appendChild(el);
         return el;
       })();
-    link.href = branding.logoUrl;
-  }, [branding?.logoUrl]);
+    link.href = resolvedLogoUrl;
+  }, [resolvedLogoUrl]);
 
   useEffect(() => {
     onAuthFailure(() => {
@@ -275,7 +276,7 @@ function App() {
       return (
         <ForgotPasswordPage
           onBackToLogin={() => setAuthScreen('login')}
-          logoUrl={branding?.logoUrl ?? null}
+          logoUrl={resolvedLogoUrl}
           raisonSociale={branding?.raisonSociale}
         />
       );
@@ -284,7 +285,7 @@ function App() {
       <LoginPage
         onLoginSuccess={() => setIsAuthenticated(true)}
         onForgotPassword={() => setAuthScreen('forgot-password')}
-        logoUrl={branding?.logoUrl ?? null}
+        logoUrl={resolvedLogoUrl}
         raisonSociale={branding?.raisonSociale}
       />
     );
@@ -300,7 +301,7 @@ function App() {
         mobileOpen={mobileNavOpen}
         onMobileClose={() => setMobileNavOpen(false)}
         permissions={permissions}
-        logoUrl={branding?.logoUrl ?? null}
+        logoUrl={resolvedLogoUrl}
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <AppTopbar

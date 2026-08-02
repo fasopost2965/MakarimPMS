@@ -1,10 +1,22 @@
-# Logo Hôtel Makarim — asset source
+# Logo officiel Hôtel Makarim Tétouan
 
-`logo-makarim-source.jpg` : logo officiel fourni par l'utilisateur (225×225, fond blanc), destiné à une intégration ultérieure — **pas encore câblé nulle part** dans l'application.
+`logo-makarim-source.jpg` est le fichier officiel fourni par l'utilisateur
+le 2 août 2026 (1280×848, fond blanc). Il est conservé sans retouche afin de
+préserver fidèlement le dessin et les couleurs de l'hôtel.
 
-Usages prévus, à faire dans une session dédiée :
-- Logo affiché dans `AppSidebar` (remplace le badge « M » générique actuel).
-- Favicon (`frontend/public/favicon.svg` reste le favicon actif tant que ce logo n'est pas décliné en SVG/PNG optimisé).
-- En-tête des documents PDF générés côté backend (fiche de police — `police/utils/police-record.pdf.ts` — et toute future facture/reçu, module `billing`).
+`logo-makarim-mark.png` est une déclinaison compacte et transparente obtenue
+par recadrage déterministe de l'emblème du fichier officiel. Aucun élément
+n'est redessiné ou généré. Cette version carrée évite de rendre illisibles les
+trois lignes de texte du logo complet dans les cadres de 28 à 34 pixels.
 
-Le fichier source (JPEG) devra probablement être retravaillé (fond transparent, déclinaisons de taille) avant intégration réelle — conservé tel que fourni pour l'instant.
+Usages actifs :
+
+- repli visuel compact de la connexion, du mot de passe oublié et de la
+  sidebar quand aucun logo personnalisé n'est enregistré dans
+  `HotelConfig.logoUrl` ;
+- favicon dynamique de repli après le chargement du frontend.
+
+Le logo administrable depuis Paramètres reste prioritaire. Les documents PDF
+continuent volontairement d'utiliser `HotelConfig.logoUrl` : cette source
+configurable est leur contrat existant et ne doit pas être contournée par un
+chemin de fichier frontend inaccessible au backend.
