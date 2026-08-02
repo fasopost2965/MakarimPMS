@@ -157,6 +157,7 @@ model Room {
   nights             RoomNight[]
   stays              Stay[]
   statusLogs         RoomStatusLog[]
+  housekeepingTasks  HousekeepingTask[]
   maintenanceTickets MaintenanceTicket[]
   stockMovements     StockMovement[]
   // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
@@ -178,6 +179,86 @@ model RoomStatusLog {
   motif         String?
   userId        Int?
   createdAt     DateTime      @default(now())
+}
+
+enum StatutTacheHousekeeping {
+  A_FAIRE
+  AFFECTEE
+  EN_COURS
+  TERMINEE
+  VALIDEE
+  ANNULEE
+}
+
+enum OrigineTacheHousekeeping {
+  CHECKOUT
+  MANUELLE
+  REPRISE
+}
+
+enum TypeLogTacheHousekeeping {
+  CREATION
+  AFFECTATION
+  REAFFECTATION
+  RETRAIT_AFFECTATION
+  DEMARRAGE
+  COMPLETION
+  VALIDATION
+  REFUS_CONTROLE
+  ANNULATION
+  REOUVERTURE
+}
+
+// Fondation HK-P1-03A : une tâche représente un cycle de nettoyage d'une
+// chambre. activeRoomKey duplique volontairement roomId uniquement pendant
+// les états actifs : l'unicité nullable MySQL garantit ainsi au niveau base
+// qu'une chambre ne possède jamais deux tâches actives simultanément.
+model HousekeepingTask {
+  id             Int                      @id @default(autoincrement())
+  roomId         Int
+  room           Room                     @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  assignedUserId Int?
+  assignedUser   User?                    @relation("HousekeepingTaskAssignedUser", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  statut         StatutTacheHousekeeping  @default(A_FAIRE)
+  origine        OrigineTacheHousekeeping
+  sourceEventKey String?                  @unique @db.VarChar(64)
+  activeRoomKey  Int?                     @unique
+  assignedAt     DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  validatedAt    DateTime?
+  cancelledAt    DateTime?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  logs           HousekeepingTaskLog[]
+
+  @@index([roomId, createdAt])
+  @@index([statut])
+  @@index([assignedUserId, statut])
+}
+
+// Journal métier append-only des transitions et affectations. Les noms sont
+// copiés au moment de l'action pour conserver un historique intelligible si
+// un compte est ensuite renommé, désactivé ou supprimé logiquement.
+model HousekeepingTaskLog {
+  id                     Int                      @id @default(autoincrement())
+  taskId                 Int
+  task                   HousekeepingTask         @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  type                   TypeLogTacheHousekeeping
+  actorUserId            Int?
+  actorUser              User?                    @relation("HousekeepingTaskLogActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  ancienStatut           StatutTacheHousekeeping?
+  nouveauStatut          StatutTacheHousekeeping?
+  ancienAssignedUserId   Int?
+  nouveauAssignedUserId  Int?
+  ancienAssignedUserNom  String?
+  nouveauAssignedUserNom String?
+  actorUserNom           String?
+  motif                  String?
+  createdAt              DateTime                 @default(now())
+
+  @@index([taskId, createdAt])
+  @@index([actorUserId])
 }
 
 enum CategorieClient {
@@ -739,27 +820,29 @@ model RolePermission {
 }
 
 model User {
-  id                      Int                  @id @default(autoincrement())
-  nom                     String
-  email                   String               @unique
-  motDePasseHash          String
-  roleId                  Int
-  role                    Role                 @relation(fields: [roleId], references: [id])
-  actif                   Boolean              @default(true)
-  createdAt               DateTime             @default(now())
-  loginLogs               LoginLog[]
-  passwordResets          PasswordResetToken[]
-  refreshTokens           RefreshToken[]
-  auditLogs               AuditLog[]
+  id                        Int                   @id @default(autoincrement())
+  nom                       String
+  email                     String                @unique
+  motDePasseHash            String
+  roleId                    Int
+  role                      Role                  @relation(fields: [roleId], references: [id])
+  actif                     Boolean               @default(true)
+  createdAt                 DateTime              @default(now())
+  loginLogs                 LoginLog[]
+  passwordResets            PasswordResetToken[]
+  refreshTokens             RefreshToken[]
+  auditLogs                 AuditLog[]
   // Profil RH (module 5.11) : au plus un Employee par compte de connexion.
-  employee                Employee?
+  employee                  Employee?
   // Bulletins de paie validés par cet utilisateur en tant que responsable RH.
-  paySlipsValidated       PaySlip[]
-  stockMovements          StockMovement[]
-  purchaseOrdersCreated   PurchaseOrder[]      @relation("PurchaseOrderCreatedBy")
-  purchaseOrdersValidated PurchaseOrder[]      @relation("PurchaseOrderValidatedBy")
+  paySlipsValidated         PaySlip[]
+  stockMovements            StockMovement[]
+  purchaseOrdersCreated     PurchaseOrder[]       @relation("PurchaseOrderCreatedBy")
+  purchaseOrdersValidated   PurchaseOrder[]       @relation("PurchaseOrderValidatedBy")
+  housekeepingTasksAssigned HousekeepingTask[]    @relation("HousekeepingTaskAssignedUser")
+  housekeepingTaskLogs      HousekeepingTaskLog[] @relation("HousekeepingTaskLogActor")
   // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
-  deletedAt               DateTime?
+  deletedAt                 DateTime?
 
   @@index([deletedAt])
 }
@@ -1259,6 +1342,7 @@ enum AuditEntity {
   // même statut que Company (guests), n'est pas audité.
   Supplier
   PurchaseOrder
+  HousekeepingTask
 }
 
 enum AuditAction {
@@ -1332,6 +1416,11 @@ enum AuditAction {
   SUBMIT_PURCHASE_ORDER
   VALIDATE_PURCHASE_ORDER
   CANCEL_PURCHASE_ORDER
+  REASSIGN_HOUSEKEEPING_TASK
+  CANCEL_HOUSEKEEPING_TASK
+  VALIDATE_HOUSEKEEPING_TASK
+  REFUSE_HOUSEKEEPING_TASK
+  REOPEN_HOUSEKEEPING_TASK
 }
 
 // ------------------------------------------------------------------
