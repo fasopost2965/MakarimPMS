@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select';
 import { createTicket, listRooms, listTickets, resolveTicket } from '../api';
 import { MaintenanceTicketDetailDialog } from '../components/MaintenanceTicketDetailDialog';
+import { RoomMaintenanceHistoryDialog } from '../components/RoomMaintenanceHistoryDialog';
 import type {
   CreateMaintenanceTicketInput,
   MaintenanceTicket,
@@ -112,6 +113,7 @@ export function MaintenancePage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
   const [detailTicketId, setDetailTicketId] = useState<number | null>(null);
+  const [historyRoom, setHistoryRoom] = useState<Room | null>(null);
 
   const refetchTickets = useCallback(async () => {
     setTicketsLoading(true);
@@ -481,15 +483,31 @@ export function MaintenancePage() {
                   <Wrench className="size-4" />
                 </span>
               )}
-              <button
-                type="button"
-                onClick={() => setDetailTicketId(ticket.id)}
-                className="col-start-1 row-start-2 min-w-0 truncate rounded text-left font-medium outline-none hover:underline focus-visible:ring-2 md:col-auto md:row-auto"
-                aria-label={`Voir le détail du ticket ${ticket.id}`}
-              >
-                {ticket.room ? `Chambre ${ticket.room.numero}` : 'Zone commune'}{' '}
-                — {ticket.typePanne}
-              </button>
+              <div className="col-start-1 row-start-2 min-w-0 md:col-auto md:row-auto">
+                <div className="flex min-w-0 flex-wrap items-center gap-1 font-medium">
+                  {ticket.room ? (
+                    <button
+                      type="button"
+                      onClick={() => setHistoryRoom(ticket.room)}
+                      className="rounded text-left underline-offset-2 outline-none hover:underline focus-visible:ring-2"
+                      aria-label={`Voir l’historique maintenance de la chambre ${ticket.room.numero}`}
+                    >
+                      Chambre {ticket.room.numero}
+                    </button>
+                  ) : (
+                    <span>Zone commune</span>
+                  )}
+                  <span aria-hidden="true">—</span>
+                  <button
+                    type="button"
+                    onClick={() => setDetailTicketId(ticket.id)}
+                    className="min-w-0 truncate rounded text-left outline-none hover:underline focus-visible:ring-2"
+                    aria-label={`Voir le détail du ticket ${ticket.id}`}
+                  >
+                    {ticket.typePanne}
+                  </button>
+                </div>
+              </div>
               <span className="col-start-1 row-start-3 md:col-auto md:row-auto">
                 <Badge variant={PRIORITE_BADGE_VARIANT[ticket.priorite]}>
                   {PRIORITE_LABEL[ticket.priorite]}
@@ -550,6 +568,12 @@ export function MaintenancePage() {
       <MaintenanceTicketDetailDialog
         ticketId={detailTicketId}
         onClose={() => setDetailTicketId(null)}
+      />
+
+      <RoomMaintenanceHistoryDialog
+        roomId={historyRoom?.id ?? null}
+        roomNumero={historyRoom?.numero ?? null}
+        onClose={() => setHistoryRoom(null)}
       />
 
       <Dialog

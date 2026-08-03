@@ -379,6 +379,39 @@ describe('MaintenancePage — création, résolution et accessibilité', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('ouvre l’historique de chambre au clavier et ne propose rien pour une zone commune', async () => {
+    const user = userEvent.setup();
+    const room202 = mockRoom({ id: 2, numero: '202' });
+    const roomTicket = mockTicket({ id: 1, roomId: 2, room: room202 });
+    const commonTicket = mockTicket({ id: 2 });
+    vi.mocked(listTickets)
+      .mockResolvedValueOnce([roomTicket, commonTicket])
+      .mockResolvedValueOnce([roomTicket]);
+
+    render(<MaintenancePage />);
+    const historyButton = await screen.findByRole('button', {
+      name: 'Voir l’historique maintenance de la chambre 202',
+    });
+    expect(
+      screen.queryByRole('button', {
+        name: /historique maintenance.*zone commune/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Voir le détail du ticket 1' }),
+    ).toBeInTheDocument();
+
+    historyButton.focus();
+    await user.keyboard('{Enter}');
+
+    expect(listTickets).toHaveBeenLastCalledWith({ roomId: 2 });
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Historique maintenance — chambre 202',
+      }),
+    ).toBeInTheDocument();
+  });
+
   it('utilise une structure responsive unique', async () => {
     vi.mocked(listTickets).mockResolvedValue([mockTicket({ id: 1 })]);
 
@@ -386,7 +419,7 @@ describe('MaintenancePage — création, résolution et accessibilité', () => {
     const detailButton = await screen.findByRole('button', {
       name: 'Voir le détail du ticket 1',
     });
-    const row = detailButton.parentElement;
+    const row = detailButton.closest('.border-b');
     const header = screen.getByText('Ticket').parentElement;
 
     expect(row).toHaveClass('grid-cols-[minmax(0,1fr)_minmax(110px,auto)]');
@@ -406,7 +439,7 @@ describe('MaintenancePage — photo et formulaire existants', () => {
 
     expect(
       await screen.findByRole('button', { name: 'Voir le détail du ticket 1' }),
-    ).toHaveTextContent('Zone commune — Plomberie');
+    ).toHaveTextContent('Plomberie');
   });
 
   it('ouvre la photo en plein format', async () => {
