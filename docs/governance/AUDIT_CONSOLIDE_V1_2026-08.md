@@ -1,14 +1,15 @@
 # AUDIT CONSOLIDÉ V1
 ## Projet : MakarimPMS
-Version : 1.0
-Date : 02 août 2026
-Statut : Référence de gouvernance
+Version : 1.1
+Date : 03 août 2026
+Statut : Référence de gouvernance (Confirmé)
+Dernier SHA connu (main) : 12c60957f1287a745defeadcb79cf62767545fd6
 
 ---
 
 # 1. Objet du document
 
-Ce document constitue la référence technique et fonctionnelle du projet MakarimPMS à compter du 02/08/2026.
+Ce document constitue la référence technique et fonctionnelle du projet MakarimPMS à compter du 03/08/2026.
 
 Il remplace les multiples notes d'audit réalisées pendant les différentes phases du projet et centralise l'état réel du système.
 
@@ -180,7 +181,7 @@ Aucun accès direct à la base pour contourner les services métier.
 | Stay | Stable |
 | Billing | Stable |
 | Payments | Stable |
-| Housekeeping | En évolution |
+| Housekeeping | Implémenté (Backend) / Planifié (Frontend) |
 | Maintenance | Stable |
 | Restaurant | Fonctionnel |
 | Inventory | Fonctionnel |
@@ -373,9 +374,9 @@ Responsabilités :
 
 Statut :
 
-En cours d'intégration
+Implémenté (Backend) - Planifié (Intégration Frontend & Checkout)
 
-Ce service deviendra l'autorité unique des tâches Housekeeping.
+Ce service est l'autorité unique des tâches Housekeeping.
 
 ---
 
@@ -543,24 +544,24 @@ Dashboard
 
 ## Documents de référence
 
-- schema.prisma
-- REGISTRE_CHANTIERS
-- REGISTRE_DECISIONS
-- ETAT_ACTUEL_PROJET
-- GO_LIVE_CHECKLIST
-- OPERATIONS_RUNBOOK
-- PLAN_BACKEND_100_REEL
-- CARTOGRAPHIE_ECRANS
-- EXIGENCES_UX
-- AUDITS TECHNIQUES
+- schema.prisma (Confirmé)
+- REGISTRE_CHANTIERS (À vérifier)
+- REGISTRE_DECISIONS (Confirmé)
+- ETAT_ACTUEL_PROJET (À vérifier)
+- GO_LIVE_CHECKLIST (À vérifier)
+- OPERATIONS_RUNBOOK (Planifié)
+- PLAN_BACKEND_100_REEL (Implémenté)
+- CARTOGRAPHIE_ECRANS (Confirmé)
+- EXIGENCES_UX (Confirmé)
+- AUDITS TECHNIQUES (Confirmé)
 
 ---
 
 ## Documents à synchroniser
 
-- ETAT_ACTUEL_PROJET
-- MATRICE_TRACABILITE
-- RELEASE_CHECKLIST
+- ETAT_ACTUEL_PROJET (Planifié)
+- MATRICE_TRACABILITE (Planifié)
+- RELEASE_CHECKLIST (Planifié)
 
 ---
 
@@ -582,10 +583,11 @@ Aucune.
 
 ## Haute
 
-- Finaliser HK-P1-03B
-- Finaliser HK-P1-03C
-- Historique Maintenance
-- Synchronisation documentaire
+- HK-P1-03A : Implémenté (fusionné)
+- HK-P1-03B : Implémenté (fusionné)
+- HK-P1-03C : Planifié (non commencé)
+- Historique Maintenance : Planifié
+- Synchronisation documentaire : Planifié
 
 ---
 
@@ -855,9 +857,9 @@ Stable
 
 ## Housekeeping
 
-En évolution.
+Implémenté (Backend) / Planifié (Frontend).
 
-Le moteur HousekeepingTask devient la référence.
+Le moteur HousekeepingTask est la référence.
 
 ---
 
@@ -952,11 +954,11 @@ Ils ne remettent pas en cause la stabilité générale du projet mais devront ê
 
 | ID | Risque | Priorité | Statut |
 |----|---------|----------|--------|
-| R-001 | Finalisation HousekeepingTask | Haute | En cours |
-| R-002 | Historique Maintenance | Haute | À faire |
-| R-003 | Synchronisation documentaire | Haute | À faire |
-| R-004 | Sauvegarde externe VPS | Haute | À faire |
-| R-005 | Validation Go Live | Haute | À faire |
+| R-001 | Finalisation HousekeepingTask (Frontend & HK-P1-03C) | Haute | Planifié |
+| R-002 | Historique Maintenance | Haute | Planifié |
+| R-003 | Synchronisation documentaire | Haute | Planifié |
+| R-004 | Sauvegarde externe VPS | Haute | Planifié |
+| R-005 | Validation Go Live | Haute | À vérifier |
 | R-006 | Smoke Test Frontend | Moyenne | À faire |
 | R-007 | Validation Notifications | Moyenne | À faire |
 | R-008 | Validation OTA | Moyenne | À faire |
@@ -1043,10 +1045,11 @@ Les développements futurs devront respecter l'ordre suivant.
 
 ## Priorité 1
 
-- Finaliser HK-P1-03B
-- Finaliser HK-P1-03C
-- Fusion et validation
-- Historique Maintenance
+- HK-P1-03C : Planifié (non commencé)
+- Intégration Checkout (Réconciliation automatique) : Planifié
+- Endpoints HousekeepingTask et Frontend des tâches : Planifié
+- Fusion et validation : À vérifier
+- Historique Maintenance : Planifié
 
 ---
 
@@ -1121,3 +1124,4 @@ Aucun développement majeur ne devra être engagé sans vérification de ces doc
 | Version | Date | Auteur | Description |
 |---------|------|--------|-------------|
 | 1.0 | 02/08/2026 | ChatGPT (Lead Architect / QA) | Première consolidation complète des audits, de la gouvernance et de l'état réel du projet. |
+| 1.1 | 03/08/2026 | Antigravity | Mise à jour de l'état Housekeeping (HK-P1-03A/B fusionnés), ajout du SHA main. |
