@@ -524,19 +524,11 @@ Availability
 
 ## Housekeeping
 
-Checkout
-
-↓
-
-HousekeepingTask
-
-↓
-
-Room
-
-↓
-
-Dashboard
+- HousekeepingTaskService domaine : implémenté et fusionné ;
+- création automatique au checkout : planifiée HK-P1-03C ;
+- endpoints HTTP : planifiés ;
+- frontend tâches et affectations : planifié ;
+- intégration Dashboard : planifiée.
 
 ---
 
@@ -546,14 +538,14 @@ Dashboard
 
 - schema.prisma (Confirmé)
 - REGISTRE_CHANTIERS (À vérifier)
-- REGISTRE_DECISIONS (Confirmé)
+- REGISTRE_DECISIONS (À vérifier)
 - ETAT_ACTUEL_PROJET (À vérifier)
 - GO_LIVE_CHECKLIST (À vérifier)
-- OPERATIONS_RUNBOOK (Planifié)
-- PLAN_BACKEND_100_REEL (Implémenté)
-- CARTOGRAPHIE_ECRANS (Confirmé)
-- EXIGENCES_UX (Confirmé)
-- AUDITS TECHNIQUES (Confirmé)
+- OPERATIONS_RUNBOOK (À vérifier)
+- PLAN_BACKEND_100_REEL (À vérifier)
+- CARTOGRAPHIE_ECRANS (À vérifier)
+- EXIGENCES_UX (À vérifier)
+- AUDITS TECHNIQUES (À vérifier)
 
 ---
 
@@ -577,7 +569,8 @@ Le code actuel fait foi.
 
 ## Critique
 
-Aucune.
+Aucun défaut applicatif critique confirmé à cette date.
+La validation go-live, sécurité VPS, sauvegarde/restauration et missions P1 restantes demeurent ouvertes.
 
 ---
 
@@ -612,9 +605,18 @@ Aucune.
 
 ## Niveau global
 
-Élevé
-
-L'architecture de sécurité est considérée comme adaptée à une mise en production après validation opérationnelle.
+- état du code : implémenté
+- état CI : vérifié
+- état VPS : à vérifier
+- contrôles restant à vérifier :
+  - rotation des secrets (à vérifier)
+  - permissions .env (à vérifier)
+  - SSH (à vérifier)
+  - pare-feu (à vérifier)
+  - HSTS (à vérifier)
+  - Certbot (à vérifier)
+  - sauvegarde distante (à vérifier)
+  - restauration (à vérifier)
 
 ---
 
@@ -672,15 +674,7 @@ Son remplacement nécessite une procédure de migration.
 
 ## Points restant à vérifier
 
-Ces éléments ne peuvent être validés que sur le VPS :
-
-- rotation réelle des secrets
-- permissions des fichiers .env
-- configuration SSH
-- pare-feu
-- renouvellement Certbot
-- HSTS
-- sauvegarde distante
+Ces éléments sont listés dans le niveau global et ne peuvent être validés que sur le VPS.
 
 ---
 
@@ -707,22 +701,22 @@ GitHub Actions
 Le pipeline effectue :
 
 - Build
-- Push GHCR
+- Push GHCR (à vérifier)
 - Migration Prisma
 - Redémarrage Backend
 - Redémarrage Frontend
 - Healthcheck
-- Promotion stable
-- Rollback
+- Promotion stable (à vérifier)
+- Rollback automatique (à vérifier)
+- Sauvegarde avant migration (à vérifier)
+- Smoke test après déploiement (à vérifier)
 
 ---
 
 ## Points restant à améliorer
 
-- sauvegarde automatique avant migration
 - premier tag stable
 - alignement version Node
-- smoke test frontend
 - validation HTTPS
 
 ---
@@ -867,7 +861,11 @@ Le moteur HousekeepingTask est la référence.
 
 Stable.
 
-Historique chambre en attente.
+Historique Maintenance :
+- implémentation disponible dans la PR #55
+- non fusionnée
+- branche ancienne à synchroniser avec main
+- statut : en attente de remise à niveau et validation
 
 ---
 
@@ -889,61 +887,64 @@ Tests de concurrence à renforcer.
 
 ## Reporting
 
-Fonctionnel.
-
-Validation métier des états restant à effectuer.
+- implémenté dans le code : oui
+- testé automatiquement : à vérifier
+- validé fonctionnellement : à vérifier (validation métier des états restante)
+- validé sur VPS : à vérifier
 
 ---
 
 ## RH
 
-Employés
-
-Présence
-
-Paie
-
-Planning prévisionnel restant à développer.
+- implémenté dans le code : oui (partiellement, planning prévisionnel restant à développer)
+- testé automatiquement : à vérifier
+- validé fonctionnellement : à vérifier
+- validé sur VPS : à vérifier
 
 ---
 
 ## OCR
 
-Fonctionnel.
-
-Validation humaine obligatoire.
+- implémenté dans le code : oui
+- testé automatiquement : à vérifier
+- validé fonctionnellement : à vérifier (validation humaine obligatoire)
+- validé sur VPS : à vérifier
 
 ---
 
 ## Booking Engine
 
-Fonctionnel.
-
-Réutilise ReservationsService.
+- implémenté dans le code : oui (réutilise ReservationsService)
+- testé automatiquement : à vérifier
+- validé fonctionnellement : à vérifier
+- validé sur VPS : à vérifier
 
 ---
 
 ## Self Check-in
 
-Fonctionnel.
-
-Pré-enregistrement uniquement.
+- implémenté dans le code : oui (pré-enregistrement uniquement)
+- testé automatiquement : à vérifier
+- validé fonctionnellement : à vérifier
+- validé sur VPS : à vérifier
 
 ---
 
 ## Channel Manager
 
-Architecture validée.
-
-Connecteurs OTA à finaliser selon les canaux.
+- implémenté dans le code : architecture validée, connecteurs OTA à finaliser
+- testé automatiquement : à vérifier
+- validé fonctionnellement : à vérifier
+- validé sur VPS : à vérifier
 
 ---
 
 ## Notifications
 
-Architecture validée.
-
-Validation des fournisseurs en production restante.
+- implémenté dans le code : architecture validée
+- testé automatiquement : à vérifier
+- validé fonctionnellement : à vérifier
+- validé sur VPS : à vérifier (validation fournisseurs en production restante)
 ---
 
 # 17. Risques ouverts
