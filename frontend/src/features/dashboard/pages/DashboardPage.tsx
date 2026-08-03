@@ -162,8 +162,7 @@ export function DashboardPage({ onNavigate, permissions }: Props) {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void refetch();
+    void Promise.resolve().then(() => refetch());
   }, [refetch]);
 
   const can = (permission: string) =>
