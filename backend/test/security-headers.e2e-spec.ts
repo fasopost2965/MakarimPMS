@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
@@ -62,7 +63,9 @@ describe('Security Headers & Swagger (e2e)', () => {
     const res = await request(prodApp.getHttpServer()).get('/');
     expect(res.headers['content-security-policy']).toBeDefined();
     // In strict CSP, 'unsafe-inline' is absent from script-src (but helmet default includes it in style-src)
-    expect(res.headers['content-security-policy']).not.toMatch(/script-src[^;]*'unsafe-inline'/);
+    expect(res.headers['content-security-policy']).not.toMatch(
+      /script-src[^;]*'unsafe-inline'/,
+    );
 
     // Swagger should not be mounted
     await request(prodApp.getHttpServer()).get('/api/docs').expect(404);

@@ -67,6 +67,12 @@ describe('Housekeeping — machine à états complète (e2e)', () => {
     await prisma.roomNight.deleteMany({ where: { room: { roomTypeId } } });
     await prisma.stay.deleteMany({ where: { room: { roomTypeId } } });
     await prisma.reservation.deleteMany({ where: { room: { roomTypeId } } });
+    await prisma.housekeepingTaskLog.deleteMany({
+      where: { task: { room: { roomTypeId } } },
+    });
+    await prisma.housekeepingTask.deleteMany({
+      where: { room: { roomTypeId } },
+    });
     await prisma.room.deleteMany({ where: { roomTypeId } });
     await prisma.roomType.deleteMany({ where: { id: roomTypeId } });
     await app.close();
@@ -122,7 +128,7 @@ describe('Housekeeping — machine à états complète (e2e)', () => {
       });
       expect(log).toBeDefined();
       expect(log!.ancienStatut).toBe('OCCUPEE');
-      expect(log!.motif).toContain('Check-out');
+      expect(log!.motif).toContain('Checkout');
     },
   );
 

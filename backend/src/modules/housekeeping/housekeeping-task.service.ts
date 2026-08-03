@@ -943,4 +943,106 @@ export class HousekeepingTaskService {
       return updated;
     });
   }
+
+  async handleCheckoutEffectue(
+    stayId: number,
+    roomId: number,
+    tx?: Prisma.TransactionClient,
+  ) {
+    return this.runInTx(tx, async (t) => {
+      const sourceEventKey = `checkout:${stayId}`;
+
+      // 1. Verrou Room
+      const room = await this.roomsService.lockRoomForUpdate(roomId, t);
+
+      // 2. Créer ou récupérer la tâche idempotente
+      let task = await t.housekeepingTask.findFirst({
+        where: { sourceEventKey },
+      });
+
+      if (!task) {
+        task = await this.createTask(
+          roomId,
+          OrigineTacheHousekeeping.CHECKOUT,
+          sourceEventKey,
+          t,
+        );
+      }
+
+      // 3. Transitionner la chambre vers A_NETTOYER si nécessaire
+      if (room.statut !== StatutChambre.A_NETTOYER) {
+        await this.roomsService.transitionRoom(
+          roomId,
+          StatutChambre.A_NETTOYER,
+          {
+            motif: `Checkout du séjour #${stayId} - passage à A_NETTOYER.`,
+            userId: undefined, // System action
+            tx: t,
+          },
+        );
+      }
+
+      return task;
+    });
+  }
+
+  async reconcileDirtyRooms(
+    actorUserId: number,
+    tx?: Prisma.TransactionClient,
+  ) {
+    return this.runInTx(tx, async (t) => {
+      // Find all rooms in A_NETTOYER or EN_NETTOYAGE statuses
+      const dirtyRooms = await t.room.findMany({
+        where: {
+          statut: {
+            in: [StatutChambre.A_NETTOYER, StatutChambre.EN_NETTOYAGE],
+          },
+        },
+      });
+
+      const results = { created: 0, skipped: 0 };
+
+      for (const room of dirtyRooms) {
+        // Find active task for room
+        const activeTask = await t.housekeepingTask.findUnique({
+          where: { activeRoomKey: room.id },
+        });
+
+        if (!activeTask) {
+          // No active task, we must create one.
+          // Origin: REPRISE
+          const statutTache =
+            room.statut === StatutChambre.EN_NETTOYAGE
+              ? StatutTacheHousekeeping.EN_COURS
+              : StatutTacheHousekeeping.A_FAIRE;
+
+          const task = await t.housekeepingTask.create({
+            data: {
+              roomId: room.id,
+              statut: statutTache,
+              origine: OrigineTacheHousekeeping.REPRISE,
+              activeRoomKey: room.id,
+              // For EN_NETTOYAGE, startedAt remains null since we don't know the exact time
+            },
+          });
+
+          await t.housekeepingTaskLog.create({
+            data: {
+              taskId: task.id,
+              type: TypeLogTacheHousekeeping.CREATION,
+              nouveauStatut: statutTache,
+              motif: `Création par réconciliation (statut chambre: ${room.statut}).`,
+              actorUserId: null,
+            },
+          });
+
+          results.created++;
+        } else {
+          results.skipped++;
+        }
+      }
+
+      return results;
+    });
+  }
 }

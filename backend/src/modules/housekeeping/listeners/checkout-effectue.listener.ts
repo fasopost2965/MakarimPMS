@@ -1,22 +1,33 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { StatutChambre } from '@prisma/client';
-import { RoomsService } from '../../rooms/rooms.service';
 import { CheckoutEffectueEvent } from '../../stay/events/checkout-effectue.event';
+import { HousekeepingTaskService } from '../housekeeping-task.service';
 
-// Concrétise le déclenchement automatique du ménage au check-out (cahier des
-// charges §5.6 Phase 2) : la chambre passe en À nettoyer via la machine à
-// états, jamais par une écriture directe de StayService.
 @Injectable()
 export class CheckoutEffectueListener {
-  constructor(private readonly roomsService: RoomsService) {}
+  private readonly logger = new Logger(CheckoutEffectueListener.name);
+
+  constructor(
+    private readonly housekeepingTaskService: HousekeepingTaskService,
+  ) {}
 
   @OnEvent('checkout.effectue')
   async handle(event: CheckoutEffectueEvent) {
-    await this.roomsService.transitionRoom(
-      event.roomId,
-      StatutChambre.A_NETTOYER,
-      { motif: 'Check-out effectué', userId: event.userId },
-    );
+    try {
+      await this.housekeepingTaskService.handleCheckoutEffectue(
+        event.stayId,
+        event.roomId,
+      );
+      this.logger.log(
+        `Tâche de ménage traitée pour le checkout ${event.stayId} de la chambre ${event.roomId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de la création de la tâche de ménage pour le checkout ${event.stayId}`,
+        error,
+      );
+      // Ne pas propager l'erreur pour ne pas casser le processus de check-out existant
+      // (bien que l'événement soit généralement asynchrone / post-commit).
+    }
   }
 }

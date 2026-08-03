@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { HousekeepingController } from './housekeeping.controller';
 import { MobileHousekeepingController } from './mobile-housekeeping.controller';
+import { HousekeepingTaskController } from './housekeeping-task.controller';
 import { HousekeepingService } from './housekeeping.service';
 import { HousekeepingTaskService } from './housekeeping-task.service';
 import { CheckoutEffectueListener } from './listeners/checkout-effectue.listener';
@@ -20,7 +21,11 @@ import { AuditModule } from '../audit/audit.module';
     AuthModule,
     AuditModule,
   ],
-  controllers: [HousekeepingController, MobileHousekeepingController],
+  controllers: [
+    HousekeepingController,
+    MobileHousekeepingController,
+    HousekeepingTaskController,
+  ],
   providers: [
     HousekeepingService,
     HousekeepingTaskService,

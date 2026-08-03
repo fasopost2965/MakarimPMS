@@ -74,6 +74,10 @@ describe('Housekeeping — statuts de chambre (e2e)', () => {
     await prisma.stay.deleteMany({ where: { roomId } });
     await prisma.reservation.deleteMany({ where: { roomId } });
     await prisma.roomStatusLog.deleteMany({ where: { roomId } });
+    await prisma.housekeepingTaskLog.deleteMany({
+      where: { task: { roomId } },
+    });
+    await prisma.housekeepingTask.deleteMany({ where: { roomId } });
     await prisma.room.deleteMany({ where: { id: roomId } });
     await prisma.roomType.deleteMany({ where: { id: roomTypeId } });
     await app.close();
