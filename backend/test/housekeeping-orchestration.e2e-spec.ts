@@ -1,14 +1,10 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unused-vars */
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import request from 'supertest';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { App } from 'supertest/types';
 import { authedRequest, loginAs } from './helpers/auth';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { JwtService } from '@nestjs/jwt';
 import {
   StatutChambre,
   StatutTacheHousekeeping,
@@ -18,13 +14,11 @@ import {
 describe('Housekeeping Orchestration & API (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
-  let jwtService: JwtService;
 
-  let adminClient: any;
-  let controlClient: any;
-  let writeClient: any;
-  let readClient: any;
-  let noPermClient: any;
+  let controlClient: ReturnType<typeof authedRequest>;
+  let writeClient: ReturnType<typeof authedRequest>;
+  let readClient: ReturnType<typeof authedRequest>;
+  let noPermClient: ReturnType<typeof authedRequest>;
 
   let testRoomId: number;
   let testStayId: number;
@@ -42,11 +36,8 @@ describe('Housekeeping Orchestration & API (e2e)', () => {
     await app.init();
 
     prisma = app.get<PrismaService>(PrismaService);
-    jwtService = app.get<JwtService>(JwtService);
-    const configService = app.get(ConfigService);
 
     // Create tokens for different roles using standard helper
-    const adminToken = await loginAs(app.getHttpServer() as App, 'admin');
     const gouvernanteToken = await loginAs(
       app.getHttpServer() as App,
       'gouvernante',
@@ -60,7 +51,6 @@ describe('Housekeeping Orchestration & API (e2e)', () => {
       'comptable',
     );
 
-    adminClient = authedRequest(app.getHttpServer() as App, adminToken);
     controlClient = authedRequest(app.getHttpServer() as App, gouvernanteToken);
     writeClient = authedRequest(app.getHttpServer() as App, gouvernanteToken);
     readClient = authedRequest(app.getHttpServer() as App, receptionToken);
@@ -183,7 +173,7 @@ describe('Housekeeping Orchestration & API (e2e)', () => {
         .send({ roomId: testRoomId, motif: 'Test manual creation' })
         .expect(403);
 
-      const res = await writeClient
+      await writeClient
         .post('/api/housekeeping/tasks')
         .send({ roomId: testRoomId, motif: 'Test manual creation' })
         .expect(409); // because room is LIBRE_PROPRE (attendu: A_NETTOYER)
@@ -284,7 +274,8 @@ describe('Housekeeping Orchestration & API (e2e)', () => {
       }
       expect(res.status).toBe(201);
 
-      expect(res.body.created).toBe(0);
+      const resBody = res.body as { created: number };
+      expect(resBody.created).toBe(0);
 
       const countTasks = await prisma.housekeepingTask.count({
         where: { roomId: testRoomId },
@@ -307,10 +298,14 @@ describe('Housekeeping Orchestration & API (e2e)', () => {
         .get('/api/housekeeping/tasks?page=1&limit=10')
         .expect(200);
 
-      expect(res.body.meta).toBeDefined();
-      expect(res.body.meta.page).toBe(1);
-      expect(res.body.meta.limit).toBe(10);
-      expect(res.body.data).toBeInstanceOf(Array);
+      const resBody = res.body as {
+        meta: { page: number; limit: number };
+        data: unknown[];
+      };
+      expect(resBody.meta).toBeDefined();
+      expect(resBody.meta.page).toBe(1);
+      expect(resBody.meta.limit).toBe(10);
+      expect(resBody.data).toBeInstanceOf(Array);
     });
   });
 });
