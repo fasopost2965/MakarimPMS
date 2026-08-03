@@ -328,7 +328,9 @@ function App() {
                 <p className="text-muted-foreground p-6 text-sm">Chargement…</p>
               }
             >
-              {tab === 'dashboard' && <DashboardPage onNavigate={setTab} />}
+              {tab === 'dashboard' && (
+                <DashboardPage onNavigate={setTab} permissions={permissions} />
+              )}
               {tab === 'reservations' && <ReservationsCalendarPage />}
               {tab === 'checkin' && <CheckinPage />}
               {tab === 'housekeeping' && <HousekeepingPage />}

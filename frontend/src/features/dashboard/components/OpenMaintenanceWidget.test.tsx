@@ -37,13 +37,16 @@ function ticket(overrides: Partial<MaintenanceTicket>): MaintenanceTicket {
 // comme MakarimPMS_v2 (4 tâches codées en dur référençant un client
 // imaginaire).
 describe('OpenMaintenanceWidget — données réelles uniquement', () => {
-  it('affiche les tickets ouverts réels avec leur priorité', async () => {
+  it('affiche les urgences en premier en conservant leur ordre relatif', async () => {
     vi.mocked(listTickets).mockResolvedValue([
+      ticket({ id: 1, typePanne: 'Fuite légère', priorite: 'BASSE' }),
       ticket({
-        id: 1,
+        id: 2,
         typePanne: 'Climatisation en panne',
         priorite: 'URGENTE',
       }),
+      ticket({ id: 3, typePanne: 'Ascenseur bloqué', priorite: 'URGENTE' }),
+      ticket({ id: 4, typePanne: 'Ampoule', priorite: 'MOYENNE' }),
     ]);
 
     render(<OpenMaintenanceWidget onNavigate={() => {}} />);
@@ -51,7 +54,15 @@ describe('OpenMaintenanceWidget — données réelles uniquement', () => {
     await waitFor(() => {
       expect(screen.getByText(/Climatisation en panne/)).toBeInTheDocument();
     });
-    expect(screen.getByText('URGENTE')).toBeInTheDocument();
+    expect(screen.getAllByText('URGENTE')).toHaveLength(2);
+    expect(screen.getByText('2 interventions urgentes')).toBeInTheDocument();
+    const labels = screen
+      .getAllByRole('listitem')
+      .map((item) => item.textContent);
+    expect(labels[0]).toContain('Climatisation en panne');
+    expect(labels[1]).toContain('Ascenseur bloqué');
+    expect(labels[2]).toContain('Fuite légère');
+    expect(labels[3]).toContain('Ampoule');
     expect(listTickets).toHaveBeenCalledWith({ ouvert: true });
   });
 
@@ -62,7 +73,9 @@ describe('OpenMaintenanceWidget — données réelles uniquement', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('Aucun ticket ouvert pour le moment.'),
+        screen.getByText(
+          'Aucune intervention ouverte ou urgente pour le moment.',
+        ),
       ).toBeInTheDocument();
     });
   });
