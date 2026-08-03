@@ -187,8 +187,7 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
 
   useEffect(() => {
     // Chargement au montage, pas de condition de course (un seul fetch).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void refetch();
+    void Promise.resolve().then(() => refetch());
   }, [refetch]);
 
   function openStay(stay: Stay) {

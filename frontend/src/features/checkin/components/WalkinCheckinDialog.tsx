@@ -172,10 +172,12 @@ function WalkinForm({
       return;
     }
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setAvailabilityLoading(true);
-    setAvailabilityError(null);
-    setAvailability(null);
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      setAvailabilityLoading(true);
+      setAvailabilityError(null);
+      setAvailability(null);
+    });
     checkRoomAvailability({
       roomId: selectedRoom.id,
       dateArrivee: today,

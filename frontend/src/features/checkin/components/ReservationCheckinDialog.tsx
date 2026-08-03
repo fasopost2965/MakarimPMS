@@ -104,10 +104,12 @@ function ReservationCheckinForm({
   useEffect(() => {
     let cancelled = false;
     // Cette synchronisation expose le cycle de la requête serveur.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setAvailabilityLoading(true);
-    setAvailabilityError(null);
-    setAvailability(null);
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      setAvailabilityLoading(true);
+      setAvailabilityError(null);
+      setAvailability(null);
+    });
     checkRoomAvailability({
       roomId: reservation.roomId,
       dateArrivee: reservation.dateArrivee,
@@ -137,9 +139,11 @@ function ReservationCheckinForm({
   useEffect(() => {
     if (!canReadPayments) return;
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDepositsLoading(true);
-    setDepositsError(null);
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      setDepositsLoading(true);
+      setDepositsError(null);
+    });
     listReservationDeposits(reservation.id)
       .then((result) => {
         if (!cancelled) setDeposits(result);
