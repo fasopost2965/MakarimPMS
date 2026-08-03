@@ -99,6 +99,12 @@ describe('Dashboard — résumé (e2e)', () => {
     await prisma.roomStatusLog.deleteMany({
       where: { roomId: { in: [roomId, roomId2] } },
     });
+    await prisma.housekeepingTaskLog.deleteMany({
+      where: { task: { roomId: { in: [roomId, roomId2] } } },
+    });
+    await prisma.housekeepingTask.deleteMany({
+      where: { roomId: { in: [roomId, roomId2] } },
+    });
     await prisma.room.deleteMany({ where: { id: { in: [roomId, roomId2] } } });
     await prisma.roomType.deleteMany({ where: { id: roomTypeId } });
     await app.close();
@@ -305,6 +311,12 @@ describe('Dashboard — résumé (e2e)', () => {
     await prisma.folio.deleteMany({ where: { id: folioId } });
     await prisma.stay.deleteMany({ where: { id: paymentStayId } });
     await prisma.roomStatusLog.deleteMany({
+      where: { roomId: paymentRoom.id },
+    });
+    await prisma.housekeepingTaskLog.deleteMany({
+      where: { task: { roomId: paymentRoom.id } },
+    });
+    await prisma.housekeepingTask.deleteMany({
       where: { roomId: paymentRoom.id },
     });
     await prisma.room.deleteMany({ where: { id: paymentRoom.id } });

@@ -94,6 +94,12 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
     await prisma.stay.deleteMany({ where: { room: { roomTypeId } } });
     await prisma.reservation.deleteMany({ where: { room: { roomTypeId } } });
     await prisma.roomStatusLog.deleteMany({ where: { room: { roomTypeId } } });
+    await prisma.housekeepingTaskLog.deleteMany({
+      where: { task: { room: { roomTypeId } } },
+    });
+    await prisma.housekeepingTask.deleteMany({
+      where: { room: { roomTypeId } },
+    });
     await prisma.room.deleteMany({ where: { roomTypeId } });
     await prisma.seasonRate.deleteMany({ where: { roomTypeId } });
     await prisma.roomType.deleteMany({ where: { id: roomTypeId } });

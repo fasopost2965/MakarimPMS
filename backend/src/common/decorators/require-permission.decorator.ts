@@ -4,7 +4,7 @@ export const PERMISSION_KEY = 'requiredPermission';
 
 export interface RequiredPermission {
   module: string;
-  action: 'read' | 'write' | 'delete' | 'export';
+  action: 'read' | 'write' | 'delete' | 'export' | 'control';
 }
 
 // Déclare la permission (module, action) nécessaire pour atteindre une
