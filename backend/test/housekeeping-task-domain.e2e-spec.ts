@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   INestApplication,
-  NotFoundException,
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
@@ -14,7 +13,10 @@ import {
   StatutTacheHousekeeping,
   TypeLogTacheHousekeeping,
   AuditAction,
-  AuditEntity,
+  Role,
+  Permission,
+  User,
+  Room,
 } from '@prisma/client';
 
 describe('HousekeepingTaskService — Domaine, Transactions, Verrous et Concurrence (Integration)', () => {
@@ -24,13 +26,13 @@ describe('HousekeepingTaskService — Domaine, Transactions, Verrous et Concurre
 
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let roomTypeId: number;
-  let gouvRole: any;
-  let agentRole: any;
-  let randomRole: any;
+  let gouvRole: Role;
+  let agentRole: Role;
+  let randomRole: Role;
 
-  let userGouv: any;
-  let userAgent: any;
-  let userUnauthorized: any;
+  let userGouv: User;
+  let userAgent: User;
+  let userUnauthorized: User;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -48,7 +50,7 @@ describe('HousekeepingTaskService — Domaine, Transactions, Verrous et Concurre
       data: { nom: `TestGouvRole-${suffix}` },
     });
     // Associate permission housekeeping:control and write (create if missing)
-    let permControl = await prisma.permission.findUnique({
+    let permControl: Permission | null = await prisma.permission.findUnique({
       where: { module_action: { module: 'housekeeping', action: 'control' } },
     });
     if (!permControl) {
@@ -60,7 +62,7 @@ describe('HousekeepingTaskService — Domaine, Transactions, Verrous et Concurre
       data: { roleId: gouvRole.id, permissionId: permControl.id },
     });
 
-    let permWrite = await prisma.permission.findUnique({
+    let permWrite: Permission | null = await prisma.permission.findUnique({
       where: { module_action: { module: 'housekeeping', action: 'write' } },
     });
     if (!permWrite) {
@@ -177,7 +179,10 @@ describe('HousekeepingTaskService — Domaine, Transactions, Verrous et Concurre
     }
   });
 
-  async function createRoom(numero: string, statut: StatutChambre) {
+  async function createRoom(
+    numero: string,
+    statut: StatutChambre,
+  ): Promise<Room> {
     return prisma.room.create({
       data: {
         numero: `${numero}-${suffix}`,
