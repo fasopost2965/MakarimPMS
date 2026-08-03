@@ -347,44 +347,78 @@ function GuestDetail({ guest, onCategorieChanged }: GuestDetailProps) {
   const [savingPreferences, setSavingPreferences] = useState(false);
   const [preferencesError, setPreferencesError] = useState<string | null>(null);
 
-  const loadHistorique = useCallback(async () => {
-    setHistoriqueLoading(true);
-    setHistoriqueError(null);
-    try {
-      setHistorique(await getGuestHistorique(guest.id));
-    } catch (err) {
-      setHistoriqueError(
-        err instanceof Error
-          ? err.message
-          : "Erreur de chargement de l'historique",
-      );
-    } finally {
-      setHistoriqueLoading(false);
-    }
-  }, [guest.id]);
+  const fetchHistorique = useCallback(
+    async (signal?: AbortSignal) => {
+      try {
+        const data = await getGuestHistorique(guest.id);
+        if (signal?.aborted) return;
+        setHistorique(data);
+        setHistoriqueError(null);
+      } catch (err) {
+        if (signal?.aborted) return;
+        setHistoriqueError(
+          err instanceof Error
+            ? err.message
+            : "Erreur de chargement de l'historique",
+        );
+      } finally {
+        if (!signal?.aborted) {
+          setHistoriqueLoading(false);
+        }
+      }
+    },
+    [guest.id],
+  );
 
-  const loadFactures = useCallback(async () => {
-    setFacturesLoading(true);
-    setFacturesError(null);
-    try {
-      setFactures(await getGuestFactures(guest.id));
-    } catch (err) {
-      setFacturesError(
-        err instanceof Error
-          ? err.message
-          : 'Erreur de chargement des factures',
-      );
-    } finally {
-      setFacturesLoading(false);
-    }
-  }, [guest.id]);
+  const fetchFactures = useCallback(
+    async (signal?: AbortSignal) => {
+      try {
+        const data = await getGuestFactures(guest.id);
+        if (signal?.aborted) return;
+        setFactures(data);
+        setFacturesError(null);
+      } catch (err) {
+        if (signal?.aborted) return;
+        setFacturesError(
+          err instanceof Error
+            ? err.message
+            : 'Erreur de chargement des factures',
+        );
+      } finally {
+        if (!signal?.aborted) {
+          setFacturesLoading(false);
+        }
+      }
+    },
+    [guest.id],
+  );
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadHistorique();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadFactures();
-  }, [loadFactures, loadHistorique]);
+    const controller = new AbortController();
+
+    Promise.resolve().then(() => {
+      if (!controller.signal.aborted) {
+        void fetchHistorique(controller.signal);
+        void fetchFactures(controller.signal);
+      }
+    });
+
+    return () => {
+      controller.abort();
+    };
+  }, [fetchFactures, fetchHistorique]);
+
+  const retryHistorique = useCallback(() => {
+    setHistoriqueLoading(true);
+    setHistoriqueError(null);
+    void fetchHistorique();
+  }, [fetchHistorique]);
+
+  const retryFactures = useCallback(() => {
+    setFacturesLoading(true);
+    setFacturesError(null);
+    void fetchFactures();
+  }, [fetchFactures]);
 
   const totalNights = countNights(historique);
   const lastStayDate = getLastStayDate(historique);
@@ -620,7 +654,7 @@ function GuestDetail({ guest, onCategorieChanged }: GuestDetailProps) {
           <ErrorState
             title="Historique indisponible"
             description={historiqueError}
-            onRetry={() => void loadHistorique()}
+            onRetry={() => void retryHistorique()}
           />
         ) : (
           <div className="overflow-x-auto rounded-md border">
@@ -670,7 +704,7 @@ function GuestDetail({ guest, onCategorieChanged }: GuestDetailProps) {
           <ErrorState
             title="Factures indisponibles"
             description={facturesError}
-            onRetry={() => void loadFactures()}
+            onRetry={() => void retryFactures()}
           />
         ) : (
           <div className="overflow-x-auto rounded-md border">

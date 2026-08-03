@@ -184,4 +184,73 @@ describe('GuestsPage — Sprint 001', () => {
       ),
     ).toBeInTheDocument();
   });
+
+  it("ignore les réponses obsolètes de l'historique et des factures après un changement de client", async () => {
+    vi.mocked(searchGuests).mockResolvedValue([
+      guest({ id: 1, nom: 'Guest', prenom: 'One' }),
+      guest({ id: 2, nom: 'Guest', prenom: 'Two' }),
+    ]);
+
+    let resolveHistorique1: (data: GuestStayHistorique[]) => void;
+    let resolveFactures1: (data: GuestInvoice[]) => void;
+    const promiseHistorique1 = new Promise<GuestStayHistorique[]>((resolve) => {
+      resolveHistorique1 = resolve;
+    });
+    const promiseFactures1 = new Promise<GuestInvoice[]>((resolve) => {
+      resolveFactures1 = resolve;
+    });
+
+    vi.mocked(getGuestHistorique).mockImplementation(async (id) => {
+      if (id === 1) return promiseHistorique1;
+      return [];
+    });
+    vi.mocked(getGuestFactures).mockImplementation(async (id) => {
+      if (id === 1) return promiseFactures1;
+      return [];
+    });
+
+    render(<GuestsPage />);
+    const guest1Btn = await screen.findByRole('button', { name: /Guest One/ });
+    const guest2Btn = await screen.findByRole('button', { name: /Guest Two/ });
+
+    await userEvent.click(guest1Btn);
+    await userEvent.click(guest2Btn);
+
+    resolveHistorique1!([
+      stay(99, '2026-01-01T00:00:00.000Z', '2026-01-02T00:00:00.000Z'),
+    ]);
+    resolveFactures1!([invoice(99, '999.00')]);
+
+    await waitFor(() => {
+      expect(screen.queryByText('99')).not.toBeInTheDocument();
+      expect(screen.queryByText('FAC-99')).not.toBeInTheDocument();
+    });
+  });
+
+  it("conserve l'historique disponible si les factures échouent et permet de les recharger", async () => {
+    mockInitialList();
+    vi.mocked(getGuestFactures)
+      .mockRejectedValueOnce(new Error('Erreur factures'))
+      .mockResolvedValueOnce([invoice(1, '300.00')]);
+    vi.mocked(getGuestHistorique).mockResolvedValue([
+      stay(1, '2026-07-01T00:00:00.000Z', '2026-07-03T00:00:00.000Z'),
+    ]);
+
+    render(<GuestsPage />);
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Diallo/ }),
+    );
+
+    expect(
+      await screen.findByText('Factures indisponibles'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('101')).toBeInTheDocument();
+    expect(screen.getByText('Terminé')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+    expect(await screen.findByText('FAC-1')).toBeInTheDocument();
+    expect(
+      screen.queryByText('Factures indisponibles'),
+    ).not.toBeInTheDocument();
+  });
 });
