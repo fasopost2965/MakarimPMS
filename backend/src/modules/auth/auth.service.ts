@@ -7,6 +7,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MailerService } from '../notifications/mailer.service';
 import { LoginDto } from './dto/login.dto';
@@ -407,5 +408,29 @@ ${resetLink ? `<p>Ou cliquez sur ce lien pour préremplir le code : <a href="${r
     });
 
     return { accessToken, refreshToken };
+  }
+
+  async hasPermission(
+    userId: number,
+    module: string,
+    action: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<boolean> {
+    const prisma = tx ?? this.prisma;
+    const user = await prisma.user.findUnique({
+      where: { id: userId, deletedAt: null },
+      select: { roleId: true, actif: true },
+    });
+    if (!user || !user.actif) {
+      return false;
+    }
+    const grant = await prisma.permission.findFirst({
+      where: {
+        module,
+        action,
+        roles: { some: { roleId: user.roleId } },
+      },
+    });
+    return grant !== null;
   }
 }

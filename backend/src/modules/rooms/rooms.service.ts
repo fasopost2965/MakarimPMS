@@ -7,6 +7,7 @@ import {
   AuditAction,
   AuditEntity,
   Prisma,
+  Room,
   StatutChambre,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -369,5 +370,21 @@ export class RoomsService {
 
       return updated;
     });
+  }
+
+  async lockRoomForUpdate(
+    roomId: number,
+    tx: Prisma.TransactionClient,
+  ): Promise<Room> {
+    const rooms = await tx.$queryRaw<Room[]>`
+      SELECT id, numero, roomTypeId, statut, etage, deletedAt 
+      FROM Room 
+      WHERE id = ${roomId} 
+      FOR UPDATE
+    `;
+    if (!rooms || rooms.length === 0) {
+      throw new NotFoundException(`Chambre ${roomId} introuvable.`);
+    }
+    return rooms[0];
   }
 }
