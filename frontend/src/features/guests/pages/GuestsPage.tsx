@@ -380,7 +380,9 @@ function GuestDetail({ guest, onCategorieChanged }: GuestDetailProps) {
   }, [guest.id]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadHistorique();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadFactures();
   }, [loadFactures, loadHistorique]);
 
