@@ -27,6 +27,7 @@ import {
 import type { Stay, WalkinCheckinInput } from '../types';
 import { WalkinCheckinDialog } from '../components/WalkinCheckinDialog';
 import { StayDetailsDialog } from '../components/StayDetailsDialog';
+import { ReservationCheckinDialog } from '../components/ReservationCheckinDialog';
 
 // CH-063 (docs/design/design_handoff_exploitation_hotel) — un séjour créé
 // via le check-in walk-in (StayService.checkinWalkIn) n'a jamais de
@@ -95,7 +96,7 @@ function matchesSearch(
   );
 }
 
-export function CheckinPage() {
+export function CheckinPage({ permissions }: { permissions: string[] | null }) {
   const [arrivals, setArrivals] = useState<Reservation[]>([]);
   const [staysEnCours, setStaysEnCours] = useState<Stay[]>([]);
   const [departs, setDeparts] = useState<Stay[]>([]);
@@ -106,6 +107,8 @@ export function CheckinPage() {
   const [checkingInReservationId, setCheckingInReservationId] = useState<
     number | null
   >(null);
+  const [checkingInReservation, setCheckingInReservation] =
+    useState<Reservation | null>(null);
 
   const [walkinOpen, setWalkinOpen] = useState(false);
   const [walkinSubmitting, setWalkinSubmitting] = useState(false);
@@ -184,8 +187,7 @@ export function CheckinPage() {
 
   useEffect(() => {
     // Chargement au montage, pas de condition de course (un seul fetch).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void refetch();
+    void Promise.resolve().then(() => refetch());
   }, [refetch]);
 
   function openStay(stay: Stay) {
@@ -200,6 +202,7 @@ export function CheckinPage() {
     try {
       const stay = await checkinFromReservation(reservationId);
       notifyCheckinDone(stay.guest, stay.room);
+      setCheckingInReservation(null);
       await refetch();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Erreur de check-in');
@@ -352,7 +355,10 @@ export function CheckinPage() {
                   </span>
                   <Button
                     size="sm"
-                    onClick={() => handleCheckin(reservation.id)}
+                    onClick={() => {
+                      setActionError(null);
+                      setCheckingInReservation(reservation);
+                    }}
                     disabled={checkingInReservationId === reservation.id}
                   >
                     {checkingInReservationId === reservation.id
@@ -486,6 +492,27 @@ export function CheckinPage() {
         onConfirm={handleWalkinConfirm}
         submitting={walkinSubmitting}
         error={walkinError}
+      />
+
+      <ReservationCheckinDialog
+        reservation={checkingInReservation}
+        roomStatus={
+          rooms.find((room) => room.id === checkingInReservation?.roomId)
+            ?.statut ?? null
+        }
+        permissions={permissions}
+        onClose={() => {
+          if (checkingInReservationId !== null) return;
+          setCheckingInReservation(null);
+          setActionError(null);
+        }}
+        onConfirm={() => {
+          if (checkingInReservation) {
+            void handleCheckin(checkingInReservation.id);
+          }
+        }}
+        submitting={checkingInReservationId !== null}
+        error={actionError}
       />
 
       <StayDetailsDialog

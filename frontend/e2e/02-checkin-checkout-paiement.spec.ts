@@ -25,10 +25,18 @@ test('check-in walk-in, check-out bloqué sur solde impayé, débloqué après p
   await gotoTab(page, 'checkin');
 
   await page.getByRole('button', { name: '+ Check-in walk-in' }).click();
-  await pickFromSelectSearch(page, 'room', '501', /501/);
-  await page.locator('#dateCheckoutPrevue').fill(demain);
+
+  // Etape 1: Client
   await page.locator('#guest-nom').fill(guest.nom);
   await page.locator('#guest-prenom').fill(guest.prenom);
+  await page.getByRole('button', { name: 'Continuer' }).click();
+
+  // Etape 2: Chambre et séjour
+  await pickFromSelectSearch(page, 'room', '501', /501/);
+  await page.locator('#dateCheckoutPrevue').fill(demain);
+  await page.getByRole('button', { name: 'Continuer' }).click();
+
+  // Etape 3: Confirmation
   await page.getByRole('button', { name: 'Enregistrer le check-in' }).click();
 
   // Le séjour walk-in apparaît désormais dans "Séjours en cours". CH-063 —
