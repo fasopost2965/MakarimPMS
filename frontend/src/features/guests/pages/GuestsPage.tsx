@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Search } from 'lucide-react';
+import { Search, UserRound, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,6 +12,9 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   createGuest,
   getGuestFactures,
@@ -65,6 +68,60 @@ function formatClientDepuis(createdAt: string) {
     month: 'long',
     year: 'numeric',
   });
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString('fr-FR');
+}
+
+function dateOnlyTimestamp(value: string) {
+  const timestamp = Date.parse(`${value.slice(0, 10)}T00:00:00Z`);
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+function countNights(stays: GuestStayHistorique[]) {
+  return stays.reduce((total, stay) => {
+    const start = dateOnlyTimestamp(stay.dateCheckin);
+    const end = dateOnlyTimestamp(
+      stay.dateCheckoutReelle ?? stay.dateCheckoutPrevue,
+    );
+    if (start === null || end === null || end < start) return total;
+    return total + Math.round((end - start) / 86_400_000);
+  }, 0);
+}
+
+function getLastStayDate(stays: GuestStayHistorique[]) {
+  const timestamps = stays
+    .map((stay) => ({
+      timestamp: dateOnlyTimestamp(stay.dateCheckin),
+      value: stay.dateCheckin,
+    }))
+    .filter(
+      (entry): entry is { timestamp: number; value: string } =>
+        entry.timestamp !== null,
+    );
+  if (timestamps.length === 0) return null;
+  return timestamps.reduce((latest, current) =>
+    current.timestamp > latest.timestamp ? current : latest,
+  ).value;
+}
+
+function getTotalFacture(invoices: GuestInvoice[]) {
+  return invoices.reduce((total, invoice) => {
+    if (invoice.statut !== 'EMISE') return total;
+    const amount = Number(invoice.montantTotal);
+    return Number.isFinite(amount) ? total + amount : total;
+  }, 0);
+}
+
+function formatAmount(value: number) {
+  return new Intl.NumberFormat('fr-FR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 // Écran CRM (cahier des charges §5.7, Phase 2 ; refonte visuelle batch 3
@@ -122,30 +179,88 @@ export function GuestsPage() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-5 overflow-auto p-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="relative max-w-sm flex-1">
-          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Rechercher un client (nom, téléphone, pièce d'identité…)"
-            className="pl-9"
-          />
+    <div className="flex h-full flex-col gap-5 overflow-auto p-4 sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="w-full max-w-lg">
+          <Label htmlFor="guest-search" className="sr-only">
+            Rechercher un client
+          </Label>
+          <div className="relative">
+            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2" />
+            <Input
+              id="guest-search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Rechercher un client (nom, téléphone, pièce d'identité…)"
+              className="pr-9 pl-9"
+            />
+            {query && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="absolute top-1/2 right-1 -translate-y-1/2"
+                onClick={() => setQuery('')}
+                aria-label="Vider le champ de recherche"
+              >
+                <X />
+              </Button>
+            )}
+          </div>
+          <p
+            className="text-muted-foreground mt-1.5 text-xs"
+            aria-live="polite"
+          >
+            {loading
+              ? 'Recherche en cours…'
+              : `${guests.length} client${guests.length > 1 ? 's' : ''} affiché${guests.length > 1 ? 's' : ''}`}
+          </p>
         </div>
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
+        <Button
+          size="sm"
+          className="w-full sm:w-auto"
+          onClick={() => setCreateOpen(true)}
+        >
           + Nouveau client
         </Button>
       </div>
 
-      {loadError && <p className="text-destructive text-sm">{loadError}</p>}
+      {loadError && (
+        <ErrorState
+          title="Impossible de charger les clients"
+          description={loadError}
+          onRetry={() => void refetch(query)}
+        />
+      )}
 
-      <div className="grid grid-cols-[340px_1fr] items-start gap-4">
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
         <div className="flex flex-col gap-2">
           {loading ? (
-            <p className="text-muted-foreground text-sm">Chargement…</p>
+            Array.from({ length: 4 }, (_, index) => (
+              <Skeleton key={index} className="h-[66px] w-full" />
+            ))
           ) : guests.length === 0 ? (
-            <p className="text-muted-foreground text-sm">Aucun client.</p>
+            <EmptyState
+              icon={<UserRound />}
+              title={query ? 'Aucun client trouvé' : 'Aucun client enregistré'}
+              description={
+                query
+                  ? 'Modifiez ou effacez les termes de votre recherche.'
+                  : 'Créez une première fiche client pour commencer.'
+              }
+              action={
+                query
+                  ? {
+                      label: 'Effacer la recherche',
+                      onClick: () => setQuery(''),
+                    }
+                  : {
+                      label: 'Nouveau client',
+                      onClick: () => setCreateOpen(true),
+                    }
+              }
+              className="py-8"
+            />
           ) : (
             guests.map((guest) => (
               <button
@@ -217,7 +332,10 @@ interface GuestDetailProps {
 function GuestDetail({ guest, onCategorieChanged }: GuestDetailProps) {
   const [historique, setHistorique] = useState<GuestStayHistorique[]>([]);
   const [factures, setFactures] = useState<GuestInvoice[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [historiqueLoading, setHistoriqueLoading] = useState(true);
+  const [historiqueError, setHistoriqueError] = useState<string | null>(null);
+  const [facturesLoading, setFacturesLoading] = useState(true);
+  const [facturesError, setFacturesError] = useState<string | null>(null);
   const [categorie, setCategorie] = useState<CategorieClient>(guest.categorie);
   const [motif, setMotif] = useState('');
   const [saving, setSaving] = useState(false);
@@ -229,24 +347,82 @@ function GuestDetail({ guest, onCategorieChanged }: GuestDetailProps) {
   const [savingPreferences, setSavingPreferences] = useState(false);
   const [preferencesError, setPreferencesError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoading(true);
-    Promise.all([getGuestHistorique(guest.id), getGuestFactures(guest.id)])
-      .then(([h, f]) => {
-        if (!cancelled) {
-          setHistorique(h);
-          setFactures(f);
+  const fetchHistorique = useCallback(
+    async (signal?: AbortSignal) => {
+      try {
+        const data = await getGuestHistorique(guest.id);
+        if (signal?.aborted) return;
+        setHistorique(data);
+        setHistoriqueError(null);
+      } catch (err) {
+        if (signal?.aborted) return;
+        setHistoriqueError(
+          err instanceof Error
+            ? err.message
+            : "Erreur de chargement de l'historique",
+        );
+      } finally {
+        if (!signal?.aborted) {
+          setHistoriqueLoading(false);
         }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+      }
+    },
+    [guest.id],
+  );
+
+  const fetchFactures = useCallback(
+    async (signal?: AbortSignal) => {
+      try {
+        const data = await getGuestFactures(guest.id);
+        if (signal?.aborted) return;
+        setFactures(data);
+        setFacturesError(null);
+      } catch (err) {
+        if (signal?.aborted) return;
+        setFacturesError(
+          err instanceof Error
+            ? err.message
+            : 'Erreur de chargement des factures',
+        );
+      } finally {
+        if (!signal?.aborted) {
+          setFacturesLoading(false);
+        }
+      }
+    },
+    [guest.id],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    Promise.resolve().then(() => {
+      if (!controller.signal.aborted) {
+        void fetchHistorique(controller.signal);
+        void fetchFactures(controller.signal);
+      }
+    });
+
     return () => {
-      cancelled = true;
+      controller.abort();
     };
-  }, [guest.id]);
+  }, [fetchFactures, fetchHistorique]);
+
+  const retryHistorique = useCallback(() => {
+    setHistoriqueLoading(true);
+    setHistoriqueError(null);
+    void fetchHistorique();
+  }, [fetchHistorique]);
+
+  const retryFactures = useCallback(() => {
+    setFacturesLoading(true);
+    setFacturesError(null);
+    void fetchFactures();
+  }, [fetchFactures]);
+
+  const totalNights = countNights(historique);
+  const lastStayDate = getLastStayDate(historique);
+  const totalFacture = getTotalFacture(factures);
 
   async function handleSaveCategorie(e: FormEvent) {
     e.preventDefault();
@@ -285,7 +461,7 @@ function GuestDetail({ guest, onCategorieChanged }: GuestDetailProps) {
   }
 
   return (
-    <div className="bg-card flex flex-col gap-4 rounded-lg border p-5">
+    <div className="bg-card min-w-0 flex flex-col gap-4 rounded-lg border p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <div className="flex items-center gap-2">
@@ -310,6 +486,38 @@ function GuestDetail({ guest, onCategorieChanged }: GuestDetailProps) {
         <span className="text-muted-foreground text-xs whitespace-nowrap">
           Client depuis {formatClientDepuis(guest.createdAt)}
         </span>
+      </div>
+
+      <div
+        className="grid grid-cols-2 gap-2 lg:grid-cols-4"
+        aria-label="Indicateurs factuels du client"
+      >
+        <ClientMetric
+          label="Séjours"
+          value={historiqueError ? 'Indisponible' : String(historique.length)}
+          loading={historiqueLoading}
+        />
+        <ClientMetric
+          label="Nuitées"
+          value={historiqueError ? 'Indisponible' : String(totalNights)}
+          loading={historiqueLoading}
+        />
+        <ClientMetric
+          label="Dernier séjour"
+          value={
+            historiqueError
+              ? 'Indisponible'
+              : (formatDate(lastStayDate) ?? 'Aucun séjour')
+          }
+          loading={historiqueLoading}
+        />
+        <ClientMetric
+          label="Total facturé"
+          value={
+            facturesError ? 'Indisponible' : `${formatAmount(totalFacture)} MAD`
+          }
+          loading={facturesLoading}
+        />
       </div>
 
       {/* Handoff design final, lot 5 (Clients.dc.html, vue 360) — le
@@ -436,88 +644,125 @@ function GuestDetail({ guest, onCategorieChanged }: GuestDetailProps) {
       </form>
       {saveError && <p className="text-destructive text-sm">{saveError}</p>}
 
-      {loading ? (
-        <p className="text-muted-foreground text-sm">Chargement…</p>
-      ) : (
-        <>
-          <div className="flex flex-col gap-2">
-            <span className="text-muted-foreground text-[11px] font-bold tracking-wide uppercase">
-              Historique des séjours
-            </span>
-            <div className="overflow-hidden rounded-md border">
-              <div className="bg-muted/60 text-muted-foreground grid grid-cols-[80px_1fr_1fr_100px] gap-2 px-3.5 py-2 text-[11px] font-bold">
-                <span>Chambre</span>
-                <span>Arrivée</span>
-                <span>Départ</span>
-                <span>Statut</span>
-              </div>
-              {historique.length === 0 ? (
-                <p className="text-muted-foreground border-t px-3.5 py-3 text-xs">
-                  Aucun séjour.
-                </p>
-              ) : (
-                historique.map((stay) => (
-                  <div
-                    key={stay.id}
-                    className="grid grid-cols-[80px_1fr_1fr_100px] items-center gap-2 border-t px-3.5 py-2 text-xs"
-                  >
-                    <span className="font-medium">{stay.room.numero}</span>
-                    <span>{stay.dateCheckin.slice(0, 10)}</span>
-                    <span>
-                      {(
-                        stay.dateCheckoutReelle ?? stay.dateCheckoutPrevue
-                      ).slice(0, 10)}
-                    </span>
-                    <Badge
-                      variant={
-                        stay.statut === 'EN_COURS' ? 'success' : 'outline'
-                      }
-                      className="w-fit"
-                    >
-                      {stay.statut === 'EN_COURS' ? 'En cours' : 'Terminé'}
-                    </Badge>
-                  </div>
-                ))
-              )}
+      <div className="flex flex-col gap-2">
+        <span className="text-muted-foreground text-[11px] font-bold tracking-wide uppercase">
+          Historique des séjours
+        </span>
+        {historiqueLoading ? (
+          <Skeleton className="h-28 w-full" />
+        ) : historiqueError ? (
+          <ErrorState
+            title="Historique indisponible"
+            description={historiqueError}
+            onRetry={() => void retryHistorique()}
+          />
+        ) : (
+          <div className="overflow-x-auto rounded-md border">
+            <div className="bg-muted/60 text-muted-foreground grid min-w-[520px] grid-cols-[80px_1fr_1fr_100px] gap-2 px-3.5 py-2 text-[11px] font-bold">
+              <span>Chambre</span>
+              <span>Arrivée</span>
+              <span>Départ</span>
+              <span>Statut</span>
             </div>
+            {historique.length === 0 ? (
+              <p className="text-muted-foreground border-t px-3.5 py-3 text-xs">
+                Aucun séjour.
+              </p>
+            ) : (
+              historique.map((stay) => (
+                <div
+                  key={stay.id}
+                  className="grid min-w-[520px] grid-cols-[80px_1fr_1fr_100px] items-center gap-2 border-t px-3.5 py-2 text-xs"
+                >
+                  <span className="font-medium">{stay.room.numero}</span>
+                  <span>{formatDate(stay.dateCheckin) ?? 'Date inconnue'}</span>
+                  <span>
+                    {formatDate(
+                      stay.dateCheckoutReelle ?? stay.dateCheckoutPrevue,
+                    ) ?? 'Date inconnue'}
+                  </span>
+                  <Badge
+                    variant={stay.statut === 'EN_COURS' ? 'success' : 'outline'}
+                    className="w-fit"
+                  >
+                    {stay.statut === 'EN_COURS' ? 'En cours' : 'Terminé'}
+                  </Badge>
+                </div>
+              ))
+            )}
           </div>
+        )}
+      </div>
 
-          <div className="flex flex-col gap-2">
-            <span className="text-muted-foreground text-[11px] font-bold tracking-wide uppercase">
-              Factures
-            </span>
-            <div className="overflow-hidden rounded-md border">
-              <div className="bg-muted/60 text-muted-foreground grid grid-cols-[1fr_120px_110px] gap-2 px-3.5 py-2 text-[11px] font-bold">
-                <span>Numéro</span>
-                <span>Montant</span>
-                <span>Statut</span>
-              </div>
-              {factures.length === 0 ? (
-                <p className="text-muted-foreground border-t px-3.5 py-3 text-xs">
-                  Aucune facture.
-                </p>
-              ) : (
-                factures.map((invoice) => (
-                  <div
-                    key={invoice.id}
-                    className="grid grid-cols-[1fr_120px_110px] items-center gap-2 border-t px-3.5 py-2 text-xs"
-                  >
-                    <span>{invoice.numero}</span>
-                    <span>{invoice.montantTotal} MAD</span>
-                    <Badge
-                      variant={
-                        invoice.statut === 'EMISE' ? 'success' : 'destructive'
-                      }
-                      className="w-fit"
-                    >
-                      {invoice.statut === 'EMISE' ? 'Émise' : 'Avoir émis'}
-                    </Badge>
-                  </div>
-                ))
-              )}
+      <div className="flex flex-col gap-2">
+        <span className="text-muted-foreground text-[11px] font-bold tracking-wide uppercase">
+          Factures
+        </span>
+        {facturesLoading ? (
+          <Skeleton className="h-28 w-full" />
+        ) : facturesError ? (
+          <ErrorState
+            title="Factures indisponibles"
+            description={facturesError}
+            onRetry={() => void retryFactures()}
+          />
+        ) : (
+          <div className="overflow-x-auto rounded-md border">
+            <div className="bg-muted/60 text-muted-foreground grid min-w-[420px] grid-cols-[1fr_120px_110px] gap-2 px-3.5 py-2 text-[11px] font-bold">
+              <span>Numéro</span>
+              <span>Montant</span>
+              <span>Statut</span>
             </div>
+            {factures.length === 0 ? (
+              <p className="text-muted-foreground border-t px-3.5 py-3 text-xs">
+                Aucune facture.
+              </p>
+            ) : (
+              factures.map((invoice) => (
+                <div
+                  key={invoice.id}
+                  className="grid min-w-[420px] grid-cols-[1fr_120px_110px] items-center gap-2 border-t px-3.5 py-2 text-xs"
+                >
+                  <span>{invoice.numero}</span>
+                  <span>{invoice.montantTotal} MAD</span>
+                  <Badge
+                    variant={
+                      invoice.statut === 'EMISE' ? 'success' : 'destructive'
+                    }
+                    className="w-fit"
+                  >
+                    {invoice.statut === 'EMISE' ? 'Émise' : 'Avoir émis'}
+                  </Badge>
+                </div>
+              ))
+            )}
           </div>
-        </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ClientMetric({
+  label,
+  value,
+  loading,
+}: {
+  label: string;
+  value: string;
+  loading: boolean;
+}) {
+  return (
+    <div className="bg-muted/40 min-w-0 rounded-md border p-3">
+      <p className="text-muted-foreground text-[11px] font-bold tracking-wide uppercase">
+        {label}
+      </p>
+      {loading ? (
+        <Skeleton className="mt-2 h-5 w-20 max-w-full" />
+      ) : (
+        <p className="mt-1 truncate text-sm font-semibold" title={value}>
+          {value}
+        </p>
       )}
     </div>
   );
@@ -567,7 +812,7 @@ function CreateGuestForm({
           });
         }}
       >
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="nom">Nom</Label>
             <Input
