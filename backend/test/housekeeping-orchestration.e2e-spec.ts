@@ -137,27 +137,31 @@ describe('Housekeeping Orchestration & API (e2e)', () => {
 
   afterAll(async () => {
     // Clean up
-    await prisma.roomStatusLog.deleteMany({
-      where: { room: { numero: 'HK-999' } },
-    });
-    await prisma.housekeepingTaskLog.deleteMany({
-      where: { task: { room: { numero: 'HK-999' } } },
-    });
-    await prisma.housekeepingTask.deleteMany({
-      where: { room: { numero: 'HK-999' } },
-    });
-    await prisma.roomNight.deleteMany({
-      where: { room: { numero: 'HK-999' } },
-    });
-    await prisma.stay.deleteMany({ where: { room: { numero: 'HK-999' } } });
-    await prisma.reservation.deleteMany({
-      where: { room: { numero: 'HK-999' } },
-    });
-    await prisma.guest.deleteMany({ where: { email: 'hk@test.com' } });
-    await prisma.room.deleteMany({ where: { numero: 'HK-999' } });
-    await prisma.roomType.deleteMany({ where: { nom: 'HK-Cat' } });
+    if (prisma) {
+      await prisma.roomStatusLog.deleteMany({
+        where: { room: { numero: 'HK-999' } },
+      });
+      await prisma.housekeepingTaskLog.deleteMany({
+        where: { task: { room: { numero: 'HK-999' } } },
+      });
+      await prisma.housekeepingTask.deleteMany({
+        where: { room: { numero: 'HK-999' } },
+      });
+      await prisma.roomNight.deleteMany({
+        where: { room: { numero: 'HK-999' } },
+      });
+      await prisma.stay.deleteMany({ where: { room: { numero: 'HK-999' } } });
+      await prisma.reservation.deleteMany({
+        where: { room: { numero: 'HK-999' } },
+      });
+      await prisma.guest.deleteMany({ where: { email: 'hk@test.com' } });
+      await prisma.room.deleteMany({ where: { numero: 'HK-999' } });
+      await prisma.roomType.deleteMany({ where: { nom: 'HK-Cat' } });
+    }
 
-    await app.close();
+    if (app) {
+      await app.close();
+    }
   });
 
   describe('RBAC & Endpoints', () => {

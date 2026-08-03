@@ -19,6 +19,7 @@ import { RoomsService } from '../rooms/rooms.service';
 import { AuditService } from '../audit/audit.service';
 import { AuthService } from '../auth/auth.service';
 import { StayService } from '../stay/stay.service';
+import { HousekeepingTaskQueryDto } from './dto/housekeeping-task-query.dto';
 
 @Injectable()
 export class HousekeepingTaskService {
@@ -29,6 +30,120 @@ export class HousekeepingTaskService {
     private readonly authService: AuthService,
     private readonly stayService: StayService,
   ) {}
+
+  async findAll(
+    query: HousekeepingTaskQueryDto = {} as HousekeepingTaskQueryDto,
+  ) {
+    const {
+      page = 1,
+      limit = 25,
+      roomId,
+      assignedUserId,
+      statut,
+      active,
+    } = query;
+    const take = Math.min(limit, 100);
+    const skip = (page - 1) * take;
+
+    const where: Prisma.HousekeepingTaskWhereInput = {};
+    if (roomId) where.roomId = roomId;
+    if (assignedUserId) where.assignedUserId = assignedUserId;
+    if (statut) where.statut = statut;
+    if (active === true) where.activeRoomKey = { not: null };
+    if (active === false) where.activeRoomKey = null;
+
+    const [items, total] = await Promise.all([
+      this.prisma.housekeepingTask.findMany({
+        where,
+        skip,
+        take,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        include: {
+          room: {
+            select: {
+              id: true,
+              numero: true,
+              etage: true,
+              statut: true,
+              roomTypeId: true,
+            },
+          },
+          assignedUser: { select: { id: true, nom: true, actif: true } },
+        },
+      }),
+      this.prisma.housekeepingTask.count({ where }),
+    ]);
+
+    return {
+      data: items,
+      meta: {
+        page,
+        limit: take,
+        total,
+        totalPages: Math.ceil(total / take),
+      },
+    };
+  }
+
+  async findOne(id: number) {
+    const task = await this.prisma.housekeepingTask.findUnique({
+      where: { id },
+      include: {
+        room: {
+          select: {
+            id: true,
+            numero: true,
+            etage: true,
+            statut: true,
+            roomTypeId: true,
+          },
+        },
+        assignedUser: { select: { id: true, nom: true, actif: true } },
+      },
+    });
+    if (!task) {
+      throw new NotFoundException(`Tâche ${id} introuvable`);
+    }
+    return task;
+  }
+
+  async findHistory(
+    id: number,
+    query: HousekeepingTaskQueryDto = {} as HousekeepingTaskQueryDto,
+  ) {
+    const task = await this.prisma.housekeepingTask.findUnique({
+      where: { id },
+    });
+    if (!task) {
+      throw new NotFoundException(`Tâche ${id} introuvable`);
+    }
+
+    const { page = 1, limit = 25 } = query;
+    const take = Math.min(limit, 100);
+    const skip = (page - 1) * take;
+
+    const [items, total] = await Promise.all([
+      this.prisma.housekeepingTaskLog.findMany({
+        where: { taskId: id },
+        skip,
+        take,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      }),
+      this.prisma.housekeepingTaskLog.count({
+        where: { taskId: id },
+      }),
+    ]);
+
+    return {
+      data: items,
+      meta: {
+        page,
+        limit: take,
+        total,
+        totalPages: Math.ceil(total / take),
+      },
+    };
+  }
 
   private async runInTx<T>(
     tx: Prisma.TransactionClient | undefined,
@@ -54,6 +169,52 @@ export class HousekeepingTaskService {
       throw new NotFoundException(`Tâche housekeeping ${taskId} introuvable.`);
     }
     return tasks[0];
+  }
+
+  async createManual(roomId: number, motif: string, actorUserId: number) {
+    return this.runInTx(undefined, async (t) => {
+      const actorUser = await t.user.findUnique({
+        where: { id: actorUserId, deletedAt: null },
+        select: { nom: true },
+      });
+      if (!actorUser) {
+        throw new NotFoundException(`Acteur ${actorUserId} introuvable.`);
+      }
+
+      // Check for authorization (write permission required)
+      const hasWrite = await this.authService.hasPermission(
+        actorUserId,
+        'housekeeping',
+        'write',
+        t,
+      );
+      if (!hasWrite) {
+        throw new ForbiddenException(
+          `Permission requise : housekeeping:write.`,
+        );
+      }
+
+      const task = await this.createTask(
+        roomId,
+        OrigineTacheHousekeeping.MANUELLE,
+        undefined,
+        t,
+      );
+
+      // Update the default creation log with manual details
+      const latestLog = await t.housekeepingTaskLog.findFirst({
+        where: { taskId: task.id },
+        orderBy: { id: 'desc' },
+      });
+      if (latestLog) {
+        await t.housekeepingTaskLog.update({
+          where: { id: latestLog.id },
+          data: { motif, actorUserId, actorUserNom: actorUser.nom },
+        });
+      }
+
+      return task;
+    });
   }
 
   async createTask(
