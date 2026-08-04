@@ -8,7 +8,12 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
@@ -17,6 +22,7 @@ import { CreateHousekeepingTaskDto } from './dto/create-housekeeping-task.dto';
 import { AssignHousekeepingTaskDto } from './dto/assign-housekeeping-task.dto';
 import { HousekeepingTaskActionDto } from './dto/housekeeping-task-action.dto';
 import { HousekeepingTaskQueryDto } from './dto/housekeeping-task-query.dto';
+import { AssignableUserResponseDto } from './dto/assignable-user-response.dto';
 
 @ApiTags('housekeeping-tasks')
 @ApiBearerAuth()
@@ -29,6 +35,16 @@ export class HousekeepingTaskController {
   @Get()
   async findAll(@Query() query: HousekeepingTaskQueryDto) {
     return this.taskService.findAll(query);
+  }
+
+  @RequirePermission('housekeeping', 'write')
+  @ApiOperation({
+    summary: 'Liste des utilisateurs actifs affectables aux tâches',
+  })
+  @ApiResponse({ type: [AssignableUserResponseDto] })
+  @Get('assignable-users')
+  async findAssignableUsers() {
+    return this.taskService.findAssignableUsers();
   }
 
   @RequirePermission('housekeeping', 'read')

@@ -145,6 +145,31 @@ export class HousekeepingTaskService {
     };
   }
 
+  async findAssignableUsers() {
+    return this.prisma.user.findMany({
+      where: {
+        actif: true,
+        deletedAt: null,
+        role: {
+          permissions: {
+            some: {
+              permission: {
+                module: 'housekeeping',
+                action: 'write',
+              },
+            },
+          },
+        },
+      },
+      select: {
+        id: true,
+        nom: true,
+        actif: true,
+      },
+      orderBy: [{ nom: 'asc' }, { id: 'asc' }],
+    });
+  }
+
   private async runInTx<T>(
     tx: Prisma.TransactionClient | undefined,
     fn: (t: Prisma.TransactionClient) => Promise<T>,
