@@ -92,10 +92,8 @@ export function HousekeepingMobileApp() {
   }, [token, handleLogout]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      void refetch();
-    }, 0);
-    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void refetch();
   }, [refetch]);
 
   function handleLoginSuccess(newToken: string) {
