@@ -8,6 +8,10 @@ export const RECEPTION = {
   email: 'reception@makarim.test',
   password: 'Password123!',
 };
+export const GOUVERNANTE = {
+  email: 'gouvernante@makarim.test',
+  password: 'Password123!',
+};
 
 export async function login(
   page: Page,
@@ -18,6 +22,19 @@ export async function login(
   await page.locator('#motDePasse').fill(creds.password);
   await page.getByRole('button', { name: 'Se connecter' }).click();
   await expect(page.locator('#nav-dashboard')).toBeVisible();
+}
+
+export async function switchUser(
+  page: Page,
+  creds: { email: string; password: string },
+) {
+  await page.context().clearCookies();
+  await page.goto('/');
+  await page.evaluate(() => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+  });
+  await login(page, creds);
 }
 
 export async function gotoTab(
