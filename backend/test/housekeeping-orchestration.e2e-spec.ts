@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { App } from 'supertest/types';
+import request from 'supertest';
 import { authedRequest, loginAs } from './helpers/auth';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -57,6 +58,19 @@ describe('Housekeeping Orchestration & API (e2e)', () => {
     noPermClient = authedRequest(app.getHttpServer() as App, comptableToken);
 
     // Clean up from previous runs if they failed mid-way
+    await prisma.user.deleteMany({
+      where: { email: { endsWith: '@assignable-test.com' } },
+    });
+    await prisma.rolePermission.deleteMany({
+      where: {
+        role: {
+          nom: { in: ['TEST_ROLE_CONTROL_ONLY', 'TEST_ROLE_READ_ONLY'] },
+        },
+      },
+    });
+    await prisma.role.deleteMany({
+      where: { nom: { in: ['TEST_ROLE_CONTROL_ONLY', 'TEST_ROLE_READ_ONLY'] } },
+    });
     await prisma.roomStatusLog.deleteMany({
       where: { room: { numero: 'HK-999' } },
     });
@@ -138,6 +152,21 @@ describe('Housekeeping Orchestration & API (e2e)', () => {
   afterAll(async () => {
     // Clean up
     if (prisma) {
+      await prisma.user.deleteMany({
+        where: { email: { endsWith: '@assignable-test.com' } },
+      });
+      await prisma.rolePermission.deleteMany({
+        where: {
+          role: {
+            nom: { in: ['TEST_ROLE_CONTROL_ONLY', 'TEST_ROLE_READ_ONLY'] },
+          },
+        },
+      });
+      await prisma.role.deleteMany({
+        where: {
+          nom: { in: ['TEST_ROLE_CONTROL_ONLY', 'TEST_ROLE_READ_ONLY'] },
+        },
+      });
       await prisma.roomStatusLog.deleteMany({
         where: { room: { numero: 'HK-999' } },
       });
@@ -188,14 +217,11 @@ describe('Housekeeping Orchestration & API (e2e)', () => {
     it('should create task and transition room on checkout.effectue', async () => {
       // Simulate emitting the event
       const eventEmitter = app.get(EventEmitter2);
-      eventEmitter.emit('checkout.effectue', {
+      await eventEmitter.emitAsync('checkout.effectue', {
         stayId: testStayId,
         roomId: testRoomId,
         userId: 1,
       });
-
-      // Wait a bit for async event processing
-      await new Promise((resolve) => setTimeout(resolve, 500));
 
       const room = await prisma.room.findUnique({
         where: { id: testRoomId },
@@ -214,13 +240,11 @@ describe('Housekeeping Orchestration & API (e2e)', () => {
     it('should be idempotent on replaying checkout.effectue', async () => {
       // Re-emit same event
       const eventEmitter = app.get(EventEmitter2);
-      eventEmitter.emit('checkout.effectue', {
+      await eventEmitter.emitAsync('checkout.effectue', {
         stayId: testStayId,
         roomId: testRoomId,
         userId: 1,
       });
-
-      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Should still be only 1 task
       const tasks = await prisma.housekeepingTask.findMany({
@@ -310,6 +334,260 @@ describe('Housekeeping Orchestration & API (e2e)', () => {
       expect(resBody.meta.page).toBe(1);
       expect(resBody.meta.limit).toBe(10);
       expect(resBody.data).toBeInstanceOf(Array);
+    });
+  });
+
+  describe('GET /api/housekeeping/tasks/assignable-users', () => {
+    let userW1: { id: number };
+    let userW2: { id: number };
+    let userW3: { id: number };
+    let userInactive: { id: number };
+    let userDeleted: { id: number };
+    let userRead: { id: number };
+    let userControl: { id: number };
+    let userNoPerm: { id: number };
+
+    beforeAll(async () => {
+      const gouvernanteRole = await prisma.role.findFirst({
+        where: { nom: 'gouvernante' },
+      });
+
+      const permRead = await prisma.permission.upsert({
+        where: { module_action: { module: 'housekeeping', action: 'read' } },
+        update: {},
+        create: { module: 'housekeeping', action: 'read' },
+      });
+
+      const roleRead = await prisma.role.create({
+        data: {
+          nom: 'TEST_ROLE_READ_ONLY',
+          permissions: {
+            create: [{ permissionId: permRead.id }],
+          },
+        },
+      });
+
+      const permControl = await prisma.permission.upsert({
+        where: { module_action: { module: 'housekeeping', action: 'control' } },
+        update: {},
+        create: { module: 'housekeeping', action: 'control' },
+      });
+
+      const roleControl = await prisma.role.create({
+        data: {
+          nom: 'TEST_ROLE_CONTROL_ONLY',
+          permissions: {
+            create: [{ permissionId: permControl.id }],
+          },
+        },
+      });
+
+      const roleNoPerm = await prisma.role.create({
+        data: {
+          nom: 'TEST_ROLE_NO_PERM',
+        },
+      });
+
+      const fakeHash = '$2b$10$e8.Z/v7P23YV9j44J7KxOe3.1/v7P23YV9j44J7KxOe3.1';
+
+      userW1 = await prisma.user.create({
+        data: {
+          nom: 'Z_Assignable HK User',
+          email: 'z_assignable@assignable-test.com',
+          motDePasseHash: fakeHash,
+          roleId: gouvernanteRole!.id,
+          actif: true,
+        },
+      });
+
+      userW2 = await prisma.user.create({
+        data: {
+          nom: 'A_Assignable HK User',
+          email: 'a_assignable1@assignable-test.com',
+          motDePasseHash: fakeHash,
+          roleId: gouvernanteRole!.id,
+          actif: true,
+        },
+      });
+
+      userW3 = await prisma.user.create({
+        data: {
+          nom: 'A_Assignable HK User',
+          email: 'a_assignable2@assignable-test.com',
+          motDePasseHash: fakeHash,
+          roleId: gouvernanteRole!.id,
+          actif: true,
+        },
+      });
+
+      userInactive = await prisma.user.create({
+        data: {
+          nom: 'B_Inactive HK User',
+          email: 'inactive@assignable-test.com',
+          motDePasseHash: fakeHash,
+          roleId: gouvernanteRole!.id,
+          actif: false,
+        },
+      });
+
+      userDeleted = await prisma.user.create({
+        data: {
+          nom: 'C_Deleted HK User',
+          email: 'deleted@assignable-test.com',
+          motDePasseHash: fakeHash,
+          roleId: gouvernanteRole!.id,
+          actif: true,
+          deletedAt: new Date(),
+        },
+      });
+
+      userRead = await prisma.user.create({
+        data: {
+          nom: 'D_Read HK User',
+          email: 'read_only@assignable-test.com',
+          motDePasseHash: fakeHash,
+          roleId: roleRead.id,
+          actif: true,
+        },
+      });
+
+      userControl = await prisma.user.create({
+        data: {
+          nom: 'F_ControlOnly HK User',
+          email: 'control_only@assignable-test.com',
+          motDePasseHash: fakeHash,
+          roleId: roleControl.id,
+          actif: true,
+        },
+      });
+
+      userNoPerm = await prisma.user.create({
+        data: {
+          nom: 'G_NoPerm HK User',
+          email: 'no_perm@assignable-test.com',
+          motDePasseHash: fakeHash,
+          roleId: roleNoPerm.id,
+          actif: true,
+        },
+      });
+    });
+
+    afterAll(async () => {
+      await prisma.user.deleteMany({
+        where: { email: { endsWith: '@assignable-test.com' } },
+      });
+      await prisma.rolePermission.deleteMany({
+        where: {
+          role: {
+            nom: {
+              in: [
+                'TEST_ROLE_CONTROL_ONLY',
+                'TEST_ROLE_READ_ONLY',
+                'TEST_ROLE_NO_PERM',
+              ],
+            },
+          },
+        },
+      });
+      await prisma.role.deleteMany({
+        where: {
+          nom: {
+            in: [
+              'TEST_ROLE_CONTROL_ONLY',
+              'TEST_ROLE_READ_ONLY',
+              'TEST_ROLE_NO_PERM',
+            ],
+          },
+        },
+      });
+    });
+
+    it('should return 401 when unauthenticated', async () => {
+      await request(app.getHttpServer() as App)
+        .get('/api/housekeeping/tasks/assignable-users')
+        .expect(401);
+    });
+
+    it('should return 403 when user lacks housekeeping:write', async () => {
+      await noPermClient
+        .get('/api/housekeeping/tasks/assignable-users')
+        .expect(403);
+    });
+
+    it('should return active users with housekeeping:write and exclude inactive, deleted, read-only, control-only users', async () => {
+      const res = await writeClient
+        .get('/api/housekeeping/tasks/assignable-users')
+        .expect(200);
+
+      const users = res.body as Array<{
+        id: number;
+        nom: string;
+        actif: boolean;
+      }>;
+
+      expect(Array.isArray(users)).toBe(true);
+
+      const returnedIds = users.map((u) => u.id);
+      expect(returnedIds).toContain(userW1.id);
+      expect(returnedIds).toContain(userW2.id);
+      expect(returnedIds).toContain(userW3.id);
+
+      expect(returnedIds).not.toContain(userInactive.id);
+      expect(returnedIds).not.toContain(userDeleted.id);
+      expect(returnedIds).not.toContain(userRead.id);
+      expect(returnedIds).not.toContain(userControl.id);
+      expect(returnedIds).not.toContain(userNoPerm.id);
+    });
+
+    it('should project exactly id, nom, actif and omit all sensitive fields', async () => {
+      const res = await writeClient
+        .get('/api/housekeeping/tasks/assignable-users')
+        .expect(200);
+
+      const users = res.body as Array<Record<string, unknown>>;
+      expect(users.length).toBeGreaterThan(0);
+
+      for (const item of users) {
+        expect(Object.keys(item).sort()).toEqual(['actif', 'id', 'nom']);
+        expect(item.actif).toBe(true);
+        expect(item).not.toHaveProperty('email');
+        expect(item).not.toHaveProperty('motDePasseHash');
+        expect(item).not.toHaveProperty('roleId');
+        expect(item).not.toHaveProperty('tokenVersion');
+        expect(item).not.toHaveProperty('deletedAt');
+        expect(item).not.toHaveProperty('permissions');
+        expect(item).not.toHaveProperty('employee');
+      }
+    });
+
+    it('should sort deterministically by nom ASC then id ASC', async () => {
+      const res = await writeClient
+        .get('/api/housekeeping/tasks/assignable-users')
+        .expect(200);
+
+      const users = res.body as Array<{
+        id: number;
+        nom: string;
+        actif: boolean;
+      }>;
+
+      const testUsers = users.filter((u) =>
+        [userW1.id, userW2.id, userW3.id].includes(u.id),
+      );
+
+      expect(testUsers).toHaveLength(3);
+      expect(testUsers[0].id).toBe(userW2.id); // A_Assignable, smaller ID
+      expect(testUsers[1].id).toBe(userW3.id); // A_Assignable, larger ID
+      expect(testUsers[2].id).toBe(userW1.id); // Z_Assignable
+    });
+
+    it('should not collide with GET /housekeeping/tasks/:id route', async () => {
+      const res = await readClient
+        .get('/api/housekeeping/tasks/999999')
+        .expect(404);
+
+      const body = res.body as { message: string };
+      expect(body.message).toMatch(/Tâche 999999 introuvable/);
     });
   });
 });
