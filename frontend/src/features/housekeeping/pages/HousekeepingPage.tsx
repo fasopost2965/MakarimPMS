@@ -12,24 +12,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { listRooms, updateRoomStatus } from '../api';
+import {
+  listRooms,
+  listHousekeepingTasks,
+  assignHousekeepingTask,
+  startHousekeepingTask,
+  completeHousekeepingTask,
+  validateHousekeepingTask,
+  refuseHousekeepingTask,
+  cancelHousekeepingTask,
+  reopenHousekeepingTask,
+  createHousekeepingTask,
+} from '../api';
 import { RoomHistoryDialog } from '../components/RoomHistoryDialog';
+import { HousekeepingTaskRow } from '../components/HousekeepingTaskRow';
+import { HousekeepingAssignmentDialog } from '../components/HousekeepingAssignmentDialog';
+import { HousekeepingReasonDialog } from '../components/HousekeepingReasonDialog';
+import { HousekeepingTaskCreateDialog } from '../components/HousekeepingTaskCreateDialog';
+import { HousekeepingTaskHistoryDialog } from '../components/HousekeepingTaskHistoryDialog';
 import type { Room, StatutChambre } from '../../reservations/types';
+import type { HousekeepingTask } from '../types';
 
-// Machine à états complète (cahier des charges §5.6, Phase 2) : ces quatre
-// statuts sont pilotables manuellement. RESERVEE, OCCUPEE et DEPART_PREVU
-// sont exclusivement pilotés par le système (réservation du jour, check-in,
-// check-out — voir HousekeepingService côté backend) — jamais par un choix
-// manuel ici.
-const STATUTS_MANUELS: StatutChambre[] = [
-  'A_NETTOYER',
-  'EN_NETTOYAGE',
-  'LIBRE_PROPRE',
-  'EN_MAINTENANCE',
-];
-
-// Texte explicatif affiché à la place du sélecteur pour les statuts pilotés
-// par le système (pas de changement manuel possible).
 const NON_MODIFIABLE_MANUELLEMENT: Partial<Record<StatutChambre, string>> = {
   RESERVEE: 'Occupée au check-in',
   OCCUPEE: 'Libérée au check-out',
@@ -46,9 +49,6 @@ const STATUT_LABEL: Record<StatutChambre, string> = {
   EN_MAINTENANCE: 'En maintenance',
 };
 
-// CH-063 (docs/design/design_handoff_exploitation_hotel) — le token violet
-// distingue désormais EN_NETTOYAGE (en cours) de A_NETTOYER (warning, en
-// attente), deux statuts manuels adjacents jusqu'ici tous deux en warning.
 const STATUT_BADGE_VARIANT: Record<
   StatutChambre,
   'success' | 'info' | 'destructive' | 'warning' | 'violet'
@@ -62,8 +62,6 @@ const STATUT_BADGE_VARIANT: Record<
   EN_MAINTENANCE: 'destructive',
 };
 
-// Puce (point coloré) des chips de stats — même mapping sémantique que les
-// badges, en couleur pleine plutôt qu'en teinte 10 %.
 const STATUT_DOT_CLASS: Record<StatutChambre, string> = {
   LIBRE_PROPRE: 'bg-success',
   RESERVEE: 'bg-info',
@@ -74,9 +72,6 @@ const STATUT_DOT_CLASS: Record<StatutChambre, string> = {
   EN_MAINTENANCE: 'bg-destructive',
 };
 
-// Les 4 statuts pilotables manuellement, seuls repris en chips de stats
-// (cohérent avec le mockup — Réservée/Occupée/Départ prévu ne sont que des
-// reflets du planning, pas une charge de travail ménage à suivre ici).
 const CHIP_STATUTS = [
   'A_NETTOYER',
   'EN_NETTOYAGE',
@@ -101,90 +96,160 @@ function floorLabel(etage: number | null) {
   return etage === null ? 'Sans étage renseigné' : `Étage ${etage}`;
 }
 
-export function HousekeepingPage() {
+export function HousekeepingPage({
+  permissions,
+}: {
+  permissions?: string[] | null;
+}) {
   const [rooms, setRooms] = useState<Room[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [tasks, setTasks] = useState<HousekeepingTask[]>([]);
+
+  const [roomsLoading, setRoomsLoading] = useState(true);
+  const [tasksLoading, setTasksLoading] = useState(true);
+
+  const [roomsLoadError, setRoomsLoadError] = useState<string | null>(null);
+  const [tasksLoadError, setTasksLoadError] = useState<string | null>(null);
+
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
-  const [updatingRoomId, setUpdatingRoomId] = useState<number | null>(null);
+
   const [actionError, setActionError] = useState<string | null>(null);
+  const [updatingTaskId, setUpdatingTaskId] = useState<number | null>(null);
+
   const [historyRoom, setHistoryRoom] = useState<Room | null>(null);
+
   const [statutFilter, setStatutFilter] = useState<
     StatutChambre | typeof ALL_STATUSES
   >(ALL_STATUSES);
   const [floorFilter, setFloorFilter] = useState(ALL_FLOORS);
   const [roomSearch, setRoomSearch] = useState('');
-  const requestSequence = useRef(0);
-  const initialRequestId = useRef<number | null>(null);
+
+  const initialRoomsRequestId = useRef<number | null>(null);
+  const initialTasksRequestId = useRef<number | null>(null);
   const refreshRequestId = useRef<number | null>(null);
+  const requestSequence = useRef(0);
 
-  const loadRooms = useCallback(async (mode: LoadMode) => {
-    const requestId = ++requestSequence.current;
-    if (mode === 'initial') {
-      initialRequestId.current = requestId;
-      setLoading(true);
-      setLoadError(null);
-    } else if (mode === 'refresh') {
-      refreshRequestId.current = requestId;
-      setRefreshing(true);
-      setRefreshError(null);
-    }
+  // Modal states
+  const [createRoom, setCreateRoom] = useState<Room | null>(null);
+  const [assignTask, setAssignTask] = useState<HousekeepingTask | null>(null);
+  const [reasonTask, setReasonTask] = useState<{
+    task: HousekeepingTask;
+    action: 'validate' | 'refuse' | 'cancel' | 'reopen';
+  } | null>(null);
+  const [historyTask, setHistoryTask] = useState<HousekeepingTask | null>(null);
 
-    try {
-      const nextRooms = await listRooms();
-      if (requestId !== requestSequence.current) return false;
+  const hasRead = permissions?.includes('housekeeping:read');
+  const hasWrite = permissions?.includes('housekeeping:write');
 
-      setRooms(nextRooms);
-      setLastUpdatedAt(new Date());
-      return true;
-    } catch (err) {
-      if (requestId !== requestSequence.current) return false;
+  const loadData = useCallback(
+    async (mode: LoadMode) => {
+      const requestId = ++requestSequence.current;
 
-      const message =
-        err instanceof Error ? err.message : 'Erreur de chargement';
-      if (mode === 'initial') setLoadError(message);
-      else if (mode === 'refresh') setRefreshError(message);
-      else throw err;
-      return false;
-    } finally {
-      if (initialRequestId.current === requestId) {
-        initialRequestId.current = null;
-        setLoading(false);
+      if (mode === 'initial') {
+        initialRoomsRequestId.current = requestId;
+        initialTasksRequestId.current = requestId;
+        setRoomsLoading(true);
+        if (hasRead) setTasksLoading(true);
+        setRoomsLoadError(null);
+        setTasksLoadError(null);
+      } else if (mode === 'refresh' || mode === 'status-update') {
+        refreshRequestId.current = requestId;
+        if (mode === 'refresh') {
+          setRefreshing(true);
+          setRefreshError(null);
+        }
       }
-      if (refreshRequestId.current === requestId) {
-        refreshRequestId.current = null;
-        setRefreshing(false);
+
+      const roomsPromise = listRooms()
+        .then((res) => {
+          if (requestId === requestSequence.current) {
+            setRooms(res);
+          }
+        })
+        .catch((err) => {
+          if (requestId === requestSequence.current) {
+            const msg =
+              err instanceof Error
+                ? err.message
+                : 'Erreur de chargement des chambres';
+            if (mode === 'initial') setRoomsLoadError(msg);
+            else if (mode === 'refresh') throw new Error(`Chambres: ${msg}`);
+          }
+        })
+        .finally(() => {
+          if (requestId === requestSequence.current && mode === 'initial') {
+            setRoomsLoading(false);
+            initialRoomsRequestId.current = null;
+          }
+        });
+
+      let tasksPromise = Promise.resolve();
+      if (hasRead) {
+        tasksPromise = listHousekeepingTasks({ active: true, limit: 100 })
+          .then((res) => {
+            if (requestId === requestSequence.current) {
+              setTasks(res.data);
+            }
+          })
+          .catch((err) => {
+            if (requestId === requestSequence.current) {
+              const msg =
+                err instanceof Error
+                  ? err.message
+                  : 'Erreur de chargement des tâches';
+              if (mode === 'initial') setTasksLoadError(msg);
+              else if (mode === 'refresh') throw new Error(`Tâches: ${msg}`);
+            }
+          })
+          .finally(() => {
+            if (requestId === requestSequence.current && mode === 'initial') {
+              setTasksLoading(false);
+              initialTasksRequestId.current = null;
+            }
+          });
+      } else {
+        if (mode === 'initial') setTasksLoading(false);
       }
-    }
-  }, []);
+
+      try {
+        await Promise.all([roomsPromise, tasksPromise]);
+        if (requestId === requestSequence.current) {
+          setLastUpdatedAt(new Date());
+        }
+      } catch (err) {
+        if (requestId === requestSequence.current && mode === 'refresh') {
+          setRefreshError(
+            err instanceof Error
+              ? err.message
+              : 'Erreur lors du rafraîchissement',
+          );
+        }
+      } finally {
+        if (requestId === requestSequence.current && mode === 'refresh') {
+          setRefreshing(false);
+          refreshRequestId.current = null;
+        }
+      }
+    },
+    [hasRead],
+  );
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadRooms('initial');
-
+    const timer = setTimeout(() => {
+      void loadData('initial');
+    }, 0);
     return () => {
       requestSequence.current += 1;
-      initialRequestId.current = null;
-      refreshRequestId.current = null;
+      clearTimeout(timer);
     };
-  }, [loadRooms]);
+  }, [loadData]);
 
-  async function handleChange(roomId: number, statut: StatutChambre) {
-    setActionError(null);
-    setUpdatingRoomId(roomId);
-    try {
-      await updateRoomStatus(roomId, statut);
-      await loadRooms('status-update');
-    } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : 'Erreur de mise à jour du statut',
-      );
-    } finally {
-      setUpdatingRoomId(null);
-    }
-  }
+  const taskByRoomId = useMemo(() => {
+    const map = new Map<number, HousekeepingTask>();
+    for (const t of tasks) map.set(t.roomId, t);
+    return map;
+  }, [tasks]);
 
   const chipCounts = useMemo(() => {
     const counts = new Map<StatutChambre, number>();
@@ -204,7 +269,6 @@ export function HousekeepingPage() {
 
   const filteredRooms = useMemo(() => {
     const normalizedSearch = roomSearch.trim().toLocaleLowerCase('fr-FR');
-
     return rooms.filter((room) => {
       const matchesStatus =
         statutFilter === ALL_STATUSES || room.statut === statutFilter;
@@ -252,19 +316,99 @@ export function HousekeepingPage() {
     setRoomSearch('');
   }
 
+  // Actions
+  async function performAction(
+    taskId: number,
+    actionFn: () => Promise<unknown>,
+    successCallback?: () => void,
+  ) {
+    setActionError(null);
+    setUpdatingTaskId(taskId);
+    try {
+      await actionFn();
+      if (successCallback) successCallback();
+      await loadData('status-update');
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Erreur inattendue');
+    } finally {
+      setUpdatingTaskId(null);
+    }
+  }
+
+  const handleStart = (taskId: number) =>
+    performAction(taskId, () => startHousekeepingTask(taskId));
+  const handleComplete = (taskId: number) =>
+    performAction(taskId, () => completeHousekeepingTask(taskId));
+
+  const handleCreateConfirm = (roomId: number, motif: string) => {
+    performAction(
+      -1,
+      () => createHousekeepingTask({ roomId, motif }),
+      () => setCreateRoom(null),
+    );
+  };
+
+  const handleAssignConfirm = (
+    taskId: number,
+    assignedUserId: number | null,
+    motif?: string,
+  ) => {
+    performAction(
+      taskId,
+      () => assignHousekeepingTask(taskId, { assignedUserId, motif }),
+      () => setAssignTask(null),
+    );
+  };
+
+  const handleReasonConfirm = (motif: string) => {
+    if (!reasonTask) return;
+    const { task, action } = reasonTask;
+    let actionPromise;
+    switch (action) {
+      case 'validate':
+        actionPromise = validateHousekeepingTask(task.id, { motif });
+        break;
+      case 'refuse':
+        actionPromise = refuseHousekeepingTask(task.id, { motif });
+        break;
+      case 'cancel':
+        actionPromise = cancelHousekeepingTask(task.id, { motif });
+        break;
+      case 'reopen':
+        actionPromise = reopenHousekeepingTask(task.id, { motif });
+        break;
+    }
+    performAction(
+      task.id,
+      () => actionPromise,
+      () => setReasonTask(null),
+    );
+  };
+
+  const isLoading = roomsLoading || tasksLoading;
+
   return (
     <div className="flex h-full flex-col gap-4 p-6">
-      {actionError && <p className="text-destructive text-sm">{actionError}</p>}
-
-      {loading ? (
-        <p className="text-muted-foreground text-sm" role="status">
-          Chargement des chambres…
+      {actionError && (
+        <p className="text-destructive text-sm" role="alert">
+          {actionError}
         </p>
-      ) : loadError ? (
+      )}
+      {tasksLoadError && (
+        <p className="text-destructive text-sm">
+          Erreur de chargement des tâches : {tasksLoadError}
+        </p>
+      )}
+
+      {isLoading ? (
+        <p className="text-muted-foreground text-sm" role="status">
+          Chargement des données…
+        </p>
+      ) : roomsLoadError ? (
         <ErrorState
           title="Impossible de charger les chambres"
-          description={loadError}
-          onRetry={() => void loadRooms('initial')}
+          description={roomsLoadError}
+          onRetry={() => void loadData('initial')}
         />
       ) : (
         <>
@@ -399,7 +543,7 @@ export function HousekeepingPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => void loadRooms('refresh')}
+                onClick={() => void loadData('refresh')}
                 disabled={refreshing}
               >
                 {refreshing ? 'Actualisation…' : 'Actualiser'}
@@ -418,7 +562,7 @@ export function HousekeepingPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => void loadRooms('refresh')}
+                onClick={() => void loadData('refresh')}
                 disabled={refreshing}
               >
                 Réessayer l’actualisation
@@ -454,63 +598,80 @@ export function HousekeepingPage() {
                   <div className="bg-muted/30 text-primary border-b px-4 py-1.5 text-[11px] font-bold tracking-wide uppercase">
                     {floorLabel(etage)}
                   </div>
-                  {floorRooms.map((room) => (
-                    <div
-                      key={room.id}
-                      className="hover:bg-muted/40 grid grid-cols-[minmax(0,1fr)_minmax(130px,auto)] items-center gap-2 border-b px-4 py-3 text-sm last:border-b-0 md:grid-cols-[80px_1fr_170px_150px] md:py-2.5"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setHistoryRoom(room)}
-                        className="focus-visible:ring-ring rounded text-left font-bold outline-none hover:underline focus-visible:ring-2"
-                        aria-label={`Voir l’historique de la chambre ${room.numero}`}
+                  {floorRooms.map((room) => {
+                    const task = taskByRoomId.get(room.id);
+
+                    if (task) {
+                      return (
+                        <HousekeepingTaskRow
+                          key={room.id}
+                          room={room}
+                          task={task}
+                          permissions={permissions}
+                          disabled={
+                            updatingTaskId === task.id || updatingTaskId === -1
+                          }
+                          onShowHistory={() => setHistoryRoom(room)}
+                          onAssign={() => setAssignTask(task)}
+                          onStart={() => handleStart(task.id)}
+                          onComplete={() => handleComplete(task.id)}
+                          onValidate={() =>
+                            setReasonTask({ task, action: 'validate' })
+                          }
+                          onRefuse={() =>
+                            setReasonTask({ task, action: 'refuse' })
+                          }
+                          onCancel={() =>
+                            setReasonTask({ task, action: 'cancel' })
+                          }
+                          onReopen={() =>
+                            setReasonTask({ task, action: 'reopen' })
+                          }
+                          onTaskHistory={() => setHistoryTask(task)}
+                        />
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={room.id}
+                        className="hover:bg-muted/40 grid grid-cols-[minmax(0,1fr)_minmax(130px,auto)] items-center gap-2 border-b px-4 py-3 text-sm last:border-b-0 md:grid-cols-[80px_1fr_170px_150px] md:py-2.5"
                       >
-                        {room.numero}
-                      </button>
-                      <span className="text-muted-foreground col-start-1 row-start-2 text-xs md:col-start-2 md:row-start-1">
-                        {room.roomType.nom}
-                      </span>
-                      <span className="col-start-1 row-start-3 md:col-start-3 md:row-start-1">
-                        <Badge variant={STATUT_BADGE_VARIANT[room.statut]}>
-                          {STATUT_LABEL[room.statut]}
-                        </Badge>
-                      </span>
-                      <span className="col-start-2 row-span-3 row-start-1 flex justify-end md:col-start-4 md:row-span-1">
-                        {NON_MODIFIABLE_MANUELLEMENT[room.statut] ? (
-                          <span className="text-muted-foreground text-right text-xs">
-                            {NON_MODIFIABLE_MANUELLEMENT[room.statut]}
-                          </span>
-                        ) : (
-                          <Select
-                            value={room.statut}
-                            onValueChange={(v) =>
-                              v && handleChange(room.id, v as StatutChambre)
-                            }
-                            disabled={updatingRoomId === room.id}
-                            items={STATUTS_MANUELS.map((s) => ({
-                              value: s,
-                              label: STATUT_LABEL[s],
-                            }))}
-                          >
-                            <SelectTrigger
+                        <button
+                          type="button"
+                          onClick={() => setHistoryRoom(room)}
+                          className="focus-visible:ring-ring rounded text-left font-bold outline-none hover:underline focus-visible:ring-2"
+                          aria-label={`Voir l’historique de la chambre ${room.numero}`}
+                        >
+                          {room.numero}
+                        </button>
+                        <span className="text-muted-foreground col-start-1 row-start-2 text-xs md:col-start-2 md:row-start-1">
+                          {room.roomType.nom}
+                        </span>
+                        <span className="col-start-1 row-start-3 md:col-start-3 md:row-start-1">
+                          <Badge variant={STATUT_BADGE_VARIANT[room.statut]}>
+                            {STATUT_LABEL[room.statut]}
+                          </Badge>
+                        </span>
+                        <span className="col-start-2 row-span-3 row-start-1 flex justify-end md:col-start-4 md:row-span-1">
+                          {room.statut === 'A_NETTOYER' && hasWrite ? (
+                            <Button
                               size="sm"
-                              className="h-7 text-xs"
-                              aria-label={`Changer le statut de la chambre ${room.numero}`}
+                              variant="outline"
+                              onClick={() => setCreateRoom(room)}
+                              disabled={updatingTaskId !== null}
                             >
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {STATUTS_MANUELS.map((s) => (
-                                <SelectItem key={s} value={s}>
-                                  {STATUT_LABEL[s]}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
-                      </span>
-                    </div>
-                  ))}
+                              Créer une tâche
+                            </Button>
+                          ) : (
+                            <span className="text-muted-foreground text-right text-xs">
+                              {NON_MODIFIABLE_MANUELLEMENT[room.statut] || '—'}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               ))}
             </div>
@@ -522,6 +683,56 @@ export function HousekeepingPage() {
         roomId={historyRoom?.id ?? null}
         roomNumero={historyRoom?.numero ?? null}
         onClose={() => setHistoryRoom(null)}
+      />
+
+      <HousekeepingTaskCreateDialog
+        room={createRoom}
+        onClose={() => setCreateRoom(null)}
+        onConfirm={handleCreateConfirm}
+        submitting={updatingTaskId === -1}
+      />
+
+      <HousekeepingAssignmentDialog
+        task={assignTask}
+        onClose={() => setAssignTask(null)}
+        onConfirm={handleAssignConfirm}
+        submitting={assignTask ? updatingTaskId === assignTask.id : false}
+        actionError={actionError}
+      />
+
+      <HousekeepingReasonDialog
+        open={reasonTask !== null}
+        onClose={() => setReasonTask(null)}
+        title={
+          reasonTask?.action === 'validate'
+            ? 'Valider la tâche'
+            : reasonTask?.action === 'refuse'
+              ? 'Refuser la tâche'
+              : reasonTask?.action === 'cancel'
+                ? 'Annuler la tâche'
+                : 'Réouvrir la tâche'
+        }
+        confirmLabel={
+          reasonTask?.action === 'validate'
+            ? 'Valider'
+            : reasonTask?.action === 'refuse'
+              ? 'Refuser'
+              : reasonTask?.action === 'cancel'
+                ? 'Annuler'
+                : 'Réouvrir'
+        }
+        submitting={reasonTask ? updatingTaskId === reasonTask.task.id : false}
+        onConfirm={handleReasonConfirm}
+      />
+
+      <HousekeepingTaskHistoryDialog
+        taskId={historyTask?.id ?? null}
+        roomNumero={
+          historyTask
+            ? (rooms.find((r) => r.id === historyTask.roomId)?.numero ?? '')
+            : null
+        }
+        onClose={() => setHistoryTask(null)}
       />
     </div>
   );

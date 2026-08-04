@@ -8,6 +8,10 @@ export const RECEPTION = {
   email: 'reception@makarim.test',
   password: 'Password123!',
 };
+export const GOUVERNANTE = {
+  email: 'gouvernante@makarim.test',
+  password: 'Password123!',
+};
 
 export async function login(
   page: Page,
@@ -17,9 +21,20 @@ export async function login(
   await page.locator('#email').fill(creds.email);
   await page.locator('#motDePasse').fill(creds.password);
   await page.getByRole('button', { name: 'Se connecter' }).click();
-  // La navigation principale n'apparaît qu'une fois authentifié — attendre
-  // le tableau de bord plutôt qu'un délai arbitraire.
   await expect(page.locator('#nav-dashboard')).toBeVisible();
+}
+
+export async function switchUser(
+  page: Page,
+  creds: { email: string; password: string },
+) {
+  await page.context().clearCookies();
+  await page.goto('/');
+  await page.evaluate(() => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+  });
+  await login(page, creds);
 }
 
 export async function gotoTab(
@@ -43,9 +58,6 @@ export async function gotoTab(
   await page.locator(`#nav-${tab}`).click();
 }
 
-// Interaction avec le composant SelectSearch (base-ui combobox) — ouvre le
-// champ, tape pour filtrer, clique l'option affichée. Réutilisé partout où
-// le composant apparaît (chambre du check-in walk-in, etc.).
 export async function pickFromSelectSearch(
   page: Page,
   inputId: string,
@@ -58,9 +70,84 @@ export async function pickFromSelectSearch(
   await page.getByRole('option', { name: optionText }).click();
 }
 
-// Nom de client unique par exécution (évite toute collision entre deux
-// lancements successifs de la suite sans reseed intermédiaire).
 export function uniqueGuestName(prefix: string) {
-  const suffix = Date.now().toString(36);
+  const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
   return { nom: `${prefix}-${suffix}`, prenom: 'E2E' };
+}
+
+export async function makeRoomNeedsCleaning(
+  page: Page,
+  roomNumber: string,
+  prefix: string,
+) {
+  const guest = uniqueGuestName(prefix);
+  const demain = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  await gotoTab(page, 'checkin');
+  await page.getByRole('button', { name: '+ Check-in walk-in' }).click();
+  await page.locator('#guest-nom').fill(guest.nom);
+  await page.locator('#guest-prenom').fill(guest.prenom);
+  await page.getByRole('button', { name: 'Continuer' }).click();
+  await pickFromSelectSearch(page, 'room', roomNumber, new RegExp(roomNumber));
+  await page.locator('#dateCheckoutPrevue').fill(demain);
+  await page.getByRole('button', { name: 'Continuer' }).click();
+  await page.getByRole('button', { name: 'Enregistrer le check-in' }).click();
+
+  const stayRow = page
+    .getByRole('button')
+    .filter({ hasText: guest.nom })
+    .filter({ hasText: roomNumber });
+  await expect(stayRow).toBeVisible();
+  await stayRow.click();
+
+  await page.getByRole('button', { name: 'Facturation' }).click();
+  await page.getByRole('button', { name: 'Encaisser un paiement' }).click();
+  await page.locator('#montant').fill('5000');
+  await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await expect(page.locator('#montant')).not.toBeVisible();
+
+  await page.getByRole('button', { name: 'Détails' }).click();
+  await page.getByRole('button', { name: 'Check-out', exact: true }).click();
+  await expect(page.getByText('Check-out effectué')).toBeVisible();
+  await page.getByRole('button', { name: 'Fermer' }).click();
+}
+
+export async function completeHousekeepingTaskForRoom(
+  page: Page,
+  roomNumber: string,
+  assigneeName = 'Gouvernante Test',
+) {
+  await gotoTab(page, 'housekeeping');
+  await page.getByLabel('Numéro de chambre').fill(roomNumber);
+  await expect(
+    page.getByRole('button', {
+      name: `Voir l’historique de la chambre ${roomNumber}`,
+    }),
+  ).toBeVisible();
+
+  const createButton = page.getByRole('button', { name: 'Créer une tâche' });
+  if (await createButton.isVisible()) {
+    await createButton.click();
+    await page
+      .getByLabel('Motif (minimum 10 caractères)')
+      .fill(`Création E2E chambre ${roomNumber}`);
+    await page.getByRole('button', { name: 'Créer la tâche' }).click();
+  }
+
+  await page.getByRole('button', { name: 'Affecter' }).click();
+  await page.getByLabel('Assignataire').click();
+  await page.getByRole('option', { name: assigneeName }).click();
+  await page.getByRole('button', { name: 'Confirmer' }).click();
+
+  await page.getByRole('button', { name: 'Démarrer' }).click();
+  await page.getByRole('button', { name: 'Terminer' }).click();
+  await page.getByRole('button', { name: 'Valider' }).click();
+  await page
+    .getByLabel('Motif (minimum 10 caractères)')
+    .fill(`Validation E2E chambre ${roomNumber}`);
+  await page.getByRole('button', { name: 'Valider' }).click();
+
+  await expect(page.getByText('Libre & propre').first()).toBeVisible();
 }
