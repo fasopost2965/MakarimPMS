@@ -63,7 +63,9 @@ describe('Housekeeping Orchestration & API (e2e)', () => {
     });
     await prisma.rolePermission.deleteMany({
       where: {
-        role: { nom: { in: ['TEST_ROLE_CONTROL_ONLY', 'TEST_ROLE_READ_ONLY'] } },
+        role: {
+          nom: { in: ['TEST_ROLE_CONTROL_ONLY', 'TEST_ROLE_READ_ONLY'] },
+        },
       },
     });
     await prisma.role.deleteMany({
@@ -215,14 +217,11 @@ describe('Housekeeping Orchestration & API (e2e)', () => {
     it('should create task and transition room on checkout.effectue', async () => {
       // Simulate emitting the event
       const eventEmitter = app.get(EventEmitter2);
-      eventEmitter.emit('checkout.effectue', {
+      await eventEmitter.emitAsync('checkout.effectue', {
         stayId: testStayId,
         roomId: testRoomId,
         userId: 1,
       });
-
-      // Wait a bit for async event processing
-      await new Promise((resolve) => setTimeout(resolve, 500));
 
       const room = await prisma.room.findUnique({
         where: { id: testRoomId },
@@ -241,13 +240,11 @@ describe('Housekeeping Orchestration & API (e2e)', () => {
     it('should be idempotent on replaying checkout.effectue', async () => {
       // Re-emit same event
       const eventEmitter = app.get(EventEmitter2);
-      eventEmitter.emit('checkout.effectue', {
+      await eventEmitter.emitAsync('checkout.effectue', {
         stayId: testStayId,
         roomId: testRoomId,
         userId: 1,
       });
-
-      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Should still be only 1 task
       const tasks = await prisma.housekeepingTask.findMany({
@@ -348,6 +345,7 @@ describe('Housekeeping Orchestration & API (e2e)', () => {
     let userDeleted: { id: number };
     let userRead: { id: number };
     let userControl: { id: number };
+    let userNoPerm: { id: number };
 
     beforeAll(async () => {
       const gouvernanteRole = await prisma.role.findFirst({
@@ -381,6 +379,12 @@ describe('Housekeeping Orchestration & API (e2e)', () => {
           permissions: {
             create: [{ permissionId: permControl.id }],
           },
+        },
+      });
+
+      const roleNoPerm = await prisma.role.create({
+        data: {
+          nom: 'TEST_ROLE_NO_PERM',
         },
       });
 
@@ -456,6 +460,16 @@ describe('Housekeeping Orchestration & API (e2e)', () => {
           actif: true,
         },
       });
+
+      userNoPerm = await prisma.user.create({
+        data: {
+          nom: 'G_NoPerm HK User',
+          email: 'no_perm@assignable-test.com',
+          motDePasseHash: fakeHash,
+          roleId: roleNoPerm.id,
+          actif: true,
+        },
+      });
     });
 
     afterAll(async () => {
@@ -465,13 +479,25 @@ describe('Housekeeping Orchestration & API (e2e)', () => {
       await prisma.rolePermission.deleteMany({
         where: {
           role: {
-            nom: { in: ['TEST_ROLE_CONTROL_ONLY', 'TEST_ROLE_READ_ONLY'] },
+            nom: {
+              in: [
+                'TEST_ROLE_CONTROL_ONLY',
+                'TEST_ROLE_READ_ONLY',
+                'TEST_ROLE_NO_PERM',
+              ],
+            },
           },
         },
       });
       await prisma.role.deleteMany({
         where: {
-          nom: { in: ['TEST_ROLE_CONTROL_ONLY', 'TEST_ROLE_READ_ONLY'] },
+          nom: {
+            in: [
+              'TEST_ROLE_CONTROL_ONLY',
+              'TEST_ROLE_READ_ONLY',
+              'TEST_ROLE_NO_PERM',
+            ],
+          },
         },
       });
     });
@@ -510,6 +536,7 @@ describe('Housekeeping Orchestration & API (e2e)', () => {
       expect(returnedIds).not.toContain(userDeleted.id);
       expect(returnedIds).not.toContain(userRead.id);
       expect(returnedIds).not.toContain(userControl.id);
+      expect(returnedIds).not.toContain(userNoPerm.id);
     });
 
     it('should project exactly id, nom, actif and omit all sensitive fields', async () => {
