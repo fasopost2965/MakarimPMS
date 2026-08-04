@@ -43,10 +43,15 @@ export function HousekeepingAssignmentDialog({
   const [users, setUsers] = useState<AssignableUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Use task to derive initial state when it opens
   const [selectedUserId, setSelectedUserId] = useState<
     number | null | 'unassigned'
-  >(null);
+  >(task?.assignedUserId ?? null);
   const [motif, setMotif] = useState('');
+
+  // To detect when task changes from null to a valid task (dialog opening)
+  const previousTaskId = useRef<number | null>(null);
   const requestSequence = useRef(0);
 
   const loadUsers = useCallback(async () => {
@@ -71,18 +76,15 @@ export function HousekeepingAssignmentDialog({
   useEffect(() => {
     if (!task) {
       requestSequence.current += 1;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setUsers([]);
-      setError(null);
-      setLoading(false);
-      setSelectedUserId(null);
-      setMotif('');
       return;
     }
 
-    setSelectedUserId(task.assignedUserId ?? 'unassigned');
-    setMotif('');
-    void loadUsers();
+    if (task.id !== previousTaskId.current) {
+      setSelectedUserId(task.assignedUserId ?? 'unassigned');
+      setMotif('');
+      void loadUsers();
+    }
+    previousTaskId.current = task.id;
 
     return () => {
       requestSequence.current += 1;
@@ -119,6 +121,13 @@ export function HousekeepingAssignmentDialog({
 
   function handleOpenChange(next: boolean) {
     if (!next && !submitting) {
+      requestSequence.current += 1;
+      setUsers([]);
+      setError(null);
+      setLoading(false);
+      setSelectedUserId(null);
+      setMotif('');
+      previousTaskId.current = null;
       onClose();
     }
   }

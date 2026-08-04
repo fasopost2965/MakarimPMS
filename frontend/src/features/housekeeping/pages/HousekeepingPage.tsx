@@ -189,7 +189,7 @@ export function HousekeepingPage({
         tasksPromise = listHousekeepingTasks({ active: true, limit: 100 })
           .then((res) => {
             if (requestId === requestSequence.current) {
-              setTasks(res.items);
+              setTasks(res.data);
             }
           })
           .catch((err) => {
@@ -236,10 +236,12 @@ export function HousekeepingPage({
   );
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadData('initial');
+    const timer = setTimeout(() => {
+      void loadData('initial');
+    }, 0);
     return () => {
       requestSequence.current += 1;
+      clearTimeout(timer);
     };
   }, [loadData]);
 

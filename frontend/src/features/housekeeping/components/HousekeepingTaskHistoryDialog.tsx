@@ -69,24 +69,26 @@ export function HousekeepingTaskHistoryDialog({
   useEffect(() => {
     if (taskId === null) {
       requestSequence.current += 1;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setEntries([]);
-      setError(null);
-      setLoading(false);
-      setPage(1);
-      setTotalPages(1);
       return;
     }
 
-    void loadHistory(1);
+    const timer = setTimeout(() => {
+      void loadHistory(1);
+    }, 0);
 
     return () => {
+      clearTimeout(timer);
       requestSequence.current += 1;
     };
   }, [loadHistory, taskId]);
 
   function handleClose() {
     requestSequence.current += 1;
+    setEntries([]);
+    setError(null);
+    setLoading(false);
+    setPage(1);
+    setTotalPages(1);
     onClose();
   }
 

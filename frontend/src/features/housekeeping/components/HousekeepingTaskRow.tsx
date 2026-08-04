@@ -1,6 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { HousekeepingTask, StatutTacheHousekeeping } from '../types';
+import type { HousekeepingTask, StatutTacheHousekeeping } from '../types';
 import type { Room, StatutChambre } from '../../reservations/types';
 
 const STATUT_LABEL: Record<StatutChambre, string> = {
@@ -174,7 +174,7 @@ export function HousekeepingTaskRow({
           <>
             <Button
               size="sm"
-              variant="success"
+              variant="default"
               onClick={onValidate}
               disabled={disabled}
             >

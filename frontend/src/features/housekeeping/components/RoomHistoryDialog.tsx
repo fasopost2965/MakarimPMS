@@ -66,23 +66,25 @@ export function RoomHistoryDialog({ roomId, roomNumero, onClose }: Props) {
   useEffect(() => {
     if (roomId === null) {
       requestSequence.current += 1;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setEntries([]);
-      setError(null);
-      setLoading(false);
       return;
     }
 
-    setEntries([]);
-    void loadHistory();
+    const timer = setTimeout(() => {
+      setEntries([]);
+      void loadHistory();
+    }, 0);
 
     return () => {
+      clearTimeout(timer);
       requestSequence.current += 1;
     };
   }, [loadHistory, roomId]);
 
   function handleClose() {
     requestSequence.current += 1;
+    setEntries([]);
+    setError(null);
+    setLoading(false);
     onClose();
   }
 
