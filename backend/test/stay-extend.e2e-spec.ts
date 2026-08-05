@@ -1,0 +1,941 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { App } from 'supertest/types';
+import { AppModule } from '../src/app.module';
+import { PrismaService } from '../src/prisma/prisma.service';
+import { BillingService } from '../src/modules/billing/billing.service';
+import { AuditService } from '../src/modules/audit/audit.service';
+import { authedRequest, loginAs } from './helpers/auth';
+import {
+  AuditAction,
+  FormuleHebergement,
+  StatutChambre,
+  StatutSejour,
+  TypeLigneFolio,
+} from '@prisma/client';
+
+interface StayResponse {
+  id: number;
+  roomId: number;
+  statut: string;
+  dateCheckoutPrevue: string;
+  folios: Array<{ id: number; lignes: Array<{ id: number }> }>;
+}
+
+interface RoomAlternative {
+  id: number;
+  roomTypeId: number;
+}
+
+interface RoomUnavailableBody {
+  code: string;
+  message: string;
+  alternatives: RoomAlternative[];
+}
+
+interface PaymentRequiredBody {
+  code: string;
+  message: string;
+  amountRequired: string;
+  availableCredit: string;
+}
+
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function addDays(base: Date, days: number): Date {
+  return new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+// GL-003 — Prolongation de séjour
+describe('Stay - Extend (GL-003)', () => {
+  let app: INestApplication<App>;
+  let prisma: PrismaService;
+  let billingService: BillingService;
+  let auditService: AuditService;
+  let adminClient: ReturnType<typeof authedRequest>;
+  let receptionClient: ReturnType<typeof authedRequest>;
+  let gouvernanteClient: ReturnType<typeof authedRequest>;
+
+  // Type de base (chambre actuelle), un type plus cher (alternative
+  // prioritaire de secours) et un type moins cher (jamais une alternative
+  // valide, CLAUDE.md/instructions GL-003).
+  let roomTypeId: number;
+  let roomTypeCherId: number;
+  let roomTypeMoinsCherId: number;
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('api');
+    app.useGlobalPipes(
+      new ValidationPipe({
+        forbidNonWhitelisted: true,
+        whitelist: true,
+        transform: true,
+      }),
+    );
+    await app.init();
+
+    prisma = app.get(PrismaService);
+    billingService = app.get(BillingService);
+    auditService = app.get(AuditService);
+
+    const adminToken = await loginAs(app.getHttpServer(), 'admin');
+    adminClient = authedRequest(app.getHttpServer(), adminToken);
+    const receptionToken = await loginAs(app.getHttpServer(), 'reception');
+    receptionClient = authedRequest(app.getHttpServer(), receptionToken);
+    const gouvernanteToken = await loginAs(app.getHttpServer(), 'gouvernante');
+    gouvernanteClient = authedRequest(app.getHttpServer(), gouvernanteToken);
+
+    const suffix = `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+    const base = await prisma.roomType.create({
+      data: {
+        nom: `TEST-GL003-BASE-${suffix}`,
+        prixBase: 100,
+        capacite: 2,
+        prixPetitDejeuner: 10,
+        prixDemiPension: 30,
+        prixPensionComplete: 50,
+      },
+    });
+    roomTypeId = base.id;
+
+    const cher = await prisma.roomType.create({
+      data: {
+        nom: `TEST-GL003-CHER-${suffix}`,
+        prixBase: 150,
+        capacite: 2,
+      },
+    });
+    roomTypeCherId = cher.id;
+
+    const moinsCher = await prisma.roomType.create({
+      data: {
+        nom: `TEST-GL003-MOINSCHER-${suffix}`,
+        prixBase: 50,
+        capacite: 2,
+      },
+    });
+    roomTypeMoinsCherId = moinsCher.id;
+  });
+
+  afterAll(async () => {
+    const roomTypeIds = [roomTypeId, roomTypeCherId, roomTypeMoinsCherId];
+    await prisma.roomNight.deleteMany({
+      where: { room: { roomTypeId: { in: roomTypeIds } } },
+    });
+    await prisma.folioLine.deleteMany({
+      where: { folio: { stay: { room: { roomTypeId: { in: roomTypeIds } } } } },
+    });
+    await prisma.payment.deleteMany({
+      where: { folio: { stay: { room: { roomTypeId: { in: roomTypeIds } } } } },
+    });
+    await prisma.invoice.deleteMany({
+      where: { folio: { stay: { room: { roomTypeId: { in: roomTypeIds } } } } },
+    });
+    await prisma.folio.deleteMany({
+      where: { stay: { room: { roomTypeId: { in: roomTypeIds } } } },
+    });
+    await prisma.stay.deleteMany({
+      where: { room: { roomTypeId: { in: roomTypeIds } } },
+    });
+    await prisma.reservation.deleteMany({
+      where: { room: { roomTypeId: { in: roomTypeIds } } },
+    });
+    await prisma.rateRestriction.deleteMany({
+      where: { roomTypeId: { in: roomTypeIds } },
+    });
+    await prisma.seasonRate.deleteMany({
+      where: { roomTypeId: { in: roomTypeIds } },
+    });
+    await prisma.roomStatusLog.deleteMany({
+      where: { room: { roomTypeId: { in: roomTypeIds } } },
+    });
+    await prisma.housekeepingTaskLog.deleteMany({
+      where: { task: { room: { roomTypeId: { in: roomTypeIds } } } },
+    });
+    await prisma.housekeepingTask.deleteMany({
+      where: { room: { roomTypeId: { in: roomTypeIds } } },
+    });
+    await prisma.room.deleteMany({
+      where: { roomTypeId: { in: roomTypeIds } },
+    });
+    await prisma.roomType.deleteMany({ where: { id: { in: roomTypeIds } } });
+    await app.close();
+  });
+
+  describe('POST /stays/:id/extend', () => {
+    let room1: { id: number };
+    let room2: { id: number };
+    let room3: { id: number };
+    let room4: { id: number };
+    let room5: { id: number };
+    let guest: { id: number };
+    let stay: StayResponse;
+    let today: Date;
+
+    beforeEach(async () => {
+      today = new Date();
+      today.setUTCHours(0, 0, 0, 0);
+
+      const suffix = `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+
+      room1 = await prisma.room.create({
+        data: {
+          numero: `GL003-1-${suffix}`,
+          roomTypeId,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+      room2 = await prisma.room.create({
+        data: {
+          numero: `GL003-2-${suffix}`,
+          roomTypeId,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+      room3 = await prisma.room.create({
+        data: {
+          numero: `GL003-3-${suffix}`,
+          roomTypeId: roomTypeCherId,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+      room4 = await prisma.room.create({
+        data: {
+          numero: `GL003-4-${suffix}`,
+          roomTypeId: roomTypeMoinsCherId,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+      room5 = await prisma.room.create({
+        data: {
+          numero: `GL003-5-${suffix}`,
+          roomTypeId,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+
+      guest = await prisma.guest.create({
+        data: {
+          nom: 'Extend',
+          prenom: 'Test',
+          email: `extend-${suffix}@example.com`,
+          telephone: '+212600000002',
+          nationalite: 'MA',
+          pieceIdentite: `EX${suffix}`,
+          categorie: 'STANDARD',
+        },
+      });
+
+      const walkinRes = await adminClient.post('/api/checkin/walk-in').send({
+        roomId: room1.id,
+        dateCheckoutPrevue: isoDate(addDays(today, 2)),
+        guestId: guest.id,
+        formule: FormuleHebergement.ROOM_ONLY,
+      });
+      expect(walkinRes.status).toBe(201);
+      stay = walkinRes.body as StayResponse;
+      expect(stay.statut).toBe(StatutSejour.EN_COURS);
+      expect(stay.roomId).toBe(room1.id);
+
+      // Toujours réinitialiser le drapeau de paiement immédiat au début de
+      // chaque test — même précédent que la Room fraîchement LIBRE_PROPRE
+      // ci-dessus : jamais d'état résiduel d'un test précédent.
+      await prisma.hotelConfig.updateMany({
+        data: { paiementImmediatProlongationObligatoire: false },
+      });
+    });
+
+    afterEach(async () => {
+      const roomIds = [room1.id, room2.id, room3.id, room4.id, room5.id];
+      await prisma.auditLog.deleteMany({
+        where: { targetId: stay.id, targetEntity: 'Stay' },
+      });
+      await prisma.payment.deleteMany({
+        where: { folio: { stay: { roomId: { in: roomIds } } } },
+      });
+      await prisma.invoice.deleteMany({
+        where: { folio: { stay: { roomId: { in: roomIds } } } },
+      });
+      await prisma.housekeepingTaskLog.deleteMany({
+        where: { task: { roomId: { in: roomIds } } },
+      });
+      await prisma.housekeepingTask.deleteMany({
+        where: { roomId: { in: roomIds } },
+      });
+      await prisma.roomStatusLog.deleteMany({
+        where: { roomId: { in: roomIds } },
+      });
+      await prisma.roomNight.deleteMany({
+        where: { roomId: { in: roomIds } },
+      });
+      await prisma.folioLine.deleteMany({
+        where: { folio: { stay: { roomId: { in: roomIds } } } },
+      });
+      await prisma.folio.deleteMany({
+        where: { stay: { roomId: { in: roomIds } } },
+      });
+      await prisma.stay.deleteMany({ where: { roomId: { in: roomIds } } });
+      await prisma.reservation.deleteMany({
+        where: { roomId: { in: roomIds } },
+      });
+      await prisma.rateRestriction.deleteMany({
+        where: { roomTypeId: { in: [roomTypeId, roomTypeCherId] } },
+      });
+      await prisma.seasonRate.deleteMany({ where: { roomTypeId } });
+      await prisma.room.deleteMany({ where: { id: { in: roomIds } } });
+      await prisma.guest.deleteMany({ where: { id: guest.id } });
+      await prisma.hotelConfig.updateMany({
+        data: { paiementImmediatProlongationObligatoire: false },
+      });
+      jest.restoreAllMocks();
+    });
+
+    it('Prolongation nominale : ajoute uniquement les nuits du delta', async () => {
+      const nouvelleDate = isoDate(addDays(today, 4));
+      const res = await receptionClient
+        .post(`/api/stays/${stay.id}/extend`)
+        .send({
+          nouvelleDateCheckoutPrevue: nouvelleDate,
+          motif: 'Le client souhaite prolonger son séjour de 2 nuits',
+        });
+
+      expect(res.status).toBe(201);
+      const body = res.body as StayResponse;
+      expect(body.dateCheckoutPrevue.slice(0, 10)).toBe(nouvelleDate);
+
+      const nights = await prisma.roomNight.findMany({
+        where: { roomId: room1.id, stayId: stay.id },
+      });
+      expect(nights.length).toBe(4); // 2 nuits initiales + 2 nuits ajoutées
+
+      const folioLines = await prisma.folioLine.findMany({
+        where: { folio: { stayId: stay.id }, type: TypeLigneFolio.HEBERGEMENT },
+      });
+      // 1 ligne HEBERGEMENT initiale (check-in) + 1 nouvelle ligne pour le
+      // supplément — jamais un recalcul de la ligne existante.
+      expect(folioLines.length).toBe(2);
+      const nouvelleLigne = folioLines.find((l) =>
+        l.libelle.startsWith('Prolongation'),
+      );
+      expect(nouvelleLigne).toBeDefined();
+      expect(Number(nouvelleLigne!.montant)).toBeCloseTo(200); // 2 nuits x 100
+
+      const auditLog = await prisma.auditLog.findFirstOrThrow({
+        where: { action: AuditAction.EXTEND_STAY, targetId: stay.id },
+      });
+      expect(auditLog.motif).toBe(
+        'Le client souhaite prolonger son séjour de 2 nuits',
+      );
+    });
+
+    it('Changement de saison : nuits ajoutées à cheval sur deux SeasonRate', async () => {
+      // Nuits ajoutées : today+2 et today+3 (extension de 2 nuits, dates
+      // dateCheckoutPrevue initiale = today+2). Deux tarifs saisonniers
+      // couvrent chacun une seule de ces deux nuits.
+      await prisma.seasonRate.create({
+        data: {
+          roomTypeId,
+          libelle: 'Saison A',
+          dateDebut: addDays(today, 2),
+          dateFin: addDays(today, 2),
+          prixNuit: 120,
+        },
+      });
+      await prisma.seasonRate.create({
+        data: {
+          roomTypeId,
+          libelle: 'Saison B',
+          dateDebut: addDays(today, 3),
+          dateFin: addDays(today, 3),
+          prixNuit: 140,
+        },
+      });
+
+      const res = await receptionClient
+        .post(`/api/stays/${stay.id}/extend`)
+        .send({
+          nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+          motif: 'Prolongation à cheval sur deux saisons tarifaires',
+        });
+      expect(res.status).toBe(201);
+
+      const nouvelleLigne = await prisma.folioLine.findFirstOrThrow({
+        where: {
+          folio: { stayId: stay.id },
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: { startsWith: 'Prolongation' },
+        },
+      });
+      expect(Number(nouvelleLigne.montant)).toBeCloseTo(120 + 140);
+    });
+
+    it('Formule EXTRA ajoutée pour une formule ≠ ROOM_ONLY', async () => {
+      // Nouveau séjour dédié en HALF_BOARD (le séjour partagé par défaut est
+      // ROOM_ONLY — voir beforeEach).
+      const stayRes = await adminClient.post('/api/checkin/walk-in').send({
+        roomId: room5.id,
+        dateCheckoutPrevue: isoDate(addDays(today, 2)),
+        guestId: guest.id,
+        formule: FormuleHebergement.HALF_BOARD,
+      });
+      const halfBoardStay = stayRes.body as StayResponse;
+
+      const res = await receptionClient
+        .post(`/api/stays/${halfBoardStay.id}/extend`)
+        .send({
+          nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+          motif: 'Prolongation avec formule demi-pension conservée',
+        });
+      expect(res.status).toBe(201);
+
+      const extraLine = await prisma.folioLine.findFirstOrThrow({
+        where: {
+          folio: { stayId: halfBoardStay.id },
+          type: TypeLigneFolio.EXTRA,
+          libelle: { startsWith: 'Prolongation' },
+        },
+      });
+      // 2 nuits x 2 personnes (capacite roomType) x 30 (prixDemiPension)
+      expect(Number(extraLine.montant)).toBeCloseTo(120);
+    });
+
+    it('Nouvelle date identique à l’actuelle doit être rejetée (400)', async () => {
+      const res = await receptionClient
+        .post(`/api/stays/${stay.id}/extend`)
+        .send({
+          nouvelleDateCheckoutPrevue: isoDate(addDays(today, 2)),
+          motif: 'Motif valide minimum 10 caractères',
+        });
+      expect(res.status).toBe(400);
+    });
+
+    it('Nouvelle date antérieure à l’actuelle doit être rejetée (400)', async () => {
+      const res = await receptionClient
+        .post(`/api/stays/${stay.id}/extend`)
+        .send({
+          nouvelleDateCheckoutPrevue: isoDate(addDays(today, 1)),
+          motif: 'Motif valide minimum 10 caractères',
+        });
+      expect(res.status).toBe(400);
+    });
+
+    it('Séjour inexistant doit retourner 404', async () => {
+      const res = await receptionClient
+        .post('/api/stays/99999999/extend')
+        .send({
+          nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+          motif: 'Motif valide minimum 10 caractères',
+        });
+      expect(res.status).toBe(404);
+    });
+
+    it('Séjour déjà clôturé doit être rejeté (409)', async () => {
+      const checkoutRes = await adminClient
+        .post(`/api/checkout/${stay.id}`)
+        .send({ force: true, motif: 'Check-out forcé pour préparer le test' });
+      expect(checkoutRes.status).toBe(201);
+
+      const res = await receptionClient
+        .post(`/api/stays/${stay.id}/extend`)
+        .send({
+          nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+          motif: 'Motif valide minimum 10 caractères',
+        });
+      expect(res.status).toBe(409);
+    });
+
+    it('Permission absente (Gouvernante) doit être rejetée (403)', async () => {
+      const res = await gouvernanteClient
+        .post(`/api/stays/${stay.id}/extend`)
+        .send({
+          nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+          motif: 'Motif valide minimum 10 caractères',
+        });
+      expect(res.status).toBe(403);
+    });
+
+    it("Conflit avec une RoomNight issue d'une Reservation → 409 ROOM_UNAVAILABLE avec alternatives", async () => {
+      // Réservation future sur room1 chevauchant une nuit du delta demandé.
+      await receptionClient.post('/api/reservations').send({
+        roomId: room1.id,
+        guestId: guest.id,
+        dateArrivee: isoDate(addDays(today, 2)),
+        dateDepart: isoDate(addDays(today, 3)),
+      });
+
+      const res = await receptionClient
+        .post(`/api/stays/${stay.id}/extend`)
+        .send({
+          nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+          motif: 'Motif valide minimum 10 caractères',
+        });
+      expect(res.status).toBe(409);
+      const body = res.body as RoomUnavailableBody;
+      expect(body.code).toBe('ROOM_UNAVAILABLE');
+      expect(body.alternatives.length).toBeGreaterThan(0);
+
+      // Jamais de changement de chambre automatique — Stay.roomId inchangé.
+      const stayAfter = await prisma.stay.findUniqueOrThrow({
+        where: { id: stay.id },
+      });
+      expect(stayAfter.roomId).toBe(room1.id);
+    });
+
+    it("Conflit avec une RoomNight issue d'un autre séjour walk-in (sans reservationId) → 409", async () => {
+      // Simule une RoomNight déjà posée sur room1 par un autre séjour, sans
+      // jamais passer par une Reservation (reservationId toujours null,
+      // même situation que GL-002) — fixture directe car un deuxième
+      // check-in walk-in réel sur room1 échouerait dès la transition de
+      // statut (OCCUPEE → OCCUPEE n'est pas une transition valide).
+      const otherStayRes = await adminClient.post('/api/checkin/walk-in').send({
+        roomId: room5.id,
+        dateCheckoutPrevue: isoDate(addDays(today, 2)),
+        guestId: guest.id,
+      });
+      const otherStay = otherStayRes.body as StayResponse;
+      await prisma.roomNight.create({
+        data: {
+          roomId: room1.id,
+          date: addDays(today, 2),
+          stayId: otherStay.id,
+        },
+      });
+
+      const res = await receptionClient
+        .post(`/api/stays/${stay.id}/extend`)
+        .send({
+          nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+          motif: 'Motif valide minimum 10 caractères',
+        });
+      expect(res.status).toBe(409);
+      expect((res.body as RoomUnavailableBody).code).toBe('ROOM_UNAVAILABLE');
+    });
+
+    it('Alternative de même catégorie priorisée avant une catégorie plus chère, jamais de catégorie moins chère', async () => {
+      await receptionClient.post('/api/reservations').send({
+        roomId: room1.id,
+        guestId: guest.id,
+        dateArrivee: isoDate(addDays(today, 2)),
+        dateDepart: isoDate(addDays(today, 3)),
+      });
+
+      const res = await receptionClient
+        .post(`/api/stays/${stay.id}/extend`)
+        .send({
+          nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+          motif: 'Motif valide minimum 10 caractères',
+        });
+      expect(res.status).toBe(409);
+      const body = res.body as RoomUnavailableBody;
+      const alternativeIds = body.alternatives.map((r) => r.id);
+
+      expect(alternativeIds).toContain(room2.id); // même catégorie
+      expect(alternativeIds).toContain(room3.id); // catégorie plus chère
+      expect(alternativeIds).not.toContain(room4.id); // jamais moins cher
+      // Même catégorie (roomTypeId identique, prixBase égal) triée avant la
+      // catégorie plus chère.
+      const idxRoom2 = alternativeIds.indexOf(room2.id);
+      const idxRoom3 = alternativeIds.indexOf(room3.id);
+      expect(idxRoom2).toBeLessThan(idxRoom3);
+    });
+
+    it('Catégorie plus chère proposée si la même catégorie est indisponible', async () => {
+      // room2 (même catégorie) rendue indisponible.
+      await prisma.room.update({
+        where: { id: room2.id },
+        data: { statut: StatutChambre.EN_MAINTENANCE },
+      });
+      await receptionClient.post('/api/reservations').send({
+        roomId: room1.id,
+        guestId: guest.id,
+        dateArrivee: isoDate(addDays(today, 2)),
+        dateDepart: isoDate(addDays(today, 3)),
+      });
+
+      const res = await receptionClient
+        .post(`/api/stays/${stay.id}/extend`)
+        .send({
+          nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+          motif: 'Motif valide minimum 10 caractères',
+        });
+      expect(res.status).toBe(409);
+      const alternativeIds = (res.body as RoomUnavailableBody).alternatives.map(
+        (r) => r.id,
+      );
+      expect(alternativeIds).not.toContain(room2.id);
+      expect(alternativeIds).toContain(room3.id);
+    });
+
+    it('Chambre actuellement EN_MAINTENANCE traitée comme indisponible', async () => {
+      await prisma.room.update({
+        where: { id: room1.id },
+        data: { statut: StatutChambre.EN_MAINTENANCE },
+      });
+
+      const res = await receptionClient
+        .post(`/api/stays/${stay.id}/extend`)
+        .send({
+          nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+          motif: 'Motif valide minimum 10 caractères',
+        });
+      expect(res.status).toBe(409);
+      expect((res.body as RoomUnavailableBody).code).toBe('ROOM_UNAVAILABLE');
+    });
+
+    it('Stop Sale actif sur les nuits ajoutées n’empêche jamais la prolongation', async () => {
+      await prisma.rateRestriction.create({
+        data: {
+          roomTypeId,
+          dateDebut: addDays(today, 2),
+          dateFin: addDays(today, 3),
+          stopSale: true,
+          libelle: 'Test stop sale GL-003',
+        },
+      });
+
+      const res = await receptionClient
+        .post(`/api/stays/${stay.id}/extend`)
+        .send({
+          nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+          motif: 'Motif valide minimum 10 caractères',
+        });
+      expect(res.status).toBe(201);
+    });
+
+    it('Aucune tâche housekeeping créée, Room.statut inchangé (OCCUPEE)', async () => {
+      const res = await receptionClient
+        .post(`/api/stays/${stay.id}/extend`)
+        .send({
+          nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+          motif: 'Motif valide minimum 10 caractères',
+        });
+      expect(res.status).toBe(201);
+
+      const tasks = await prisma.housekeepingTask.findMany({
+        where: { roomId: room1.id },
+      });
+      expect(tasks.length).toBe(0);
+
+      const roomAfter = await prisma.room.findUniqueOrThrow({
+        where: { id: room1.id },
+      });
+      expect(roomAfter.statut).toBe(StatutChambre.OCCUPEE);
+    });
+
+    it('Facture déjà EMISE sur le folio → conflit hérité d’addFolioLine (409)', async () => {
+      const folioId = stay.folios[0].id;
+      const invoiceRes = await adminClient.post(
+        `/api/invoices/generer?folioId=${folioId}`,
+      );
+      expect(invoiceRes.status).toBe(201);
+
+      const res = await receptionClient
+        .post(`/api/stays/${stay.id}/extend`)
+        .send({
+          nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+          motif: 'Motif valide minimum 10 caractères',
+        });
+      expect(res.status).toBe(409);
+
+      // Aucune nuit ajoutée malgré l'échec.
+      const nights = await prisma.roomNight.findMany({
+        where: { roomId: room1.id, stayId: stay.id },
+      });
+      expect(nights.length).toBe(2);
+    });
+
+    describe('Paiement immédiat obligatoire (HotelConfig.paiementImmediatProlongationObligatoire)', () => {
+      it('Paramètre false (défaut) : prolongation directe sans vérification de crédit', async () => {
+        const res = await receptionClient
+          .post(`/api/stays/${stay.id}/extend`)
+          .send({
+            nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+            motif: 'Prolongation sans paiement immédiat requis',
+          });
+        expect(res.status).toBe(201);
+      });
+
+      it('Paramètre true sans crédit suffisant → 409 PAYMENT_REQUIRED, aucune écriture committée', async () => {
+        await prisma.hotelConfig.updateMany({
+          data: { paiementImmediatProlongationObligatoire: true },
+        });
+
+        const nightsBefore = await prisma.roomNight.count({
+          where: { roomId: room1.id, stayId: stay.id },
+        });
+        const linesBefore = await prisma.folioLine.count({
+          where: { folio: { stayId: stay.id } },
+        });
+        const auditBefore = await prisma.auditLog.count({
+          where: { action: AuditAction.EXTEND_STAY, targetId: stay.id },
+        });
+
+        const res = await receptionClient
+          .post(`/api/stays/${stay.id}/extend`)
+          .send({
+            nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+            motif: 'Prolongation sans crédit disponible suffisant',
+          });
+        expect(res.status).toBe(409);
+        const body = res.body as PaymentRequiredBody;
+        expect(body.code).toBe('PAYMENT_REQUIRED');
+        // Aucun paiement encaissé : crédit disponible nul, montant requis =
+        // 2 nuits x 100 MAD.
+        expect(body.availableCredit).toBe('0.00');
+        expect(body.amountRequired).toBe('200.00');
+
+        const nightsAfter = await prisma.roomNight.count({
+          where: { roomId: room1.id, stayId: stay.id },
+        });
+        const linesAfter = await prisma.folioLine.count({
+          where: { folio: { stayId: stay.id } },
+        });
+        const auditAfter = await prisma.auditLog.count({
+          where: { action: AuditAction.EXTEND_STAY, targetId: stay.id },
+        });
+        expect(nightsAfter).toBe(nightsBefore);
+        expect(linesAfter).toBe(linesBefore);
+        expect(auditAfter).toBe(auditBefore);
+
+        const stayAfter = await prisma.stay.findUniqueOrThrow({
+          where: { id: stay.id },
+        });
+        expect(stayAfter.dateCheckoutPrevue.toISOString().slice(0, 10)).toBe(
+          isoDate(addDays(today, 2)),
+        );
+      });
+
+      it('Paiement enregistré séparément puis nouvel appel réussit', async () => {
+        await prisma.hotelConfig.updateMany({
+          data: { paiementImmediatProlongationObligatoire: true },
+        });
+
+        const firstAttempt = await receptionClient
+          .post(`/api/stays/${stay.id}/extend`)
+          .send({
+            nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+            motif: 'Première tentative, sans crédit disponible',
+          });
+        expect(firstAttempt.status).toBe(409);
+
+        const folioId = stay.folios[0].id;
+        // Crédit disponible = paiements − charges déjà existantes (hors
+        // PAIEMENT) : la charge HEBERGEMENT initiale (200 = 2 nuits x 100)
+        // doit d'abord être couverte avant que le supplément de 200 requis
+        // ne soit lui-même disponible en crédit — encaisser 400 au total.
+        const paymentRes = await adminClient.post('/api/payments').send({
+          folioId,
+          moyen: 'ESPECES',
+          montant: '400.00',
+          idempotencyKey: `gl003-payment-${stay.id}-${Date.now()}`,
+        });
+        expect(paymentRes.status).toBe(201);
+
+        const retry = await receptionClient
+          .post(`/api/stays/${stay.id}/extend`)
+          .send({
+            nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+            motif: 'Nouvelle tentative après enregistrement du paiement',
+          });
+        expect(retry.status).toBe(201);
+      });
+
+      it('Crédit supérieur au montant requis : reliquat conservé après application', async () => {
+        await prisma.hotelConfig.updateMany({
+          data: { paiementImmediatProlongationObligatoire: true },
+        });
+
+        const folioId = stay.folios[0].id;
+        // Charge initiale = 200 (2 nuits x 100), supplément requis = 200 —
+        // 500 encaissés couvrent les deux (400) et laissent un reliquat de
+        // 100 après application de la prolongation.
+        const paymentRes = await adminClient.post('/api/payments').send({
+          folioId,
+          moyen: 'ESPECES',
+          montant: '500.00',
+          idempotencyKey: `gl003-payment-surplus-${stay.id}-${Date.now()}`,
+        });
+        expect(paymentRes.status).toBe(201);
+
+        const res = await receptionClient
+          .post(`/api/stays/${stay.id}/extend`)
+          .send({
+            nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+            motif: 'Prolongation avec crédit supérieur au montant requis',
+          });
+        expect(res.status).toBe(201);
+
+        const folioLines = await prisma.folioLine.findMany({
+          where: { folioId },
+        });
+        const paiements = folioLines
+          .filter((l) => l.type === TypeLigneFolio.PAIEMENT)
+          .reduce((sum, l) => sum + Number(l.montant), 0);
+        const charges = folioLines
+          .filter((l) => l.type !== TypeLigneFolio.PAIEMENT && !l.annulee)
+          .reduce((sum, l) => sum + Number(l.montant), 0);
+        // Reliquat = 500 (paiement) − (200 initial + 200 supplément) = 100,
+        // toujours présent après application (jamais perdu/écrêté) :
+        // paiements > charges de précisément ce reliquat.
+        expect(paiements - charges).toBeCloseTo(100);
+      });
+    });
+
+    it('Rollback intégral si l’écriture FolioLine échoue (sabotage/restore)', async () => {
+      jest
+        .spyOn(billingService, 'addFolioLine')
+        .mockRejectedValueOnce(new Error('Sabotage : addFolioLine en échec'));
+
+      const res = await receptionClient
+        .post(`/api/stays/${stay.id}/extend`)
+        .send({
+          nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+          motif: 'Motif valide minimum 10 caractères',
+        });
+      expect(res.status).toBe(500);
+
+      const [nightsAfter, stayAfter, auditAfter] = await Promise.all([
+        prisma.roomNight.count({
+          where: { roomId: room1.id, stayId: stay.id },
+        }),
+        prisma.stay.findUniqueOrThrow({ where: { id: stay.id } }),
+        prisma.auditLog.findFirst({
+          where: { action: AuditAction.EXTEND_STAY, targetId: stay.id },
+        }),
+      ]);
+      expect(nightsAfter).toBe(2);
+      expect(stayAfter.dateCheckoutPrevue.toISOString().slice(0, 10)).toBe(
+        isoDate(addDays(today, 2)),
+      );
+      expect(auditAfter).toBeNull();
+
+      jest.restoreAllMocks();
+      const retry = await receptionClient
+        .post(`/api/stays/${stay.id}/extend`)
+        .send({
+          nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+          motif: 'Nouvelle tentative après restauration du sabotage',
+        });
+      expect(retry.status).toBe(201);
+    });
+
+    it('Rollback intégral si l’écriture AuditLog échoue (sabotage/restore)', async () => {
+      jest
+        .spyOn(auditService, 'writeLog')
+        .mockRejectedValueOnce(new Error('Sabotage : writeLog en échec'));
+
+      const res = await receptionClient
+        .post(`/api/stays/${stay.id}/extend`)
+        .send({
+          nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+          motif: 'Motif valide minimum 10 caractères',
+        });
+      expect(res.status).toBe(500);
+
+      const [nightsAfter, stayAfter, linesAfter] = await Promise.all([
+        prisma.roomNight.count({
+          where: { roomId: room1.id, stayId: stay.id },
+        }),
+        prisma.stay.findUniqueOrThrow({ where: { id: stay.id } }),
+        prisma.folioLine.count({ where: { folio: { stayId: stay.id } } }),
+      ]);
+      expect(nightsAfter).toBe(2);
+      expect(stayAfter.dateCheckoutPrevue.toISOString().slice(0, 10)).toBe(
+        isoDate(addDays(today, 2)),
+      );
+      expect(linesAfter).toBe(1); // seule la ligne HEBERGEMENT initiale
+
+      jest.restoreAllMocks();
+      const retry = await receptionClient
+        .post(`/api/stays/${stay.id}/extend`)
+        .send({
+          nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+          motif: 'Nouvelle tentative après restauration du sabotage',
+        });
+      expect(retry.status).toBe(201);
+    });
+
+    // Deux appels concurrents identiques sur le MÊME séjour : le verrou
+    // FOR UPDATE sur Stay sérialise les deux transactions — la seconde relit
+    // une dateCheckoutPrevue déjà mise à jour par la première (verrou
+    // relâché après commit) et échoue donc la validation de date (nouvelle
+    // date <= date déjà atteinte). Un seul des deux appels réussit — même
+    // garantie de non-double-écriture que GL-002 (contrainte unique
+    // RoomNight(roomId, date) + verrous FOR UPDATE), ici démontrée sur la
+    // sérialisation de Stay.dateCheckoutPrevue plutôt que sur une chambre
+    // alternative partagée (cette route ne déplace jamais automatiquement
+    // une chambre — voir instructions GL-003).
+    it('Deux prolongations concurrentes identiques sur le même séjour : un seul succès', async () => {
+      const nouvelleDate = isoDate(addDays(today, 4));
+      const [res1, res2] = await Promise.all([
+        receptionClient.post(`/api/stays/${stay.id}/extend`).send({
+          nouvelleDateCheckoutPrevue: nouvelleDate,
+          motif: 'Course concurrente — appel 1',
+        }),
+        receptionClient.post(`/api/stays/${stay.id}/extend`).send({
+          nouvelleDateCheckoutPrevue: nouvelleDate,
+          motif: 'Course concurrente — appel 2',
+        }),
+      ]);
+
+      const statuses = [res1.status, res2.status];
+      const successCount = statuses.filter((s) => s === 201).length;
+      expect(successCount).toBe(1);
+
+      const nights = await prisma.roomNight.count({
+        where: { roomId: room1.id, stayId: stay.id },
+      });
+      expect(nights).toBe(4); // jamais de doublon malgré les deux appels
+
+      const stayAfter = await prisma.stay.findUniqueOrThrow({
+        where: { id: stay.id },
+      });
+      expect(stayAfter.dateCheckoutPrevue.toISOString().slice(0, 10)).toBe(
+        nouvelleDate,
+      );
+    });
+
+    it('Folios/paiements/factures historiques du séjour préservés après une prolongation', async () => {
+      const folioId = stay.folios[0].id;
+      await adminClient.post('/api/payments').send({
+        folioId,
+        moyen: 'ESPECES',
+        montant: '100.00',
+        idempotencyKey: `gl003-historique-${stay.id}-${Date.now()}`,
+      });
+
+      const linesBefore = await prisma.folioLine.findMany({
+        where: { folioId },
+        orderBy: { id: 'asc' },
+      });
+
+      const res = await receptionClient
+        .post(`/api/stays/${stay.id}/extend`)
+        .send({
+          nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+          motif: 'Prolongation avec historique de paiement préexistant',
+        });
+      expect(res.status).toBe(201);
+
+      const linesAfter = await prisma.folioLine.findMany({
+        where: { folioId, id: { in: linesBefore.map((l) => l.id) } },
+        orderBy: { id: 'asc' },
+      });
+      expect(linesAfter.length).toBe(linesBefore.length);
+      linesBefore.forEach((before, index) => {
+        expect(linesAfter[index].montant.toString()).toBe(
+          before.montant.toString(),
+        );
+        expect(linesAfter[index].type).toBe(before.type);
+        expect(linesAfter[index].libelle).toBe(before.libelle);
+      });
+    });
+  });
+});

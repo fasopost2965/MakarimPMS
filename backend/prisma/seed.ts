@@ -547,6 +547,11 @@ async function main() {
   permissions['stay:change-room'] = await prisma.permission.create({
     data: { module: 'stay', action: 'change-room' },
   });
+  // GL-003 — prolongation de séjour (StayService.extendStay) :
+  // Administrateur + Réception, même famille que stay:change-room ci-dessus.
+  permissions['stay:extend'] = await prisma.permission.create({
+    data: { module: 'stay', action: 'extend' },
+  });
 
   const rolesData: Array<{
     nom: string;
@@ -564,6 +569,7 @@ async function main() {
         'checkin:read',
         'checkin:write',
         'stay:change-room',
+        'stay:extend',
         'housekeeping:read',
         'housekeeping:write',
         'dashboard:read',

@@ -787,6 +787,12 @@ model HotelConfig {
   categorieEtoiles  Int
   devise            String   @default("MAD")
   formatDate        String   @default("DD/MM/YYYY")
+  // GL-003 — quand actif, une prolongation de séjour (StayService.extendStay)
+  // n'est appliquée que si le crédit disponible du folio couvre déjà le
+  // supplément (sinon 409 PAYMENT_REQUIRED, aucune écriture committée).
+  // Défaut false : comportement actuel inchangé tant que l'Administrateur
+  // n'active pas explicitement cette exigence via parameters:write.
+  paiementImmediatProlongationObligatoire Boolean @default(false)
   updatedAt         DateTime @updatedAt
 }
 
@@ -1426,6 +1432,9 @@ enum AuditAction {
   // GL-002 — changement de chambre pendant un séjour (StayService.changeRoom),
   // réservé à la permission dédiée stay:change-room (Administrateur + Réception).
   CHANGE_ROOM
+  // GL-003 — prolongation de séjour (StayService.extendStay), réservé à la
+  // permission dédiée stay:extend (Administrateur + Réception).
+  EXTEND_STAY
 }
 
 // ------------------------------------------------------------------

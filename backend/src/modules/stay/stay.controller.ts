@@ -14,6 +14,7 @@ import { StayService } from './stay.service';
 import { WalkinDto } from './dto/walkin.dto';
 import { ForceCheckoutDto } from './dto/force-checkout.dto';
 import { ChangeRoomDto } from './dto/change-room.dto';
+import { ExtendStayDto } from './dto/extend-stay.dto';
 
 // Routes HTTP et clé de permission ('checkin') volontairement inchangées
 // malgré le renommage du module (voir CLAUDE.md) — aucun consommateur
@@ -107,6 +108,32 @@ export class StayController {
     return this.stayService.changeRoom(
       id,
       dto.newRoomId,
+      dto.motif,
+      user.sub,
+      user.roleId,
+    );
+  }
+
+  // GL-003 — prolongation de séjour (ajout de nuits sur la chambre actuelle).
+  // Permission dédiée stay:extend (Administrateur + Réception), même
+  // convention que stay:change-room ci-dessus — pas de vérification
+  // dynamique nécessaire (exigibilité indépendante du contenu de la
+  // requête). StayService revérifie la même permission en interne (défense
+  // en profondeur), mais ce décorateur reste la barrière principale.
+  @RequirePermission('stay', 'extend')
+  @ApiOperation({
+    summary:
+      'Prolongation de séjour (GL-003) — ajout de nuits sur la chambre actuelle, réservé à stay:extend (Administrateur + Réception)',
+  })
+  @Post('stays/:id/extend')
+  extendStay(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ExtendStayDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.stayService.extendStay(
+      id,
+      dto.nouvelleDateCheckoutPrevue,
       dto.motif,
       user.sub,
       user.roleId,
