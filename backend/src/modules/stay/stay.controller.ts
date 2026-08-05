@@ -86,11 +86,15 @@ export class StayController {
 
   // GL-002 — changement de chambre pendant un séjour (transfert vers une
   // chambre disponible). Permission dédiée stay:change-room (Administrateur +
-  // Réception), même pattern que checkin:force-checkout.
-  @RequirePermission('stay', 'change-room')
+  // Réception) : checkin:write comme garde générique (décorateur statique) +
+  // vérification manuelle de stay:change-room dans le service, même pattern
+  // que checkin:force-checkout — une action dédiée hors de la grille
+  // read/write/delete/export/control ne peut pas s'exprimer via
+  // @RequirePermission (union de types figée).
+  @RequirePermission('checkin', 'write')
   @ApiOperation({
     summary:
-      'Changement de chambre pendant un séjour — transfert vers une chambre disponible (GL-002)',
+      'Changement de chambre pendant un séjour — transfert vers une chambre disponible (GL-002), réservé à stay:change-room (Administrateur + Réception)',
   })
   @Post('stays/:id/change-room')
   changeRoom(
@@ -98,6 +102,12 @@ export class StayController {
     @Body() dto: ChangeRoomDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.stayService.changeRoom(id, dto.newRoomId, dto.motif, user.sub);
+    return this.stayService.changeRoom(
+      id,
+      dto.newRoomId,
+      dto.motif,
+      user.sub,
+      user.roleId,
+    );
   }
 }

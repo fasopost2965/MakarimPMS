@@ -532,12 +532,12 @@ export class StayService {
   // - Motif obligatoire, audit complet, transaction atomique
   // - Permission dédiée : stay:change-room (Administrateur + Réception)
 
-  /* eslint-disable @typescript-eslint/no-unsafe-assignment */
   async changeRoom(
     id: number,
     newRoomId: number,
     motif: string,
     userId?: number,
+    roleId?: number,
   ) {
     const stay = await this.findOne(id);
 
@@ -553,10 +553,21 @@ export class StayService {
       );
     }
 
-    const { start: todayStart } = getTodayRange();
+    const { today: todayStart } = getTodayRange();
     const oldRoomId = stay.roomId;
 
     const updated = await this.prisma.$transaction(async (tx) => {
+      const grant = await tx.permission.findFirst({
+        where: {
+          module: 'stay',
+          action: 'change-room',
+          roles: { some: { roleId } },
+        },
+      });
+      if (!grant) {
+        throw new ForbiddenException('Permission requise : stay:change-room.');
+      }
+
       // 1. Verrou Stay
       const stayLocked = await tx.$queryRaw<
         Array<{ id: number; roomId: number }>
@@ -603,7 +614,6 @@ export class StayService {
         stayId: { not: id },
         reservationId: { not: null },
       } as const satisfies Prisma.RoomNightWhereInput;
-      // @ts-expect-error Prisma type inference in transaction context
       const conflictingNights = await tx.roomNight.findMany({
         where: whereConflicting,
       });
@@ -621,7 +631,6 @@ export class StayService {
           gte: todayStart,
         },
       } as const satisfies Prisma.RoomNightWhereInput;
-      // @ts-expect-error Prisma type inference in transaction context
       const futureNights = await tx.roomNight.findMany({
         where: whereFuture,
       });
@@ -676,7 +685,6 @@ export class StayService {
 
     return updated;
   }
-  /* eslint-enable @typescript-eslint/no-unsafe-assignment */
 
   private translateConflict(error: unknown, message: string) {
     if (
