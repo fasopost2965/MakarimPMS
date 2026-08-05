@@ -7,7 +7,12 @@ import { RoomsService } from '../src/modules/rooms/rooms.service';
 import { AuditService } from '../src/modules/audit/audit.service';
 import { HousekeepingTaskService } from '../src/modules/housekeeping/housekeeping-task.service';
 import { authedRequest, loginAs } from './helpers/auth';
-import { AuditAction, StatutChambre, StatutSejour } from '@prisma/client';
+import {
+  AuditAction,
+  Prisma,
+  StatutChambre,
+  StatutSejour,
+} from '@prisma/client';
 
 interface ReservationResponse {
   id: number;
@@ -320,7 +325,7 @@ describe('Stay - Change Room (GL-002)', () => {
       expect(res.status).toBe(409);
     });
 
-    it('Cible réservée (RoomNight issue d\'une Reservation) doit être rejetée (409)', async () => {
+    it("Cible réservée (RoomNight issue d'une Reservation) doit être rejetée (409)", async () => {
       // room2 reste LIBRE_PROPRE (aucun check-in), mais une réservation
       // future chevauche la période restante du séjour — RoomNight avec
       // reservationId renseigné, stayId null.
@@ -328,9 +333,7 @@ describe('Stay - Change Room (GL-002)', () => {
         roomId: room2.id,
         guestId: guest.id,
         dateArrivee: today.toISOString().slice(0, 10),
-        dateDepart: new Date(
-          today.getTime() + 2 * 24 * 60 * 60 * 1000,
-        )
+        dateDepart: new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000)
           .toISOString()
           .slice(0, 10),
       });
@@ -490,7 +493,9 @@ describe('Stay - Change Room (GL-002)', () => {
     // (2 changements de chambre visant la même cible) — walk-in : le plus
     // rapide à mettre en place, sans dépendre du flux réservation.
     async function checkinWalkInStay(roomId: number) {
-      const dateCheckoutPrevue = new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000)
+      const dateCheckoutPrevue = new Date(
+        today.getTime() + 2 * 24 * 60 * 60 * 1000,
+      )
         .toISOString()
         .slice(0, 10);
       const res = await adminClient.post('/api/checkin/walk-in').send({
@@ -582,15 +587,40 @@ describe('Stay - Change Room (GL-002)', () => {
     // identique réussit de nouveau — sinon le test ne serait pas
     // discriminant.
     it('Rollback intégral si la transition de la nouvelle chambre échoue', async () => {
-      const original = roomsService.transitionRoom.bind(roomsService);
-      jest
-        .spyOn(roomsService, 'transitionRoom')
-        .mockImplementation(async (roomId, to, opts) => {
-          if (to === StatutChambre.OCCUPEE && roomId === room2.id) {
-            throw new Error('Sabotage : transition OCCUPEE en échec');
-          }
-          return original(roomId, to, opts);
-        });
+      type TransitionRoomFn = (
+        roomId: number,
+        to: StatutChambre,
+        opts?: {
+          motif?: string;
+          userId?: number;
+          tx?: Prisma.TransactionClient;
+        },
+      ) => ReturnType<RoomsService['transitionRoom']>;
+      // strictBindCallApply est désactivé pour tout le projet (tsconfig.json)
+      // — .call() perd donc son typage précis ici ; référence capturée avant
+      // le spy, jamais détachée de son instance (toujours appelée via
+      // .call(this, ...) juste en dessous).
+      const originalTransitionRoom: TransitionRoomFn =
+        // eslint-disable-next-line @typescript-eslint/unbound-method
+        RoomsService.prototype.transitionRoom;
+      jest.spyOn(roomsService, 'transitionRoom').mockImplementation(function (
+        this: RoomsService,
+        roomId,
+        to,
+        opts,
+      ) {
+        if (to === StatutChambre.OCCUPEE && roomId === room2.id) {
+          return Promise.reject(
+            new Error('Sabotage : transition OCCUPEE en échec'),
+          );
+        }
+        return originalTransitionRoom.call(
+          this,
+          roomId,
+          to,
+          opts,
+        ) as ReturnType<RoomsService['transitionRoom']>;
+      });
 
       const res = await receptionClient
         .post(`/api/stays/${stay.id}/change-room`)

@@ -43,6 +43,10 @@ import { AuditModule } from '../audit/audit.module';
     CheckoutEffectueListener,
     { provide: HOUSEKEEPING_TASK_WRITER, useExisting: HousekeepingTaskService },
   ],
-  exports: [HousekeepingService, HousekeepingTaskService, HOUSEKEEPING_TASK_WRITER],
+  exports: [
+    HousekeepingService,
+    HousekeepingTaskService,
+    HOUSEKEEPING_TASK_WRITER,
+  ],
 })
 export class HousekeepingModule {}
