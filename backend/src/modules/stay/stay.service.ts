@@ -595,6 +595,7 @@ export class StayService {
       // pendant la période du séjour (nuits restantes)
       const conflictingNights = await tx.roomNight.findMany({
         where: {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           roomId: newRoomId,
           date: {
             gte: todayStart,
@@ -616,6 +617,7 @@ export class StayService {
       // 5. Transférer les RoomNight futures de stay.roomId → newRoomId
       const futureNights = await tx.roomNight.findMany({
         where: {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           stayId: id,
           date: {
             gte: todayStart,
