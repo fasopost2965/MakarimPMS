@@ -241,7 +241,7 @@ describe('Stay - Change Room (GL-002)', () => {
         .post(`/api/stays/${stay.id}/change-room`)
         .send({
           newRoomId: room2.id,
-          motif: 'Trop court',
+          motif: 'Court',
         });
 
       expect(res.status).toBe(400);
