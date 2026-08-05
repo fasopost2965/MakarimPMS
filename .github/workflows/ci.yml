@@ -211,3 +211,4 @@ jobs:
           name: playwright-report
           path: frontend/playwright-report/
           retention-days: 7
+# CI rerun trigger
