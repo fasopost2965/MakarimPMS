@@ -531,6 +531,8 @@ export class StayService {
   // - Ancienne chambre → A_NETTOYER + tâche housekeeping créée
   // - Motif obligatoire, audit complet, transaction atomique
   // - Permission dédiée : stay:change-room (Administrateur + Réception)
+
+  /* eslint-disable @typescript-eslint/no-unsafe-assignment */
   async changeRoom(
     id: number,
     newRoomId: number,
@@ -579,9 +581,7 @@ export class StayService {
       const newRoom = roomsLocked.find((r) => r.id === newRoomId);
 
       if (!oldRoom || !newRoom) {
-        throw new NotFoundException(
-          `Une ou deux chambre(s) introuvable(s).`,
-        );
+        throw new NotFoundException(`Une ou deux chambre(s) introuvable(s).`);
       }
 
       // 3. Vérifier que la cible est LIBRE_PROPRE
@@ -593,19 +593,19 @@ export class StayService {
 
       // 4. Vérifier qu'il n'y a pas de RoomNight conflictuelle sur la cible
       // pendant la période du séjour (nuits restantes)
-      const conflictingNights = await tx.roomNight.findMany({
-        where: {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          roomId: newRoomId,
-          date: {
-            gte: todayStart,
-            lte: stay.dateCheckoutPrevue,
-          },
-          // Exclure les nuits du séjour lui-même si elles sont déjà sur la cible
-          // (pas de conflit avec soi-même)
-          stayId: { not: id },
-          reservationId: { not: null },
+      const whereConflicting = {
+        roomId: newRoomId,
+        date: {
+          gte: todayStart,
+          lte: stay.dateCheckoutPrevue,
         },
+
+        stayId: { not: id },
+        reservationId: { not: null },
+      } as const satisfies Prisma.RoomNightWhereInput;
+      // @ts-expect-error Prisma type inference in transaction context
+      const conflictingNights = await tx.roomNight.findMany({
+        where: whereConflicting,
       });
 
       if (conflictingNights.length > 0) {
@@ -615,14 +615,15 @@ export class StayService {
       }
 
       // 5. Transférer les RoomNight futures de stay.roomId → newRoomId
-      const futureNights = await tx.roomNight.findMany({
-        where: {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          stayId: id,
-          date: {
-            gte: todayStart,
-          },
+      const whereFuture = {
+        stayId: id,
+        date: {
+          gte: todayStart,
         },
+      } as const satisfies Prisma.RoomNightWhereInput;
+      // @ts-expect-error Prisma type inference in transaction context
+      const futureNights = await tx.roomNight.findMany({
+        where: whereFuture,
       });
 
       for (const night of futureNights) {
@@ -675,6 +676,7 @@ export class StayService {
 
     return updated;
   }
+  /* eslint-enable @typescript-eslint/no-unsafe-assignment */
 
   private translateConflict(error: unknown, message: string) {
     if (
