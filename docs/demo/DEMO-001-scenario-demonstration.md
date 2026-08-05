@@ -16,6 +16,26 @@ Cette démonstration n'est **pas** la recette : elle est plus courte, plus guid�
 
 ---
 
+## Avant Makarim / Avec Makarim
+
+Cette section sert de fil rouge pour ancrer chaque module démontré dans le quotidien réel de l'hôtel, plutôt que de rester une suite d'écrans déconnectés du vécu de Hajbrahim. À utiliser en introduction de chaque module (module concerné entre parenthèses), pas comme une section isolée à part.
+
+| Aujourd'hui (sans Makarim, présumé — à faire confirmer par Hajbrahim, pas à affirmer) | Avec Makarim (module démontré) |
+|---|---|
+| Planning des chambres tenu sur papier/tableau ou fichier non partagé | Vue planning centralisée, mise à jour en temps réel (module 2) |
+| Réservation notée à la main ou par téléphone sans vérification systématique de double-réservation | Vérification de disponibilité automatique avant toute réservation (module 3) |
+| Saisie manuelle de la pièce d'identité à l'arrivée | Check-in avec saisie structurée, réutilisable pour le registre de police (module 4, 10) |
+| Note de séjour reconstituée en fin de séjour, risque d'oubli d'une charge extra | Folio tenu en continu, chaque charge ajoutée au fil de l'eau (module 5) |
+| Prolongation de séjour gérée de façon informelle, sans recalcul systématique du prix | Prolongation avec recalcul automatique et vérification de disponibilité (module 6) |
+| Départ autorisé sans vérification systématique du solde | Blocage explicite du check-out si solde impayé, sauf dérogation tracée (module 7) |
+| Statut de propreté des chambres communiqué oralement entre équipes | Statut de chambre partagé en temps réel entre réception et gouvernante (module 8) |
+| Accès aux fonctions sensibles (encaissement, configuration) non différencié par personne | Droits d'accès différenciés par rôle, vérifiés à chaque action (module 9) |
+| Registre de police tenu séparément, export manuel | Registre alimenté automatiquement au check-in, export en un geste (module 10) |
+
+**Avertissement** : la colonne « Aujourd'hui » est une hypothèse de travail, pas une affirmation sur l'organisation réelle de l'hôtel — elle doit être confirmée ou corrigée par Hajbrahim en début de démonstration plutôt que présentée comme un constat déjà établi.
+
+---
+
 ## Ordre de la démonstration
 
 | # | Module | Durée | Compte utilisé |
@@ -33,6 +53,43 @@ Cette démonstration n'est **pas** la recette : elle est plus courte, plus guid�
 | 11 | Questions ouvertes & synthèse | 4 min | — |
 
 Total : ~45 min (borne haute). Les modules 6, 9 et 10 sont les premiers à raccourcir si le temps manque — voir « Marge de sécurité » en fin de document.
+
+---
+
+## Ce qu'il faut observer
+
+Section transverse à l'usage du présentateur pendant toute la démonstration — à ne pas confondre avec les « points clés à montrer » propres à chaque module ci-dessous, qui décrivent ce qu'il faut **faire voir** à l'écran. Ici, il s'agit de ce qu'il faut **surveiller chez Hajbrahim** pendant la démo, pour ajuster le rythme ou revenir sur un point en direct :
+
+- **Signes d'adhésion** : hochement, question de détail sur un champ précis, demande de « refaire » un geste — signal que le module démontré correspond à un besoin réel, à noter pour la synthèse (module 11).
+- **Signes de décrochage** : silence prolongé, question qui change de sujet, regard sur le téléphone — signal qu'il faut accélérer ou simplifier l'explication en cours, pas insister sur le détail technique.
+- **Hésitation ou correction sur la colonne « Aujourd'hui »** de la section *Avant Makarim / Avec Makarim* — toute correction de Hajbrahim sur l'organisation actuelle de l'hôtel doit être notée immédiatement, elle vaut plus que l'hypothèse initiale du document.
+- **Comparaison spontanée avec un outil existant** (papier, tableur, autre logiciel) — signal fort à creuser dans les questions ouvertes (module 11), pas à ignorer pour rester dans le déroulé prévu.
+- **Écart entre ce qui est montré et ce que Hajbrahim attendait** : si une fonctionnalité attendue n'apparaît pas, le noter tel quel dans la conclusion plutôt que de rassurer sans preuve sur une capacité non démontrée.
+
+## Questions à poser — vue consolidée
+
+Liste consolidée de toutes les questions posées module par module (le détail contextualisé par module reste inchangé plus bas) — utile pour préparer la synthèse (module 11) et pour ne pas en oublier une en cours de démonstration :
+
+1. Quelles informations voulez-vous voir en premier en arrivant le matin sur le tableau de bord ? *(module 1)*
+2. Le niveau de détail du tableau de bord correspond-il à votre usage quotidien réel ? *(module 1)*
+3. La lisibilité du planning est-elle suffisante en heure de pointe ? *(module 2)*
+4. Le glisser-déposer d'une réservation correspond-il à votre geste habituel ? *(module 2)*
+5. Les informations demandées à la réservation correspondent-elles à vos besoins actuels ? *(module 3)*
+6. Un champ que vous utilisez aujourd'hui manque-t-il à la réservation ? *(module 3)*
+7. Le temps de saisie au comptoir est-il acceptable comparé à votre pratique actuelle ? *(module 4)*
+8. Le scan OCR de pièce d'identité simplifie-t-il réellement la saisie pour votre équipe ? *(module 4)*
+9. La répartition hébergement/extras correspond-elle à votre comptabilité actuelle ? *(module 5)*
+10. Les moyens de paiement proposés couvrent-ils tous les cas réels de votre réception ? *(module 5)*
+11. La prolongation de séjour correspond-elle à une situation fréquente chez vous ? *(module 6)*
+12. Le paiement immédiat obligatoire pour une nuit ajoutée doit-il être activé dès l'ouverture ? *(module 6)*
+13. Le blocage sur solde impayé correspond-il à votre politique actuelle ? *(module 7)*
+14. Existe-t-il des cas où un départ doit être autorisé malgré un solde dû ? *(module 7)*
+15. Ce parcours de ménage correspond-il à l'organisation réelle de votre équipe d'étage ? *(module 8)*
+16. L'application mobile ménage sera-t-elle utilisable sur les appareils de votre personnel ? *(module 8)*
+17. La répartition des droits par rôle correspond-elle à l'organisation réelle de vos équipes ? *(module 9)*
+18. Un rôle ou une restriction supplémentaire est-il nécessaire pour un poste chez vous ? *(module 9)*
+19. Le format d'export du registre de police correspond-il aux exigences des autorités locales ? *(module 10)*
+20. Quels indicateurs supplémentaires souhaitez-vous voir dans le reporting quotidien ? *(module 10)*
 
 ---
 
@@ -202,6 +259,25 @@ Ordre de réduction recommandé si la démonstration prend du retard, du moins c
 1. Réduire le module 9 (RBAC) à une seule bascule de compte au lieu de deux.
 2. Réduire le module 10 (reporting) à l'export du registre de police seul, sans le tableau de bord.
 3. Ne pas raccourcir les modules 3 à 7 (cycle réservation → check-out) — c'est le cœur de l'exploitation quotidienne et le point de jugement principal de Hajbrahim.
+
+## Conclusion de démonstration
+
+Section à remplir en direct à la fin du module 11, avec Hajbrahim si possible — pas rédigée à froid après coup, pour préserver la fidélité des retours.
+
+**Gabarit de synthèse** :
+
+| Élément | Constat |
+|---|---|
+| Modules ayant suscité le plus d'adhésion (signes observés section « Ce qu'il faut observer ») | |
+| Modules ayant suscité des réserves ou du décrochage | |
+| Corrections apportées par Hajbrahim sur la colonne « Aujourd'hui » (*Avant Makarim / Avec Makarim*) | |
+| Fonctionnalité attendue mais non montrée ou absente du système | |
+| Décision de Hajbrahim : prêt pour la recette formelle (chapitre 07 du Go Live Book) / seconde démonstration nécessaire | |
+| Si seconde démonstration nécessaire : sur quels modules précisément | |
+
+**Prochaine étape explicite à formuler avant de clore la session** : confirmer avec Hajbrahim la date envisagée pour le début de la recette formelle (chapitre 07 du Go Live Book), ou pour une éventuelle seconde démonstration — ne pas laisser cette question implicite.
+
+---
 
 ## Après la démonstration
 
