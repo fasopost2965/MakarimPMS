@@ -5,7 +5,6 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import {
   AuditAction,
-  AuditEntity,
   StatutChambre,
   StatutReservation,
   StatutSejour,
@@ -130,7 +129,6 @@ describe('Stay - Change Room (GL-002)', () => {
   });
 
   describe('POST /stays/:id/change-room', () => {
-    let hotelConfig: any;
     let room1: any;
     let room2: any;
     let room3: any;
@@ -142,9 +140,6 @@ describe('Stay - Change Room (GL-002)', () => {
       // Obtenir la date d'aujourd'hui
       today = new Date();
       today.setHours(0, 0, 0, 0);
-
-      // Créer une configuration hôtel
-      hotelConfig = await prisma.hotelConfig.findFirst({});
 
       // Créer un type de chambre
       const roomType = await prisma.roomType.create({

@@ -536,7 +536,6 @@ export class StayService {
     newRoomId: number,
     motif: string,
     userId?: number,
-    roleId?: number,
   ) {
     const stay = await this.findOne(id);
 

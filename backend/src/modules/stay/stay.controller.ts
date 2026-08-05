@@ -98,6 +98,6 @@ export class StayController {
     @Body() dto: ChangeRoomDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.stayService.changeRoom(id, dto.newRoomId, dto.motif, user.sub, user.roleId);
+    return this.stayService.changeRoom(id, dto.newRoomId, dto.motif, user.sub);
   }
 }
