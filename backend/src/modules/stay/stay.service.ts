@@ -5,11 +5,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   AuditAction,
   AuditEntity,
   FormuleHebergement,
+  OrigineTacheHousekeeping,
   Prisma,
   StatutAcompte,
   StatutChambre,
@@ -28,11 +30,19 @@ import { RoomsService } from '../rooms/rooms.service';
 import { GuestsService } from '../guests/guests.service';
 import { BillingService } from '../billing/billing.service';
 import { AuditService } from '../audit/audit.service';
+// Jeton + interface uniquement (fichier feuille, aucune dépendance vers
+// stay/*) — jamais d'import de housekeeping.module.ts ni de la classe
+// concrète HousekeepingTaskService ici : un aller-retour entre fichiers
+// .module.ts casse le chargement CommonJS au démarrage (constaté en le
+// testant). Résolu à l'exécution via ModuleRef#get (voir changeRoom).
+import {
+  HOUSEKEEPING_TASK_WRITER,
+  type HousekeepingTaskWriter,
+} from '../housekeeping/housekeeping-task-writer.token';
 import { WalkinDto } from './dto/walkin.dto';
 import { ForceCheckoutDto } from './dto/force-checkout.dto';
 import { computeSoldeDu } from './utils/solde';
 import { CheckoutEffectueEvent } from './events/checkout-effectue.event';
-import { RoomChangedEvent } from './events/room-changed.event';
 
 const STAY_INCLUDE = {
   reservation: true,
@@ -65,6 +75,7 @@ export class StayService {
     private readonly billingService: BillingService,
     private readonly auditService: AuditService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   // Transformation réservation → séjour (CLAUDE.md règle 1 : le séjour
@@ -528,10 +539,32 @@ export class StayService {
   // - Les nuits passées (< today) restent sur l'ancienne chambre (lecture seule)
   // - Seules les nuits futures (>= today) sont transférées
   // - La cible doit être LIBRE_PROPRE et disponible sur la période
-  // - Ancienne chambre → A_NETTOYER + tâche housekeeping créée
+  // - Ancienne chambre → A_NETTOYER, nouvelle chambre → OCCUPEE, tâche
+  //   housekeeping créée pour l'ancienne chambre — tout dans la même
+  //   transaction que le transfert (aucun listener post-commit sur ce
+  //   chemin : une tâche de ménage manquante après un changement de
+  //   chambre serait un défaut opérationnel silencieux, contrairement au
+  //   check-out où `checkout.effectue` reste acceptable — voir
+  //   CheckoutEffectueListener).
   // - Motif obligatoire, audit complet, transaction atomique
-  // - Permission dédiée : stay:change-room (Administrateur + Réception)
-
+  // - Permission dédiée : stay:change-room (Administrateur + Réception),
+  //   exprimée directement par @RequirePermission (StayController) — pas
+  //   de contenu de requête conditionnant la permission ici (contrairement
+  //   à checkin:force-checkout/guests:blacklist), donc pas besoin du
+  //   pattern de vérification dynamique. Le contrôle ci-dessous n'est
+  //   qu'une défense en profondeur (même permission revérifiée), jamais la
+  //   seule barrière.
+  //
+  // Écart assumé au graphe de dépendances (docs/DEPENDENCY_GRAPH.md, arête
+  // pointillée M6 stay -.-> M9 housekeeping) : StayModule importe
+  // désormais HousekeepingModule (via forwardRef, HousekeepingModule
+  // important déjà StayModule pour ses propres façades de lecture — voir
+  // HousekeepingTaskService.handleCheckoutEffectue) pour appeler
+  // HousekeepingTaskService.createTask() dans CETTE transaction. Le
+  // découplage événementiel reste la norme pour toute transition qui ne
+  // requiert pas cette garantie (checkout notamment) ; ici la consigne est
+  // explicite : pas de listener post-commit qui absorbe les erreurs, la
+  // création de la tâche doit faire partie de l'atomicité de l'opération.
   async changeRoom(
     id: number,
     newRoomId: number,
@@ -539,102 +572,127 @@ export class StayService {
     userId?: number,
     roleId?: number,
   ) {
-    const stay = await this.findOne(id);
-
-    if (stay.statut !== StatutSejour.EN_COURS) {
-      throw new ConflictException(
-        `Ce séjour est déjà clôturé (statut actuel : ${stay.statut}).`,
-      );
-    }
-
-    if (newRoomId === stay.roomId) {
-      throw new ConflictException(
-        `La chambre cible est identique à la chambre actuelle.`,
-      );
+    // Défense en profondeur — la garde réelle est @RequirePermission sur
+    // la route (StayController). Hors transaction : lecture seule, aucun
+    // verrou à tenir pour ça.
+    const grant = await this.prisma.permission.findFirst({
+      where: {
+        module: 'stay',
+        action: 'change-room',
+        roles: { some: { roleId } },
+      },
+    });
+    if (!grant) {
+      throw new ForbiddenException('Permission requise : stay:change-room.');
     }
 
     const { today: todayStart } = getTodayRange();
-    const oldRoomId = stay.roomId;
 
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const grant = await tx.permission.findFirst({
-        where: {
-          module: 'stay',
-          action: 'change-room',
-          roles: { some: { roleId } },
-        },
-      });
-      if (!grant) {
-        throw new ForbiddenException('Permission requise : stay:change-room.');
-      }
-
-      // 1. Verrou Stay
+    const result = await this.prisma.$transaction(async (tx) => {
+      // 1. Verrou Stay — état frais, jamais l'objet lu avant la
+      // transaction. Toutes les validations qui suivent se basent
+      // exclusivement sur cette ligne verrouillée.
       const stayLocked = await tx.$queryRaw<
-        Array<{ id: number; roomId: number }>
+        Array<{
+          id: number;
+          roomId: number;
+          statut: StatutSejour;
+          dateCheckoutPrevue: Date;
+        }>
       >`
-        SELECT id, roomId FROM Stay WHERE id = ${id} FOR UPDATE
+        SELECT id, roomId, statut, dateCheckoutPrevue
+        FROM Stay WHERE id = ${id} FOR UPDATE
       `;
       if (!stayLocked || stayLocked.length === 0) {
         throw new NotFoundException(`Séjour ${id} introuvable.`);
       }
+      const lockedStay = stayLocked[0];
 
-      // 2. Verrou des deux chambres, triées par ID croissant
-      const roomIds = [stay.roomId, newRoomId].sort((a, b) => a - b);
-      const roomsLocked = await tx.$queryRaw<
-        Array<{ id: number; statut: StatutChambre }>
-      >`
-        SELECT id, statut FROM Room
-        WHERE id IN (${roomIds[0]}, ${roomIds[1]})
-        ORDER BY id FOR UPDATE
-      `;
-
-      const oldRoom = roomsLocked.find((r) => r.id === stay.roomId);
-      const newRoom = roomsLocked.find((r) => r.id === newRoomId);
-
-      if (!oldRoom || !newRoom) {
-        throw new NotFoundException(`Une ou deux chambre(s) introuvable(s).`);
+      if (lockedStay.statut !== StatutSejour.EN_COURS) {
+        throw new ConflictException(
+          `Ce séjour est déjà clôturé (statut actuel : ${lockedStay.statut}).`,
+        );
       }
+      if (newRoomId === lockedStay.roomId) {
+        throw new ConflictException(
+          `La chambre cible est identique à la chambre actuelle.`,
+        );
+      }
+      const oldRoomId = lockedStay.roomId;
+
+      // 2. Verrou des deux chambres, dans l'ordre croissant des ID —
+      // séquentiel (jamais Promise.all, qui ne garantirait pas l'ordre
+      // d'acquisition) — même chemin d'écriture/lecture verrouillée que
+      // partout ailleurs (RoomsService.lockRoomForUpdate), jamais de
+      // SELECT ... FOR UPDATE dupliqué ici.
+      const [firstRoomId, secondRoomId] = [oldRoomId, newRoomId].sort(
+        (a, b) => a - b,
+      );
+      const firstRoomLocked = await this.roomsService.lockRoomForUpdate(
+        firstRoomId,
+        tx,
+      );
+      const secondRoomLocked = await this.roomsService.lockRoomForUpdate(
+        secondRoomId,
+        tx,
+      );
+      const resolvedNewRoom =
+        firstRoomLocked.id === newRoomId ? firstRoomLocked : secondRoomLocked;
 
       // 3. Vérifier que la cible est LIBRE_PROPRE
-      if (newRoom.statut !== StatutChambre.LIBRE_PROPRE) {
+      if (resolvedNewRoom.statut !== StatutChambre.LIBRE_PROPRE) {
         throw new ConflictException(
-          `La chambre cible (${newRoomId}) n'est pas disponible (statut actuel : ${newRoom.statut}).`,
+          `La chambre cible (${newRoomId}) n'est pas disponible (statut actuel : ${resolvedNewRoom.statut}).`,
         );
       }
 
-      // 4. Vérifier qu'il n'y a pas de RoomNight conflictuelle sur la cible
-      // pendant la période du séjour (nuits restantes)
-      const whereConflicting = {
-        roomId: newRoomId,
-        date: {
-          gte: todayStart,
-          lte: stay.dateCheckoutPrevue,
-        },
+      // 4. Verrouiller explicitement les RoomNight concernées :
+      //    a) toutes les nuits du séjour (passées incluses, pour les
+      //       préserver intégralement) ;
+      //    b) toutes les nuits déjà posées sur la chambre cible pendant la
+      //       période restante, quelle que soit leur origine (réservation
+      //       OU séjour en cours — jamais de filtre reservationId != null,
+      //       qui manquerait un conflit avec un séjour déjà en place créé
+      //       sans réservation, ex. walk-in).
+      const stayNights = await tx.$queryRaw<
+        Array<{
+          id: number;
+          roomId: number;
+          date: Date;
+          stayId: number | null;
+          reservationId: number | null;
+        }>
+      >`
+        SELECT id, roomId, date, stayId, reservationId
+        FROM RoomNight WHERE stayId = ${id} FOR UPDATE
+      `;
 
-        stayId: { not: id },
-        reservationId: { not: null },
-      } as const satisfies Prisma.RoomNightWhereInput;
-      const conflictingNights = await tx.roomNight.findMany({
-        where: whereConflicting,
-      });
+      const targetNights = await tx.$queryRaw<
+        Array<{
+          id: number;
+          roomId: number;
+          date: Date;
+          stayId: number | null;
+          reservationId: number | null;
+        }>
+      >`
+        SELECT id, roomId, date, stayId, reservationId
+        FROM RoomNight
+        WHERE roomId = ${newRoomId}
+          AND date >= ${todayStart}
+          AND date <= ${lockedStay.dateCheckoutPrevue}
+        FOR UPDATE
+      `;
 
-      if (conflictingNights.length > 0) {
+      if (targetNights.length > 0) {
         throw new ConflictException(
           `La chambre cible est réservée pendant la période du séjour.`,
         );
       }
 
-      // 5. Transférer les RoomNight futures de stay.roomId → newRoomId
-      const whereFuture = {
-        stayId: id,
-        date: {
-          gte: todayStart,
-        },
-      } as const satisfies Prisma.RoomNightWhereInput;
-      const futureNights = await tx.roomNight.findMany({
-        where: whereFuture,
-      });
-
+      // 5. Transférer uniquement les nuits futures (>= aujourd'hui) —
+      // les nuits passées restent, intégralement, sur l'ancienne chambre.
+      const futureNights = stayNights.filter((n) => n.date >= todayStart);
       for (const night of futureNights) {
         await tx.roomNight.update({
           where: { id: night.id },
@@ -643,15 +701,16 @@ export class StayService {
       }
 
       // 6. Mettre à jour Stay.roomId
-      const updated = await tx.stay.update({
+      const updatedStay = await tx.stay.update({
         where: { id },
         data: { roomId: newRoomId },
         include: STAY_INCLUDE,
       });
 
-      // 7. Passer l'ancienne chambre à A_NETTOYER
+      // 7. Statuts des deux chambres — même client transactionnel,
+      // RoomsService.transitionRoom comme seul chemin d'écriture.
       await this.roomsService.transitionRoom(
-        stay.roomId,
+        oldRoomId,
         StatutChambre.A_NETTOYER,
         {
           motif: `Changement de chambre depuis séjour #${id} → ${newRoomId}.`,
@@ -659,31 +718,50 @@ export class StayService {
           tx,
         },
       );
+      await this.roomsService.transitionRoom(newRoomId, StatutChambre.OCCUPEE, {
+        motif: `Changement de chambre depuis séjour #${id} (${oldRoomId} → ${newRoomId}).`,
+        userId,
+        tx,
+      });
 
-      // 8. Audit
-      await this.auditService.writeLog(tx, {
+      // 8. Audit — écrit avant la tâche housekeeping pour disposer de son
+      // ID (clé d'idempotence durable, voir étape 9).
+      const auditEntry = await this.auditService.writeLog(tx, {
         userId,
         action: AuditAction.CHANGE_ROOM,
         targetEntity: AuditEntity.Stay,
         targetId: id,
-        oldValue: { roomId: stay.roomId },
+        oldValue: { roomId: oldRoomId },
         newValue: { roomId: newRoomId },
         motif,
       });
 
-      return updated;
+      // 9. Tâche housekeeping pour l'ancienne chambre, dans la même
+      // transaction — un échec ici fait échouer tout le changement de
+      // chambre (rollback intégral), jamais un listener qui absorberait
+      // l'erreur. Idempotence : clé durable liée à CETTE occurrence
+      // (l'AuditLog créé à l'étape 8), pas seulement au trajet
+      // stayId/oldRoomId/newRoomId — un rejeu de la même requête HTTP
+      // retrouve la même tâche (même AuditLog, transaction déjà commitée
+      // en amont) ; deux changements de chambre distincts sur le même
+      // trajet créent chacun leur propre tâche. Résolution tardive
+      // (ModuleRef, mode global) plutôt qu'injection de constructeur — voir
+      // housekeeping-task-writer.token.ts pour la justification complète.
+      const housekeepingTaskWriter = this.moduleRef.get<HousekeepingTaskWriter>(
+        HOUSEKEEPING_TASK_WRITER,
+        { strict: false },
+      );
+      await housekeepingTaskWriter.createTask(
+        oldRoomId,
+        OrigineTacheHousekeeping.CHANGE_ROOM,
+        `room-change:${auditEntry.id}`,
+        tx,
+      );
+
+      return updatedStay;
     });
 
-    // Après la transaction, émettre l'événement pour housekeeping
-    // (création de la tâche de nettoyage de l'ancienne chambre).
-    // Utiliser emitAsync pour garantir que le listener s'exécute
-    // avant que le client reçoive la réponse (même pattern que checkout.effectue).
-    await this.eventEmitter.emitAsync(
-      'stay.room-changed',
-      new RoomChangedEvent(id, oldRoomId, newRoomId, userId),
-    );
-
-    return updated;
+    return result;
   }
 
   private translateConflict(error: unknown, message: string) {

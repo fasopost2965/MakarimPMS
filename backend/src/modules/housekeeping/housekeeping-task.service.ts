@@ -21,6 +21,10 @@ import { AuthService } from '../auth/auth.service';
 import { StayService } from '../stay/stay.service';
 import { HousekeepingTaskQueryDto } from './dto/housekeeping-task-query.dto';
 
+// createTask() implémente aussi HousekeepingTaskWriter (voir
+// housekeeping-task-writer.token.ts), consommé par StayService via
+// ModuleRef#get à l'exécution — pas d'import de cette classe depuis
+// stay.service.ts, uniquement le jeton + l'interface (fichier feuille).
 @Injectable()
 export class HousekeepingTaskService {
   constructor(

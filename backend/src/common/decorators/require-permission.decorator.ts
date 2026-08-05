@@ -4,7 +4,14 @@ export const PERMISSION_KEY = 'requiredPermission';
 
 export interface RequiredPermission {
   module: string;
-  action: 'read' | 'write' | 'delete' | 'export' | 'control';
+  // 'control' (housekeeping) et 'change-room' (GL-002, stay) sont des
+  // actions dédiées hors de la grille CRUD générique mais dont
+  // l'exigibilité ne dépend jamais du contenu de la requête (contrairement
+  // à guests:blacklist/checkin:force-checkout/payments:refund, qui restent
+  // volontairement hors de cette union et vérifiés dynamiquement dans le
+  // service concerné) — elles peuvent donc être exprimées directement par
+  // ce décorateur statique.
+  action: 'read' | 'write' | 'delete' | 'export' | 'control' | 'change-room';
 }
 
 // Déclare la permission (module, action) nécessaire pour atteindre une

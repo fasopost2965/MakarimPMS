@@ -85,13 +85,15 @@ export class StayController {
   }
 
   // GL-002 — changement de chambre pendant un séjour (transfert vers une
-  // chambre disponible). Permission dédiée stay:change-room (Administrateur +
-  // Réception) : checkin:write comme garde générique (décorateur statique) +
-  // vérification manuelle de stay:change-room dans le service, même pattern
-  // que checkin:force-checkout — une action dédiée hors de la grille
-  // read/write/delete/export/control ne peut pas s'exprimer via
-  // @RequirePermission (union de types figée).
-  @RequirePermission('checkin', 'write')
+  // chambre disponible). Permission dédiée stay:change-room (Administrateur
+  // + Réception), gardée directement par @RequirePermission — contrairement
+  // à checkin:force-checkout/guests:blacklist, l'exigibilité de cette
+  // permission ne dépend jamais du contenu de la requête (toujours requise
+  // pour atteindre cette route), donc pas besoin du pattern de vérification
+  // dynamique ; même précédent que housekeeping:control. StayService
+  // revérifie la même permission en interne (défense en profondeur), mais
+  // ce décorateur reste la barrière principale.
+  @RequirePermission('stay', 'change-room')
   @ApiOperation({
     summary:
       'Changement de chambre pendant un séjour — transfert vers une chambre disponible (GL-002), réservé à stay:change-room (Administrateur + Réception)',
