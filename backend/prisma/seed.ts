@@ -541,6 +541,12 @@ async function main() {
   permissions['housekeeping:control'] = await prisma.permission.create({
     data: { module: 'housekeeping', action: 'control' },
   });
+  // GL-002 — changement de chambre pendant un séjour (StayService.changeRoom) :
+  // Administrateur + Réception, jamais déduit du nom de rôle (même pattern que
+  // guests:blacklist/payments:refund/checkin:force-checkout).
+  permissions['stay:change-room'] = await prisma.permission.create({
+    data: { module: 'stay', action: 'change-room' },
+  });
 
   const rolesData: Array<{
     nom: string;
@@ -557,6 +563,7 @@ async function main() {
         'reservations:write',
         'checkin:read',
         'checkin:write',
+        'stay:change-room',
         'housekeeping:read',
         'housekeeping:write',
         'dashboard:read',

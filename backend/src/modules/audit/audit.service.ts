@@ -32,8 +32,12 @@ export class AuditService {
   // tx est obligatoire (pas de fallback vers this.prisma) : l'écriture
   // d'audit doit réussir/échouer atomiquement avec l'opération auditée
   // (ADR-005 Anti-Pattern #4) — sinon un log peut silencieusement manquer.
+  // Retourne la ligne créée (id inclus) — GL-002 (StayService.changeRoom)
+  // s'en sert comme clé d'idempotence durable pour la tâche housekeeping
+  // associée (room-change:<auditLogId>) ; les appelants existants
+  // ignoraient déjà la valeur de retour, ajout non cassant.
   async writeLog(tx: Prisma.TransactionClient, entry: AuditLogEntry) {
-    await tx.auditLog.create({
+    return tx.auditLog.create({
       data: {
         userId: entry.userId,
         action: entry.action,

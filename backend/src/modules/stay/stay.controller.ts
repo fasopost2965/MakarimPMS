@@ -13,6 +13,7 @@ import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { StayService } from './stay.service';
 import { WalkinDto } from './dto/walkin.dto';
 import { ForceCheckoutDto } from './dto/force-checkout.dto';
+import { ChangeRoomDto } from './dto/change-room.dto';
 
 // Routes HTTP et clé de permission ('checkin') volontairement inchangées
 // malgré le renommage du module (voir CLAUDE.md) — aucun consommateur
@@ -81,5 +82,34 @@ export class StayController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.stayService.checkout(stayId, dto, user.sub, user.roleId);
+  }
+
+  // GL-002 — changement de chambre pendant un séjour (transfert vers une
+  // chambre disponible). Permission dédiée stay:change-room (Administrateur
+  // + Réception), gardée directement par @RequirePermission — contrairement
+  // à checkin:force-checkout/guests:blacklist, l'exigibilité de cette
+  // permission ne dépend jamais du contenu de la requête (toujours requise
+  // pour atteindre cette route), donc pas besoin du pattern de vérification
+  // dynamique ; même précédent que housekeeping:control. StayService
+  // revérifie la même permission en interne (défense en profondeur), mais
+  // ce décorateur reste la barrière principale.
+  @RequirePermission('stay', 'change-room')
+  @ApiOperation({
+    summary:
+      'Changement de chambre pendant un séjour — transfert vers une chambre disponible (GL-002), réservé à stay:change-room (Administrateur + Réception)',
+  })
+  @Post('stays/:id/change-room')
+  changeRoom(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ChangeRoomDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.stayService.changeRoom(
+      id,
+      dto.newRoomId,
+      dto.motif,
+      user.sub,
+      user.roleId,
+    );
   }
 }

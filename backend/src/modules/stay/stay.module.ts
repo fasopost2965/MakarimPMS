@@ -9,6 +9,19 @@ import { AuditModule } from '../audit/audit.module';
 // BillingModule : imputation des acomptes (ReservationDeposit) au folio
 // principal via BillingService.creditFolioLine au check-in — dépendance
 // sanctionnée par docs/DEPENDENCY_GRAPH.md (arête M6 stay → M7 billing).
+//
+// Pas d'import de HousekeepingModule ici, volontairement : HousekeepingModule
+// importe déjà StayModule (façades de lecture seule préexistantes, ex.
+// reconcileDailyStatuses). Un aller-retour StayModule <-> HousekeepingModule
+// au niveau des fichiers de module casse le chargement CommonJS au
+// démarrage (constaté en le testant : NotificationsModule reçoit
+// StayModule=undefined dans son tableau imports, forwardRef() au niveau du
+// tableau imports ne suffit pas à corriger un cycle réel entre deux
+// fichiers .module.ts). GL-002 (StayService.changeRoom) obtient
+// HousekeepingTaskService via ModuleRef#get(token, { strict: false })
+// (résolution globale à l'exécution, après le bootstrap complet de
+// l'application) plutôt que par injection de constructeur — voir
+// housekeeping-task-writer.token.ts.
 @Module({
   imports: [RoomsModule, GuestsModule, BillingModule, AuditModule],
   controllers: [StayController],
