@@ -194,6 +194,8 @@ enum OrigineTacheHousekeeping {
   CHECKOUT
   MANUELLE
   REPRISE
+  // GL-002 — changement de chambre pendant un séjour (StayService.changeRoom)
+  CHANGE_ROOM
 }
 
 enum TypeLogTacheHousekeeping {
@@ -1421,6 +1423,9 @@ enum AuditAction {
   VALIDATE_HOUSEKEEPING_TASK
   REFUSE_HOUSEKEEPING_TASK
   REOPEN_HOUSEKEEPING_TASK
+  // GL-002 — changement de chambre pendant un séjour (StayService.changeRoom),
+  // réservé à la permission dédiée stay:change-room (Administrateur + Réception).
+  CHANGE_ROOM
 }
 
 // ------------------------------------------------------------------

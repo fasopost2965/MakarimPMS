@@ -13,6 +13,7 @@ import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { StayService } from './stay.service';
 import { WalkinDto } from './dto/walkin.dto';
 import { ForceCheckoutDto } from './dto/force-checkout.dto';
+import { ChangeRoomDto } from './dto/change-room.dto';
 
 // Routes HTTP et clé de permission ('checkin') volontairement inchangées
 // malgré le renommage du module (voir CLAUDE.md) — aucun consommateur
@@ -81,5 +82,22 @@ export class StayController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.stayService.checkout(stayId, dto, user.sub, user.roleId);
+  }
+
+  // GL-002 — changement de chambre pendant un séjour (transfert vers une
+  // chambre disponible). Permission dédiée stay:change-room (Administrateur +
+  // Réception), même pattern que checkin:force-checkout.
+  @RequirePermission('stay', 'change-room')
+  @ApiOperation({
+    summary:
+      "Changement de chambre pendant un séjour — transfert vers une chambre disponible (GL-002)",
+  })
+  @Post('stays/:id/change-room')
+  changeRoom(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ChangeRoomDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.stayService.changeRoom(id, dto.newRoomId, dto.motif, user.sub, user.roleId);
   }
 }

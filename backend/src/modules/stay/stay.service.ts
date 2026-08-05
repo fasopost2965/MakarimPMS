@@ -32,6 +32,7 @@ import { WalkinDto } from './dto/walkin.dto';
 import { ForceCheckoutDto } from './dto/force-checkout.dto';
 import { computeSoldeDu } from './utils/solde';
 import { CheckoutEffectueEvent } from './events/checkout-effectue.event';
+import { RoomChangedEvent } from './events/room-changed.event';
 
 const STAY_INCLUDE = {
   reservation: true,
@@ -519,6 +520,159 @@ export class StayService {
     return this.prisma.stay.findFirst({
       where: { roomId, statut: StatutSejour.EN_COURS },
     });
+  }
+
+  // GL-002 — changement de chambre pendant un séjour (transfert vers une
+  // chambre disponible). Règles métier (docs/modules/stay.md §5) :
+  // - Le séjour conserve son identité, folios/paiements/factures inchangés
+  // - Les nuits passées (< today) restent sur l'ancienne chambre (lecture seule)
+  // - Seules les nuits futures (>= today) sont transférées
+  // - La cible doit être LIBRE_PROPRE et disponible sur la période
+  // - Ancienne chambre → A_NETTOYER + tâche housekeeping créée
+  // - Motif obligatoire, audit complet, transaction atomique
+  // - Permission dédiée : stay:change-room (Administrateur + Réception)
+  async changeRoom(
+    id: number,
+    newRoomId: number,
+    motif: string,
+    userId?: number,
+    roleId?: number,
+  ) {
+    const stay = await this.findOne(id);
+
+    if (stay.statut !== StatutSejour.EN_COURS) {
+      throw new ConflictException(
+        `Ce séjour est déjà clôturé (statut actuel : ${stay.statut}).`,
+      );
+    }
+
+    if (newRoomId === stay.roomId) {
+      throw new ConflictException(
+        `La chambre cible est identique à la chambre actuelle.`,
+      );
+    }
+
+    const { start: todayStart } = getTodayRange();
+    const oldRoomId = stay.roomId;
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      // 1. Verrou Stay
+      const stayLocked = await tx.$queryRaw<
+        Array<{ id: number; roomId: number }>
+      >`
+        SELECT id, roomId FROM Stay WHERE id = ${id} FOR UPDATE
+      `;
+      if (!stayLocked || stayLocked.length === 0) {
+        throw new NotFoundException(`Séjour ${id} introuvable.`);
+      }
+
+      // 2. Verrou des deux chambres, triées par ID croissant
+      const roomIds = [stay.roomId, newRoomId].sort((a, b) => a - b);
+      const roomsLocked = await tx.$queryRaw<
+        Array<{ id: number; statut: StatutChambre }>
+      >`
+        SELECT id, statut FROM Room
+        WHERE id IN (${roomIds[0]}, ${roomIds[1]})
+        ORDER BY id FOR UPDATE
+      `;
+
+      const oldRoom = roomsLocked.find((r) => r.id === stay.roomId);
+      const newRoom = roomsLocked.find((r) => r.id === newRoomId);
+
+      if (!oldRoom || !newRoom) {
+        throw new NotFoundException(
+          `Une ou deux chambre(s) introuvable(s).`,
+        );
+      }
+
+      // 3. Vérifier que la cible est LIBRE_PROPRE
+      if (newRoom.statut !== StatutChambre.LIBRE_PROPRE) {
+        throw new ConflictException(
+          `La chambre cible (${newRoomId}) n'est pas disponible (statut actuel : ${newRoom.statut}).`,
+        );
+      }
+
+      // 4. Vérifier qu'il n'y a pas de RoomNight conflictuelle sur la cible
+      // pendant la période du séjour (nuits restantes)
+      const conflictingNights = await tx.roomNight.findMany({
+        where: {
+          roomId: newRoomId,
+          date: {
+            gte: todayStart,
+            lte: stay.dateCheckoutPrevue,
+          },
+          // Exclure les nuits du séjour lui-même si elles sont déjà sur la cible
+          // (pas de conflit avec soi-même)
+          stayId: { not: id },
+          reservationId: { not: null },
+        },
+      });
+
+      if (conflictingNights.length > 0) {
+        throw new ConflictException(
+          `La chambre cible est réservée pendant la période du séjour.`,
+        );
+      }
+
+      // 5. Transférer les RoomNight futures de stay.roomId → newRoomId
+      const futureNights = await tx.roomNight.findMany({
+        where: {
+          stayId: id,
+          date: {
+            gte: todayStart,
+          },
+        },
+      });
+
+      for (const night of futureNights) {
+        await tx.roomNight.update({
+          where: { id: night.id },
+          data: { roomId: newRoomId },
+        });
+      }
+
+      // 6. Mettre à jour Stay.roomId
+      const updated = await tx.stay.update({
+        where: { id },
+        data: { roomId: newRoomId },
+        include: STAY_INCLUDE,
+      });
+
+      // 7. Passer l'ancienne chambre à A_NETTOYER
+      await this.roomsService.transitionRoom(
+        stay.roomId,
+        StatutChambre.A_NETTOYER,
+        {
+          motif: `Changement de chambre depuis séjour #${id} → ${newRoomId}.`,
+          userId,
+          tx,
+        },
+      );
+
+      // 8. Audit
+      await this.auditService.writeLog(tx, {
+        userId,
+        action: AuditAction.CHANGE_ROOM,
+        targetEntity: AuditEntity.Stay,
+        targetId: id,
+        oldValue: { roomId: stay.roomId },
+        newValue: { roomId: newRoomId },
+        motif,
+      });
+
+      return updated;
+    });
+
+    // Après la transaction, émettre l'événement pour housekeeping
+    // (création de la tâche de nettoyage de l'ancienne chambre).
+    // Utiliser emitAsync pour garantir que le listener s'exécute
+    // avant que le client reçoive la réponse (même pattern que checkout.effectue).
+    await this.eventEmitter.emitAsync(
+      'stay.room-changed',
+      new RoomChangedEvent(id, oldRoomId, newRoomId, userId),
+    );
+
+    return updated;
   }
 
   private translateConflict(error: unknown, message: string) {

@@ -5,6 +5,7 @@ import { HousekeepingTaskController } from './housekeeping-task.controller';
 import { HousekeepingService } from './housekeeping.service';
 import { HousekeepingTaskService } from './housekeeping-task.service';
 import { CheckoutEffectueListener } from './listeners/checkout-effectue.listener';
+import { RoomChangedListener } from './listeners/room-changed.listener';
 import { RoomsModule } from '../rooms/rooms.module';
 import { ReservationsModule } from '../reservations/reservations.module';
 import { StayModule } from '../stay/stay.module';
@@ -30,6 +31,7 @@ import { AuditModule } from '../audit/audit.module';
     HousekeepingService,
     HousekeepingTaskService,
     CheckoutEffectueListener,
+    RoomChangedListener,
   ],
   exports: [HousekeepingService, HousekeepingTaskService],
 })
