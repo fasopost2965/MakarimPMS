@@ -5,6 +5,7 @@ import { RoomsModule } from '../rooms/rooms.module';
 import { GuestsModule } from '../guests/guests.module';
 import { BillingModule } from '../billing/billing.module';
 import { AuditModule } from '../audit/audit.module';
+import { ParametersModule } from '../parameters/parameters.module';
 
 // BillingModule : imputation des acomptes (ReservationDeposit) au folio
 // principal via BillingService.creditFolioLine au check-in — dépendance
@@ -22,8 +23,18 @@ import { AuditModule } from '../audit/audit.module';
 // (résolution globale à l'exécution, après le bootstrap complet de
 // l'application) plutôt que par injection de constructeur — voir
 // housekeeping-task-writer.token.ts.
+// ParametersModule (GL-003) : StayService.extendStay lit la grille tarifaire
+// saisonnière via ParametersService.getSeasonRatesForRoomType — module
+// feuille, aucun risque de cycle (parameters.module.ts n'importe que
+// AuditModule).
 @Module({
-  imports: [RoomsModule, GuestsModule, BillingModule, AuditModule],
+  imports: [
+    RoomsModule,
+    GuestsModule,
+    BillingModule,
+    AuditModule,
+    ParametersModule,
+  ],
   controllers: [StayController],
   providers: [StayService],
   exports: [StayService],

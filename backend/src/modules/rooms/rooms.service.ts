@@ -372,6 +372,71 @@ export class RoomsService {
     });
   }
 
+  // GL-003 — façade de recherche d'alternatives pour la prolongation de
+  // séjour (StayService.extendStay), quand la chambre actuelle n'est pas
+  // disponible sur les nuits ajoutées. Deux niveaux de compatibilité :
+  // 1) même RoomType que la chambre actuelle, 2) tout autre RoomType au
+  // moins aussi cher/aussi grand — jamais une catégorie moins chère.
+  // Ne lit que Room/RoomType/RoomNight en Prisma direct (RoomsModule reste
+  // un module feuille, même convention que les autres méthodes de lecture
+  // ci-dessus).
+  async findCompatibleAvailableRooms(
+    currentRoomTypeId: number,
+    nights: Date[],
+    excludeRoomId: number,
+    tx: Prisma.TransactionClient,
+  ): Promise<Array<Room & { roomType: Prisma.RoomTypeGetPayload<object> }>> {
+    const currentRoomType = await tx.roomType.findUnique({
+      where: { id: currentRoomTypeId },
+    });
+    if (!currentRoomType) {
+      throw new NotFoundException(
+        `Type de chambre ${currentRoomTypeId} introuvable.`,
+      );
+    }
+
+    // Chambres candidates : même RoomType, OU tout RoomType au moins aussi
+    // cher/aussi grand (jamais une catégorie moins chère — CLAUDE.md,
+    // instructions GL-003). Ne garder que LIBRE_PROPRE, hors chambre
+    // actuelle.
+    const candidates = await tx.room.findMany({
+      where: {
+        id: { not: excludeRoomId },
+        statut: StatutChambre.LIBRE_PROPRE,
+        deletedAt: null,
+        OR: [
+          { roomTypeId: currentRoomTypeId },
+          {
+            roomType: {
+              capacite: { gte: currentRoomType.capacite },
+              prixBase: { gte: currentRoomType.prixBase },
+            },
+          },
+        ],
+      },
+      include: { roomType: true },
+      orderBy: [{ roomType: { prixBase: 'asc' } }, { id: 'asc' }],
+    });
+
+    if (candidates.length === 0 || nights.length === 0) {
+      return candidates;
+    }
+
+    // Exclure toute chambre ayant une RoomNight sur l'une des dates
+    // demandées, quelle que soit l'origine (réservation OU séjour, jamais de
+    // filtre reservationId != null — même correction que GL-002).
+    const conflictingNights = await tx.roomNight.findMany({
+      where: {
+        roomId: { in: candidates.map((room) => room.id) },
+        date: { in: nights },
+      },
+      select: { roomId: true },
+    });
+    const unavailableRoomIds = new Set(conflictingNights.map((n) => n.roomId));
+
+    return candidates.filter((room) => !unavailableRoomIds.has(room.id));
+  }
+
   async lockRoomForUpdate(
     roomId: number,
     tx: Prisma.TransactionClient,

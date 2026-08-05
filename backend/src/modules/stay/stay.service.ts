@@ -30,6 +30,11 @@ import { RoomsService } from '../rooms/rooms.service';
 import { GuestsService } from '../guests/guests.service';
 import { BillingService } from '../billing/billing.service';
 import { AuditService } from '../audit/audit.service';
+// GL-003 — module feuille (parameters.module.ts n'importe que AuditModule),
+// consommé en façade pour la grille tarifaire saisonnière (SeasonRate) et le
+// paramètre paiementImmediatProlongationObligatoire, jamais de lecture
+// directe de ces tables (CLAUDE.md, docs/modules/parameters.md §10).
+import { ParametersService } from '../parameters/parameters.service';
 // Jeton + interface uniquement (fichier feuille, aucune dépendance vers
 // stay/*) — jamais d'import de housekeeping.module.ts ni de la classe
 // concrète HousekeepingTaskService ici : un aller-retour entre fichiers
@@ -74,6 +79,7 @@ export class StayService {
     private readonly guestsService: GuestsService,
     private readonly billingService: BillingService,
     private readonly auditService: AuditService,
+    private readonly parametersService: ParametersService,
     private readonly eventEmitter: EventEmitter2,
     private readonly moduleRef: ModuleRef,
   ) {}
@@ -759,6 +765,275 @@ export class StayService {
       );
 
       return updatedStay;
+    });
+
+    return result;
+  }
+
+  // GL-003 — prolongation de séjour en cours (ajout de nuits sur la chambre
+  // actuelle). Règles métier (voir instructions GL-003) :
+  // - Stay.statut doit être EN_COURS (sinon 409)
+  // - nouvelleDateCheckoutPrevue doit être strictement postérieure à
+  //   l'ancienne dateCheckoutPrevue verrouillée (jamais l'objet lu avant la
+  //   transaction — même précédent que changeRoom ci-dessus)
+  // - Seules les nuits du delta sont créées (RoomNight) ; les nuits/lignes
+  //   de folio historiques restent strictement inchangées
+  // - Stop Sale (RateRestriction) n'est jamais consulté ici — une
+  //   prolongation n'est jamais bloquée par une restriction tarifaire
+  // - Stay.formule est conservée telle quelle (pas de nouveau choix de
+  //   formule à la prolongation)
+  // - Aucune tâche/évènement Housekeeping, Room.statut jamais modifié pour
+  //   la chambre actuelle (elle reste OCCUPEE du début à la fin)
+  // - Si HotelConfig.paiementImmediatProlongationObligatoire est actif, le
+  //   crédit disponible du folio (paiements non annulés − charges non
+  //   annulées hors PAIEMENT, jamais négatif) doit déjà couvrir le
+  //   supplément calculé — sinon 409 PAYMENT_REQUIRED, rien n'est committé.
+  // - Aucune dépendance vers PaymentsModule dans un sens ou dans l'autre :
+  //   toute lecture financière passe par les FolioLine déjà chargées ici
+  //   (computeSoldeDu), jamais par PaymentsService/la table Payment.
+  async extendStay(
+    id: number,
+    nouvelleDateCheckoutPrevueRaw: string,
+    motif: string,
+    userId?: number,
+    roleId?: number,
+  ) {
+    // 1. Défense en profondeur — la garde réelle est @RequirePermission sur
+    // la route (StayController), même précédent que changeRoom ci-dessus.
+    const grant = await this.prisma.permission.findFirst({
+      where: {
+        module: 'stay',
+        action: 'extend',
+        roles: { some: { roleId } },
+      },
+    });
+    if (!grant) {
+      throw new ForbiddenException('Permission requise : stay:extend.');
+    }
+
+    // Drapeau de configuration lu hors transaction — même convention que
+    // les autres appels ParametersService sans tx (ex. generateInvoicePdf) :
+    // pas de verrou dédié pour un simple paramètre rarement modifié en
+    // pleine concurrence avec une prolongation.
+    const hotelConfig = await this.parametersService.getHotelConfig();
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      // 2. Verrou Stay — état frais, jamais l'objet lu avant la transaction.
+      // Toutes les validations qui suivent se basent exclusivement sur
+      // cette ligne verrouillée.
+      const stayLocked = await tx.$queryRaw<
+        Array<{
+          id: number;
+          roomId: number;
+          statut: StatutSejour;
+          dateCheckoutPrevue: Date;
+          formule: FormuleHebergement;
+        }>
+      >`
+        SELECT id, roomId, statut, dateCheckoutPrevue, formule
+        FROM Stay WHERE id = ${id} FOR UPDATE
+      `;
+      if (!stayLocked || stayLocked.length === 0) {
+        throw new NotFoundException(`Séjour ${id} introuvable.`);
+      }
+      const lockedStay = stayLocked[0];
+
+      if (lockedStay.statut !== StatutSejour.EN_COURS) {
+        throw new ConflictException(
+          `Ce séjour est déjà clôturé (statut actuel : ${lockedStay.statut}).`,
+        );
+      }
+
+      const ancienneDate = lockedStay.dateCheckoutPrevue;
+      const nouvelleDate = new Date(nouvelleDateCheckoutPrevueRaw);
+      if (nouvelleDate <= ancienneDate) {
+        throw new BadRequestException(
+          'La nouvelle date de départ doit être strictement postérieure à la date de départ prévue actuelle.',
+        );
+      }
+
+      // 3. Verrou de la chambre actuelle — même chemin d'écriture/lecture
+      // verrouillée que partout ailleurs (RoomsService.lockRoomForUpdate).
+      const lockedRoom = await this.roomsService.lockRoomForUpdate(
+        lockedStay.roomId,
+        tx,
+      );
+
+      // 4. Verrouiller explicitement les RoomNight du delta demandé sur la
+      // chambre actuelle — détecter tout conflit, quelle que soit l'origine
+      // (réservation OU séjour en cours, jamais de filtre reservationId !=
+      // null, même correction que GL-002).
+      const nights = getNightsBetween(ancienneDate, nouvelleDate);
+      const conflictingNights = nights.length
+        ? await tx.$queryRaw<Array<{ id: number }>>`
+            SELECT id FROM RoomNight
+            WHERE roomId = ${lockedStay.roomId}
+              AND date IN (${Prisma.join(nights)})
+            FOR UPDATE
+          `
+        : [];
+
+      // 5. Verrouiller le Folio et ses FolioLine existantes AVANT de calculer le
+      // crédit disponible — même verrou explicite que Stay/Room/RoomNight
+      // ci-dessus. Le verrou sur Folio suffit à sérialiser avec un paiement
+      // concurrent (POST /payments insère une nouvelle FolioLine référençant ce
+      // Folio par FK — InnoDB prend un verrou partagé implicite sur la ligne
+      // parente Folio lors de ce INSERT pour la vérification de contrainte,
+      // donc bloque tant que ce FOR UPDATE tient la transaction). Verrouiller
+      // aussi les FolioLine existantes ferme la fenêtre côté annulation/
+      // remboursement d'un paiement déjà existant (UPDATE FolioLine.annulee),
+      // qui ne déclenche pas de vérification FK et ne serait donc pas
+      // bloqué par le seul verrou sur Folio.
+      const lockedFolioIds = await tx.$queryRaw<Array<{ id: number }>>`
+        SELECT id FROM Folio WHERE stayId = ${id} FOR UPDATE
+      `;
+      if (lockedFolioIds.length > 0) {
+        await tx.$queryRaw`
+          SELECT id FROM FolioLine
+          WHERE folioId IN (${Prisma.join(lockedFolioIds.map((f) => f.id))})
+          FOR UPDATE
+        `;
+      }
+      // Lecture fraîche du folio/de ses lignes, dans la même transaction
+      // (nécessaire au calcul du crédit disponible à l'étape 8, mais aussi
+      // au folio principal ciblé par addFolioLine à l'étape 11).
+      const folios = await tx.folio.findMany({
+        where: { stayId: id },
+        include: { lignes: true },
+      });
+
+      // 6. Indisponibilité de la chambre actuelle : maintenance en cours
+      // (motif d'indisponibilité explicitement demandé par GL-003, la
+      // maintenance planifiée future restant hors périmètre) OU conflit
+      // détecté sur une nuit du delta. Aucun changement de chambre n'est
+      // jamais effectué automatiquement ici — recherche d'alternatives
+      // purement informative pour le réceptionniste.
+      const chambreIndisponible =
+        lockedRoom.statut === StatutChambre.EN_MAINTENANCE ||
+        conflictingNights.length > 0;
+      if (chambreIndisponible) {
+        const alternatives =
+          await this.roomsService.findCompatibleAvailableRooms(
+            lockedRoom.roomTypeId,
+            nights,
+            lockedRoom.id,
+            tx,
+          );
+        throw new ConflictException({
+          code: 'ROOM_UNAVAILABLE',
+          message: `La chambre actuelle (${lockedRoom.id}) n'est pas disponible pour la période de prolongation demandée.`,
+          alternatives,
+        });
+      }
+
+      // 7. Tarification nuit par nuit selon la grille saisonnière — jamais
+      // de lecture directe de SeasonRate (ParametersService en façade).
+      const roomType = await tx.roomType.findUniqueOrThrow({
+        where: { id: lockedRoom.roomTypeId },
+      });
+      const seasonRates =
+        await this.parametersService.getSeasonRatesForRoomType(roomType.id, tx);
+      const montantHebergement = calculateNightlyTotal(
+        nights,
+        roomType.prixBase,
+        seasonRates,
+      );
+      const montantFormule =
+        lockedStay.formule !== FormuleHebergement.ROOM_ONLY
+          ? calculateFormuleTotal(
+              lockedStay.formule,
+              roomType,
+              nights.length,
+              roomType.capacite,
+            )
+          : new Prisma.Decimal(0);
+      const montantSupplement = montantHebergement.add(montantFormule);
+
+      // 8. Paiement immédiat obligatoire (HotelConfig) : crédit disponible
+      // = max(0, paiements non annulés − charges non annulées hors
+      // PAIEMENT) — l'opposé de computeSoldeDu quand celui-ci est négatif,
+      // jamais un nouveau calcul indépendant (CLAUDE.md règle 3).
+      if (hotelConfig.paiementImmediatProlongationObligatoire) {
+        const soldeDu = computeSoldeDu(folios);
+        const creditDisponible = soldeDu.isNegative()
+          ? soldeDu.neg()
+          : new Prisma.Decimal(0);
+        if (creditDisponible.lt(montantSupplement)) {
+          throw new ConflictException({
+            code: 'PAYMENT_REQUIRED',
+            message:
+              'Crédit disponible insuffisant pour couvrir le supplément de cette prolongation — enregistrer un paiement puis relancer la prolongation.',
+            amountRequired: montantSupplement.toFixed(2),
+            availableCredit: creditDisponible.toFixed(2),
+          });
+        }
+      }
+
+      // 9. Créer uniquement les RoomNight du delta — les nuits historiques
+      // ne sont jamais recréées/modifiées.
+      await tx.roomNight.createMany({
+        data: nights.map((date) => ({
+          roomId: lockedStay.roomId,
+          date,
+          stayId: id,
+        })),
+      });
+
+      // 10. Mettre à jour Stay.dateCheckoutPrevue.
+      await tx.stay.update({
+        where: { id },
+        data: { dateCheckoutPrevue: nouvelleDate },
+      });
+
+      // 11. FolioLine HEBERGEMENT (+ EXTRA formule si applicable) sur le
+      // folio principal, via BillingService.addFolioLine — jamais d'écriture
+      // FolioLine directe ici (chemin d'écriture canonique unique, même
+      // précédent que RestaurantService.addCharge). Les lignes historiques
+      // ne sont jamais touchées.
+      const folioPrincipal = folios[0];
+      if (!folioPrincipal) {
+        throw new NotFoundException(`Aucun folio trouvé pour le séjour ${id}.`);
+      }
+      await this.billingService.addFolioLine(
+        folioPrincipal.id,
+        {
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: `Prolongation — ${nights.length} nuit${nights.length > 1 ? 's' : ''}`,
+          montant: montantHebergement.toFixed(2),
+        },
+        tx,
+      );
+      if (
+        lockedStay.formule !== FormuleHebergement.ROOM_ONLY &&
+        montantFormule.gt(0)
+      ) {
+        await this.billingService.addFolioLine(
+          folioPrincipal.id,
+          {
+            type: TypeLigneFolio.EXTRA,
+            libelle: `Prolongation — formule ${FORMULE_LABEL[lockedStay.formule]} — ${nights.length} nuit${nights.length > 1 ? 's' : ''}`,
+            montant: montantFormule.toFixed(2),
+          },
+          tx,
+        );
+      }
+
+      // 12. Audit — dans la même transaction que toutes les écritures
+      // ci-dessus (ADR-005).
+      await this.auditService.writeLog(tx, {
+        userId,
+        action: AuditAction.EXTEND_STAY,
+        targetEntity: AuditEntity.Stay,
+        targetId: id,
+        oldValue: { dateCheckoutPrevue: ancienneDate.toISOString() },
+        newValue: { dateCheckoutPrevue: nouvelleDate.toISOString() },
+        motif,
+      });
+
+      return tx.stay.findUniqueOrThrow({
+        where: { id },
+        include: STAY_INCLUDE,
+      });
     });
 
     return result;
