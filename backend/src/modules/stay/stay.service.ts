@@ -593,9 +593,9 @@ export class StayService {
 
       // 4. Vérifier qu'il n'y a pas de RoomNight conflictuelle sur la cible
       // pendant la période du séjour (nuits restantes)
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const conflictingNights = await tx.roomNight.findMany({
         where: {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           roomId: newRoomId,
           date: {
             gte: todayStart,
@@ -615,9 +615,9 @@ export class StayService {
       }
 
       // 5. Transférer les RoomNight futures de stay.roomId → newRoomId
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const futureNights = await tx.roomNight.findMany({
         where: {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           stayId: id,
           date: {
             gte: todayStart,
