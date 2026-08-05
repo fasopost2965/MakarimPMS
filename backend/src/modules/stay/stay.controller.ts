@@ -90,7 +90,7 @@ export class StayController {
   @RequirePermission('stay', 'change-room')
   @ApiOperation({
     summary:
-      "Changement de chambre pendant un séjour — transfert vers une chambre disponible (GL-002)",
+      'Changement de chambre pendant un séjour — transfert vers une chambre disponible (GL-002)',
   })
   @Post('stays/:id/change-room')
   changeRoom(
