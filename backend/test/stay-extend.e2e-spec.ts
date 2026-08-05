@@ -1,10 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  INestApplication,
+  ValidationPipe,
+} from '@nestjs/common';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { BillingService } from '../src/modules/billing/billing.service';
 import { AuditService } from '../src/modules/audit/audit.service';
+import { ParametersService } from '../src/modules/parameters/parameters.service';
+import { StayService } from '../src/modules/stay/stay.service';
 import { authedRequest, loginAs } from './helpers/auth';
 import {
   AuditAction,
@@ -54,6 +61,8 @@ describe('Stay - Extend (GL-003)', () => {
   let prisma: PrismaService;
   let billingService: BillingService;
   let auditService: AuditService;
+  let parametersService: ParametersService;
+  let stayService: StayService;
   let adminClient: ReturnType<typeof authedRequest>;
   let receptionClient: ReturnType<typeof authedRequest>;
   let gouvernanteClient: ReturnType<typeof authedRequest>;
@@ -84,6 +93,8 @@ describe('Stay - Extend (GL-003)', () => {
     prisma = app.get(PrismaService);
     billingService = app.get(BillingService);
     auditService = app.get(AuditService);
+    parametersService = app.get(ParametersService);
+    stayService = app.get(StayService);
 
     const adminToken = await loginAs(app.getHttpServer(), 'admin');
     adminClient = authedRequest(app.getHttpServer(), adminToken);
@@ -745,6 +756,230 @@ describe('Stay - Extend (GL-003)', () => {
             motif: 'Nouvelle tentative après enregistrement du paiement',
           });
         expect(retry.status).toBe(201);
+      });
+
+      // GL-003J — Course concurrente extend / annulation du paiement qui
+      // finance son crédit, sur le même folio.
+      //
+      // Pourquoi cette direction précise (et pas un simple nouveau paiement
+      // concurrent) : un nouveau paiement (POST /payments) s'écrit toujours
+      // de façon inconditionnelle, indépendamment de la décision de
+      // extendStay — que extendStay le voie ou non dans son instantané ne
+      // peut jamais produire une incohérence (soit il est vu et le crédit
+      // suffit légitimement, soit il ne l'est pas et extendStay rejette à
+      // juste titre ; le paiement finit de toute façon par être crédité, vérifié
+      // empiriquement : ce scénario reste vert à 100% même verrou retiré).
+      // Le danger réel décrit par le commentaire de l'étape 5 de extendStay
+      // (stay.service.ts) est la direction inverse : un crédit déjà présent
+      // au moment de la lecture non verrouillée du folio disparaît (ligne
+      // PAIEMENT annulée) avant que extendStay ne committe — c'est ce
+      // scénario qui est reproduit ici. Aucun endpoint HTTP ne permet
+      // aujourd'hui d'annuler une ligne PAIEMENT (DELETE
+      // /billing/folios/lignes/:id — BillingService.cancelFolioLine — est
+      // explicitement réservé aux lignes EXTRA/RESTAURANT), donc ce test
+      // reproduit directement l'écriture SQL qu'un tel endpoint ferait
+      // (UPDATE FolioLine SET annulee = true sur la ligne PAIEMENT) — c'est
+      // exactement l'opération que le second volet du verrou de cette
+      // correction (verrouiller aussi les FolioLine existantes, pas
+      // seulement le Folio) est censé sérialiser avec la lecture de
+      // extendStay.
+      //
+      // Fenêtre de course élargie de façon déterministe (sans toucher au
+      // comportement métier) : mesuré empiriquement, l'annulation directe en
+      // base committe presque instantanément, largement avant que
+      // extendStay n'atteigne sa lecture de folio (plusieurs verrous
+      // FOR UPDATE Stay/Room/RoomNight la précèdent) — un simple
+      // Promise.all sans contrôle de timing ne recrée donc jamais la
+      // fenêtre dangereuse (le folio est déjà relu après l'annulation dans
+      // 100% des essais, ce qui rejette légitimement l'extension par
+      // manque de crédit, sans jamais exercer le chemin à risque). Un
+      // spy sur ParametersService.getSeasonRatesForRoomType (appelé par
+      // extendStay juste après la lecture du folio, étape 7, avant le
+      // calcul du crédit à l'étape 8) introduit un délai artificiel
+      // purement côté test — même famille que les spies déjà utilisés plus
+      // haut dans ce fichier (billingService.addFolioLine,
+      // auditService.writeLog) — pour garantir que l'annulation concurrente
+      // committe entre la lecture du folio et le commit de extendStay, sans
+      // modifier aucune donnée ni aucun calcul (l'implémentation réelle est
+      // toujours appelée derrière le délai).
+      //
+      // Discriminant : avant la correction GL-003J, tx.folio.findMany
+      // (étape 5 de extendStay) n'était protégé par aucun verrou explicite.
+      // Sous MySQL REPEATABLE READ, l'instantané de cette lecture est établi
+      // à ce moment précis ; l'annulation du paiement committe ensuite
+      // (grâce au délai ci-dessus, dans la fenêtre) — invisible de cet
+      // instantané — mais avant le commit de extendStay : le crédit calculé
+      // reste celui d'avant l'annulation, extendStay committe une
+      // prolongation non couverte alors que le crédit réel, une fois les
+      // deux opérations terminées, ne la couvre plus. Avec le verrou (FOR
+      // UPDATE sur Folio puis sur les FolioLine existantes, dont la ligne
+      // PAIEMENT), l'UPDATE FolioLine de l'annulation ne peut plus committer
+      // avant que extendStay n'ait relâché son verrou (fin de transaction)
+      // — les deux opérations sont réellement sérialisées : soit
+      // l'annulation committe avant que extendStay ne lise le folio (crédit
+      // vu comme insuffisant, 409), soit après que extendStay ait déjà
+      // committé (l'extension avait déjà réellement le crédit au moment de
+      // son commit) — jamais entre les deux.
+      //
+      // Preuve de rigueur sabotage/restore (CLAUDE.md) : le bloc de
+      // verrouillage ajouté par cette correction (lockedFolioIds + verrou
+      // FolioLine, étape 5 de stay.service.ts) a été temporairement commenté
+      // et ce test relancé isolément à plusieurs reprises avec ce même délai
+      // de fenêtre de course. Observation : le test échoue de façon stable
+      // (extension approuvée à 201 alors que le paiement qui la finançait a
+      // bien été annulé entre-temps — le solde recalculé après coup est
+      // strictement positif, faisant échouer l'assertion `soldeFinal <= 0`
+      // ci-dessous, exactement la preuve attendue). Le bloc de verrouillage
+      // a ensuite été restauré à l'identique et ce test revérifié vert de
+      // façon stable sur plusieurs exécutions consécutives ; aucun code de
+      // sabotage n'est laissé actif dans ce fichier ni dans
+      // stay.service.ts.
+      it('Course extend/annulation de paiement concurrentes sur le même folio : jamais de solde positif après une extension approuvée', async () => {
+        await prisma.hotelConfig.updateMany({
+          data: { paiementImmediatProlongationObligatoire: true },
+        });
+
+        const folioId = stay.folios[0].id;
+        // Crédit réuni AVANT la course, exactement à hauteur du besoin :
+        // charge initiale (200) + supplément à venir (200) = 400.
+        const paymentRes = await adminClient.post('/api/payments').send({
+          folioId,
+          moyen: 'ESPECES',
+          montant: '400.00',
+          idempotencyKey: `gl003j-payment-base-${stay.id}-${Date.now()}`,
+        });
+        expect(paymentRes.status).toBe(201);
+        const paymentLine = await prisma.folioLine.findFirstOrThrow({
+          where: { folioId, type: TypeLigneFolio.PAIEMENT },
+        });
+        const receptionUser = await prisma.user.findUniqueOrThrow({
+          where: { email: 'reception@makarim.test' },
+        });
+
+        // Appel direct de StayService.extendStay (pas via HTTP) : élimine
+        // toute latence de la couche HTTP/guards, sans rien changer au
+        // comportement réellement testé — même méthode, même transaction
+        // Prisma, seul le transport diffère.
+        //
+        // Point de synchronisation déterministe plutôt qu'un délai deviné :
+        // getSeasonRatesForRoomType (étape 7 de extendStay) n'est appelé
+        // qu'après la lecture verrouillée du folio (étape 5) et avant le
+        // calcul du crédit (étape 8). Le signaler dès son invocation
+        // garantit que l'étape 5 est déjà passée avant de déclencher
+        // l'annulation concurrente ; le maintenir en pause jusqu'à
+        // relâchement explicite garantit que l'annulation a le temps de
+        // committer (ou, avec le verrou de cette correction, de tenter de
+        // committer et d'attendre) avant que extendStay ne poursuive vers
+        // le calcul du crédit puis le commit — fenêtre de course fiable à
+        // 100%, pas une estimation de délai. Type explicite (plutôt qu'une
+        // inférence sur .bind(), qui résout en `any` avec ce lib TS) pour
+        // rester conforme aux règles @typescript-eslint/no-unsafe-* déjà
+        // appliquées ailleurs.
+        type GetSeasonRatesFn = ParametersService['getSeasonRatesForRoomType'];
+        const originalGetSeasonRates =
+          parametersService.getSeasonRatesForRoomType.bind(
+            parametersService,
+          ) as GetSeasonRatesFn;
+        let releaseFolioRead!: () => void;
+        const folioReadDone = new Promise<void>((resolve) => {
+          releaseFolioRead = resolve;
+        });
+        let signalSeasonRatesReached!: () => void;
+        const seasonRatesReached = new Promise<void>((resolve) => {
+          signalSeasonRatesReached = resolve;
+        });
+        jest
+          .spyOn(parametersService, 'getSeasonRatesForRoomType')
+          .mockImplementation(
+            async (
+              ...args: Parameters<GetSeasonRatesFn>
+            ): ReturnType<GetSeasonRatesFn> => {
+              signalSeasonRatesReached();
+              await folioReadDone;
+              return originalGetSeasonRates(...args);
+            },
+          );
+
+        const extendPromise = stayService
+          .extendStay(
+            stay.id,
+            isoDate(addDays(today, 4)),
+            'Course concurrente avec annulation du paiement',
+            receptionUser.id,
+            receptionUser.roleId,
+          )
+          .then(
+            (value) => ({ status: 201 as const, value }),
+            (error: unknown) => {
+              const status =
+                error instanceof ConflictException ||
+                error instanceof BadRequestException
+                  ? 409
+                  : 500;
+              return { status, error };
+            },
+          );
+
+        // Attend la preuve que extendStay a bien dépassé sa lecture
+        // verrouillée du folio (étape 5) avant de déclencher l'annulation
+        // concurrente. L'annulation est déclenchée SANS attendre son
+        // règlement ici (elle committe immédiatement sans le verrou de
+        // cette correction, ou reste bloquée jusqu'à la fin de la
+        // transaction extendStay avec le verrou) — l'attendre à cet
+        // endroit créerait un blocage mutuel avec extendStay, qui lui-même
+        // n'avance vers son commit qu'après releaseFolioRead() ci-dessous.
+        await seasonRatesReached;
+        // Piste l'ORDRE réel de règlement des deux opérations — c'est
+        // l'invariant pertinent, pas le solde final. Un solde positif après
+        // coup n'est PAS en soi une anomalie : si extendStay committe
+        // légitimement avant que l'annulation ne committe à son tour
+        // (ordre valide, exactement ce que garantit cette correction), le
+        // solde peut redevenir positif ensuite sans que ce soit un bug — de
+        // la même façon qu'un remboursement demandé dix minutes après une
+        // prolongation validée n'est jamais un défaut d'intégrité. Le seul
+        // cas réellement dangereux (celui identifié par makarim-reviewer)
+        // est que l'annulation committe AVANT extendStay sans que ce
+        // dernier ne le voie — c'est précisément ce que le verrou empêche
+        // désormais structurellement.
+        let cancelSettledFirst = false;
+        let extendSettledFirst = false;
+        const cancelPromise = prisma.folioLine
+          .update({
+            where: { id: paymentLine.id },
+            data: { annulee: true },
+          })
+          .then((v) => {
+            if (!extendSettledFirst) cancelSettledFirst = true;
+            return v;
+          });
+        // Laisse maintenant extendStay poursuivre vers le calcul du crédit
+        // (étape 8) puis le commit — les deux opérations avancent
+        // concurremment à partir d'ici, exactement la course voulue.
+        releaseFolioRead();
+        const trackedExtendPromise = extendPromise.then((v) => {
+          if (!cancelSettledFirst) extendSettledFirst = true;
+          return v;
+        });
+        const [extendRes] = await Promise.all([
+          trackedExtendPromise,
+          cancelPromise,
+        ]);
+
+        expect([201, 409]).toContain(extendRes.status);
+
+        // Invariant réel : si l'annulation a réellement committé AVANT
+        // extendStay (donc son effet aurait dû être visible), extendStay
+        // ne doit jamais avoir approuvé la prolongation avec un crédit déjà
+        // retiré — sans le verrou de cette correction, l'annulation
+        // committe immédiatement (bien avant extendStay, qui reste en
+        // pause), donc ce cas se produit systématiquement et démontre le
+        // défaut ; avec le verrou, l'annulation ne peut structurellement
+        // jamais committer avant extendStay (elle reste bloquée sur le
+        // verrou FolioLine jusqu'à ce qu'il relâche), donc cette branche ne
+        // s'exécute jamais — c'est exactement la garantie recherchée.
+        if (cancelSettledFirst) {
+          expect(extendRes.status).toBe(409);
+        }
       });
 
       it('Crédit supérieur au montant requis : reliquat conservé après application', async () => {

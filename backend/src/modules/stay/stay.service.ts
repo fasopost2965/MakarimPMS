@@ -873,7 +873,28 @@ export class StayService {
           `
         : [];
 
-      // 5. Lecture fraîche du folio/de ses lignes, dans la même transaction
+      // 5. Verrouiller le Folio et ses FolioLine existantes AVANT de calculer le
+      // crédit disponible — même verrou explicite que Stay/Room/RoomNight
+      // ci-dessus. Le verrou sur Folio suffit à sérialiser avec un paiement
+      // concurrent (POST /payments insère une nouvelle FolioLine référençant ce
+      // Folio par FK — InnoDB prend un verrou partagé implicite sur la ligne
+      // parente Folio lors de ce INSERT pour la vérification de contrainte,
+      // donc bloque tant que ce FOR UPDATE tient la transaction). Verrouiller
+      // aussi les FolioLine existantes ferme la fenêtre côté annulation/
+      // remboursement d'un paiement déjà existant (UPDATE FolioLine.annulee),
+      // qui ne déclenche pas de vérification FK et ne serait donc pas
+      // bloqué par le seul verrou sur Folio.
+      const lockedFolioIds = await tx.$queryRaw<Array<{ id: number }>>`
+        SELECT id FROM Folio WHERE stayId = ${id} FOR UPDATE
+      `;
+      if (lockedFolioIds.length > 0) {
+        await tx.$queryRaw`
+          SELECT id FROM FolioLine
+          WHERE folioId IN (${Prisma.join(lockedFolioIds.map((f) => f.id))})
+          FOR UPDATE
+        `;
+      }
+      // Lecture fraîche du folio/de ses lignes, dans la même transaction
       // (nécessaire au calcul du crédit disponible à l'étape 8, mais aussi
       // au folio principal ciblé par addFolioLine à l'étape 11).
       const folios = await tx.folio.findMany({
