@@ -185,10 +185,58 @@ describe('ExtendStayDialog — comportement UI', () => {
     );
     expect(
       screen.getByText(
-        'Un paiement complémentaire de 350.00 DH est nécessaire avant de prolonger le séjour.',
+        'Un paiement complémentaire de 350,00 DH est nécessaire avant de prolonger le séjour.',
       ),
     ).toBeVisible();
     expect(screen.queryByText('raw backend message')).not.toBeInTheDocument();
+  });
+
+  it('PAYMENT_REQUIRED sans amountRequired : message générique sûr, jamais "undefined DH"', () => {
+    const err = new ApiError(409, 'raw backend message', 'PAYMENT_REQUIRED', {
+      code: 'PAYMENT_REQUIRED',
+      message: 'raw backend message',
+      availableCredit: '0.00',
+    });
+    render(
+      <ExtendStayDialog
+        stay={STAY}
+        onClose={noop}
+        onConfirm={noop}
+        submitting={false}
+        error={err}
+      />,
+    );
+    expect(screen.queryByText(/undefined DH/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "La prolongation n'a pas pu être enregistrée. Réessayez ou contactez un responsable si le problème persiste.",
+      ),
+    ).toBeVisible();
+  });
+
+  it('PAYMENT_REQUIRED avec amountRequired non numérique : jamais "NaN DH", ne plante pas', () => {
+    const err = new ApiError(409, 'raw backend message', 'PAYMENT_REQUIRED', {
+      code: 'PAYMENT_REQUIRED',
+      message: 'raw backend message',
+      amountRequired: 'pas un montant',
+      availableCredit: { montant: 0 },
+    });
+    render(
+      <ExtendStayDialog
+        stay={STAY}
+        onClose={noop}
+        onConfirm={noop}
+        submitting={false}
+        error={err}
+      />,
+    );
+    expect(screen.queryByText(/NaN DH/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\[object Object\]/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "La prolongation n'a pas pu être enregistrée. Réessayez ou contactez un responsable si le problème persiste.",
+      ),
+    ).toBeVisible();
   });
 
   it('affiche les alternatives et le rappel GL-002 séparé pour ROOM_UNAVAILABLE, sans déclencher GL-002', () => {
@@ -230,6 +278,112 @@ describe('ExtendStayDialog — comportement UI', () => {
     expect(
       screen.queryByRole('button', { name: /changer de chambre/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it('ROOM_UNAVAILABLE sans alternatives : affiche uniquement le message d’indisponibilité et le rappel GL-002 séparé', () => {
+    const err = new ApiError(409, 'raw backend message', 'ROOM_UNAVAILABLE', {
+      code: 'ROOM_UNAVAILABLE',
+      message: 'raw backend message',
+    });
+    render(
+      <ExtendStayDialog
+        stay={STAY}
+        onClose={noop}
+        onConfirm={noop}
+        submitting={false}
+        error={err}
+      />,
+    );
+    expect(
+      screen.getByText(
+        "La chambre actuelle n'est pas disponible pour toute la période demandée.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        'Le changement de chambre doit être effectué séparément.',
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole('list')).not.toBeInTheDocument();
+  });
+
+  it('ROOM_UNAVAILABLE avec alternatives non tableau : traité comme une liste vide, ne plante pas', () => {
+    const err = new ApiError(409, 'raw backend message', 'ROOM_UNAVAILABLE', {
+      code: 'ROOM_UNAVAILABLE',
+      message: 'raw backend message',
+      alternatives: 'pas un tableau',
+    });
+    render(
+      <ExtendStayDialog
+        stay={STAY}
+        onClose={noop}
+        onConfirm={noop}
+        submitting={false}
+        error={err}
+      />,
+    );
+    expect(
+      screen.getByText(
+        "La chambre actuelle n'est pas disponible pour toute la période demandée.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole('list')).not.toBeInTheDocument();
+  });
+
+  it('ROOM_UNAVAILABLE : une alternative invalide est ignorée, les valides restent affichées', () => {
+    const err = new ApiError(409, 'raw backend message', 'ROOM_UNAVAILABLE', {
+      code: 'ROOM_UNAVAILABLE',
+      message: 'raw backend message',
+      alternatives: [
+        { id: 5, numero: '105', roomType: { nom: 'Suite', capacite: 3 } },
+        { id: 'invalide', numero: '106', roomType: { nom: 'Suite' } },
+        { id: 7, numero: '107', roomType: null },
+        { id: 8, roomType: { nom: 'Suite' } },
+        'chaîne invalide',
+      ],
+    });
+    render(
+      <ExtendStayDialog
+        stay={STAY}
+        onClose={noop}
+        onConfirm={noop}
+        submitting={false}
+        error={err}
+      />,
+    );
+    const list = screen.getByRole('list');
+    expect(list.children).toHaveLength(1);
+    expect(screen.getByText(/Chambre 105 — Suite \(3 pers\.\)/)).toBeVisible();
+    expect(screen.queryByText(/Chambre 106/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Chambre 107/)).not.toBeInTheDocument();
+  });
+
+  it('details totalement malformé (pas un objet) : message métier sûr, aucun texte technique', () => {
+    const err = new ApiError(
+      409,
+      'raw backend message',
+      'ROOM_UNAVAILABLE',
+      'ceci n’est pas un objet',
+    );
+    render(
+      <ExtendStayDialog
+        stay={STAY}
+        onClose={noop}
+        onConfirm={noop}
+        submitting={false}
+        error={err}
+      />,
+    );
+    // `details` n'étant pas un objet, isPlainObject échoue : ni
+    // PAYMENT_REQUIRED ni ROOM_UNAVAILABLE ne sont reconnus — retombe sur le
+    // statut HTTP (409, sans code exploitable) : traduction "séjour clôturé"
+    // (seul conflit non structuré connu de cet endpoint), jamais un texte
+    // technique.
+    expect(
+      screen.getByText('Ce séjour est clôturé et ne peut plus être prolongé.'),
+    ).toBeVisible();
+    expect(screen.queryByText('raw backend message')).not.toBeInTheDocument();
+    expect(screen.queryByText(/\[object Object\]/)).not.toBeInTheDocument();
   });
 
   it('affiche la traduction date invalide (400) plutôt que le message brut', () => {

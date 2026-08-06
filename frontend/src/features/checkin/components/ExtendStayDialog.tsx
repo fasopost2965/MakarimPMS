@@ -11,11 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ApiError } from '@/lib/api-client';
-import type {
-  PaymentRequiredErrorDetails,
-  RoomUnavailableErrorDetails,
-  Stay,
-} from '../types';
+import type { Stay } from '../types';
 
 interface Props {
   stay: Stay | null;
@@ -25,29 +21,80 @@ interface Props {
   error: unknown;
 }
 
-function isRoomUnavailable(
-  details: unknown,
-): details is RoomUnavailableErrorDetails {
-  return (
-    !!details &&
-    typeof details === 'object' &&
-    (details as { code?: unknown }).code === 'ROOM_UNAVAILABLE'
-  );
+// PR #78 — durcissement : `ApiError.details` vient du réseau (`unknown`),
+// jamais fait confiance à un simple cast. Chaque champ effectivement utilisé
+// à l'affichage est validé individuellement ; une entrée invalide est
+// ignorée plutôt que de faire planter le dialogue ou d'afficher
+// `undefined`/`NaN`/`[object Object]`.
+interface SafeRoomAlternative {
+  id: number;
+  numero: string;
+  roomTypeNom: string;
+  capacite?: number;
 }
 
-function isPaymentRequired(
-  details: unknown,
-): details is PaymentRequiredErrorDetails {
-  return (
-    !!details &&
-    typeof details === 'object' &&
-    (details as { code?: unknown }).code === 'PAYMENT_REQUIRED'
-  );
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+// Aucun formateur monétaire partagé n'existe ailleurs dans le projet
+// (vérifié : `lib/utils.ts` ne contient que `cn`) — formatage local
+// français stable à deux décimales, comme demandé, plutôt que d'introduire
+// un fichier hors périmètre de cette mission.
+function formatMontant(value: number): string {
+  return `${new Intl.NumberFormat('fr-FR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)} DH`;
+}
+
+function toSafeAlternative(value: unknown): SafeRoomAlternative | null {
+  if (!isPlainObject(value)) return null;
+  const id = toFiniteNumber(value.id);
+  const numero =
+    typeof value.numero === 'string' && value.numero.length > 0
+      ? value.numero
+      : null;
+  if (id === null || numero === null || !isPlainObject(value.roomType)) {
+    return null;
+  }
+  const nom =
+    typeof value.roomType.nom === 'string' && value.roomType.nom.length > 0
+      ? value.roomType.nom
+      : null;
+  if (nom === null) return null;
+  const capaciteRaw = toFiniteNumber(value.roomType.capacite);
+  const capacite =
+    capaciteRaw !== null && capaciteRaw > 0 ? capaciteRaw : undefined;
+  return { id, numero, roomTypeNom: nom, capacite };
+}
+
+function toSafeAlternatives(value: unknown): SafeRoomAlternative[] {
+  if (!Array.isArray(value)) return [];
+  const safe: SafeRoomAlternative[] = [];
+  for (const item of value) {
+    const alternative = toSafeAlternative(item);
+    if (alternative) safe.push(alternative);
+  }
+  return safe;
 }
 
 type ExtendStayErrorTranslation =
-  | { kind: 'paymentRequired'; details: PaymentRequiredErrorDetails }
-  | { kind: 'roomUnavailable'; details: RoomUnavailableErrorDetails }
+  | {
+      kind: 'paymentRequired';
+      amountRequired: number;
+      availableCredit: number | null;
+    }
+  | { kind: 'roomUnavailable'; alternatives: SafeRoomAlternative[] }
   | { kind: 'invalidDate' }
   | { kind: 'stayClosed' }
   | { kind: 'unknown' };
@@ -58,7 +105,11 @@ type ExtendStayErrorTranslation =
 // `code`) est le SEUL conflit non structuré que cet endpoint peut lever —
 // vérifié dans stay.service.ts avant d'écrire cette fonction — donc
 // `status === 409 && !code` l'identifie sans ambiguïté, ce n'est pas un
-// filtrage par contenu de message.
+// filtrage par contenu de message. `code` seul ne suffit jamais à valider un
+// cas structuré (PR #78) : `amountRequired` invalide/absent sur
+// PAYMENT_REQUIRED retombe sur `unknown` plutôt que d'afficher un montant
+// cassé ; `alternatives` invalide/absente sur ROOM_UNAVAILABLE retombe sur
+// une liste vide (le message d'indisponibilité reste affiché quand même).
 // Non exportée volontairement (react-refresh/only-export-components) : un
 // fichier de composant ne doit exporter que des composants pour que le Fast
 // Refresh reste fiable. Le comportement de cette fonction est couvert
@@ -67,12 +118,25 @@ type ExtendStayErrorTranslation =
 // import direct.
 function translateExtendStayError(error: unknown): ExtendStayErrorTranslation {
   if (!(error instanceof ApiError)) return { kind: 'unknown' };
-  if (isPaymentRequired(error.details)) {
-    return { kind: 'paymentRequired', details: error.details };
+  const details = error.details;
+
+  if (isPlainObject(details) && details.code === 'PAYMENT_REQUIRED') {
+    const amountRequired = toFiniteNumber(details.amountRequired);
+    if (amountRequired === null) return { kind: 'unknown' };
+    return {
+      kind: 'paymentRequired',
+      amountRequired,
+      availableCredit: toFiniteNumber(details.availableCredit),
+    };
   }
-  if (isRoomUnavailable(error.details)) {
-    return { kind: 'roomUnavailable', details: error.details };
+
+  if (isPlainObject(details) && details.code === 'ROOM_UNAVAILABLE') {
+    return {
+      kind: 'roomUnavailable',
+      alternatives: toSafeAlternatives(details.alternatives),
+    };
   }
+
   if (error.status === 400) return { kind: 'invalidDate' };
   if (error.status === 409) return { kind: 'stayClosed' };
   return { kind: 'unknown' };
@@ -84,24 +148,24 @@ function ExtendStayErrorMessage({ error }: { error: unknown }) {
 
   switch (translation.kind) {
     case 'paymentRequired': {
-      const { amountRequired, availableCredit } = translation.details;
-      const hasCredit = Number(availableCredit) > 0;
+      const { amountRequired, availableCredit } = translation;
+      const hasCredit = availableCredit !== null && availableCredit > 0;
       return (
         <div className="border-destructive/30 bg-destructive/10 text-destructive flex flex-col gap-1 rounded-md border p-3 text-sm">
           <p>
-            Un paiement complémentaire de {amountRequired} DH est nécessaire
-            avant de prolonger le séjour.
+            Un paiement complémentaire de {formatMontant(amountRequired)} est
+            nécessaire avant de prolonger le séjour.
           </p>
           {hasCredit && (
             <p className="text-xs opacity-90">
-              Crédit actuellement disponible : {availableCredit} DH
+              Crédit actuellement disponible : {formatMontant(availableCredit)}
             </p>
           )}
         </div>
       );
     }
     case 'roomUnavailable': {
-      const { alternatives } = translation.details;
+      const { alternatives } = translation;
       return (
         <div className="border-destructive/30 bg-destructive/10 text-destructive flex flex-col gap-2 rounded-md border p-3 text-sm">
           <p>
@@ -112,10 +176,8 @@ function ExtendStayErrorMessage({ error }: { error: unknown }) {
             <ul className="flex flex-col gap-1">
               {alternatives.map((room) => (
                 <li key={room.id} className="text-xs">
-                  Chambre {room.numero} — {room.roomType.nom}
-                  {room.roomType.capacite
-                    ? ` (${room.roomType.capacite} pers.)`
-                    : ''}
+                  Chambre {room.numero} — {room.roomTypeNom}
+                  {room.capacite ? ` (${room.capacite} pers.)` : ''}
                 </li>
               ))}
             </ul>
