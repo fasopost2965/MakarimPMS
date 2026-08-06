@@ -79,3 +79,13 @@ export function extendStay(
     body: JSON.stringify({ nouvelleDateCheckoutPrevue, motif }),
   });
 }
+
+// GL-002 (MX-002C) — même remarque que extendStay ci-dessus : la réponse
+// contient déjà le Stay à jour (STAY_INCLUDE), mais l'appelant relit via
+// getStay() plutôt que de s'y fier comme seule source d'état.
+export function changeRoom(stayId: number, newRoomId: number, motif: string) {
+  return apiRequest<Stay>(`/stays/${stayId}/change-room`, {
+    method: 'POST',
+    body: JSON.stringify({ newRoomId, motif }),
+  });
+}

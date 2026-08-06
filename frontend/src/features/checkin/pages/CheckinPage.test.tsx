@@ -7,6 +7,7 @@ vi.mock('../../reservations/api', () => ({
   listRooms: vi.fn(),
 }));
 vi.mock('../api', () => ({
+  changeRoom: vi.fn(),
   checkinFromReservation: vi.fn(),
   checkinWalkIn: vi.fn(),
   checkoutStay: vi.fn(),
@@ -22,15 +23,43 @@ vi.mock('../components/StayDetailsDialog', () => ({
   StayDetailsDialog: ({
     stay,
     onExtendClick,
+    onChangeRoomClick,
   }: {
     stay: { id: number } | null;
     onExtendClick?: () => void;
+    onChangeRoomClick?: () => void;
   }) =>
     stay ? (
       <div>
         Détails séjour {stay.id}
         <button type="button" onClick={onExtendClick}>
           Ouvrir prolongation
+        </button>
+        <button type="button" onClick={onChangeRoomClick}>
+          Ouvrir changement de chambre
+        </button>
+      </div>
+    ) : null,
+}));
+vi.mock('../components/ChangeRoomDialog', () => ({
+  ChangeRoomDialog: ({
+    stay,
+    onConfirm,
+    error,
+  }: {
+    stay: { id: number } | null;
+    onConfirm: (newRoomId: number, motif: string) => void;
+    error: unknown;
+  }) =>
+    stay ? (
+      <div>
+        Dialogue changement de chambre {stay.id}
+        {error ? <span>Erreur changement de chambre présente</span> : null}
+        <button
+          type="button"
+          onClick={() => onConfirm(4, 'motif de test recette')}
+        >
+          Confirmer le changement de chambre
         </button>
       </div>
     ) : null,
@@ -78,6 +107,7 @@ vi.mock('../components/ReservationCheckinDialog', () => ({
 
 import { arrivalsToday, listRooms } from '../../reservations/api';
 import {
+  changeRoom,
   checkinFromReservation,
   extendStay,
   getStay,
@@ -241,6 +271,118 @@ describe('CheckinPage — GL-003, prolongation de séjour (MX-002A)', () => {
       expect(screen.getByText('Dialogue prolongation 6')).toBeVisible(),
     );
     expect(screen.getByText('Erreur prolongation présente')).toBeVisible();
+    expect(vi.mocked(listStaysEnCours).mock.calls.length).toBe(
+      callsBeforeSubmit,
+    );
+  });
+});
+
+describe('CheckinPage — GL-002, changement de chambre (MX-002C)', () => {
+  beforeEach(() => {
+    vi.mocked(arrivalsToday).mockReset().mockResolvedValue([]);
+    vi.mocked(listRooms).mockReset().mockResolvedValue([]);
+    vi.mocked(listStaysEnCours)
+      .mockReset()
+      .mockResolvedValue([STAY as never]);
+    vi.mocked(listDepartsDuJour).mockReset().mockResolvedValue([]);
+    vi.mocked(changeRoom).mockReset();
+    vi.mocked(getStay).mockReset();
+  });
+
+  it('après succès du POST et de getStay : viewingStay est mis à jour, les listes sont rafraîchies, le dialogue se ferme', async () => {
+    const user = userEvent.setup();
+    vi.mocked(changeRoom).mockResolvedValue(STAY as never);
+    const refreshedStay = {
+      ...STAY,
+      roomId: 4,
+      room: { ...STAY.room, id: 4, numero: '312' },
+    };
+    vi.mocked(getStay).mockResolvedValue(refreshedStay as never);
+
+    render(<CheckinPage permissions={['stay:change-room']} />);
+
+    await user.click(await screen.findByRole('button', { name: /Bennani/ }));
+    await user.click(
+      screen.getByRole('button', { name: 'Ouvrir changement de chambre' }),
+    );
+    expect(screen.getByText('Dialogue changement de chambre 6')).toBeVisible();
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Confirmer le changement de chambre',
+      }),
+    );
+
+    await waitFor(() =>
+      expect(changeRoom).toHaveBeenCalledWith(6, 4, 'motif de test recette'),
+    );
+    await waitFor(() => expect(getStay).toHaveBeenCalledWith(6));
+    await waitFor(() =>
+      expect(screen.queryByText('Dialogue changement de chambre 6')).toBeNull(),
+    );
+    await waitFor(() =>
+      expect(vi.mocked(listStaysEnCours).mock.calls.length).toBeGreaterThan(1),
+    );
+  });
+
+  it("si getStay échoue après un POST réussi : le changement n'est jamais annoncé comme un échec, le dialogue se ferme, le refetch des listes est déclenché", async () => {
+    const user = userEvent.setup();
+    vi.mocked(changeRoom).mockResolvedValue(STAY as never);
+    vi.mocked(getStay).mockRejectedValue(new Error('Erreur réseau'));
+
+    render(<CheckinPage permissions={['stay:change-room']} />);
+
+    await user.click(await screen.findByRole('button', { name: /Bennani/ }));
+    await user.click(
+      screen.getByRole('button', { name: 'Ouvrir changement de chambre' }),
+    );
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Confirmer le changement de chambre',
+      }),
+    );
+
+    await waitFor(() => expect(getStay).toHaveBeenCalledWith(6));
+    await waitFor(() =>
+      expect(screen.queryByText('Dialogue changement de chambre 6')).toBeNull(),
+    );
+    expect(
+      screen.queryByText('Erreur changement de chambre présente'),
+    ).toBeNull();
+    await waitFor(() =>
+      expect(vi.mocked(listStaysEnCours).mock.calls.length).toBeGreaterThan(1),
+    );
+  });
+
+  it('si le POST échoue : le dialogue reste ouvert avec une erreur, aucun refetch ni fermeture', async () => {
+    const user = userEvent.setup();
+    vi.mocked(changeRoom).mockRejectedValue(
+      new Error('La chambre cible est réservée pendant la période du séjour.'),
+    );
+
+    render(<CheckinPage permissions={['stay:change-room']} />);
+
+    await user.click(await screen.findByRole('button', { name: /Bennani/ }));
+    await user.click(
+      screen.getByRole('button', { name: 'Ouvrir changement de chambre' }),
+    );
+    const callsBeforeSubmit = vi.mocked(listStaysEnCours).mock.calls.length;
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Confirmer le changement de chambre',
+      }),
+    );
+
+    await waitFor(() => expect(changeRoom).toHaveBeenCalled());
+    expect(getStay).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(
+        screen.getByText('Dialogue changement de chambre 6'),
+      ).toBeVisible(),
+    );
+    expect(
+      screen.getByText('Erreur changement de chambre présente'),
+    ).toBeVisible();
     expect(vi.mocked(listStaysEnCours).mock.calls.length).toBe(
       callsBeforeSubmit,
     );
