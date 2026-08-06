@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ApiError } from '@/lib/api-client';
 import { ChangeRoomDialog } from './ChangeRoomDialog';
@@ -83,7 +83,9 @@ describe('ChangeRoomDialog — sélection et tri', () => {
         error={null}
       />,
     );
-    const items = screen.getAllByRole('radio').map((el) => el.textContent);
+    const items = screen
+      .getAllByRole('button', { name: /^\d/ })
+      .map((el) => el.textContent);
     expect(items[0]).toContain('9');
     expect(items[1]).toContain('10');
     expect(items[2]).toContain('204');
@@ -106,8 +108,29 @@ describe('ChangeRoomDialog — sélection et tri', () => {
         error={null}
       />,
     );
-    expect(screen.getAllByRole('radio')).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /^\d/ })).toHaveLength(1);
     expect(screen.getByText('105')).toBeVisible();
+  });
+});
+
+describe('ChangeRoomDialog — accessibilité (revue qualité PR #79)', () => {
+  it('focus initial sur le titre à l’ouverture (parité ExtendStayDialog)', async () => {
+    const rooms = [room({ id: 4, numero: '105' })];
+    render(
+      <ChangeRoomDialog
+        stay={STAY}
+        rooms={rooms}
+        onClose={noop}
+        onConfirm={noop}
+        submitting={false}
+        error={null}
+      />,
+    );
+    // base-ui Dialog déplace le focus initial de façon asynchrone
+    // (post-montage) — même constat que ExtendStayDialog.
+    await waitFor(() =>
+      expect(screen.getByText('Changer de chambre')).toHaveFocus(),
+    );
   });
 });
 
@@ -129,7 +152,7 @@ describe('ChangeRoomDialog — Empty State (jamais un Select vide)', () => {
     expect(
       screen.getByText(/Toutes les chambres sont actuellement indisponibles/),
     ).toBeVisible();
-    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('button', { name: /^\d/ })).toHaveLength(0);
     await user.click(screen.getByRole('button', { name: 'Fermer' }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -148,8 +171,8 @@ describe('ChangeRoomDialog — pas de présélection', () => {
         error={null}
       />,
     );
-    const radio = screen.getByRole('radio');
-    expect(radio).toHaveAttribute('aria-checked', 'false');
+    const radio = screen.getByRole('button', { name: /105/ });
+    expect(radio).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('button', { name: 'Continuer' })).toBeDisabled();
   });
 });
@@ -183,7 +206,7 @@ describe('ChangeRoomDialog — étape de confirmation avant appel API', () => {
     const continueButton = screen.getByRole('button', { name: 'Continuer' });
     expect(continueButton).toBeDisabled();
 
-    await user.click(screen.getByRole('radio', { name: /312/ }));
+    await user.click(screen.getByRole('button', { name: /312/ }));
     expect(continueButton).toBeDisabled();
 
     await user.type(screen.getByLabelText(/Motif/), 'court');
@@ -194,7 +217,7 @@ describe('ChangeRoomDialog — étape de confirmation avant appel API', () => {
     const user = userEvent.setup();
     const { onConfirm } = renderWithSelection();
 
-    await user.click(screen.getByRole('radio', { name: /312/ }));
+    await user.click(screen.getByRole('button', { name: /312/ }));
     await user.type(screen.getByLabelText(/Motif/), 'Demande du client');
     expect(onConfirm).not.toHaveBeenCalled();
 
@@ -216,7 +239,7 @@ describe('ChangeRoomDialog — étape de confirmation avant appel API', () => {
     const user = userEvent.setup();
     const { onConfirm } = renderWithSelection();
 
-    await user.click(screen.getByRole('radio', { name: /312/ }));
+    await user.click(screen.getByRole('button', { name: /312/ }));
     await user.type(screen.getByLabelText(/Motif/), '  Demande du client  ');
     await user.click(screen.getByRole('button', { name: 'Continuer' }));
     await user.click(screen.getByRole('button', { name: 'Confirmer' }));
@@ -229,7 +252,7 @@ describe('ChangeRoomDialog — étape de confirmation avant appel API', () => {
     const user = userEvent.setup();
     const { onConfirm } = renderWithSelection();
 
-    await user.click(screen.getByRole('radio', { name: /312/ }));
+    await user.click(screen.getByRole('button', { name: /312/ }));
     await user.type(screen.getByLabelText(/Motif/), 'Demande du client');
     await user.click(screen.getByRole('button', { name: 'Continuer' }));
     const confirmButton = screen.getByRole('button', { name: 'Confirmer' });
@@ -243,13 +266,13 @@ describe('ChangeRoomDialog — étape de confirmation avant appel API', () => {
     const user = userEvent.setup();
     renderWithSelection();
 
-    await user.click(screen.getByRole('radio', { name: /312/ }));
+    await user.click(screen.getByRole('button', { name: /312/ }));
     await user.type(screen.getByLabelText(/Motif/), 'Demande du client');
     await user.click(screen.getByRole('button', { name: 'Continuer' }));
     await user.click(screen.getByRole('button', { name: 'Modifier' }));
 
-    expect(screen.getByRole('radio', { name: /312/ })).toHaveAttribute(
-      'aria-checked',
+    expect(screen.getByRole('button', { name: /312/ })).toHaveAttribute(
+      'aria-pressed',
       'true',
     );
     expect(screen.getByLabelText(/Motif/)).toHaveValue('Demande du client');
@@ -272,7 +295,7 @@ describe('ChangeRoomDialog — étape de confirmation avant appel API', () => {
         error={error}
       />,
     );
-    await user.click(screen.getByRole('radio', { name: /312/ }));
+    await user.click(screen.getByRole('button', { name: /312/ }));
     await user.type(screen.getByLabelText(/Motif/), 'Demande du client');
     await user.click(screen.getByRole('button', { name: 'Continuer' }));
 

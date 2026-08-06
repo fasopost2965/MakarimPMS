@@ -96,19 +96,20 @@ function RoomSelectionSection({
       <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
         Choix de la chambre
       </h3>
-      <div
-        role="radiogroup"
-        aria-label="Chambre de destination"
-        className="grid max-h-64 gap-2 overflow-y-auto sm:grid-cols-2"
-      >
+      {/* Revue qualité PR #79 : boutons standards + aria-pressed plutôt que
+          role="radiogroup"/role="radio" — ce dernier engage un contrat
+          clavier précis (navigation par flèches, un seul arrêt Tab pour tout
+          le groupe) qui n'était pas implémenté, un vrai décalage entre le
+          rôle annoncé et le comportement réel. Boutons indépendants : Tab
+          standard entre chaque carte, comportement honnête. */}
+      <div className="grid max-h-64 gap-2 overflow-y-auto sm:grid-cols-2">
         {candidateRooms.map((room) => {
           const selected = room.id === selectedRoomId;
           return (
             <button
               key={room.id}
               type="button"
-              role="radio"
-              aria-checked={selected}
+              aria-pressed={selected}
               disabled={disabled}
               onClick={() => onSelect(room.id)}
               className={`flex flex-col gap-0.5 rounded-md border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
@@ -219,6 +220,11 @@ export function ChangeRoomDialog({
   const [newRoomId, setNewRoomId] = useState<number | null>(null);
   const [motif, setMotif] = useState('');
   const submitLockRef = useRef(false);
+  // Revue qualité PR #79 : focus initial explicite manquant (régression vs
+  // ExtendStayDialog). Cible le titre plutôt qu'un champ précis — même
+  // convention que ReservationCheckinDialog (headingRef), pertinente ici
+  // aussi car le dialogue est multi-étapes sans champ "premier" unique.
+  const titleRef = useRef<HTMLHeadingElement>(null);
 
   // Réinitialisation à chaque (ré)ouverture — même pattern que
   // ExtendStayDialog (MX-002A) : calcul pendant le rendu plutôt qu'un
@@ -272,11 +278,16 @@ export function ChangeRoomDialog({
 
   return (
     <Dialog open={stay !== null} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent
+        initialFocus={titleRef}
+        className="max-h-[90vh] overflow-y-auto sm:max-w-lg"
+      >
         {stay && (
           <div className="flex flex-col gap-4">
             <DialogHeader>
-              <DialogTitle>Changer de chambre</DialogTitle>
+              <DialogTitle ref={titleRef} tabIndex={-1}>
+                Changer de chambre
+              </DialogTitle>
               <DialogDescription>
                 {step === 'selection'
                   ? 'Choisissez la chambre de destination et indiquez le motif.'
