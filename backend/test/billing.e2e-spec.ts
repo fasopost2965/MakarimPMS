@@ -6,6 +6,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Prisma, StatutChambre, TypeLigneFolio } from '@prisma/client';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { computeSoldeDu } from '../src/modules/stay/utils/solde';
 import { authedRequest, loginAs } from './helpers/auth';
 
 describe('Billing Module (5.13)', () => {
@@ -747,7 +748,18 @@ describe('Billing Module (5.13)', () => {
       await cleanup(ctx);
     });
 
-    it('cohérence : le solde TTC du folio (sans paiement) converge avec le montant facturé', async () => {
+    // Revue architecturale FIN-101B (point 1) : computeSoldeDu() ne voit
+    // TAXE_SEJOUR qu'après que generateInvoice() l'a matérialisée en
+    // FolioLine — avant cet instant, le solde ne reflète que les charges
+    // déjà écrites (HEBERGEMENT/EXTRA), pas la taxe de séjour qui sera
+    // ajoutée à la facturation. Ce test démontre donc UNIQUEMENT la
+    // convergence solde/facture APRÈS matérialisation — il ne prétend pas
+    // démontrer INV-FIN-001 (ADR-008) à tout instant du cycle de vie du
+    // folio. Le moment de matérialisation de TAXE_SEJOUR (aujourd'hui :
+    // à la facturation, pas au check-in) reste un écart connu, hors
+    // périmètre de FIN-101B, à traiter dans une mission tarifaire dédiée
+    // (FIN-102A — composition du tarif public TTC).
+    it('convergence solde/facture APRÈS matérialisation de TAXE_SEJOUR (pas avant)', async () => {
       const ctx = await createStayWithFolio('COHERENCE');
       await prisma.folioLine.create({
         data: {
@@ -766,26 +778,36 @@ describe('Billing Module (5.13)', () => {
         },
       });
 
-      // Solde TTC calculé ici à partir des lignes actives, même formule que
-      // computeSoldeDu (somme des charges actives, aucune ligne PAIEMENT) —
-      // sans importer/modifier backend/src/modules/stay/utils/solde.ts.
-      const lignesActives = await prisma.folioLine.findMany({
+      // AVANT generateInvoice() : computeSoldeDu() réelle (aucune formule
+      // recopiée), appelée sur les lignes réellement en base à cet instant
+      // — HEBERGEMENT + EXTRA uniquement, aucune TAXE_SEJOUR.
+      const lignesAvant = await prisma.folioLine.findMany({
         where: { folioId: ctx.folio.id, annulee: false },
       });
-      const soldeTtc = lignesActives.reduce(
-        (total, l) => total.add(l.montant),
-        new Prisma.Decimal(0),
-      );
+      const soldeAvant = computeSoldeDu([{ lignes: lignesAvant }]);
+      expect(soldeAvant.toNumber()).toBe(550);
 
       const invoiceRes = await client
         .post(`/api/invoices/generer?folioId=${ctx.folio.id}`)
         .send({});
       expect(invoiceRes.status).toBe(201);
 
-      // INV-FIN-001 (ADR-008) : pour un même ensemble de prestations, le
-      // solde TTC du folio (avant facturation, sans paiement) et le montant
-      // facturé convergent structurellement.
-      expect(Number(invoiceRes.body.montantTotal)).toBe(soldeTtc.toNumber());
+      // APRÈS generateInvoice() : relecture réelle des FolioLine (inclut
+      // désormais TAXE_SEJOUR, matérialisée par generateInvoice) et nouvel
+      // appel à computeSoldeDu() réelle sur cet état à jour.
+      const lignesApres = await prisma.folioLine.findMany({
+        where: { folioId: ctx.folio.id, annulee: false },
+      });
+      const soldeApres = computeSoldeDu([{ lignes: lignesApres }]);
+
+      const ligneTaxeSejour = lignesApres.find(
+        (l) => l.type === TypeLigneFolio.TAXE_SEJOUR,
+      );
+      expect(ligneTaxeSejour).toBeDefined();
+
+      // La convergence n'existe qu'à partir de cet instant, pas avant.
+      expect(soldeApres.toNumber()).not.toBe(soldeAvant.toNumber());
+      expect(soldeApres.toNumber()).toBe(Number(invoiceRes.body.montantTotal));
 
       await cleanup(ctx);
     });

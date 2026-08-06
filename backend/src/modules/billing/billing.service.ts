@@ -249,9 +249,15 @@ export class BillingService {
       const excludedIds = new Set(
         folio.taxExclusions.map((e) => e.taxRateConfigId),
       );
-      // TVA_HEBERGEMENT/TVA_ANNEXE restent une marge appliquée par
-      // calculateInvoiceTotal, jamais une FolioLine propre — voir
-      // commentaire ci-dessus.
+      // TVA_HEBERGEMENT/TVA_ANNEXE exclues ici (jamais matérialisées en
+      // FolioLine propre) — depuis ADR-008/FIN-101B, HEBERGEMENT/EXTRA/
+      // RESTAURANT sont déjà TTC et calculateInvoiceTotal n'ajoute plus
+      // aucune marge de TVA dessus (voir invoice-calc.ts). TAXE_SEJOUR
+      // reste pour le moment une ligne statutaire distincte, créée ici
+      // même, au moment de generateInvoice — ce moment de création (avant
+      // toute matérialisation au check-in) sera revu dans une mission
+      // tarifaire dédiée (FIN-102A, composition du tarif public TTC),
+      // hors périmètre de FIN-101B.
       const taxesToApply = applicableTaxes.filter(
         (t) =>
           t.type !== 'TVA_HEBERGEMENT' &&
