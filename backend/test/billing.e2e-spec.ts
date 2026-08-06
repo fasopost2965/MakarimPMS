@@ -642,6 +642,9 @@ describe('Billing Module (5.13)', () => {
       folio: { id: number };
     }) {
       await prisma.payment.deleteMany({ where: { folioId: ctx.folio.id } });
+      await prisma.creditNote.deleteMany({
+        where: { invoice: { folioId: ctx.folio.id } },
+      });
       await prisma.invoice.deleteMany({ where: { folioId: ctx.folio.id } });
       await prisma.folioLine.deleteMany({ where: { folioId: ctx.folio.id } });
       await prisma.folio.deleteMany({ where: { stayId: ctx.stay.id } });
