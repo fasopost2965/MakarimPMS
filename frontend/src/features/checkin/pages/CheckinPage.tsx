@@ -21,6 +21,8 @@ import {
   checkinFromReservation,
   checkinWalkIn,
   checkoutStay,
+  extendStay,
+  getStay,
   listDepartsDuJour,
   listStaysEnCours,
 } from '../api';
@@ -28,6 +30,7 @@ import type { Stay, WalkinCheckinInput } from '../types';
 import { WalkinCheckinDialog } from '../components/WalkinCheckinDialog';
 import { StayDetailsDialog } from '../components/StayDetailsDialog';
 import { ReservationCheckinDialog } from '../components/ReservationCheckinDialog';
+import { ExtendStayDialog } from '../components/ExtendStayDialog';
 
 // CH-063 (docs/design/design_handoff_exploitation_hotel) — un séjour créé
 // via le check-in walk-in (StayService.checkinWalkIn) n'a jamais de
@@ -119,6 +122,13 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [soldeDu, setSoldeDu] = useState<string | null>(null);
 
+  // GL-003 (MX-002A) — le séjour prolongé est toujours celui déjà ouvert
+  // dans StayDetailsDialog (viewingStay) ; ce booléen contrôle uniquement
+  // l'ouverture du second dialogue, jamais une copie séparée du Stay.
+  const [extendDialogOpen, setExtendDialogOpen] = useState(false);
+  const [extending, setExtending] = useState(false);
+  const [extendError, setExtendError] = useState<unknown>(null);
+
   const [search, setSearch] = useState('');
   const arrivalsRef = useRef<HTMLElement>(null);
   const departsRef = useRef<HTMLElement>(null);
@@ -193,6 +203,7 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
   function openStay(stay: Stay) {
     setSoldeDu(null);
     setCheckoutError(null);
+    setExtendError(null);
     setViewingStay(stay);
   }
 
@@ -241,6 +252,49 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
       );
     } finally {
       setCheckingOut(false);
+    }
+  }
+
+  // MX-002A — GL-003. `POST /stays/:id/extend` renvoie déjà le Stay à jour
+  // (STAY_INCLUDE), mais on ne s'appuie volontairement pas sur cette seule
+  // hypothèse : une fois le POST confirmé réussi, on relit l'état réel via
+  // getStay(). Un échec de cette relecture ne doit jamais être présenté
+  // comme un échec de la prolongation elle-même (le POST a déjà réussi) —
+  // le refetch() général des listes sert alors de filet de secours, il
+  // resynchronise déjà viewingStay depuis les données fraîches (voir
+  // refetch ci-dessus).
+  async function handleExtendStay(
+    nouvelleDateCheckoutPrevue: string,
+    motif: string,
+  ) {
+    if (!viewingStay) return;
+    const stayId = viewingStay.id;
+    setExtending(true);
+    setExtendError(null);
+    try {
+      await extendStay(stayId, nouvelleDateCheckoutPrevue, motif);
+      setExtendDialogOpen(false);
+      try {
+        const refreshed = await getStay(stayId);
+        setViewingStay(refreshed);
+        toastManager.add({
+          title: 'Séjour prolongé',
+          description: `Nouvelle date de départ prévue : ${nouvelleDateCheckoutPrevue}`,
+          type: 'success',
+        });
+      } catch {
+        toastManager.add({
+          title: 'Prolongation enregistrée',
+          description:
+            "L'affichage n'a pas pu être actualisé immédiatement — rafraîchissement en cours.",
+          type: 'success',
+        });
+      }
+      await refetch();
+    } catch (err) {
+      setExtendError(err);
+    } finally {
+      setExtending(false);
     }
   }
 
@@ -527,6 +581,23 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
         error={checkoutError}
         soldeDu={soldeDu}
         onPoliceRecordSaved={refetch}
+        permissions={permissions}
+        onExtendClick={() => {
+          setExtendError(null);
+          setExtendDialogOpen(true);
+        }}
+      />
+
+      <ExtendStayDialog
+        stay={extendDialogOpen ? viewingStay : null}
+        onClose={() => {
+          if (extending) return;
+          setExtendDialogOpen(false);
+          setExtendError(null);
+        }}
+        onConfirm={handleExtendStay}
+        submitting={extending}
+        error={extendError}
       />
     </div>
   );

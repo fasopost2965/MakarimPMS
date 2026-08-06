@@ -86,6 +86,30 @@ export interface ReservationDeposit {
   createdAt: string;
 }
 
+// GL-003 (MX-002A) — payload d'entrée de POST /stays/:id/extend
+// (ExtendStayDto, backend/src/modules/stay/dto/extend-stay.dto.ts).
+export interface ExtendStayInput {
+  nouvelleDateCheckoutPrevue: string;
+  motif: string;
+}
+
+// Formes des corps d'erreur structurés levés par StayService.extendStay
+// (backend/src/modules/stay/stay.service.ts) — narrowing explicite de
+// `ApiError.details` (voir lib/api-client.ts), jamais un type large exposé
+// automatiquement par le client HTTP lui-même.
+export interface RoomUnavailableErrorDetails {
+  code: 'ROOM_UNAVAILABLE';
+  message: string;
+  alternatives: Room[];
+}
+
+export interface PaymentRequiredErrorDetails {
+  code: 'PAYMENT_REQUIRED';
+  message: string;
+  amountRequired: string;
+  availableCredit: string;
+}
+
 // L'un des deux champs client est requis (module CRM 5.7) : guestId pour
 // réutiliser un client existant (déclenche le contrôle blacklist côté
 // serveur), guest pour en saisir un nouveau — voir GuestPicker.

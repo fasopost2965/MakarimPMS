@@ -10,6 +10,8 @@ vi.mock('../api', () => ({
   checkinFromReservation: vi.fn(),
   checkinWalkIn: vi.fn(),
   checkoutStay: vi.fn(),
+  extendStay: vi.fn(),
+  getStay: vi.fn(),
   listDepartsDuJour: vi.fn(),
   listStaysEnCours: vi.fn(),
 }));
@@ -17,7 +19,44 @@ vi.mock('../components/WalkinCheckinDialog', () => ({
   WalkinCheckinDialog: () => null,
 }));
 vi.mock('../components/StayDetailsDialog', () => ({
-  StayDetailsDialog: () => null,
+  StayDetailsDialog: ({
+    stay,
+    onExtendClick,
+  }: {
+    stay: { id: number } | null;
+    onExtendClick?: () => void;
+  }) =>
+    stay ? (
+      <div>
+        Détails séjour {stay.id}
+        <button type="button" onClick={onExtendClick}>
+          Ouvrir prolongation
+        </button>
+      </div>
+    ) : null,
+}));
+vi.mock('../components/ExtendStayDialog', () => ({
+  ExtendStayDialog: ({
+    stay,
+    onConfirm,
+    error,
+  }: {
+    stay: { id: number } | null;
+    onConfirm: (date: string, motif: string) => void;
+    error: unknown;
+  }) =>
+    stay ? (
+      <div>
+        Dialogue prolongation {stay.id}
+        {error ? <span>Erreur prolongation présente</span> : null}
+        <button
+          type="button"
+          onClick={() => onConfirm('2026-08-10', 'motif de test recette')}
+        >
+          Confirmer la prolongation
+        </button>
+      </div>
+    ) : null,
 }));
 vi.mock('../components/ReservationCheckinDialog', () => ({
   ReservationCheckinDialog: ({
@@ -40,6 +79,8 @@ vi.mock('../components/ReservationCheckinDialog', () => ({
 import { arrivalsToday, listRooms } from '../../reservations/api';
 import {
   checkinFromReservation,
+  extendStay,
+  getStay,
   listDepartsDuJour,
   listStaysEnCours,
 } from '../api';
@@ -76,6 +117,135 @@ const RESERVATION = {
   createdAt: '2026-07-01T00:00:00.000Z',
   updatedAt: '2026-07-01T00:00:00.000Z',
 } as const;
+
+const STAY = {
+  id: 6,
+  reservationId: null,
+  reservation: null,
+  roomId: 3,
+  room: {
+    id: 3,
+    numero: '103',
+    roomTypeId: 1,
+    statut: 'OCCUPEE',
+    roomType: { id: 1, nom: 'Double', prixBase: '600', capacite: 2 },
+  },
+  guestId: 8,
+  guest: { id: 8, nom: 'Bennani', prenom: 'Yasmine' },
+  dateCheckin: '2026-08-06T12:00:00.000Z',
+  dateCheckoutPrevue: '2026-08-07',
+  dateCheckoutReelle: null,
+  statut: 'EN_COURS',
+  folios: [],
+  policeRecord: null,
+  createdAt: '2026-08-06T12:00:00.000Z',
+  updatedAt: '2026-08-06T12:00:00.000Z',
+} as const;
+
+describe('CheckinPage — GL-003, prolongation de séjour (MX-002A)', () => {
+  beforeEach(() => {
+    vi.mocked(arrivalsToday).mockReset().mockResolvedValue([]);
+    vi.mocked(listRooms).mockReset().mockResolvedValue([]);
+    vi.mocked(listStaysEnCours)
+      .mockReset()
+      .mockResolvedValue([STAY as never]);
+    vi.mocked(listDepartsDuJour).mockReset().mockResolvedValue([]);
+    vi.mocked(extendStay).mockReset();
+    vi.mocked(getStay).mockReset();
+  });
+
+  it('après succès du POST et de getStay : viewingStay est mis à jour, les listes sont rafraîchies, le dialogue se ferme', async () => {
+    const user = userEvent.setup();
+    vi.mocked(extendStay).mockResolvedValue(STAY as never);
+    const refreshedStay = { ...STAY, dateCheckoutPrevue: '2026-08-10' };
+    vi.mocked(getStay).mockResolvedValue(refreshedStay as never);
+
+    render(<CheckinPage permissions={['stay:extend']} />);
+
+    await user.click(await screen.findByRole('button', { name: /Bennani/ }));
+    await user.click(
+      screen.getByRole('button', { name: 'Ouvrir prolongation' }),
+    );
+    expect(screen.getByText('Dialogue prolongation 6')).toBeVisible();
+
+    await user.click(
+      screen.getByRole('button', { name: 'Confirmer la prolongation' }),
+    );
+
+    await waitFor(() =>
+      expect(extendStay).toHaveBeenCalledWith(
+        6,
+        '2026-08-10',
+        'motif de test recette',
+      ),
+    );
+    await waitFor(() => expect(getStay).toHaveBeenCalledWith(6));
+    // Le dialogue de prolongation se ferme dès le POST confirmé réussi.
+    await waitFor(() =>
+      expect(screen.queryByText('Dialogue prolongation 6')).toBeNull(),
+    );
+    // refetch() des listes déclenché après succès (au moins un second appel
+    // au-delà du chargement initial).
+    await waitFor(() =>
+      expect(vi.mocked(listStaysEnCours).mock.calls.length).toBeGreaterThan(1),
+    );
+  });
+
+  it("si getStay échoue après un POST réussi : la prolongation n'est jamais annoncée comme un échec, le dialogue se ferme, le refetch des listes est déclenché", async () => {
+    const user = userEvent.setup();
+    vi.mocked(extendStay).mockResolvedValue(STAY as never);
+    vi.mocked(getStay).mockRejectedValue(new Error('Erreur réseau'));
+
+    render(<CheckinPage permissions={['stay:extend']} />);
+
+    await user.click(await screen.findByRole('button', { name: /Bennani/ }));
+    await user.click(
+      screen.getByRole('button', { name: 'Ouvrir prolongation' }),
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'Confirmer la prolongation' }),
+    );
+
+    await waitFor(() => expect(getStay).toHaveBeenCalledWith(6));
+    // Le dialogue se ferme malgré l'échec de getStay — jamais présenté
+    // comme un échec de la prolongation elle-même (le POST a réussi).
+    await waitFor(() =>
+      expect(screen.queryByText('Dialogue prolongation 6')).toBeNull(),
+    );
+    expect(screen.queryByText('Erreur prolongation présente')).toBeNull();
+    await waitFor(() =>
+      expect(vi.mocked(listStaysEnCours).mock.calls.length).toBeGreaterThan(1),
+    );
+  });
+
+  it('si le POST échoue : le dialogue reste ouvert avec une erreur, aucun refetch ni fermeture', async () => {
+    const user = userEvent.setup();
+    vi.mocked(extendStay).mockRejectedValue(
+      new Error('Ce séjour est déjà clôturé.'),
+    );
+
+    render(<CheckinPage permissions={['stay:extend']} />);
+
+    await user.click(await screen.findByRole('button', { name: /Bennani/ }));
+    await user.click(
+      screen.getByRole('button', { name: 'Ouvrir prolongation' }),
+    );
+    const callsBeforeSubmit = vi.mocked(listStaysEnCours).mock.calls.length;
+    await user.click(
+      screen.getByRole('button', { name: 'Confirmer la prolongation' }),
+    );
+
+    await waitFor(() => expect(extendStay).toHaveBeenCalled());
+    expect(getStay).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getByText('Dialogue prolongation 6')).toBeVisible(),
+    );
+    expect(screen.getByText('Erreur prolongation présente')).toBeVisible();
+    expect(vi.mocked(listStaysEnCours).mock.calls.length).toBe(
+      callsBeforeSubmit,
+    );
+  });
+});
 
 describe('CheckinPage — confirmation guidée', () => {
   beforeEach(() => {
