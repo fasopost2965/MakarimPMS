@@ -2,12 +2,15 @@ import { FolioLine, TaxRateConfig, TypeLigneFolio } from '@prisma/client';
 import { Prisma, TaxMode } from '@prisma/client';
 
 // Calcul du montant total d'une facture à partir des lignes de folio.
-// Règle non négociable (CLAUDE.md §8) : les taux TVA/taxe de séjour sont
-// toujours lus depuis TaxRateConfig en base, jamais codés en dur.
-export function calculateInvoiceTotal(
-  folioLines: FolioLine[],
-  taxRates: Map<string, Prisma.Decimal>,
-): Prisma.Decimal {
+// ADR-008 (§4.2/§4.4) : les montants HEBERGEMENT/EXTRA/RESTAURANT sont déjà
+// TTC dès leur écriture (FolioLine.montant) — cette fonction ne fait plus
+// que sommer les montants déjà TTC, elle n'ajoute plus jamais de TVA
+// par-dessus (l'ancien comportement additif est le bug corrigé par
+// FIN-101B/ADR-008). Signature simplifiée : plus besoin de `taxRates`
+// puisqu'aucun taux fiscal n'influence plus le total — appelant unique
+// (BillingService.generateInvoice) adapté en conséquence, aucun contrat API
+// public ne dépend du détail d'implémentation de cette fonction interne.
+export function calculateInvoiceTotal(folioLines: FolioLine[]): Prisma.Decimal {
   let total = new Prisma.Decimal(0);
 
   for (const line of folioLines) {
@@ -15,23 +18,25 @@ export function calculateInvoiceTotal(
       continue;
     }
 
-    let lineAmount = new Prisma.Decimal(line.montant);
-
-    // Appliquer la TVA/taxe selon le type de ligne
-    if (line.type === TypeLigneFolio.HEBERGEMENT) {
-      const tvaRate = taxRates.get('TVA_HEBERGEMENT') || new Prisma.Decimal(10);
-      const taxAmount = lineAmount.mul(tvaRate).div(100);
-      lineAmount = lineAmount.add(taxAmount);
-    } else if (line.type === TypeLigneFolio.EXTRA) {
-      const tvaRate = taxRates.get('TVA_ANNEXE') || new Prisma.Decimal(20);
-      const taxAmount = lineAmount.mul(tvaRate).div(100);
-      lineAmount = lineAmount.add(taxAmount);
-    } else if (line.type === TypeLigneFolio.TAXE_SEJOUR) {
-      // La taxe de séjour s'ajoute directement sans appliquer d'autre taxe
-      lineAmount = new Prisma.Decimal(line.montant);
+    // PAIEMENT est explicitement exclu du total de facture (défense en
+    // profondeur n°2 — la n°1 est le filtrage fait en amont dans
+    // BillingService.generateInvoice) : un règlement/acompte déjà encaissé
+    // ne doit jamais être compté comme une charge facturée.
+    if (line.type === TypeLigneFolio.PAIEMENT) {
+      continue;
     }
 
-    total = total.add(lineAmount);
+    // HEBERGEMENT, EXTRA, RESTAURANT et TAXE_SEJOUR sont tous ajoutés tels
+    // quels (déjà TTC, jamais de majoration) — couverture explicite de
+    // RESTAURANT, absent de toute branche avant ADR-008.
+    if (
+      line.type === TypeLigneFolio.HEBERGEMENT ||
+      line.type === TypeLigneFolio.EXTRA ||
+      line.type === TypeLigneFolio.RESTAURANT ||
+      line.type === TypeLigneFolio.TAXE_SEJOUR
+    ) {
+      total = total.add(new Prisma.Decimal(line.montant));
+    }
   }
 
   return total;

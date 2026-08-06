@@ -201,10 +201,11 @@ export class BillingService {
   // configurable applicable (TAXE_SEJOUR et toute taxe créée depuis
   // /parameters/tax-rates) — c'était le trou identifié dans le référentiel :
   // TypeLigneFolio.TAXE_SEJOUR était géré partout en aval (invoice-calc,
-  // solde, ventilation fiscale) mais jamais généré en amont. La TVA
-  // (TVA_HEBERGEMENT/TVA_ANNEXE) reste appliquée en marge par
-  // calculateInvoiceTotal comme avant — elle est explicitement exclue de
-  // cette injection pour ne jamais être comptée deux fois.
+  // solde, ventilation fiscale) mais jamais généré en amont. ADR-008/
+  // FIN-101B : TVA_HEBERGEMENT/TVA_ANNEXE ne sont plus jamais ajoutées en
+  // marge par calculateInvoiceTotal (les montants HEBERGEMENT/EXTRA/
+  // RESTAURANT sont déjà TTC dès leur écriture) — elles restent exclues de
+  // cette injection de FolioLine, il ne s'agit jamais d'une charge propre.
   async generateInvoice(folioId: number) {
     return this.prisma.$transaction(async (tx) => {
       const folio = await tx.folio.findUnique({
@@ -308,9 +309,17 @@ export class BillingService {
         ? await tx.folioLine.findMany({ where: { folioId } })
         : folio.lignes;
 
-      // Marge TVA (HEBERGEMENT/EXTRA) chargée via le module parameters.
-      const taxRateMap = await this.parametersService.getTaxRateMap(tx);
-      const montantTotal = calculateInvoiceTotal(toutesLesLignes, taxRateMap);
+      // Défense en profondeur n°1 (ADR-008/FIN-101B) : les lignes PAIEMENT
+      // ne doivent jamais entrer dans le calcul du total de facture — un
+      // règlement/acompte déjà encaissé (imputerAcomptes crédite une ligne
+      // PAIEMENT dès le check-in, avant toute génération de facture) n'est
+      // pas une charge. Filtré ici en amont ; la défense en profondeur n°2
+      // est l'exclusion propre à calculateInvoiceTotal elle-même (voir
+      // invoice-calc.ts) — les deux coexistent volontairement.
+      const lignesFacturables = toutesLesLignes.filter(
+        (l) => l.type !== TypeLigneFolio.PAIEMENT,
+      );
+      const montantTotal = calculateInvoiceTotal(lignesFacturables);
 
       // Créer la facture avec un numéro unique et immutable.
       const invoice = await tx.invoice.create({

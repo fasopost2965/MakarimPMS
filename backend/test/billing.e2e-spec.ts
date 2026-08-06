@@ -111,10 +111,15 @@ describe('Billing Module (5.13)', () => {
       expect(invoiceRes.body).toHaveProperty('numero');
       expect(invoiceRes.body.statut).toBe('EMISE');
 
-      // Montant attendu : 500 + (500 * 10 / 100) = 550 MAD
-      expect(Number(invoiceRes.body.montantTotal)).toBe(550);
+      // ADR-008/FIN-101B : la ligne HEBERGEMENT (500) est déjà TTC — plus de
+      // majoration TVA au moment de la facturation. Montant attendu : 500.
+      expect(Number(invoiceRes.body.montantTotal)).toBe(500);
 
-      // Test de rigueur : modifier TaxRateConfig et régénérer (sur un autre folio)
+      // Test de rigueur (ADR-008/FIN-101B) : changer TVA_HEBERGEMENT en
+      // cours de route et régénérer (sur un autre folio) — le total facturé
+      // ne doit plus bouger avec le taux, puisque le montant est déjà TTC et
+      // que la TVA n'est plus qu'une ventilation informative, jamais une
+      // majoration du total.
       const folio2 = await prisma.folio.create({
         data: {
           stayId: stay.id,
@@ -143,8 +148,9 @@ describe('Billing Module (5.13)', () => {
         .send({});
 
       expect(invoice2Res.status).toBe(201);
-      // Montant attendu avec 15% : 500 + (500 * 15 / 100) = 575 MAD
-      expect(Number(invoice2Res.body.montantTotal)).toBe(575);
+      // Montant attendu : toujours 500 — le taux TVA n'affecte plus jamais
+      // le total de facture (ADR-008 §4.4, INV-FIN-003).
+      expect(Number(invoice2Res.body.montantTotal)).toBe(500);
 
       // Nettoyer
       await prisma.invoice.deleteMany({ where: { folioId: folio.id } });
@@ -513,13 +519,13 @@ describe('Billing Module (5.13)', () => {
         },
       });
 
-      // Génération initiale : HEBERGEMENT (500) + TVA 10% (50) + taxe de
-      // séjour (12) = 562.
+      // Génération initiale (ADR-008/FIN-101B — plus de majoration TVA) :
+      // HEBERGEMENT (500, déjà TTC) + taxe de séjour (12) = 512.
       const invoiceRes = await client
         .post(`/api/invoices/generer?folioId=${folio.id}`)
         .send({});
       expect(invoiceRes.status).toBe(201);
-      expect(Number(invoiceRes.body.montantTotal)).toBe(562);
+      expect(Number(invoiceRes.body.montantTotal)).toBe(512);
       const invoiceId = invoiceRes.body.id as number;
 
       const nbLignesTaxeApresGeneration = await prisma.folioLine.count({
@@ -540,7 +546,7 @@ describe('Billing Module (5.13)', () => {
           motif: 'Erreur de saisie sur le montant, correction nécessaire',
         });
       expect(creditNoteRes.status).toBe(201);
-      expect(Number(creditNoteRes.body.montant)).toBe(562);
+      expect(Number(creditNoteRes.body.montant)).toBe(512);
       expect(creditNoteRes.body.invoiceId).toBe(invoiceId);
 
       // La facture d'origine reste immuable : montantTotal/numero inchangés
@@ -549,7 +555,7 @@ describe('Billing Module (5.13)', () => {
         where: { id: invoiceId },
       });
       expect(invoiceApresAvoir.statut).toBe('ANNULEE_PAR_AVOIR');
-      expect(Number(invoiceApresAvoir.montantTotal)).toBe(562);
+      expect(Number(invoiceApresAvoir.montantTotal)).toBe(512);
       expect(invoiceApresAvoir.numero).toBe(
         (invoiceRes.body as { numero: string }).numero,
       );
@@ -563,7 +569,7 @@ describe('Billing Module (5.13)', () => {
       // Preuve de rigueur sabotage/restore : sans la garde ajoutée dans
       // generateInvoice() (ne jamais réinjecter TAXE_SEJOUR si déjà
       // matérialisée sur le folio), cette régénération aurait doublé la
-      // taxe de séjour (574 au lieu de 562, et 2 lignes TAXE_SEJOUR au lieu
+      // taxe de séjour (524 au lieu de 512, et 2 lignes TAXE_SEJOUR au lieu
       // d'1) — vérifié en retirant temporairement la garde pendant le
       // développement : le test échouait alors bien avec ces valeurs
       // doublées, confirmant qu'il est discriminant.
@@ -571,7 +577,7 @@ describe('Billing Module (5.13)', () => {
         .post(`/api/invoices/generer?folioId=${folio.id}`)
         .send({});
       expect(invoiceCorrigeeRes.status).toBe(201);
-      expect(Number(invoiceCorrigeeRes.body.montantTotal)).toBe(562);
+      expect(Number(invoiceCorrigeeRes.body.montantTotal)).toBe(512);
 
       const nbLignesTaxeApresRegeneration = await prisma.folioLine.count({
         where: { folioId: folio.id, type: TypeLigneFolio.TAXE_SEJOUR },
@@ -588,6 +594,231 @@ describe('Billing Module (5.13)', () => {
       await prisma.room.deleteMany({ where: { id: room.id } });
       await prisma.roomType.deleteMany({ where: { id: roomType.id } });
       await prisma.guest.deleteMany({ where: { id: guest.id } });
+    });
+  });
+
+  // FIN-101B (ADR-008) — moteur de calcul financier TTC : plus de
+  // majoration TVA au-dessus des montants déjà TTC, couverture de
+  // RESTAURANT, exclusion explicite des lignes PAIEMENT du total facturé.
+  describe('Moteur de calcul financier TTC (ADR-008 / FIN-101B)', () => {
+    async function createStayWithFolio(labelSuffix: string) {
+      const ts = Date.now();
+      const roomType = await prisma.roomType.create({
+        data: {
+          nom: `TEST-FIN101B-TYPE-${labelSuffix}-${ts}`,
+          prixBase: new Prisma.Decimal(500),
+          capacite: 2,
+        },
+      });
+      const room = await prisma.room.create({
+        data: {
+          numero: `TEST-FIN101B-${labelSuffix}-${ts}`,
+          roomTypeId: roomType.id,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+      const guest = await prisma.guest.create({
+        data: { nom: 'Alaoui', prenom: 'Nadia' },
+      });
+      const stay = await prisma.stay.create({
+        data: {
+          roomId: room.id,
+          guestId: guest.id,
+          dateCheckin: new Date(),
+          dateCheckoutPrevue: new Date(),
+        },
+      });
+      const folio = await prisma.folio.create({
+        data: { stayId: stay.id, libelle: 'Folio principal' },
+      });
+      return { roomType, room, guest, stay, folio };
+    }
+
+    async function cleanup(ctx: {
+      roomType: { id: number };
+      room: { id: number };
+      guest: { id: number };
+      stay: { id: number };
+      folio: { id: number };
+    }) {
+      await prisma.payment.deleteMany({ where: { folioId: ctx.folio.id } });
+      await prisma.invoice.deleteMany({ where: { folioId: ctx.folio.id } });
+      await prisma.folioLine.deleteMany({ where: { folioId: ctx.folio.id } });
+      await prisma.folio.deleteMany({ where: { stayId: ctx.stay.id } });
+      await prisma.roomNight.deleteMany({ where: { stayId: ctx.stay.id } });
+      await prisma.stay.deleteMany({ where: { id: ctx.stay.id } });
+      await prisma.room.deleteMany({ where: { id: ctx.room.id } });
+      await prisma.roomType.deleteMany({ where: { id: ctx.roomType.id } });
+      await prisma.guest.deleteMany({ where: { id: ctx.guest.id } });
+    }
+
+    it('restaurant inclus dans une facture, sans majoration (couverture RESTAURANT)', async () => {
+      const ctx = await createStayWithFolio('RESTO');
+      await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: 'Hébergement — 1 nuit',
+          montant: new Prisma.Decimal(500),
+        },
+      });
+      await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.RESTAURANT,
+          libelle: 'Note restaurant',
+          montant: new Prisma.Decimal(14),
+        },
+      });
+
+      const invoiceRes = await client
+        .post(`/api/invoices/generer?folioId=${ctx.folio.id}`)
+        .send({});
+      expect(invoiceRes.status).toBe(201);
+      // HEBERGEMENT (500) + RESTAURANT (14), aucune TVA ajoutée = 514.
+      expect(Number(invoiceRes.body.montantTotal)).toBe(514);
+
+      await cleanup(ctx);
+    });
+
+    it('un paiement partiel enregistré AVANT génération de facture est exclu du montantTotal (POST /payments)', async () => {
+      const ctx = await createStayWithFolio('PAIEMENT');
+      await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: 'Hébergement — 1 nuit',
+          montant: new Prisma.Decimal(500),
+        },
+      });
+
+      const paymentRes = await client.post('/api/payments').send({
+        folioId: ctx.folio.id,
+        moyen: 'ESPECES',
+        montant: '200.00',
+        idempotencyKey: `test-fin101b-partiel-${Date.now()}`,
+      });
+      expect(paymentRes.status).toBe(201);
+
+      const invoiceRes = await client
+        .post(`/api/invoices/generer?folioId=${ctx.folio.id}`)
+        .send({});
+      expect(invoiceRes.status).toBe(201);
+      // Le paiement de 200 (ligne PAIEMENT créditrice) ne doit ni s'ajouter
+      // ni se soustraire au total facturé — il est simplement ignoré
+      // (bug corrigé : avant FIN-101B, PAIEMENT n'était couvert par aucune
+      // branche de calculateInvoiceTotal et était additionné tel quel).
+      expect(Number(invoiceRes.body.montantTotal)).toBe(500);
+
+      await cleanup(ctx);
+    });
+
+    it('un acompte déjà imputé sur le folio (ligne PAIEMENT créditrice) est exclu du montantTotal', async () => {
+      const ctx = await createStayWithFolio('ACOMPTE');
+      await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: 'Hébergement — 1 nuit',
+          montant: new Prisma.Decimal(500),
+        },
+      });
+      // Simule l'état laissé par StayService.imputerAcomptes (crédite une
+      // ligne PAIEMENT dès le check-in, avant toute génération de facture)
+      // sans dépendre du flux complet réservation + dépôt + check-in.
+      await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.PAIEMENT,
+          libelle: 'Acompte imputé au check-in',
+          montant: new Prisma.Decimal(150),
+        },
+      });
+
+      const invoiceRes = await client
+        .post(`/api/invoices/generer?folioId=${ctx.folio.id}`)
+        .send({});
+      expect(invoiceRes.status).toBe(201);
+      expect(Number(invoiceRes.body.montantTotal)).toBe(500);
+
+      await cleanup(ctx);
+    });
+
+    it('cohérence : le solde TTC du folio (sans paiement) converge avec le montant facturé', async () => {
+      const ctx = await createStayWithFolio('COHERENCE');
+      await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: 'Hébergement — 1 nuit',
+          montant: new Prisma.Decimal(500),
+        },
+      });
+      await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.EXTRA,
+          libelle: 'Room service',
+          montant: new Prisma.Decimal(50),
+        },
+      });
+
+      // Solde TTC calculé ici à partir des lignes actives, même formule que
+      // computeSoldeDu (somme des charges actives, aucune ligne PAIEMENT) —
+      // sans importer/modifier backend/src/modules/stay/utils/solde.ts.
+      const lignesActives = await prisma.folioLine.findMany({
+        where: { folioId: ctx.folio.id, annulee: false },
+      });
+      const soldeTtc = lignesActives.reduce(
+        (total, l) => total.add(l.montant),
+        new Prisma.Decimal(0),
+      );
+
+      const invoiceRes = await client
+        .post(`/api/invoices/generer?folioId=${ctx.folio.id}`)
+        .send({});
+      expect(invoiceRes.status).toBe(201);
+
+      // INV-FIN-001 (ADR-008) : pour un même ensemble de prestations, le
+      // solde TTC du folio (avant facturation, sans paiement) et le montant
+      // facturé convergent structurellement.
+      expect(Number(invoiceRes.body.montantTotal)).toBe(soldeTtc.toNumber());
+
+      await cleanup(ctx);
+    });
+
+    it('facture émise reste immuable (montantTotal/numero inchangés après un avoir)', async () => {
+      const ctx = await createStayWithFolio('IMMUABLE');
+      await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: 'Hébergement — 1 nuit',
+          montant: new Prisma.Decimal(500),
+        },
+      });
+
+      const invoiceRes = await client
+        .post(`/api/invoices/generer?folioId=${ctx.folio.id}`)
+        .send({});
+      expect(invoiceRes.status).toBe(201);
+      const invoiceId = invoiceRes.body.id as number;
+      const numeroOriginal = invoiceRes.body.numero as string;
+      expect(Number(invoiceRes.body.montantTotal)).toBe(500);
+
+      const creditNoteRes = await client
+        .post(`/api/invoices/${invoiceId}/credit-notes`)
+        .send({ motif: 'Avoir de contrôle immuabilité FIN-101B' });
+      expect(creditNoteRes.status).toBe(201);
+
+      const invoiceApresAvoir = await prisma.invoice.findUniqueOrThrow({
+        where: { id: invoiceId },
+      });
+      expect(Number(invoiceApresAvoir.montantTotal)).toBe(500);
+      expect(invoiceApresAvoir.numero).toBe(numeroOriginal);
+      expect(invoiceApresAvoir.statut).toBe('ANNULEE_PAR_AVOIR');
+
+      await cleanup(ctx);
     });
   });
 
