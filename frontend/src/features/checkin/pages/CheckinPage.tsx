@@ -18,6 +18,7 @@ import type {
   Room,
 } from '../../reservations/types';
 import {
+  changeRoom,
   checkinFromReservation,
   checkinWalkIn,
   checkoutStay,
@@ -31,6 +32,7 @@ import { WalkinCheckinDialog } from '../components/WalkinCheckinDialog';
 import { StayDetailsDialog } from '../components/StayDetailsDialog';
 import { ReservationCheckinDialog } from '../components/ReservationCheckinDialog';
 import { ExtendStayDialog } from '../components/ExtendStayDialog';
+import { ChangeRoomDialog } from '../components/ChangeRoomDialog';
 
 // CH-063 (docs/design/design_handoff_exploitation_hotel) — un séjour créé
 // via le check-in walk-in (StayService.checkinWalkIn) n'a jamais de
@@ -129,6 +131,13 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
   const [extending, setExtending] = useState(false);
   const [extendError, setExtendError] = useState<unknown>(null);
 
+  // GL-002 (MX-002C) — même convention que l'extension de séjour ci-dessus :
+  // le séjour dont on change la chambre est toujours celui déjà ouvert dans
+  // StayDetailsDialog (viewingStay).
+  const [changeRoomDialogOpen, setChangeRoomDialogOpen] = useState(false);
+  const [changingRoom, setChangingRoom] = useState(false);
+  const [changeRoomError, setChangeRoomError] = useState<unknown>(null);
+
   const [search, setSearch] = useState('');
   const arrivalsRef = useRef<HTMLElement>(null);
   const departsRef = useRef<HTMLElement>(null);
@@ -204,6 +213,7 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
     setSoldeDu(null);
     setCheckoutError(null);
     setExtendError(null);
+    setChangeRoomError(null);
     setViewingStay(stay);
   }
 
@@ -295,6 +305,43 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
       setExtendError(err);
     } finally {
       setExtending(false);
+    }
+  }
+
+  // MX-002C — GL-002. Même garantie que handleExtendStay ci-dessus : relit
+  // l'état réel via getStay() après un POST confirmé réussi plutôt que de
+  // se fier uniquement à sa réponse ; un échec de cette relecture n'est
+  // jamais présenté comme un échec du changement de chambre lui-même
+  // (refetch() sert de filet de secours, il resynchronise déjà viewingStay).
+  async function handleChangeRoom(newRoomId: number, motif: string) {
+    if (!viewingStay) return;
+    const stayId = viewingStay.id;
+    setChangingRoom(true);
+    setChangeRoomError(null);
+    try {
+      await changeRoom(stayId, newRoomId, motif);
+      setChangeRoomDialogOpen(false);
+      try {
+        const refreshed = await getStay(stayId);
+        setViewingStay(refreshed);
+        toastManager.add({
+          title: 'Chambre changée',
+          description: `Chambre ${refreshed.room.numero} — ${refreshed.room.roomType.nom}`,
+          type: 'success',
+        });
+      } catch {
+        toastManager.add({
+          title: 'Changement de chambre enregistré',
+          description:
+            "L'affichage n'a pas pu être actualisé immédiatement — rafraîchissement en cours.",
+          type: 'success',
+        });
+      }
+      await refetch();
+    } catch (err) {
+      setChangeRoomError(err);
+    } finally {
+      setChangingRoom(false);
     }
   }
 
@@ -586,6 +633,10 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
           setExtendError(null);
           setExtendDialogOpen(true);
         }}
+        onChangeRoomClick={() => {
+          setChangeRoomError(null);
+          setChangeRoomDialogOpen(true);
+        }}
       />
 
       <ExtendStayDialog
@@ -598,6 +649,19 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
         onConfirm={handleExtendStay}
         submitting={extending}
         error={extendError}
+      />
+
+      <ChangeRoomDialog
+        stay={changeRoomDialogOpen ? viewingStay : null}
+        rooms={rooms}
+        onClose={() => {
+          if (changingRoom) return;
+          setChangeRoomDialogOpen(false);
+          setChangeRoomError(null);
+        }}
+        onConfirm={handleChangeRoom}
+        submitting={changingRoom}
+        error={changeRoomError}
       />
     </div>
   );

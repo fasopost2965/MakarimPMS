@@ -26,6 +26,10 @@ interface Props {
   // rôle ici, uniquement la permission effective transmise par App.tsx.
   permissions?: string[] | null;
   onExtendClick?: () => void;
+  // GL-002 (MX-002C) — même granularité de masquage, même prop
+  // `permissions` déjà branchée depuis MX-002A, `stay:change-room` réservé
+  // Administrateur + Réception (CLAUDE.md).
+  onChangeRoomClick?: () => void;
 }
 
 const STATUT_LABEL: Record<Stay['statut'], string> = {
@@ -43,9 +47,11 @@ export function StayDetailsDialog({
   onPoliceRecordSaved,
   permissions,
   onExtendClick,
+  onChangeRoomClick,
 }: Props) {
   const [activeTab, setActiveTab] = useState('details');
   const canExtend = permissions?.includes('stay:extend') ?? false;
+  const canChangeRoom = permissions?.includes('stay:change-room') ?? false;
 
   return (
     <Dialog open={stay !== null} onOpenChange={(next) => !next && onClose()}>
@@ -154,6 +160,17 @@ export function StayDetailsDialog({
               <Button type="button" variant="outline" onClick={onClose}>
                 Fermer
               </Button>
+              {stay.statut === 'EN_COURS' &&
+                canChangeRoom &&
+                onChangeRoomClick && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={onChangeRoomClick}
+                  >
+                    Changer de chambre
+                  </Button>
+                )}
               {stay.statut === 'EN_COURS' && canExtend && onExtendClick && (
                 <Button type="button" variant="outline" onClick={onExtendClick}>
                   Prolonger
