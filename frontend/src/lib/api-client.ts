@@ -1,5 +1,51 @@
 import { clearLoggedInHint, getCsrfToken, setCsrfToken } from './token-storage';
 
+// MX-002A — avant cette classe, apiRequest ne préservait que `body.message`
+// sur une erreur HTTP : toute donnée métier structurée renvoyée par le
+// backend (ex. StayController POST /stays/:id/extend, `{code:
+// "ROOM_UNAVAILABLE", alternatives: [...]}` ou `{code: "PAYMENT_REQUIRED",
+// amountRequired, availableCredit}`, voir stay.service.ts) était
+// silencieusement perdue. `ApiError extends Error` : tout code appelant
+// existant qui fait `error instanceof Error` (déjà la convention partout
+// dans `features/*`) continue de fonctionner sans changement. `details`
+// reste `unknown` volontairement — ce fichier ne connaît pas la forme des
+// corps d'erreur métier de chaque module, à chaque appelant de la
+// restreindre explicitement (ex. `details as { alternatives?: Room[] }`)
+// plutôt que de figer ici une interface qui fuirait dans toute l'app.
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  readonly details?: unknown;
+
+  constructor(
+    status: number,
+    message: string,
+    code?: string,
+    details?: unknown,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.details = details;
+    // Nécessaire lors de l'extension d'un built-in (Error) ciblé par le
+    // `tsconfig` de ce projet — sans ceci, `instanceof ApiError` peut
+    // échouer silencieusement selon la cible de compilation.
+    Object.setPrototypeOf(this, ApiError.prototype);
+  }
+}
+
+async function parseErrorBody(res: Response): Promise<ApiError> {
+  const body = (await res.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
+  const message =
+    typeof body?.message === 'string' ? body.message : `Erreur ${res.status}`;
+  const code = typeof body?.code === 'string' ? body.code : undefined;
+  return new ApiError(res.status, message, code, body ?? undefined);
+}
+
 // `||` et non `??` : une chaîne vide (ARG Docker non renseigné au build, voir
 // frontend/Dockerfile) doit aussi retomber sur le fallback — `??` ne le fait
 // que pour null/undefined, jamais pour une chaîne vide, ce qui a produit en
@@ -118,10 +164,7 @@ export async function apiRequest<T>(
   }
 
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as {
-      message?: string;
-    } | null;
-    throw new Error(body?.message ?? `Erreur ${res.status}`);
+    throw await parseErrorBody(res);
   }
 
   // NestJS envoie un corps vide (pas le littéral "null") aussi bien pour un
@@ -161,10 +204,7 @@ export async function apiRequestBlob(
   const res = await fetch(`${API_URL}${path}`, { credentials: 'include' });
 
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as {
-      message?: string;
-    } | null;
-    throw new Error(body?.message ?? `Erreur ${res.status}`);
+    throw await parseErrorBody(res);
   }
 
   const blob = await res.blob();

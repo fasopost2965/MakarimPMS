@@ -20,6 +20,12 @@ interface Props {
   error: string | null;
   soldeDu: string | null;
   onPoliceRecordSaved?: () => void;
+  // GL-003 (MX-002A) — même granularité de masquage que le reste de l'app
+  // (bouton entier absent, pas grisé) : voir CLAUDE.md, `stay:extend`
+  // réservé Administrateur + Réception. Jamais de vérification par nom de
+  // rôle ici, uniquement la permission effective transmise par App.tsx.
+  permissions?: string[] | null;
+  onExtendClick?: () => void;
 }
 
 const STATUT_LABEL: Record<Stay['statut'], string> = {
@@ -35,8 +41,11 @@ export function StayDetailsDialog({
   error,
   soldeDu,
   onPoliceRecordSaved,
+  permissions,
+  onExtendClick,
 }: Props) {
   const [activeTab, setActiveTab] = useState('details');
+  const canExtend = permissions?.includes('stay:extend') ?? false;
 
   return (
     <Dialog open={stay !== null} onOpenChange={(next) => !next && onClose()}>
@@ -145,6 +154,11 @@ export function StayDetailsDialog({
               <Button type="button" variant="outline" onClick={onClose}>
                 Fermer
               </Button>
+              {stay.statut === 'EN_COURS' && canExtend && onExtendClick && (
+                <Button type="button" variant="outline" onClick={onExtendClick}>
+                  Prolonger
+                </Button>
+              )}
               {stay.statut === 'EN_COURS' && (
                 <Button
                   type="button"

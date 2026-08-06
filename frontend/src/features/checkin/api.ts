@@ -63,3 +63,19 @@ export function getCheckinGuest(guestId: number) {
 export function checkoutStay(stayId: number) {
   return apiRequest<StayWithSolde>(`/checkout/${stayId}`, { method: 'POST' });
 }
+
+// GL-003 (MX-002A) — la réponse de succès contient déjà le Stay à jour
+// (STAY_INCLUDE, backend/src/modules/stay/stay.service.ts), mais l'appelant
+// (CheckinPage) ne s'appuie volontairement pas sur cette hypothèse comme
+// seule source d'état après coup : voir getStay ci-dessus, rappelé après un
+// extendStay réussi.
+export function extendStay(
+  stayId: number,
+  nouvelleDateCheckoutPrevue: string,
+  motif: string,
+) {
+  return apiRequest<Stay>(`/stays/${stayId}/extend`, {
+    method: 'POST',
+    body: JSON.stringify({ nouvelleDateCheckoutPrevue, motif }),
+  });
+}
