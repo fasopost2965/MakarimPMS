@@ -761,6 +761,19 @@ describe('Billing Module (5.13)', () => {
     // (FIN-102A — composition du tarif public TTC).
     it('convergence solde/facture APRÈS matérialisation de TAXE_SEJOUR (pas avant)', async () => {
       const ctx = await createStayWithFolio('COHERENCE');
+      // createStayWithFolio() crée dateCheckin === dateCheckoutPrevue (même
+      // instant) — sans effet pour les autres tests de ce bloc, mais
+      // getNightsBetween() renverrait alors 0 nuit ici, et
+      // computeTaxLineAmount() (mode MONTANT_FIXE, taux × nights ×
+      // personnes) matérialiserait TAXE_SEJOUR à 0 MAD au lieu de 12 — le
+      // solde ne bougerait jamais et ce test échouerait pour une mauvaise
+      // raison (donnée de test insuffisante), pas une régression FIN-101B.
+      await prisma.stay.update({
+        where: { id: ctx.stay.id },
+        data: {
+          dateCheckoutPrevue: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        },
+      });
       await prisma.folioLine.create({
         data: {
           folioId: ctx.folio.id,
