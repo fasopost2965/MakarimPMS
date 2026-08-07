@@ -23,13 +23,26 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { getTodayRange } from '../../common/utils/date-range';
 import { getNightsBetween } from '../reservations/utils/nights';
 import {
-  calculateFormuleTotal,
+  calculateFormuleSupplement,
   calculateNightlyTotal,
 } from '../reservations/utils/pricing';
 import { RoomsService } from '../rooms/rooms.service';
 import { GuestsService } from '../guests/guests.service';
 import { BillingService } from '../billing/billing.service';
 import { AuditService } from '../audit/audit.service';
+// FIN-102 (composition du tarif public TTC) — fonction pure canonique
+// unique, réutilisée par createFolioPrincipal/checkinFromReservation/
+// checkinWalkIn/extendStay (jamais une variante locale, voir
+// common/fiscal/tarif-decomposition.ts). computeTaxLineAmount réutilisé tel
+// quel (billing/utils/invoice-calc.ts, aucune modification) pour le
+// recalcul ponctuel de la réconciliation départ anticipé ci-dessous.
+import {
+  CompositionTarifaireImpossibleError,
+  decomposerTarifPublicTTC,
+  TaxeApplicableLike,
+} from '../../common/fiscal/tarif-decomposition';
+import { assertNombreOccupantsValide } from '../../common/utils/occupancy';
+import { computeTaxLineAmount } from '../billing/utils/invoice-calc';
 // GL-003 — module feuille (parameters.module.ts n'importe que AuditModule),
 // consommé en façade pour la grille tarifaire saisonnière (SeasonRate) et le
 // paramètre paiementImmediatProlongationObligatoire, jamais de lecture
@@ -45,6 +58,7 @@ import {
   type HousekeepingTaskWriter,
 } from '../housekeeping/housekeeping-task-writer.token';
 import { WalkinDto } from './dto/walkin.dto';
+import { CheckinFromReservationDto } from './dto/checkin-from-reservation.dto';
 import { ForceCheckoutDto } from './dto/force-checkout.dto';
 import { computeSoldeDu } from './utils/solde';
 import { CheckoutEffectueEvent } from './events/checkout-effectue.event';
@@ -84,12 +98,33 @@ export class StayService {
     private readonly moduleRef: ModuleRef,
   ) {}
 
+  // FIN-102 — taxes statutaires à matérialiser au check-in/à la
+  // prolongation (jamais à la facturation pour un séjour non-legacy, voir
+  // BillingService.generateInvoice). Même filtre que l'actuel `taxesToApply`
+  // de generateInvoice (TVA_HEBERGEMENT/TVA_ANNEXE exclues — ce ne sont
+  // jamais des taxes statutaires distinctes, ADR-008/FIN-101B) : dupliqué
+  // ici intentionnellement (deux points de matérialisation désormais
+  // distincts — check-in/prolongation vs fallback legacy — jamais un seul
+  // appelant partagé), pas une divergence.
+  private async getTaxesStatutaires(
+    tx: Prisma.TransactionClient,
+  ): Promise<TaxeApplicableLike[]> {
+    const applicableTaxes = await this.parametersService.getApplicableTaxes(tx);
+    return applicableTaxes.filter(
+      (t) => t.type !== 'TVA_HEBERGEMENT' && t.type !== 'TVA_ANNEXE',
+    );
+  }
+
   // Transformation réservation → séjour (CLAUDE.md règle 1 : le séjour
   // devient l'objet central). Les nuits sont déjà verrouillées depuis la
   // création de la réservation (RoomNight) : on les rattache au séjour au
   // lieu d'en recréer, la contrainte unique (roomId, date) reste la même
   // ligne physique.
-  async checkinFromReservation(reservationId: number, userId?: number) {
+  async checkinFromReservation(
+    reservationId: number,
+    dto: CheckinFromReservationDto,
+    userId?: number,
+  ) {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const reservation = await tx.reservation.findUnique({
@@ -106,6 +141,24 @@ export class StayService {
           );
         }
 
+        // FIN-102 — occupation réelle : reprise de la réservation si connue,
+        // sinon secours par le corps de requête (CheckinFromReservationDto).
+        // Jamais un repli implicite sur room.roomType.capacite (interdiction
+        // absolue, common/utils/occupancy.ts) — un nouveau séjour ne doit
+        // jamais rester Stay.nombreOccupants NULL.
+        const nombreOccupants =
+          dto?.nombreOccupants ?? reservation.nombreOccupants ?? undefined;
+        if (nombreOccupants === undefined) {
+          throw new BadRequestException(
+            'nombreOccupants requis pour ce check-in (ni la réservation ni la requête ne le renseignent).',
+          );
+        }
+        const room = await this.roomsService.findByIdWithPricing(
+          reservation.roomId,
+          tx,
+        );
+        assertNombreOccupantsValide(nombreOccupants, room.roomType.capacite);
+
         const stay = await tx.stay.create({
           data: {
             reservationId: reservation.id,
@@ -114,6 +167,7 @@ export class StayService {
             dateCheckin: new Date(),
             dateCheckoutPrevue: reservation.dateDepart,
             formule: reservation.formule,
+            nombreOccupants,
           },
         });
 
@@ -136,46 +190,29 @@ export class StayService {
           reservation.dateArrivee,
           reservation.dateDepart,
         );
-        // La ligne HEBERGEMENT reprend toujours prixTotalFinal tel quel —
-        // jamais un recalcul indépendant (CLAUDE.md règle 3, voir aussi
-        // reservations.service.ts). Priorité 3 : si une formule ≠ ROOM_ONLY
-        // s'applique, prixTotalFinal (déjà calculé formule incluse, voir
-        // ReservationsService.calculatePrixTotal) est éclaté en deux lignes
-        // (HEBERGEMENT + EXTRA repas) pour la ventilation TVA — la SOMME
-        // reste rigoureusement égale à prixTotalFinal, jamais un recalcul
-        // indépendant du montant facturé. Si un ajustement manuel a ramené
-        // prixTotalFinal sous le coût de la formule seule, on renonce à
-        // l'éclatement (une ligne HEBERGEMENT unique, comportement
-        // identique à avant Priorité 3) plutôt que produire un montant
-        // négatif.
-        const room = await this.roomsService.findByIdWithPricing(
-          reservation.roomId,
-          tx,
-        );
-        const formuleTotalBrut = calculateFormuleTotal(
-          reservation.formule,
-          room.roomType,
-          nights.length,
-          room.roomType.capacite,
-        );
-        const peutEclater =
-          reservation.formule !== FormuleHebergement.ROOM_ONLY &&
-          formuleTotalBrut.gt(0) &&
-          formuleTotalBrut.lte(reservation.prixTotalFinal);
-        const montantFormule = peutEclater
-          ? formuleTotalBrut
-          : new Prisma.Decimal(0);
-        const montantHebergement = peutEclater
-          ? reservation.prixTotalFinal.sub(montantFormule)
-          : reservation.prixTotalFinal;
+        // FIN-102 (ADR-008 suite) — le tarif public TTC vendu
+        // (prixTotalFinal, jamais recalculé indépendamment, CLAUDE.md règle
+        // 3) est décomposé par la fonction canonique unique
+        // decomposerTarifPublicTTC : HEBERGEMENT résiduel + EXTRA formule
+        // incluse + TAXE_SEJOUR, dont la somme reproduit exactement
+        // prixTotalFinal — jamais une addition par-dessus (bug corrigé ici,
+        // voir CLAUDE.md/mission FIN-102).
+        const taxesStatutaires = await this.getTaxesStatutaires(tx);
+        const decomposition = decomposerTarifPublicTTC({
+          tarifPublicTTC: reservation.prixTotalFinal,
+          nuits: nights.length,
+          occupants: nombreOccupants,
+          formule: reservation.formule,
+          roomType: room.roomType,
+          taxesApplicables: taxesStatutaires,
+        });
 
         const folio = await this.createFolioPrincipal(
           tx,
           stay.id,
-          montantHebergement,
           nights.length,
           reservation.formule,
-          montantFormule,
+          decomposition,
         );
         // Priorité 2 (acomptes) : un walk-in n'a jamais de réservation
         // préalable donc jamais d'acompte à imputer — cet appel n'existe
@@ -192,6 +229,12 @@ export class StayService {
         };
       });
     } catch (error) {
+      // FIN-102 — composition tarifaire impossible (formule + taxes >
+      // tarif public TTC) : jamais un 500 générique, traduit en 409 comme le
+      // reste des conflits métier de ce service.
+      if (error instanceof CompositionTarifaireImpossibleError) {
+        throw new ConflictException(error.message);
+      }
       throw this.translateConflict(
         error,
         'Cette réservation a déjà été transformée en séjour.',
@@ -233,6 +276,15 @@ export class StayService {
 
         const formule = dto.formule ?? FormuleHebergement.BED_AND_BREAKFAST;
 
+        // FIN-102 — un walk-in n'a pas de Reservation préexistante : le
+        // corps de requête (WalkinDto.nombreOccupants) est ici strictement
+        // obligatoire (validé au niveau DTO), jamais un repli implicite sur
+        // room.roomType.capacite (common/utils/occupancy.ts).
+        assertNombreOccupantsValide(
+          dto.nombreOccupants,
+          room.roomType.capacite,
+        );
+
         const stay = await tx.stay.create({
           data: {
             roomId: room.id,
@@ -240,6 +292,7 @@ export class StayService {
             dateCheckin,
             dateCheckoutPrevue: new Date(dto.dateCheckoutPrevue),
             formule,
+            nombreOccupants: dto.nombreOccupants,
           },
         });
 
@@ -257,24 +310,46 @@ export class StayService {
           tx,
         });
 
-        const montant = calculateNightlyTotal(
+        // FIN-102 — un walk-in n'a pas de tarif public TTC déjà quoté
+        // (contrairement à Reservation.prixTotalFinal) : le tarif public TTC
+        // annoncé au check-in EST par définition la somme du tarif nuitée
+        // brut et du supplément de formule — puis décomposé par la même
+        // fonction canonique unique que checkinFromReservation/extendStay,
+        // pour que TAXE_SEJOUR en soit absorbée exactement de la même façon
+        // (jamais additionnée par-dessus). Règle métier validée (ADR-008
+        // §4.5, reservations/utils/pricing.ts::calculateFormuleSupplement) :
+        // BED_AND_BREAKFAST n'ajoute plus rien (petit-déjeuner déjà inclus
+        // dans room.roomType.prixBase) — HALF_BOARD/FULL_BOARD restent
+        // additifs, comportement historique inchangé.
+        const hebergementBrut = calculateNightlyTotal(
           nights,
           room.roomType.prixBase,
           room.roomType.seasonRates,
         );
-        const montantFormule = calculateFormuleTotal(
+        const formuleBrute = calculateFormuleSupplement(
           formule,
           room.roomType,
           nights.length,
-          room.roomType.capacite,
+          dto.nombreOccupants,
         );
+        const tarifPublicTTC = hebergementBrut.add(formuleBrute);
+
+        const taxesStatutaires = await this.getTaxesStatutaires(tx);
+        const decomposition = decomposerTarifPublicTTC({
+          tarifPublicTTC,
+          nuits: nights.length,
+          occupants: dto.nombreOccupants,
+          formule,
+          roomType: room.roomType,
+          taxesApplicables: taxesStatutaires,
+        });
+
         await this.createFolioPrincipal(
           tx,
           stay.id,
-          montant,
           nights.length,
           formule,
-          montantFormule,
+          decomposition,
         );
 
         const created = await tx.stay.findUniqueOrThrow({
@@ -287,6 +362,9 @@ export class StayService {
         };
       });
     } catch (error) {
+      if (error instanceof CompositionTarifaireImpossibleError) {
+        throw new ConflictException(error.message);
+      }
       throw this.translateConflict(
         error,
         'Chambre déjà occupée par un autre séjour sur cette période.',
@@ -294,19 +372,34 @@ export class StayService {
     }
   }
 
-  // Priorité 3 (formules d'hébergement) : formule/montantFormule créent une
-  // seconde FolioLine EXTRA distincte de HEBERGEMENT — nécessaire pour la
-  // bonne ventilation TVA (hébergement et restauration ont des taux
-  // différents, docs/modules/parameters.md — TVA_HEBERGEMENT vs
-  // TVA_ANNEXE), jamais ajoutée pour ROOM_ONLY ni un montant à 0.
+  // FIN-102 — createFolioPrincipal reçoit désormais directement le résultat
+  // de decomposerTarifPublicTTC (HEBERGEMENT résiduel + EXTRA formule
+  // incluse + TAXE_SEJOUR statutaire), jamais un montantHebergement/
+  // montantFormule calculés séparément par l'appelant (chemin d'écriture
+  // canonique unique). La ligne EXTRA formule incluse et la/les ligne(s)
+  // TAXE_SEJOUR ne sont créées que si leur montant est strictement positif —
+  // ROOM_ONLY ou une occupation à 0 taxe ne produisent jamais de ligne
+  // vide.
   private async createFolioPrincipal(
     tx: Prisma.TransactionClient,
     stayId: number,
-    montantHebergement: Prisma.Decimal,
     nights: number,
     formule: FormuleHebergement,
-    montantFormule: Prisma.Decimal,
+    decomposition: {
+      hebergement: Prisma.Decimal;
+      formuleIncluse: Prisma.Decimal;
+      taxesStatutaires: {
+        taxRateConfigId: number;
+        type: string;
+        montant: Prisma.Decimal;
+      }[];
+    },
   ) {
+    const {
+      hebergement: montantHebergement,
+      formuleIncluse: montantFormule,
+      taxesStatutaires,
+    } = decomposition;
     const folio = await tx.folio.create({
       data: { stayId, libelle: 'Folio principal' },
     });
@@ -325,6 +418,24 @@ export class StayService {
           type: TypeLigneFolio.EXTRA,
           libelle: `Formule ${FORMULE_LABEL[formule]} — ${nights} nuit${nights > 1 ? 's' : ''}`,
           montant: montantFormule,
+        },
+      });
+    }
+    // FIN-102 — TAXE_SEJOUR (et toute future taxe statutaire) matérialisée
+    // dès le check-in pour un séjour non-legacy, plus jamais à la
+    // facturation (BillingService.generateInvoice devient strictement
+    // lecture seule sur les charges d'un tel séjour, voir §7/§8 de la
+    // mission FIN-102).
+    for (const taxe of taxesStatutaires) {
+      if (taxe.montant.lte(0)) continue;
+      await tx.folioLine.create({
+        data: {
+          folioId: folio.id,
+          type: TypeLigneFolio.TAXE_SEJOUR,
+          libelle: taxe.type,
+          montant: taxe.montant,
+          tauxTva: new Prisma.Decimal(0),
+          taxRateConfigId: taxe.taxRateConfigId,
         },
       });
     }
@@ -471,6 +582,8 @@ export class StayService {
       );
     }
 
+    const dateCheckoutReelle = new Date();
+
     const updated = await this.prisma.$transaction(async (tx) => {
       if ((soldePositif || restaurantNonAcquittee) && force) {
         const grant = await tx.permission.findFirst({
@@ -510,13 +623,28 @@ export class StayService {
         }
       }
 
+      // FIN-102 — réconciliation append-only de TAXE_SEJOUR sur départ
+      // anticipé (nuits réellement consommées < nuits prévues au moment du
+      // check-out). Exécutée avant la suppression des RoomNight (peu
+      // importe l'ordre, ni l'une ni l'autre ne dépendent du résultat de
+      // l'autre) mais toujours dans cette même transaction (ADR-005). Ne
+      // modifie jamais le solde déjà vérifié ci-dessus (soldePositif) — la
+      // réconciliation reclasse un montant entre TAXE_SEJOUR et HEBERGEMENT,
+      // jamais le total du folio.
+      await this.reconcileTaxeSejourDepartAnticipe(
+        tx,
+        stay,
+        dateCheckoutReelle,
+        userId,
+      );
+
       await tx.roomNight.deleteMany({ where: { stayId: id } });
 
       return tx.stay.update({
         where: { id },
         data: {
           statut: StatutSejour.CHECKOUT,
-          dateCheckoutReelle: new Date(),
+          dateCheckoutReelle,
         },
         include: STAY_INCLUDE,
       });
@@ -528,6 +656,134 @@ export class StayService {
     );
 
     return { ...updated, soldeDu: soldeDu.toFixed(2) };
+  }
+
+  // FIN-102 — réconciliation append-only de TAXE_SEJOUR à un départ
+  // anticipé (nombre de nuits réellement consommées < nuits prévues au
+  // moment de la matérialisation initiale au check-in/à la prolongation).
+  // Chemin d'écriture dédié, distinct de BillingService.cancelFolioLine
+  // (qui refuse explicitement TAXE_SEJOUR, BR-AUD-002 — ligne générée par le
+  // système, jamais annulable à la main) : annulation directe
+  // (annulee=true + motifAnnulation) des lignes TAXE_SEJOUR en trop, puis
+  // recréation au montant réellement dû (jamais de montant négatif).
+  // Décision de cadrage FIN-102 : l'hébergement réservé reste dû (aucune
+  // réduction automatique de HEBERGEMENT), mais pour préserver l'invariant
+  // du package TTC initial (Σlignes actives === tarif public TTC vendu), le
+  // montant de taxe libéré est reclassé dans une NOUVELLE ligne HEBERGEMENT
+  // (jamais une mutation d'une ligne existante) — le total facturé au
+  // client ne change donc jamais, seule sa ventilation TAXE_SEJOUR/
+  // HEBERGEMENT est corrigée pour rester statutairement exacte (la taxe de
+  // séjour ne doit jamais dépasser les nuits réellement occupées).
+  // Séjour legacy (Stay.nombreOccupants IS NULL) : TAXE_SEJOUR n'a jamais
+  // été matérialisée au check-in pour ces séjours (fallback facturation
+  // historique, BillingService.generateInvoice) — rien à réconcilier ici,
+  // sortie immédiate.
+  private async reconcileTaxeSejourDepartAnticipe(
+    tx: Prisma.TransactionClient,
+    stay: {
+      id: number;
+      dateCheckin: Date;
+      dateCheckoutPrevue: Date;
+      nombreOccupants: number | null;
+      folios: {
+        id: number;
+        lignes: Array<Prisma.FolioLineGetPayload<object>>;
+      }[];
+    },
+    dateCheckoutReelle: Date,
+    userId?: number,
+  ) {
+    if (stay.nombreOccupants === null) return;
+
+    const nightsPrevues = getNightsBetween(
+      stay.dateCheckin,
+      stay.dateCheckoutPrevue,
+    ).length;
+    const nightsReelles = getNightsBetween(
+      stay.dateCheckin,
+      dateCheckoutReelle,
+    ).length;
+    if (nightsReelles >= nightsPrevues) return;
+
+    const folioPrincipal = stay.folios[0];
+    if (!folioPrincipal) return;
+
+    const taxesStatutaires = await this.getTaxesStatutaires(tx);
+    let totalReclasseVersHebergement = new Prisma.Decimal(0);
+
+    for (const taxe of taxesStatutaires) {
+      const lignesActives = folioPrincipal.lignes.filter(
+        (l) =>
+          l.type === TypeLigneFolio.TAXE_SEJOUR &&
+          !l.annulee &&
+          l.taxRateConfigId === taxe.id,
+      );
+      if (lignesActives.length === 0) continue;
+
+      const ancienMontantTotal = lignesActives.reduce(
+        (acc, l) => acc.add(l.montant),
+        new Prisma.Decimal(0),
+      );
+      // Base HT non pertinente pour TAXE_SEJOUR (MONTANT_FIXE, seul mode
+      // réellement configuré aujourd'hui, cf. seed.ts) — même limite
+      // documentée que common/fiscal/tarif-decomposition.ts pour une taxe
+      // POURCENTAGE hypothétique, jamais exercée en pratique.
+      const nouveauMontant = computeTaxLineAmount(
+        taxe,
+        nightsReelles,
+        stay.nombreOccupants,
+        new Prisma.Decimal(0),
+      );
+      if (nouveauMontant.gte(ancienMontantTotal)) continue;
+
+      for (const ligne of lignesActives) {
+        await tx.folioLine.update({
+          where: { id: ligne.id },
+          data: {
+            annulee: true,
+            motifAnnulation: `Départ anticipé — recalcul taxe de séjour (${nightsReelles} nuit(s) réelles au lieu de ${nightsPrevues} prévues).`,
+          },
+        });
+      }
+      await tx.folioLine.create({
+        data: {
+          folioId: folioPrincipal.id,
+          type: TypeLigneFolio.TAXE_SEJOUR,
+          libelle: `${taxe.type} (recalculée — départ anticipé)`,
+          montant: nouveauMontant,
+          tauxTva: new Prisma.Decimal(0),
+          taxRateConfigId: taxe.id,
+        },
+      });
+      totalReclasseVersHebergement = totalReclasseVersHebergement.add(
+        ancienMontantTotal.sub(nouveauMontant),
+      );
+    }
+
+    if (totalReclasseVersHebergement.gt(0)) {
+      await tx.folioLine.create({
+        data: {
+          folioId: folioPrincipal.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle:
+            'Réajustement hébergement — départ anticipé (taxe de séjour reclassée, nuits réservées restant dues)',
+          montant: totalReclasseVersHebergement,
+        },
+      });
+
+      await this.auditService.writeLog(tx, {
+        userId,
+        action: AuditAction.RECONCILE_TAXE_SEJOUR,
+        targetEntity: AuditEntity.Stay,
+        targetId: stay.id,
+        oldValue: { nightsPrevues },
+        newValue: {
+          nightsReelles,
+          reclasseVersHebergement: totalReclasseVersHebergement.toFixed(2),
+        },
+        motif: `Départ anticipé (${nightsReelles} nuit(s) réelles au lieu de ${nightsPrevues} prévues) — taxe de séjour recalculée, montant reclassé en hébergement (nuits réservées restant dues).`,
+      });
+    }
   }
 
   // Façade en lecture seule pour housekeeping (rattrapage quotidien du
@@ -817,226 +1073,314 @@ export class StayService {
     // pleine concurrence avec une prolongation.
     const hotelConfig = await this.parametersService.getHotelConfig();
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      // 2. Verrou Stay — état frais, jamais l'objet lu avant la transaction.
-      // Toutes les validations qui suivent se basent exclusivement sur
-      // cette ligne verrouillée.
-      const stayLocked = await tx.$queryRaw<
-        Array<{
-          id: number;
-          roomId: number;
-          statut: StatutSejour;
-          dateCheckoutPrevue: Date;
-          formule: FormuleHebergement;
-        }>
-      >`
-        SELECT id, roomId, statut, dateCheckoutPrevue, formule
+    const result = await this.runExtendStayTransaction(
+      id,
+      nouvelleDateCheckoutPrevueRaw,
+      motif,
+      hotelConfig,
+      userId,
+    );
+    return result;
+  }
+
+  // FIN-102 — extrait de extendStay() pour pouvoir traduire proprement
+  // CompositionTarifaireImpossibleError (levée depuis l'intérieur de la
+  // transaction) en ConflictException, même précédent que
+  // checkinFromReservation/checkinWalkIn ci-dessus.
+  private async runExtendStayTransaction(
+    id: number,
+    nouvelleDateCheckoutPrevueRaw: string,
+    motif: string,
+    hotelConfig: { paiementImmediatProlongationObligatoire: boolean },
+    userId?: number,
+  ) {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        // 2. Verrou Stay — état frais, jamais l'objet lu avant la transaction.
+        // Toutes les validations qui suivent se basent exclusivement sur
+        // cette ligne verrouillée.
+        const stayLocked = await tx.$queryRaw<
+          Array<{
+            id: number;
+            roomId: number;
+            statut: StatutSejour;
+            dateCheckoutPrevue: Date;
+            formule: FormuleHebergement;
+            nombreOccupants: number | null;
+          }>
+        >`
+        SELECT id, roomId, statut, dateCheckoutPrevue, formule, nombreOccupants
         FROM Stay WHERE id = ${id} FOR UPDATE
       `;
-      if (!stayLocked || stayLocked.length === 0) {
-        throw new NotFoundException(`Séjour ${id} introuvable.`);
-      }
-      const lockedStay = stayLocked[0];
+        if (!stayLocked || stayLocked.length === 0) {
+          throw new NotFoundException(`Séjour ${id} introuvable.`);
+        }
+        const lockedStay = stayLocked[0];
 
-      if (lockedStay.statut !== StatutSejour.EN_COURS) {
-        throw new ConflictException(
-          `Ce séjour est déjà clôturé (statut actuel : ${lockedStay.statut}).`,
+        if (lockedStay.statut !== StatutSejour.EN_COURS) {
+          throw new ConflictException(
+            `Ce séjour est déjà clôturé (statut actuel : ${lockedStay.statut}).`,
+          );
+        }
+
+        const ancienneDate = lockedStay.dateCheckoutPrevue;
+        const nouvelleDate = new Date(nouvelleDateCheckoutPrevueRaw);
+        if (nouvelleDate <= ancienneDate) {
+          throw new BadRequestException(
+            'La nouvelle date de départ doit être strictement postérieure à la date de départ prévue actuelle.',
+          );
+        }
+
+        // 3. Verrou de la chambre actuelle — même chemin d'écriture/lecture
+        // verrouillée que partout ailleurs (RoomsService.lockRoomForUpdate).
+        const lockedRoom = await this.roomsService.lockRoomForUpdate(
+          lockedStay.roomId,
+          tx,
         );
-      }
 
-      const ancienneDate = lockedStay.dateCheckoutPrevue;
-      const nouvelleDate = new Date(nouvelleDateCheckoutPrevueRaw);
-      if (nouvelleDate <= ancienneDate) {
-        throw new BadRequestException(
-          'La nouvelle date de départ doit être strictement postérieure à la date de départ prévue actuelle.',
-        );
-      }
-
-      // 3. Verrou de la chambre actuelle — même chemin d'écriture/lecture
-      // verrouillée que partout ailleurs (RoomsService.lockRoomForUpdate).
-      const lockedRoom = await this.roomsService.lockRoomForUpdate(
-        lockedStay.roomId,
-        tx,
-      );
-
-      // 4. Verrouiller explicitement les RoomNight du delta demandé sur la
-      // chambre actuelle — détecter tout conflit, quelle que soit l'origine
-      // (réservation OU séjour en cours, jamais de filtre reservationId !=
-      // null, même correction que GL-002).
-      const nights = getNightsBetween(ancienneDate, nouvelleDate);
-      const conflictingNights = nights.length
-        ? await tx.$queryRaw<Array<{ id: number }>>`
+        // 4. Verrouiller explicitement les RoomNight du delta demandé sur la
+        // chambre actuelle — détecter tout conflit, quelle que soit l'origine
+        // (réservation OU séjour en cours, jamais de filtre reservationId !=
+        // null, même correction que GL-002).
+        const nights = getNightsBetween(ancienneDate, nouvelleDate);
+        const conflictingNights = nights.length
+          ? await tx.$queryRaw<Array<{ id: number }>>`
             SELECT id FROM RoomNight
             WHERE roomId = ${lockedStay.roomId}
               AND date IN (${Prisma.join(nights)})
             FOR UPDATE
           `
-        : [];
+          : [];
 
-      // 5. Verrouiller le Folio et ses FolioLine existantes AVANT de calculer le
-      // crédit disponible — même verrou explicite que Stay/Room/RoomNight
-      // ci-dessus. Le verrou sur Folio suffit à sérialiser avec un paiement
-      // concurrent (POST /payments insère une nouvelle FolioLine référençant ce
-      // Folio par FK — InnoDB prend un verrou partagé implicite sur la ligne
-      // parente Folio lors de ce INSERT pour la vérification de contrainte,
-      // donc bloque tant que ce FOR UPDATE tient la transaction). Verrouiller
-      // aussi les FolioLine existantes ferme la fenêtre côté annulation/
-      // remboursement d'un paiement déjà existant (UPDATE FolioLine.annulee),
-      // qui ne déclenche pas de vérification FK et ne serait donc pas
-      // bloqué par le seul verrou sur Folio.
-      const lockedFolioIds = await tx.$queryRaw<Array<{ id: number }>>`
+        // 5. Verrouiller le Folio et ses FolioLine existantes AVANT de calculer le
+        // crédit disponible — même verrou explicite que Stay/Room/RoomNight
+        // ci-dessus. Le verrou sur Folio suffit à sérialiser avec un paiement
+        // concurrent (POST /payments insère une nouvelle FolioLine référençant ce
+        // Folio par FK — InnoDB prend un verrou partagé implicite sur la ligne
+        // parente Folio lors de ce INSERT pour la vérification de contrainte,
+        // donc bloque tant que ce FOR UPDATE tient la transaction). Verrouiller
+        // aussi les FolioLine existantes ferme la fenêtre côté annulation/
+        // remboursement d'un paiement déjà existant (UPDATE FolioLine.annulee),
+        // qui ne déclenche pas de vérification FK et ne serait donc pas
+        // bloqué par le seul verrou sur Folio.
+        const lockedFolioIds = await tx.$queryRaw<Array<{ id: number }>>`
         SELECT id FROM Folio WHERE stayId = ${id} FOR UPDATE
       `;
-      if (lockedFolioIds.length > 0) {
-        await tx.$queryRaw`
+        if (lockedFolioIds.length > 0) {
+          await tx.$queryRaw`
           SELECT id FROM FolioLine
           WHERE folioId IN (${Prisma.join(lockedFolioIds.map((f) => f.id))})
           FOR UPDATE
         `;
-      }
-      // Lecture fraîche du folio/de ses lignes, dans la même transaction
-      // (nécessaire au calcul du crédit disponible à l'étape 8, mais aussi
-      // au folio principal ciblé par addFolioLine à l'étape 11).
-      const folios = await tx.folio.findMany({
-        where: { stayId: id },
-        include: { lignes: true },
-      });
-
-      // 6. Indisponibilité de la chambre actuelle : maintenance en cours
-      // (motif d'indisponibilité explicitement demandé par GL-003, la
-      // maintenance planifiée future restant hors périmètre) OU conflit
-      // détecté sur une nuit du delta. Aucun changement de chambre n'est
-      // jamais effectué automatiquement ici — recherche d'alternatives
-      // purement informative pour le réceptionniste.
-      const chambreIndisponible =
-        lockedRoom.statut === StatutChambre.EN_MAINTENANCE ||
-        conflictingNights.length > 0;
-      if (chambreIndisponible) {
-        const alternatives =
-          await this.roomsService.findCompatibleAvailableRooms(
-            lockedRoom.roomTypeId,
-            nights,
-            lockedRoom.id,
-            tx,
-          );
-        throw new ConflictException({
-          code: 'ROOM_UNAVAILABLE',
-          message: `La chambre actuelle (${lockedRoom.id}) n'est pas disponible pour la période de prolongation demandée.`,
-          alternatives,
+        }
+        // Lecture fraîche du folio/de ses lignes, dans la même transaction
+        // (nécessaire au calcul du crédit disponible à l'étape 8, mais aussi
+        // au folio principal ciblé par addFolioLine à l'étape 11).
+        const folios = await tx.folio.findMany({
+          where: { stayId: id },
+          include: { lignes: true },
         });
-      }
 
-      // 7. Tarification nuit par nuit selon la grille saisonnière — jamais
-      // de lecture directe de SeasonRate (ParametersService en façade).
-      const roomType = await tx.roomType.findUniqueOrThrow({
-        where: { id: lockedRoom.roomTypeId },
-      });
-      const seasonRates =
-        await this.parametersService.getSeasonRatesForRoomType(roomType.id, tx);
-      const montantHebergement = calculateNightlyTotal(
-        nights,
-        roomType.prixBase,
-        seasonRates,
-      );
-      const montantFormule =
-        lockedStay.formule !== FormuleHebergement.ROOM_ONLY
-          ? calculateFormuleTotal(
-              lockedStay.formule,
-              roomType,
-              nights.length,
-              roomType.capacite,
-            )
-          : new Prisma.Decimal(0);
-      const montantSupplement = montantHebergement.add(montantFormule);
-
-      // 8. Paiement immédiat obligatoire (HotelConfig) : crédit disponible
-      // = max(0, paiements non annulés − charges non annulées hors
-      // PAIEMENT) — l'opposé de computeSoldeDu quand celui-ci est négatif,
-      // jamais un nouveau calcul indépendant (CLAUDE.md règle 3).
-      if (hotelConfig.paiementImmediatProlongationObligatoire) {
-        const soldeDu = computeSoldeDu(folios);
-        const creditDisponible = soldeDu.isNegative()
-          ? soldeDu.neg()
-          : new Prisma.Decimal(0);
-        if (creditDisponible.lt(montantSupplement)) {
+        // 6. Indisponibilité de la chambre actuelle : maintenance en cours
+        // (motif d'indisponibilité explicitement demandé par GL-003, la
+        // maintenance planifiée future restant hors périmètre) OU conflit
+        // détecté sur une nuit du delta. Aucun changement de chambre n'est
+        // jamais effectué automatiquement ici — recherche d'alternatives
+        // purement informative pour le réceptionniste.
+        const chambreIndisponible =
+          lockedRoom.statut === StatutChambre.EN_MAINTENANCE ||
+          conflictingNights.length > 0;
+        if (chambreIndisponible) {
+          const alternatives =
+            await this.roomsService.findCompatibleAvailableRooms(
+              lockedRoom.roomTypeId,
+              nights,
+              lockedRoom.id,
+              tx,
+            );
           throw new ConflictException({
-            code: 'PAYMENT_REQUIRED',
-            message:
-              'Crédit disponible insuffisant pour couvrir le supplément de cette prolongation — enregistrer un paiement puis relancer la prolongation.',
-            amountRequired: montantSupplement.toFixed(2),
-            availableCredit: creditDisponible.toFixed(2),
+            code: 'ROOM_UNAVAILABLE',
+            message: `La chambre actuelle (${lockedRoom.id}) n'est pas disponible pour la période de prolongation demandée.`,
+            alternatives,
           });
         }
-      }
 
-      // 9. Créer uniquement les RoomNight du delta — les nuits historiques
-      // ne sont jamais recréées/modifiées.
-      await tx.roomNight.createMany({
-        data: nights.map((date) => ({
-          roomId: lockedStay.roomId,
-          date,
-          stayId: id,
-        })),
-      });
+        // 7. Tarification nuit par nuit selon la grille saisonnière — jamais
+        // de lecture directe de SeasonRate (ParametersService en façade).
+        // FIN-102 — le tarif public TTC du delta (tarifPublicTTCDelta =
+        // hébergement brut + formule brute, aucune valeur tierce stockée pour
+        // une prolongation) est décomposé par la même fonction canonique
+        // unique que checkinFromReservation/checkinWalkIn : HEBERGEMENT
+        // résiduel + EXTRA formule incluse + TAXE_SEJOUR, dont la somme
+        // reproduit exactement tarifPublicTTCDelta — jamais une addition
+        // par-dessus (BUG confirmé, mission FIN-102). occupantsPourFormule
+        // reste roomType.capacite pour un séjour legacy
+        // (Stay.nombreOccupants IS NULL — comportement historique inchangé,
+        // aucune recomposition rétroactive) ; pour un séjour non-legacy,
+        // l'occupation réelle du séjour est réutilisée telle quelle (jamais
+        // recapturée à la prolongation). TAXE_SEJOUR n'est matérialisée ici
+        // (taxesStatutaires non vide) que pour un séjour non-legacy — un
+        // séjour legacy reste sur le seul fallback de facturation historique
+        // (BillingService.generateInvoice), jamais une matérialisation
+        // partielle qui romprait l'idempotence de ce fallback.
+        const roomType = await tx.roomType.findUniqueOrThrow({
+          where: { id: lockedRoom.roomTypeId },
+        });
+        const seasonRates =
+          await this.parametersService.getSeasonRatesForRoomType(
+            roomType.id,
+            tx,
+          );
+        const occupantsPourFormule =
+          lockedStay.nombreOccupants ?? roomType.capacite;
+        const hebergementBrutDelta = calculateNightlyTotal(
+          nights,
+          roomType.prixBase,
+          seasonRates,
+        );
+        // Règle métier validée (ADR-008 §4.5) : BED_AND_BREAKFAST n'ajoute
+        // plus rien (petit-déjeuner déjà inclus dans roomType.prixBase) —
+        // HALF_BOARD/FULL_BOARD restent additifs, comportement historique
+        // inchangé (voir reservations/utils/pricing.ts::
+        // calculateFormuleSupplement).
+        const formuleBrutDelta = calculateFormuleSupplement(
+          lockedStay.formule,
+          roomType,
+          nights.length,
+          occupantsPourFormule,
+        );
+        const montantSupplement = hebergementBrutDelta.add(formuleBrutDelta);
 
-      // 10. Mettre à jour Stay.dateCheckoutPrevue.
-      await tx.stay.update({
-        where: { id },
-        data: { dateCheckoutPrevue: nouvelleDate },
-      });
+        const taxesStatutairesDelta =
+          lockedStay.nombreOccupants !== null
+            ? await this.getTaxesStatutaires(tx)
+            : [];
+        const decompositionDelta = decomposerTarifPublicTTC({
+          tarifPublicTTC: montantSupplement,
+          nuits: nights.length,
+          occupants: occupantsPourFormule,
+          formule: lockedStay.formule,
+          roomType,
+          taxesApplicables: taxesStatutairesDelta,
+        });
+        const montantHebergement = decompositionDelta.hebergement;
+        const montantFormule = decompositionDelta.formuleIncluse;
 
-      // 11. FolioLine HEBERGEMENT (+ EXTRA formule si applicable) sur le
-      // folio principal, via BillingService.addFolioLine — jamais d'écriture
-      // FolioLine directe ici (chemin d'écriture canonique unique, même
-      // précédent que RestaurantService.addCharge). Les lignes historiques
-      // ne sont jamais touchées.
-      const folioPrincipal = folios[0];
-      if (!folioPrincipal) {
-        throw new NotFoundException(`Aucun folio trouvé pour le séjour ${id}.`);
-      }
-      await this.billingService.addFolioLine(
-        folioPrincipal.id,
-        {
-          type: TypeLigneFolio.HEBERGEMENT,
-          libelle: `Prolongation — ${nights.length} nuit${nights.length > 1 ? 's' : ''}`,
-          montant: montantHebergement.toFixed(2),
-        },
-        tx,
-      );
-      if (
-        lockedStay.formule !== FormuleHebergement.ROOM_ONLY &&
-        montantFormule.gt(0)
-      ) {
+        // 8. Paiement immédiat obligatoire (HotelConfig) : crédit disponible
+        // = max(0, paiements non annulés − charges non annulées hors
+        // PAIEMENT) — l'opposé de computeSoldeDu quand celui-ci est négatif,
+        // jamais un nouveau calcul indépendant (CLAUDE.md règle 3).
+        if (hotelConfig.paiementImmediatProlongationObligatoire) {
+          const soldeDu = computeSoldeDu(folios);
+          const creditDisponible = soldeDu.isNegative()
+            ? soldeDu.neg()
+            : new Prisma.Decimal(0);
+          if (creditDisponible.lt(montantSupplement)) {
+            throw new ConflictException({
+              code: 'PAYMENT_REQUIRED',
+              message:
+                'Crédit disponible insuffisant pour couvrir le supplément de cette prolongation — enregistrer un paiement puis relancer la prolongation.',
+              amountRequired: montantSupplement.toFixed(2),
+              availableCredit: creditDisponible.toFixed(2),
+            });
+          }
+        }
+
+        // 9. Créer uniquement les RoomNight du delta — les nuits historiques
+        // ne sont jamais recréées/modifiées.
+        await tx.roomNight.createMany({
+          data: nights.map((date) => ({
+            roomId: lockedStay.roomId,
+            date,
+            stayId: id,
+          })),
+        });
+
+        // 10. Mettre à jour Stay.dateCheckoutPrevue.
+        await tx.stay.update({
+          where: { id },
+          data: { dateCheckoutPrevue: nouvelleDate },
+        });
+
+        // 11. FolioLine HEBERGEMENT (+ EXTRA formule si applicable) sur le
+        // folio principal, via BillingService.addFolioLine — jamais d'écriture
+        // FolioLine directe ici (chemin d'écriture canonique unique, même
+        // précédent que RestaurantService.addCharge). Les lignes historiques
+        // ne sont jamais touchées.
+        const folioPrincipal = folios[0];
+        if (!folioPrincipal) {
+          throw new NotFoundException(
+            `Aucun folio trouvé pour le séjour ${id}.`,
+          );
+        }
         await this.billingService.addFolioLine(
           folioPrincipal.id,
           {
-            type: TypeLigneFolio.EXTRA,
-            libelle: `Prolongation — formule ${FORMULE_LABEL[lockedStay.formule]} — ${nights.length} nuit${nights.length > 1 ? 's' : ''}`,
-            montant: montantFormule.toFixed(2),
+            type: TypeLigneFolio.HEBERGEMENT,
+            libelle: `Prolongation — ${nights.length} nuit${nights.length > 1 ? 's' : ''}`,
+            montant: montantHebergement.toFixed(2),
           },
           tx,
         );
+        if (
+          lockedStay.formule !== FormuleHebergement.ROOM_ONLY &&
+          montantFormule.gt(0)
+        ) {
+          await this.billingService.addFolioLine(
+            folioPrincipal.id,
+            {
+              type: TypeLigneFolio.EXTRA,
+              libelle: `Prolongation — formule ${FORMULE_LABEL[lockedStay.formule]} — ${nights.length} nuit${nights.length > 1 ? 's' : ''}`,
+              montant: montantFormule.toFixed(2),
+            },
+            tx,
+          );
+        }
+        // FIN-102 — TAXE_SEJOUR du delta, matérialisée ici même (jamais à la
+        // facturation pour un séjour non-legacy) via écriture directe
+        // (BillingService.addFolioLine n'accepte pas taxRateConfigId, requis
+        // pour la réconciliation append-only au départ anticipé ci-dessous) —
+        // même précédent que StayService.createFolioPrincipal, qui écrit déjà
+        // TAXE_SEJOUR directement plutôt que via la façade billing. Vide
+        // (taxesStatutairesDelta = []) pour un séjour legacy, voir commentaire
+        // de l'étape 7.
+        for (const taxe of decompositionDelta.taxesStatutaires) {
+          if (taxe.montant.lte(0)) continue;
+          await tx.folioLine.create({
+            data: {
+              folioId: folioPrincipal.id,
+              type: TypeLigneFolio.TAXE_SEJOUR,
+              libelle: `${taxe.type} — prolongation ${nights.length} nuit${nights.length > 1 ? 's' : ''}`,
+              montant: taxe.montant,
+              tauxTva: new Prisma.Decimal(0),
+              taxRateConfigId: taxe.taxRateConfigId,
+            },
+          });
+        }
+
+        // 12. Audit — dans la même transaction que toutes les écritures
+        // ci-dessus (ADR-005).
+        await this.auditService.writeLog(tx, {
+          userId,
+          action: AuditAction.EXTEND_STAY,
+          targetEntity: AuditEntity.Stay,
+          targetId: id,
+          oldValue: { dateCheckoutPrevue: ancienneDate.toISOString() },
+          newValue: { dateCheckoutPrevue: nouvelleDate.toISOString() },
+          motif,
+        });
+
+        return tx.stay.findUniqueOrThrow({
+          where: { id },
+          include: STAY_INCLUDE,
+        });
+      });
+    } catch (error) {
+      if (error instanceof CompositionTarifaireImpossibleError) {
+        throw new ConflictException(error.message);
       }
-
-      // 12. Audit — dans la même transaction que toutes les écritures
-      // ci-dessus (ADR-005).
-      await this.auditService.writeLog(tx, {
-        userId,
-        action: AuditAction.EXTEND_STAY,
-        targetEntity: AuditEntity.Stay,
-        targetId: id,
-        oldValue: { dateCheckoutPrevue: ancienneDate.toISOString() },
-        newValue: { dateCheckoutPrevue: nouvelleDate.toISOString() },
-        motif,
-      });
-
-      return tx.stay.findUniqueOrThrow({
-        where: { id },
-        include: STAY_INCLUDE,
-      });
-    });
-
-    return result;
+      throw error;
+    }
   }
 
   private translateConflict(error: unknown, message: string) {

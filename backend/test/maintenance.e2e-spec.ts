@@ -163,6 +163,7 @@ describe('Maintenance — tickets et connexion au statut chambre (e2e)', () => {
         dateCheckoutPrevue: new Date(Date.now() + 2 * 86_400_000)
           .toISOString()
           .slice(0, 10),
+        nombreOccupants: 1,
         guest: { nom: 'Maintenance', prenom: 'Occupee' },
       });
       expect(checkin.status).toBe(201);

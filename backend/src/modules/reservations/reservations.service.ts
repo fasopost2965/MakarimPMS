@@ -26,7 +26,10 @@ import { CheckRoomAvailabilityDto } from './dto/check-room-availability.dto';
 import { CancelReservationDto } from './dto/cancel-reservation.dto';
 import { NoShowReservationDto } from './dto/no-show-reservation.dto';
 import { getNightsBetween } from './utils/nights';
-import { calculateFormuleTotal, calculateNightlyTotal } from './utils/pricing';
+import {
+  calculateFormuleSupplement,
+  calculateNightlyTotal,
+} from './utils/pricing';
 import { computeCancellationPenalty } from './utils/cancellation-penalty';
 import {
   assertNoStopSale,
@@ -66,10 +69,21 @@ export class ReservationsService {
 
   // Tarification saisonnière (cahier des charges §5.1/§5.4) : jamais de taux
   // codé en dur, toujours dérivé de RoomType.prixBase / SeasonRate en base.
-  // Priorité 3 : ajoute le supplément de formule (prixNuit × nbNuits +
-  // prixFormule × nbPersonnes × nbNuits) — nbPersonnes = RoomType.capacite,
-  // seule notion d'occupation du schéma (pas de champ "nombre d'adultes"
-  // sur Reservation).
+  // FIN-102 (règle métier validée, ADR-008 §4.5) : RoomType.prixBase/
+  // SeasonRate.prixNuit représentent déjà le tarif public TTC du package
+  // STANDARD — pour BED_AND_BREAKFAST (formule par défaut de l'hôtel), le
+  // petit-déjeuner est déjà inclus dans ce tarif nuitée, il ne s'additionne
+  // donc plus par-dessus (calculateFormuleSupplement renvoie 0 pour ce cas,
+  // reservations/utils/pricing.ts). HALF_BOARD/FULL_BOARD restent additifs
+  // (comportement historique inchangé, aucune règle équivalente établie
+  // pour ces formules à ce jour). nbPersonnes = RoomType.capacite ici (pas
+  // encore l'occupation réelle, inconnue à ce stade pour une réservation
+  // qui ne la renseigne pas) — ce total (prixTotalCalcule/prixTotalFinal)
+  // reste le « tarif public TTC » affiché/vendu au client à la réservation.
+  // La composition réelle HEBERGEMENT résiduel/EXTRA formule incluse/
+  // TAXE_SEJOUR, elle, se calcule au check-in (StayService,
+  // decomposerTarifPublicTTC) à partir de Stay.nombreOccupants — jamais
+  // recalculée ici.
   private async calculatePrixTotal(
     tx: Prisma.TransactionClient,
     roomTypeId: number,
@@ -94,7 +108,7 @@ export class ReservationsService {
       roomType.prixBase,
       seasonRates,
     );
-    const formuleTotal = calculateFormuleTotal(
+    const formuleTotal = calculateFormuleSupplement(
       formule,
       roomType,
       nights.length,
@@ -205,6 +219,12 @@ export class ReservationsService {
             dateDepart: new Date(dto.dateDepart),
             sourceBrute: dto.sourceBrute,
             formule,
+            // FIN-102 — simple report de la valeur fournie, aucune inférence
+            // (jamais room.roomType.capacite en repli) ; NULL si non fournie
+            // (voir CreateReservationDto). Le check-in (stay.service.ts)
+            // reste seul responsable de rendre Stay.nombreOccupants
+            // obligatoire pour tout nouveau séjour.
+            nombreOccupants: dto.nombreOccupants,
             cancellationPolicyId: dto.cancellationPolicyId,
             // À la création, prixTotalFinal suit toujours prixTotalCalcule
             // (pas d'ajustement manuel possible avant que la réservation

@@ -248,6 +248,11 @@ describe('Stay - Extend (GL-003)', () => {
         roomId: room1.id,
         dateCheckoutPrevue: isoDate(addDays(today, 2)),
         guestId: guest.id,
+        // FIN-102 — nombreOccupants = capacite (2), même valeur reprise dans
+        // tous les commentaires "2 personnes (capacite roomType)" déjà
+        // présents dans ce fichier (aucun changement de sémantique voulu ici,
+        // seulement rendre le champ désormais obligatoire explicite).
+        nombreOccupants: 2,
         formule: FormuleHebergement.ROOM_ONLY,
       });
       expect(walkinRes.status).toBe(201);
@@ -336,7 +341,12 @@ describe('Stay - Extend (GL-003)', () => {
         l.libelle.startsWith('Prolongation'),
       );
       expect(nouvelleLigne).toBeDefined();
-      expect(Number(nouvelleLigne!.montant)).toBeCloseTo(200); // 2 nuits x 100
+      // FIN-102 — HEBERGEMENT résiduel : 200 (2 nuits x 100) moins la
+      // TAXE_SEJOUR du delta (3 MAD/nuit/personne x 2 nuits x 2 personnes =
+      // 12), désormais absorbée depuis ce même tarif au lieu d'être
+      // additionnée par-dessus (voir la ligne TAXE_SEJOUR dédiée vérifiée
+      // séparément plus bas dans ce fichier).
+      expect(Number(nouvelleLigne!.montant)).toBeCloseTo(200 - 12);
 
       const auditLog = await prisma.auditLog.findFirstOrThrow({
         where: { action: AuditAction.EXTEND_STAY, targetId: stay.id },
@@ -384,7 +394,9 @@ describe('Stay - Extend (GL-003)', () => {
           libelle: { startsWith: 'Prolongation' },
         },
       });
-      expect(Number(nouvelleLigne.montant)).toBeCloseTo(120 + 140);
+      // FIN-102 — idem : 120 + 140 = 260 brut, moins TAXE_SEJOUR du delta
+      // (3 x 2 nuits x 2 personnes = 12) absorbée dans ce résiduel.
+      expect(Number(nouvelleLigne.montant)).toBeCloseTo(120 + 140 - 12);
     });
 
     it('Formule EXTRA ajoutée pour une formule ≠ ROOM_ONLY', async () => {
@@ -394,6 +406,7 @@ describe('Stay - Extend (GL-003)', () => {
         roomId: room5.id,
         dateCheckoutPrevue: isoDate(addDays(today, 2)),
         guestId: guest.id,
+        nombreOccupants: 2,
         formule: FormuleHebergement.HALF_BOARD,
       });
       const halfBoardStay = stayRes.body as StayResponse;
@@ -509,6 +522,7 @@ describe('Stay - Extend (GL-003)', () => {
         roomId: room5.id,
         dateCheckoutPrevue: isoDate(addDays(today, 2)),
         guestId: guest.id,
+        nombreOccupants: 2,
       });
       const otherStay = otherStayRes.body as StayResponse;
       await prisma.roomNight.create({
@@ -1085,7 +1099,10 @@ describe('Stay - Extend (GL-003)', () => {
       expect(stayAfter.dateCheckoutPrevue.toISOString().slice(0, 10)).toBe(
         isoDate(addDays(today, 2)),
       );
-      expect(linesAfter).toBe(1); // seule la ligne HEBERGEMENT initiale
+      // FIN-102 — le check-in matérialise désormais aussi TAXE_SEJOUR (voir
+      // beforeEach, nombreOccupants: 2) : HEBERGEMENT + TAXE_SEJOUR initiales,
+      // aucune ligne supplémentaire depuis le rollback de cette tentative.
+      expect(linesAfter).toBe(2);
 
       jest.restoreAllMocks();
       const retry = await receptionClient

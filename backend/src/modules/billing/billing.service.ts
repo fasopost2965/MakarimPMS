@@ -252,24 +252,33 @@ export class BillingService {
       // TVA_HEBERGEMENT/TVA_ANNEXE exclues ici (jamais matérialisées en
       // FolioLine propre) — depuis ADR-008/FIN-101B, HEBERGEMENT/EXTRA/
       // RESTAURANT sont déjà TTC et calculateInvoiceTotal n'ajoute plus
-      // aucune marge de TVA dessus (voir invoice-calc.ts). TAXE_SEJOUR
-      // reste pour le moment une ligne statutaire distincte, créée ici
-      // même, au moment de generateInvoice — ce moment de création (avant
-      // toute matérialisation au check-in) sera revu dans une mission
-      // tarifaire dédiée (FIN-102A, composition du tarif public TTC),
-      // hors périmètre de FIN-101B.
-      const taxesToApply = applicableTaxes.filter(
-        (t) =>
-          t.type !== 'TVA_HEBERGEMENT' &&
-          t.type !== 'TVA_ANNEXE' &&
-          !excludedIds.has(t.id),
-      );
+      // aucune marge de TVA dessus (voir invoice-calc.ts). TAXE_SEJOUR reste
+      // une ligne statutaire distincte — FIN-102 (composition du tarif
+      // public TTC) : pour un séjour non-legacy (Stay.nombreOccupants IS NOT
+      // NULL), TAXE_SEJOUR est désormais matérialisée dès le check-in/à la
+      // prolongation (StayService, common/fiscal/tarif-decomposition.ts) et
+      // ce bloc ne s'exécute plus jamais pour lui — generateInvoice reste
+      // strictement lecture seule sur les charges de son folio. Seul un
+      // séjour legacy (Stay.nombreOccupants IS NULL, créé avant ce
+      // déploiement) continue de passer par ce fallback historique — aucune
+      // recomposition rétroactive de son folio, comportement inchangé.
+      const legacySansOccupation = folio.stay.nombreOccupants === null;
+      const taxesToApply = legacySansOccupation
+        ? applicableTaxes.filter(
+            (t) =>
+              t.type !== 'TVA_HEBERGEMENT' &&
+              t.type !== 'TVA_ANNEXE' &&
+              !excludedIds.has(t.id),
+          )
+        : [];
 
       // Ne jamais réinjecter les lignes TAXE_SEJOUR si une génération
       // précédente (avant un avoir) les a déjà matérialisées sur ce folio —
       // sinon une régénération après avoir double la taxe de séjour. Les
       // lignes de taxe restent sur le folio après un avoir (l'avoir annule
-      // la facture, pas les charges réelles sous-jacentes).
+      // la facture, pas les charges réelles sous-jacentes). Pour un séjour
+      // non-legacy, TAXE_SEJOUR est toujours déjà présente (matérialisée au
+      // check-in) — cette garde reste doublement vraie, jamais contournée.
       const taxeDejaMaterialisee = folio.lignes.some(
         (l) => l.type === TypeLigneFolio.TAXE_SEJOUR,
       );

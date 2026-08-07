@@ -129,16 +129,30 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
       900,
     );
 
-    const checkin = await client.post(`/api/checkin/${reservation.id}`).send();
+    const checkin = await client
+      .post(`/api/checkin/${reservation.id}`)
+      .send({ nombreOccupants: 2 });
     expect(checkin.status).toBe(201);
     const stay = checkin.body as StayResponse;
     expect(stay.reservationId).toBe(reservation.id);
 
+    // FIN-102 — le tarif public TTC (900 MAD, ajusté manuellement) est
+    // désormais décomposé : HEBERGEMENT résiduel + TAXE_SEJOUR (matérialisée
+    // dès le check-in, seed.ts : 3 MAD/nuit/personne, 2 nuits x 2 personnes
+    // = 12 MAD), dont la somme reproduit exactement 900.
     const principal = stay.folios.find((f) => f.libelle === 'Folio principal');
     expect(principal).toBeDefined();
-    expect(principal!.lignes).toHaveLength(1);
-    expect(principal!.lignes[0].type).toBe('HEBERGEMENT');
-    expect(Number(principal!.lignes[0].montant)).toBe(900);
+    const hebergement = principal!.lignes.find((l) => l.type === 'HEBERGEMENT');
+    const taxeSejour = principal!.lignes.find((l) => l.type === 'TAXE_SEJOUR');
+    expect(hebergement).toBeDefined();
+    expect(taxeSejour).toBeDefined();
+    expect(Number(taxeSejour!.montant)).toBe(12);
+    expect(Number(hebergement!.montant)).toBe(900 - 12);
+    const totalLignes = principal!.lignes.reduce(
+      (acc, l) => acc + Number(l.montant),
+      0,
+    );
+    expect(totalLignes).toBe(900);
 
     // La réservation d'origine est marquée transformée, et une chambre
     // occupée doit refuser une nouvelle vente sur les mêmes dates tant que
@@ -211,6 +225,7 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
     const res = await client.post('/api/checkin/walk-in').send({
       roomId: room.id,
       dateCheckoutPrevue: dateCheckoutPrevue.toISOString().slice(0, 10),
+      nombreOccupants: 1,
       guest: { nom: 'Walk', prenom: 'In' },
     });
     expect(res.status).toBe(201);
@@ -223,8 +238,23 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
 
     const principal = stay.folios.find((f) => f.libelle === 'Folio principal');
     // Toutes les nuits sont hors de la plage SeasonRate définie plus haut
-    // (avril 2027) : le montant doit retomber sur PRIX_BASE * nb nuits.
-    expect(Number(principal!.lignes[0].montant)).toBe(PRIX_BASE * 3);
+    // (avril 2027) : le tarif public TTC nuitée doit retomber sur
+    // PRIX_BASE * nb nuits. FIN-102 — TAXE_SEJOUR (3 MAD/nuit/personne,
+    // seed.ts) est désormais matérialisée dès le check-in et absorbée
+    // depuis ce même tarif public (jamais additionnée par-dessus) : la
+    // somme des lignes du folio reste égale à PRIX_BASE * 3, la ligne
+    // HEBERGEMENT seule est réduite d'autant.
+    const hebergement = principal!.lignes.find((l) => l.type === 'HEBERGEMENT');
+    const taxeSejour = principal!.lignes.find((l) => l.type === 'TAXE_SEJOUR');
+    expect(hebergement).toBeDefined();
+    expect(taxeSejour).toBeDefined();
+    expect(Number(taxeSejour!.montant)).toBe(3 * 3 * 1);
+    expect(Number(hebergement!.montant)).toBe(PRIX_BASE * 3 - 3 * 3 * 1);
+    const totalLignes = principal!.lignes.reduce(
+      (acc, l) => acc + Number(l.montant),
+      0,
+    );
+    expect(totalLignes).toBe(PRIX_BASE * 3);
 
     await prisma.roomNight.deleteMany({ where: { stayId: stay.id } });
     await prisma.folioLine.deleteMany({
@@ -257,6 +287,7 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
     const res = await client.post('/api/checkin/walk-in').send({
       roomId: room.id,
       dateCheckoutPrevue: dateCheckoutPrevue.toISOString().slice(0, 10),
+      nombreOccupants: 1,
       guest: { nom: 'Solde', prenom: 'Impaye' },
     });
     expect(res.status).toBe(201);

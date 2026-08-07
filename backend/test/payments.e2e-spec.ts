@@ -260,7 +260,7 @@ describe('Payments Module', () => {
 
       const checkin = await adminClient
         .post(`/api/checkin/${reservationId}`)
-        .send();
+        .send({ nombreOccupants: 1 });
       expect(checkin.status).toBe(201);
       const stayId = checkin.body.id as number;
       const folioId = (

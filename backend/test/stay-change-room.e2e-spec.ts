@@ -161,7 +161,7 @@ describe('Stay - Change Room (GL-002)', () => {
 
       const checkinRes = await adminClient
         .post(`/api/checkin/${reservation.id}`)
-        .send();
+        .send({ nombreOccupants: 1 });
       stay = checkinRes.body as StayResponse;
 
       // Vérifier que le séjour est bien en cours
@@ -361,6 +361,7 @@ describe('Stay - Change Room (GL-002)', () => {
       const walkinRes = await adminClient.post('/api/checkin/walk-in').send({
         roomId: room2.id,
         dateCheckoutPrevue,
+        nombreOccupants: 1,
         guestId: guest.id,
       });
       expect(walkinRes.status).toBe(201);
@@ -462,7 +463,7 @@ describe('Stay - Change Room (GL-002)', () => {
 
       const checkinRes = await adminClient
         .post(`/api/checkin/${reservation2.id}`)
-        .send();
+        .send({ nombreOccupants: 1 });
       const stay2 = checkinRes.body as StayResponse;
       const oldRoomId = stay2.roomId;
       expect(oldRoomId).toBe(room3.id);
@@ -501,6 +502,7 @@ describe('Stay - Change Room (GL-002)', () => {
       const res = await adminClient.post('/api/checkin/walk-in').send({
         roomId,
         dateCheckoutPrevue,
+        nombreOccupants: 1,
         guestId: guest.id,
       });
       expect(res.status).toBe(201);

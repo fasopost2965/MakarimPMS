@@ -4,6 +4,7 @@ import {
   IsEnum,
   IsInt,
   IsOptional,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { FormuleHebergement } from '@prisma/client';
@@ -18,6 +19,17 @@ export class WalkinDto {
 
   @IsDateString()
   dateCheckoutPrevue: string;
+
+  // FIN-102 (composition du tarif public TTC) — un walk-in n'a jamais de
+  // Reservation préexistante à consulter : contrairement au check-in depuis
+  // réservation (nombreOccupants optionnel en secours, voir
+  // CheckinFromReservationDto), ce champ est ici strictement obligatoire, un
+  // nouveau séjour ne devant jamais rester Stay.nombreOccupants NULL. Borne
+  // haute (capacité réelle de la chambre attribuée) vérifiée par le service,
+  // non exprimable en DTO statique.
+  @IsInt()
+  @Min(1)
+  nombreOccupants: number;
 
   @IsOptional()
   @IsInt()

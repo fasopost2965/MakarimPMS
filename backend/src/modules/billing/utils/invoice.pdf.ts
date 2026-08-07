@@ -150,8 +150,11 @@ export function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
     section('Détail');
     for (const ligne of lignes) {
       if (ligne.annulee) continue;
+      // FIN-102 — correction de libellé uniquement (bug de présentation
+      // confirmé) : chaque ligne est déjà TTC (ADR-008/FIN-101B, jamais de
+      // TVA ajoutée à part), afficher "(HT)" était donc trompeur.
       doc.text(
-        `${ligne.libelle} .......................... ${Number(ligne.montant).toFixed(2)} MAD (HT)`,
+        `${ligne.libelle} .......................... ${Number(ligne.montant).toFixed(2)} MAD (TTC)`,
       );
     }
 

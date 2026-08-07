@@ -178,6 +178,7 @@ describe('Dashboard — résumé (e2e)', () => {
         dateCheckoutPrevue: new Date(Date.now() + 86_400_000)
           .toISOString()
           .slice(0, 10),
+        nombreOccupants: 1,
         guest: { nom: 'Dashboard', prenom: 'Depart' },
       });
       expect(checkin.status).toBe(201);
@@ -254,6 +255,7 @@ describe('Dashboard — résumé (e2e)', () => {
       dateCheckoutPrevue: new Date(Date.now() + 86_400_000)
         .toISOString()
         .slice(0, 10),
+      nombreOccupants: 1,
       guest: { nom: 'Dashboard', prenom: 'Encaisse' },
     });
     expect(checkinRes.status).toBe(201);
