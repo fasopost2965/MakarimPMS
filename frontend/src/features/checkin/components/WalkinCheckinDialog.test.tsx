@@ -116,6 +116,9 @@ describe('WalkinCheckinDialog — assistant', () => {
     fireEvent.change(screen.getByLabelText('Départ prévu'), {
       target: { value: futureDate(3) },
     });
+    fireEvent.change(screen.getByLabelText("Nombre d'occupants"), {
+      target: { value: '2' },
+    });
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Continuer' })).toBeEnabled(),
     );
@@ -173,6 +176,9 @@ describe('WalkinCheckinDialog — assistant', () => {
     fireEvent.change(screen.getByLabelText('Départ prévu'), {
       target: { value: futureDate(2) },
     });
+    fireEvent.change(screen.getByLabelText("Nombre d'occupants"), {
+      target: { value: '2' },
+    });
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Continuer' })).toBeEnabled(),
     );
@@ -211,6 +217,9 @@ describe('WalkinCheckinDialog — assistant', () => {
     const departure = screen.getByLabelText('Départ prévu');
     fireEvent.change(departure, { target: { value: futureDate(2) } });
     fireEvent.change(departure, { target: { value: futureDate(4) } });
+    fireEvent.change(screen.getByLabelText("Nombre d'occupants"), {
+      target: { value: '2' },
+    });
     resolveStale?.({ disponible: false, datesConflit: [futureDate(2)] });
     await waitFor(() =>
       expect(checkRoomAvailability).toHaveBeenLastCalledWith(
@@ -221,5 +230,84 @@ describe('WalkinCheckinDialog — assistant', () => {
     expect(
       await screen.findByText(/Vérification serveur positive/),
     ).toBeVisible();
+  });
+
+  // FIN-102 — capacité 4 / occupation 1 : la valeur saisie est envoyée telle
+  // quelle, jamais une valeur dérivée de room.roomType.capacite.
+  it('envoie nombreOccupants tel que saisi (1), jamais la capacité de la chambre (4)', async () => {
+    const onConfirm = vi.fn();
+    const roomCap4: Room = {
+      id: 3,
+      numero: '305',
+      roomTypeId: 2,
+      statut: 'LIBRE_PROPRE',
+      roomType: { id: 2, nom: 'Suite', prixBase: '900', capacite: 4 },
+    };
+    render(
+      <WalkinCheckinDialog
+        open
+        rooms={[roomCap4]}
+        onClose={vi.fn()}
+        onConfirm={onConfirm}
+        submitting={false}
+        error={null}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole('button', { name: 'Sélectionner Aminata' }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Continuer' }));
+    await user.selectOptions(screen.getByLabelText('Chambre'), '3');
+    fireEvent.change(screen.getByLabelText('Départ prévu'), {
+      target: { value: futureDate(2) },
+    });
+    fireEvent.change(screen.getByLabelText("Nombre d'occupants"), {
+      target: { value: '1' },
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Continuer' })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole('button', { name: 'Continuer' }));
+    const submit = screen.getByRole('button', {
+      name: 'Enregistrer le check-in',
+    });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+    expect(onConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({ nombreOccupants: 1, roomId: 3 }),
+    );
+  });
+
+  // FIN-102 — validation frontend : 0 et au-delà de la capacité sont tous
+  // deux rejetés (le bouton "Continuer" de l'étape 2 reste désactivé).
+  it('rejette une occupation à 0 ou supérieure à la capacité de la chambre', async () => {
+    renderDialog();
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole('button', { name: 'Sélectionner Aminata' }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Continuer' }));
+    await user.selectOptions(screen.getByLabelText('Chambre'), '2');
+    fireEvent.change(screen.getByLabelText('Départ prévu'), {
+      target: { value: futureDate(2) },
+    });
+    const continuer = screen.getByRole('button', { name: 'Continuer' });
+
+    fireEvent.change(screen.getByLabelText("Nombre d'occupants"), {
+      target: { value: '0' },
+    });
+    await waitFor(() => expect(continuer).toBeDisabled());
+
+    // ROOM (capacité 2) : 3 dépasse la capacité, doit rester rejeté.
+    fireEvent.change(screen.getByLabelText("Nombre d'occupants"), {
+      target: { value: '3' },
+    });
+    await waitFor(() => expect(continuer).toBeDisabled());
+
+    fireEvent.change(screen.getByLabelText("Nombre d'occupants"), {
+      target: { value: '2' },
+    });
+    await waitFor(() => expect(continuer).toBeEnabled());
   });
 });

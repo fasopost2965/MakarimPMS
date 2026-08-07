@@ -96,6 +96,7 @@ describe('Housekeeping — machine à états complète (e2e)', () => {
         dateCheckoutPrevue: new Date(Date.now() + 2 * 86_400_000)
           .toISOString()
           .slice(0, 10),
+        nombreOccupants: 1,
         guest: { nom: 'Machine', prenom: 'Etats' },
       });
       expect(checkin.status).toBe(201);
@@ -178,7 +179,9 @@ describe('Housekeeping — machine à états complète (e2e)', () => {
       );
       expect(ours!.statut).toBe('RESERVEE');
 
-      const checkin = await client.post(`/api/checkin/${reservationId}`).send();
+      const checkin = await client
+        .post(`/api/checkin/${reservationId}`)
+        .send({ nombreOccupants: 1 });
       expect(checkin.status).toBe(201);
 
       const room = await prisma.room.findUniqueOrThrow({
@@ -233,6 +236,7 @@ describe('Housekeeping — machine à états complète (e2e)', () => {
       dateCheckoutPrevue: new Date(Date.now() + 86_400_000)
         .toISOString()
         .slice(0, 10),
+      nombreOccupants: 1,
       guest: { nom: 'Depart', prenom: 'Prevu' },
     });
     const stayId = (checkin.body as StayResponse).id;

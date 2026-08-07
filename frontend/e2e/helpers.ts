@@ -92,6 +92,10 @@ export async function makeRoomNeedsCleaning(
   await page.getByRole('button', { name: 'Continuer' }).click();
   await pickFromSelectSearch(page, 'room', roomNumber, new RegExp(roomNumber));
   await page.locator('#dateCheckoutPrevue').fill(demain);
+  // FIN-102 — nombreOccupants désormais obligatoire (WalkinDto backend) :
+  // 1 reste valide quelle que soit la capacité réelle de la chambre (jamais
+  // 0, jamais au-delà).
+  await page.locator('#nombreOccupants').fill('1');
   await page.getByRole('button', { name: 'Continuer' }).click();
   await page.getByRole('button', { name: 'Enregistrer le check-in' }).click();
 

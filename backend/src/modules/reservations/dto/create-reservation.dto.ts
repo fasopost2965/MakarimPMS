@@ -5,6 +5,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { CanalReservation, FormuleHebergement } from '@prisma/client';
@@ -44,6 +45,20 @@ export class CreateReservationDto {
   @IsOptional()
   @IsInt()
   cancellationPolicyId?: number;
+
+  // FIN-102 (composition du tarif public TTC) — optionnelle : quand elle est
+  // connue à la réservation, reprise telle quelle par
+  // StayService.checkinFromReservation pour matérialiser TAXE_SEJOUR dès le
+  // check-in (backend/src/modules/stay/dto/checkin-from-reservation.dto.ts
+  // reste le point de secours si absente ici). Borne haute vérifiée par le
+  // service (capacité réelle de la chambre attribuée), non exprimable en DTO
+  // statique. Jamais rendue obligatoire ici : le Booking Engine public (F4)
+  // et l'import Channel Manager (F10) restent hors périmètre de cette
+  // mission, non modifiés.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  nombreOccupants?: number;
 
   @IsOptional()
   @IsInt()

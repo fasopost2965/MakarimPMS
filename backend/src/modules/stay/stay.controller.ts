@@ -12,6 +12,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { StayService } from './stay.service';
 import { WalkinDto } from './dto/walkin.dto';
+import { CheckinFromReservationDto } from './dto/checkin-from-reservation.dto';
 import { ForceCheckoutDto } from './dto/force-checkout.dto';
 import { ChangeRoomDto } from './dto/change-room.dto';
 import { ExtendStayDto } from './dto/extend-stay.dto';
@@ -40,9 +41,14 @@ export class StayController {
   @Post('checkin/:reservationId')
   checkinFromReservation(
     @Param('reservationId', ParseIntPipe) reservationId: number,
+    @Body() dto: CheckinFromReservationDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.stayService.checkinFromReservation(reservationId, user.sub);
+    return this.stayService.checkinFromReservation(
+      reservationId,
+      dto,
+      user.sub,
+    );
   }
 
   @RequirePermission('checkin', 'read')

@@ -388,6 +388,14 @@ model Reservation {
   // principe que prixTotalCalcule/prixTotalFinal : on gèle ce qui a été
   // décidé, pas une valeur dérivée à la volée).
   montantPenalite      Decimal?                  @db.Decimal(10, 2)
+  // FIN-102 (composition du tarif public TTC) — occupation réelle, saisie à
+  // la réservation quand elle est connue à l'avance (jamais déduite de
+  // RoomType.capacite). Optionnelle : reprise telle quelle par
+  // StayService.checkinFromReservation pour matérialiser TAXE_SEJOUR dès le
+  // check-in ; si NULL, le check-in doit alors la demander explicitement
+  // (voir CheckinFromReservationDto) — un nouveau Stay ne reste jamais avec
+  // nombreOccupants NULL.
+  nombreOccupants      Int?
   nights               RoomNight[]
   stay                 Stay?
   deposits             ReservationDeposit[]
@@ -502,6 +510,17 @@ model Stay {
   // une FolioLine EXTRA "repas" est créée au check-in
   // (StayService.createFolioPrincipal).
   formule            FormuleHebergement @default(BED_AND_BREAKFAST)
+  // FIN-102 (composition du tarif public TTC) — nombre réel d'occupants,
+  // toujours résolu avant la création d'un nouveau Stay
+  // (checkinFromReservation/checkinWalkIn) pour décomposer le tarif public
+  // TTC (HEBERGEMENT résiduel + prestations incluses + TAXE_SEJOUR),
+  // jamais déduite de room.roomType.capacite (interdiction absolue, voir
+  // common/utils/occupancy.ts). NULL uniquement pour les séjours déjà en
+  // base avant cette migration — marqueur temporel legacy consommé par le
+  // seul fallback de BillingService.generateInvoice (matérialisation
+  // TAXE_SEJOUR à la facturation), jamais réutilisé pour un nouveau
+  // check-in.
+  nombreOccupants    Int?
   nights             RoomNight[]
   folios             Folio[]
   policeRecord       PoliceRecord?
@@ -1435,6 +1454,13 @@ enum AuditAction {
   // GL-003 — prolongation de séjour (StayService.extendStay), réservé à la
   // permission dédiée stay:extend (Administrateur + Réception).
   EXTEND_STAY
+  // FIN-102 (composition du tarif public TTC) — réconciliation append-only
+  // de TAXE_SEJOUR (et, si nécessaire, du résiduel HEBERGEMENT) à un départ
+  // anticipé (StayService.checkout, nombre de nuits réellement taxables <
+  // nuits prévues) : annulation de la/les ligne(s) matérialisée(s) en trop
+  // (annulee=true + motifAnnulation) puis recréation au montant réellement
+  // dû — jamais de montant négatif écrit directement.
+  RECONCILE_TAXE_SEJOUR
 }
 
 // ------------------------------------------------------------------

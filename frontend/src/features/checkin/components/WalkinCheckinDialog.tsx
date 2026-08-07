@@ -83,6 +83,10 @@ function WalkinForm({
   const [dateCheckoutPrevue, setDateCheckoutPrevue] = useState('');
   const [formule, setFormule] =
     useState<FormuleHebergement>('BED_AND_BREAKFAST');
+  // FIN-102 — jamais préremplie depuis room.roomType.capacite (interdiction
+  // absolue, common/utils/occupancy.ts) : reste vide tant que la réception
+  // n'a pas saisi l'occupation réelle.
+  const [nombreOccupants, setNombreOccupants] = useState('');
   const [guestSelection, setGuestSelection] = useState<GuestSelection | null>(
     null,
   );
@@ -223,10 +227,22 @@ function WalkinForm({
         : 'Client existant sélectionné'
     : 'Aucun client';
   const datesValid = dateCheckoutPrevue > today;
+  // FIN-102 — entier >= 1, jamais dérivé de selectedRoom.roomType.capacite
+  // (interdiction absolue) : cette valeur ne sert qu'à borner la saisie, la
+  // capacité elle-même n'est jamais une valeur par défaut silencieuse.
+  const nombreOccupantsNum =
+    nombreOccupants === '' ? null : Number(nombreOccupants);
+  const occupantsValid =
+    nombreOccupantsNum !== null &&
+    Number.isInteger(nombreOccupantsNum) &&
+    nombreOccupantsNum >= 1 &&
+    (selectedRoom === undefined ||
+      nombreOccupantsNum <= selectedRoom.roomType.capacite);
   const canConfirm =
     guestSelection !== null &&
     selectedRoom !== undefined &&
     datesValid &&
+    occupantsValid &&
     availability?.disponible === true &&
     prixEstime !== null &&
     !submitting;
@@ -234,7 +250,7 @@ function WalkinForm({
     step === 1
       ? guestSelection !== null
       : step === 2
-        ? selectedRoom !== undefined && datesValid
+        ? selectedRoom !== undefined && datesValid && occupantsValid
         : canConfirm;
 
   return (
@@ -251,6 +267,7 @@ function WalkinForm({
           !canConfirm ||
           !selectedRoom ||
           !guestSelection ||
+          nombreOccupantsNum === null ||
           submitLockRef.current
         )
           return;
@@ -259,6 +276,7 @@ function WalkinForm({
           roomId: selectedRoom.id,
           dateCheckoutPrevue,
           formule,
+          nombreOccupants: nombreOccupantsNum,
           ...guestSelection,
         });
       }}
@@ -327,6 +345,26 @@ function WalkinForm({
         </div>
 
         <div className="flex flex-col gap-1.5">
+          <Label htmlFor="nombreOccupants">Nombre d'occupants</Label>
+          <Input
+            id="nombreOccupants"
+            type="number"
+            min={1}
+            max={selectedRoom?.roomType.capacite}
+            value={nombreOccupants}
+            onChange={(event) => setNombreOccupants(event.target.value)}
+            required
+          />
+          {nombreOccupants !== '' && !occupantsValid && (
+            <p className="text-destructive text-xs">
+              {selectedRoom
+                ? `Doit être un entier entre 1 et ${selectedRoom.roomType.capacite} (capacité de la chambre).`
+                : 'Doit être un entier supérieur ou égal à 1.'}
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1.5">
           <Label htmlFor="formule">Formule</Label>
           <Select
             value={formule}
@@ -381,6 +419,7 @@ function WalkinForm({
             ['Statut chambre', selectedRoom?.statut ?? '—'],
             ['Arrivée', today],
             ['Départ prévu', dateCheckoutPrevue || '—'],
+            ["Nombre d'occupants", nombreOccupants || '—'],
             [
               'Formule',
               FORMULE_OPTIONS.find((option) => option.value === formule)

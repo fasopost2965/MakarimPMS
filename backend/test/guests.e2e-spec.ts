@@ -393,6 +393,7 @@ describe('Guests / CRM (e2e)', () => {
       dateCheckoutPrevue: new Date(Date.now() + 2 * 86_400_000)
         .toISOString()
         .slice(0, 10),
+      nombreOccupants: 1,
       guestId,
     });
     expect(res.status).toBe(409);
@@ -411,6 +412,7 @@ describe('Guests / CRM (e2e)', () => {
       dateCheckoutPrevue: new Date(Date.now() + 2 * 86_400_000)
         .toISOString()
         .slice(0, 10),
+      nombreOccupants: 1,
       guestId,
     });
     expect(checkin.status).toBe(201);
@@ -438,6 +440,7 @@ describe('Guests / CRM (e2e)', () => {
       dateCheckoutPrevue: new Date(Date.now() + 2 * 86_400_000)
         .toISOString()
         .slice(0, 10),
+      nombreOccupants: 1,
       guestId,
     });
     expect(checkin.status).toBe(201);
@@ -533,6 +536,7 @@ describe('Guests / CRM (e2e)', () => {
       dateCheckoutPrevue: new Date(Date.now() + 2 * 86_400_000)
         .toISOString()
         .slice(0, 10),
+      nombreOccupants: 1,
       guest: {
         nom: 'TEST-GUEST-Dedup6',
         prenom: 'Usurpe',

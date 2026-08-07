@@ -72,6 +72,13 @@ export interface Reservation {
   prixTotalFinal: string;
   ajustementManuel: boolean;
   motifAjustement: string | null;
+  // FIN-102 (composition du tarif public TTC) — occupation réelle, jamais
+  // déduite de RoomType.capacite (backend/src/common/utils/occupancy.ts).
+  // Nullable : optionnelle à la réservation (réservée aux réservations
+  // créées avant ce déploiement, ou dont le canal ne la demande pas encore),
+  // le check-in la redemande explicitement si absente ici (voir
+  // ReservationCheckinDialog).
+  nombreOccupants: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -85,6 +92,10 @@ export type CreateReservationInput = {
   dateDepart: string;
   canal?: CanalReservation;
   formule?: FormuleHebergement;
+  // FIN-102 — optionnelle ici (CreateReservationDto.nombreOccupants),
+  // reprise telle quelle par le check-in si déjà connue ; jamais déduite de
+  // RoomType.capacite si absente.
+  nombreOccupants?: number;
 } & (
   | { guestId: number; guest?: undefined }
   | {

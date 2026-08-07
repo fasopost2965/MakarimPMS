@@ -8,8 +8,17 @@ import type {
   WalkinCheckinInput,
 } from './types';
 
-export function checkinFromReservation(reservationId: number) {
-  return apiRequest<Stay>(`/checkin/${reservationId}`, { method: 'POST' });
+// FIN-102 — nombreOccupants obligatoire côté appelant (jamais optionnel
+// silencieusement ici) : soit repris de la réservation si déjà connu, soit
+// saisi explicitement au check-in (voir ReservationCheckinDialog).
+export function checkinFromReservation(
+  reservationId: number,
+  nombreOccupants: number,
+) {
+  return apiRequest<Stay>(`/checkin/${reservationId}`, {
+    method: 'POST',
+    body: JSON.stringify({ nombreOccupants }),
+  });
 }
 
 export function checkinWalkIn(input: WalkinCheckinInput) {

@@ -69,8 +69,8 @@ describe('Checkin — verrouillages de concurrence (e2e)', () => {
     const reservationId = (createRes.body as { id: number }).id;
 
     const [resA, resB] = await Promise.all([
-      client.post(`/api/checkin/${reservationId}`).send(),
-      client.post(`/api/checkin/${reservationId}`).send(),
+      client.post(`/api/checkin/${reservationId}`).send({ nombreOccupants: 1 }),
+      client.post(`/api/checkin/${reservationId}`).send({ nombreOccupants: 1 }),
     ]);
 
     const statuses = [resA.status, resB.status].sort();
@@ -88,6 +88,7 @@ describe('Checkin — verrouillages de concurrence (e2e)', () => {
     const payload = (nom: string) => ({
       roomId: room.id,
       dateCheckoutPrevue: '2027-03-15',
+      nombreOccupants: 1,
       guest: { nom, prenom: 'WalkIn' },
     });
 

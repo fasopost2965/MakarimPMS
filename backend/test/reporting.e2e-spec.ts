@@ -133,6 +133,7 @@ describe('Reporting — ventilation fiscale et rapport de police (e2e)', () => {
       const checkin = await adminClient.post('/api/checkin/walk-in').send({
         roomId,
         dateCheckoutPrevue: demain,
+        nombreOccupants: 1,
         guest: {
           nom: 'Ventilation',
           prenom: 'Test',
@@ -234,6 +235,7 @@ describe('Reporting — ventilation fiscale et rapport de police (e2e)', () => {
       const checkin = await adminClient.post('/api/checkin/walk-in').send({
         roomId,
         dateCheckoutPrevue: demain,
+        nombreOccupants: 1,
         guest: {
           nom: 'Alaoui',
           prenom: 'Karim',

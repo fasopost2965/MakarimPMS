@@ -127,7 +127,9 @@ describe('Housekeeping — statuts de chambre (e2e)', () => {
       });
       const reservationId = (reservation.body as ReservationResponse).id;
 
-      const checkin = await client.post(`/api/checkin/${reservationId}`).send();
+      const checkin = await client
+        .post(`/api/checkin/${reservationId}`)
+        .send({ nombreOccupants: 1 });
       expect(checkin.status).toBe(201);
       const stayId = (checkin.body as StayResponse).id;
 
