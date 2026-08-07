@@ -41,6 +41,10 @@ export interface Stay {
   dateCheckoutPrevue: string;
   dateCheckoutReelle: string | null;
   statut: StatutSejour;
+  // FIN-102 — occupation réelle du séjour, jamais déduite de
+  // RoomType.capacite (backend/src/common/utils/occupancy.ts). Nullable
+  // uniquement pour un séjour créé avant ce déploiement (legacy).
+  nombreOccupants: number | null;
   folios: Folio[];
   // CH-003 — obligation légale DGSN, toujours inclus par le backend
   // (STAY_INCLUDE), jamais un appel séparé nécessaire pour savoir si la
@@ -117,6 +121,10 @@ export type WalkinCheckinInput = {
   roomId: number;
   dateCheckoutPrevue: string;
   formule?: FormuleHebergement;
+  // FIN-102 — un walk-in n'a jamais de réservation préexistante à
+  // consulter : ce champ est strictement obligatoire (WalkinDto backend),
+  // jamais déduit de RoomType.capacite (common/utils/occupancy.ts).
+  nombreOccupants: number;
 } & (
   | { guestId: number; guest?: undefined }
   | {

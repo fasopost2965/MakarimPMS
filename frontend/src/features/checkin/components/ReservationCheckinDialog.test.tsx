@@ -44,6 +44,10 @@ function reservation(overrides: Record<string, unknown> = {}) {
     ajustementManuel: true,
     motifAjustement: 'Geste commercial validé',
     formule: 'BED_AND_BREAKFAST',
+    // FIN-102 — préremplie par défaut (réservation "récente" avec occupation
+    // déjà connue) ; les tests dédiés au cas legacy passent explicitement
+    // `nombreOccupants: null` en overrides.
+    nombreOccupants: 2,
     createdAt: '2026-07-01T00:00:00.000Z',
     updatedAt: '2026-07-01T00:00:00.000Z',
     ...overrides,
@@ -222,5 +226,77 @@ describe('ReservationCheckinDialog', () => {
     expect(
       await screen.findByText('Vérification serveur positive'),
     ).toBeVisible();
+  });
+
+  // FIN-102 — réservation legacy (nombreOccupants NULL en base, jamais
+  // supposé connu pour toute réservation postérieure au déploiement) : le
+  // champ démarre vide, la réception doit le saisir avant de pouvoir
+  // confirmer.
+  it('permet de saisir l’occupation manquante sur une réservation legacy (nombreOccupants NULL)', async () => {
+    const onConfirm = vi.fn();
+    const user = userEvent.setup();
+    const legacy = reservation({ nombreOccupants: null });
+    render(
+      <ReservationCheckinDialog
+        reservation={legacy}
+        roomStatus="LIBRE_PROPRE"
+        permissions={[]}
+        onClose={vi.fn()}
+        onConfirm={onConfirm}
+        submitting={false}
+        error={null}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Continuer' }));
+    expect(screen.getByLabelText("Nombre d'occupants")).toHaveValue(null);
+    await user.click(screen.getByRole('button', { name: 'Continuer' }));
+    const confirm = await screen.findByRole('button', {
+      name: 'Confirmer le check-in',
+    });
+    // Occupation manquante : le check-in reste bloqué tant qu'elle n'est
+    // pas saisie, même si la chambre est par ailleurs disponible.
+    await waitFor(() => expect(confirm).toBeDisabled());
+
+    fireEvent.change(screen.getByLabelText("Nombre d'occupants"), {
+      target: { value: '2' },
+    });
+    await waitFor(() => expect(confirm).toBeEnabled());
+    fireEvent.click(confirm);
+    expect(onConfirm).toHaveBeenCalledWith(2);
+  });
+
+  // FIN-102 — validation frontend cohérente avec le backend
+  // (common/utils/occupancy.ts, 1 <= n <= capacité) : 0 et au-delà de la
+  // capacité de la chambre (2 ici) sont tous deux rejetés.
+  it('rejette une occupation à 0 ou supérieure à la capacité de la chambre', async () => {
+    const onConfirm = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ReservationCheckinDialog
+        reservation={reservation({ nombreOccupants: null })}
+        roomStatus="LIBRE_PROPRE"
+        permissions={[]}
+        onClose={vi.fn()}
+        onConfirm={onConfirm}
+        submitting={false}
+        error={null}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Continuer' }));
+    await user.click(screen.getByRole('button', { name: 'Continuer' }));
+    const confirm = await screen.findByRole('button', {
+      name: 'Confirmer le check-in',
+    });
+
+    fireEvent.change(screen.getByLabelText("Nombre d'occupants"), {
+      target: { value: '0' },
+    });
+    await waitFor(() => expect(confirm).toBeDisabled());
+
+    fireEvent.change(screen.getByLabelText("Nombre d'occupants"), {
+      target: { value: '3' },
+    });
+    await waitFor(() => expect(confirm).toBeDisabled());
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 });

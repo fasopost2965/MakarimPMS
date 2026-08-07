@@ -28,6 +28,7 @@ test('check-in walk-in, check-out bloqué sur solde impayé, débloqué après p
 
   await pickFromSelectSearch(page, 'room', '501', /501/);
   await page.locator('#dateCheckoutPrevue').fill(demain);
+  await page.locator('#nombreOccupants').fill('2');
   await page.getByRole('button', { name: 'Continuer' }).click();
   await page.getByRole('button', { name: 'Enregistrer le check-in' }).click();
 

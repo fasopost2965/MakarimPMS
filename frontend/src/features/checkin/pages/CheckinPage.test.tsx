@@ -93,12 +93,12 @@ vi.mock('../components/ReservationCheckinDialog', () => ({
     onConfirm,
   }: {
     reservation: { id: number } | null;
-    onConfirm: () => void;
+    onConfirm: (nombreOccupants: number) => void;
   }) =>
     reservation ? (
       <div>
         Dialogue réservation {reservation.id}
-        <button type="button" onClick={onConfirm}>
+        <button type="button" onClick={() => onConfirm(2)}>
           Confirmer depuis le dialogue
         </button>
       </div>
@@ -144,6 +144,9 @@ const RESERVATION = {
   prixTotalFinal: '1800',
   ajustementManuel: false,
   motifAjustement: null,
+  // FIN-102 — préremplie (réservation "récente" avec occupation déjà
+  // connue), aucun test dédié à ce fichier n'exerce le cas legacy.
+  nombreOccupants: 2,
   createdAt: '2026-07-01T00:00:00.000Z',
   updatedAt: '2026-07-01T00:00:00.000Z',
 } as const;
@@ -425,7 +428,7 @@ describe('CheckinPage — confirmation guidée', () => {
       screen.getByRole('button', { name: 'Confirmer depuis le dialogue' }),
     );
     await waitFor(() =>
-      expect(checkinFromReservation).toHaveBeenCalledWith(10),
+      expect(checkinFromReservation).toHaveBeenCalledWith(10, 2),
     );
     expect(checkinFromReservation).toHaveBeenCalledTimes(1);
   }, 10_000);

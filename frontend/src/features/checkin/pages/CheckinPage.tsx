@@ -217,11 +217,11 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
     setViewingStay(stay);
   }
 
-  async function handleCheckin(reservationId: number) {
+  async function handleCheckin(reservationId: number, nombreOccupants: number) {
     setActionError(null);
     setCheckingInReservationId(reservationId);
     try {
-      const stay = await checkinFromReservation(reservationId);
+      const stay = await checkinFromReservation(reservationId, nombreOccupants);
       notifyCheckinDone(stay.guest, stay.room);
       setCheckingInReservation(null);
       await refetch();
@@ -607,9 +607,9 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
           setCheckingInReservation(null);
           setActionError(null);
         }}
-        onConfirm={() => {
+        onConfirm={(nombreOccupants) => {
           if (checkingInReservation) {
-            void handleCheckin(checkingInReservation.id);
+            void handleCheckin(checkingInReservation.id, nombreOccupants);
           }
         }}
         submitting={checkingInReservationId !== null}

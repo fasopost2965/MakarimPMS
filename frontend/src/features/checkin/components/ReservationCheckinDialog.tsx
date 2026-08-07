@@ -10,6 +10,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ErrorState } from '@/components/ui/error-state';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import type { Reservation, Room } from '@/features/reservations/types';
 import { checkRoomAvailability, listReservationDeposits } from '../api';
 import type {
@@ -32,7 +34,10 @@ interface Props {
   roomStatus: Room['statut'] | null;
   permissions: string[] | null;
   onClose: () => void;
-  onConfirm: () => void;
+  // FIN-102 — nombreOccupants toujours transmis explicitement à la
+  // confirmation (repris de la réservation si déjà connu, sinon saisi ici),
+  // jamais un appel sans paramètre.
+  onConfirm: (nombreOccupants: number) => void;
   submitting: boolean;
   error: string | null;
 }
@@ -88,6 +93,15 @@ function ReservationCheckinForm({
   const [depositsLoading, setDepositsLoading] = useState(false);
   const [depositsError, setDepositsError] = useState<string | null>(null);
   const [depositsRetry, setDepositsRetry] = useState(0);
+  // FIN-102 — préremplie si la réservation porte déjà nombreOccupants,
+  // sinon vide (réservation legacy) : jamais dérivée de
+  // reservation.room.roomType.capacite (interdiction absolue,
+  // common/utils/occupancy.ts).
+  const [nombreOccupants, setNombreOccupants] = useState(
+    reservation.nombreOccupants !== null
+      ? String(reservation.nombreOccupants)
+      : '',
+  );
   const headingRef = useRef<HTMLHeadingElement>(null);
   const submitLockRef = useRef(false);
   const canReadPayments = permissions?.includes('payments:read') ?? false;
@@ -171,8 +185,19 @@ function ReservationCheckinForm({
         86_400_000,
     ),
   );
+  const nombreOccupantsNum =
+    nombreOccupants === '' ? null : Number(nombreOccupants);
+  const capacite = reservation.room.roomType.capacite;
+  const occupantsValid =
+    nombreOccupantsNum !== null &&
+    Number.isInteger(nombreOccupantsNum) &&
+    nombreOccupantsNum >= 1 &&
+    nombreOccupantsNum <= capacite;
   const canConfirm =
-    !isBlacklisted && availability?.disponible === true && !submitting;
+    !isBlacklisted &&
+    occupantsValid &&
+    availability?.disponible === true &&
+    !submitting;
 
   function nextStep() {
     setStep((current) => Math.min(3, current + 1) as 1 | 2 | 3);
@@ -181,15 +206,27 @@ function ReservationCheckinForm({
   return (
     <form
       className="flex flex-col gap-5"
+      // FIN-102 — nécessaire depuis l'ajout du champ "Nombre d'occupants"
+      // (required) à l'étape 2 : ce champ reste monté (seulement masqué en
+      // CSS, comme le reste des sections par étape) tant que l'étape 1 est
+      // active, et la validation HTML5 native du navigateur bloquerait
+      // sinon toute soumission du formulaire (y compris "Continuer" à
+      // l'étape 1) tant qu'il est vide — même précédent que
+      // WalkinCheckinDialog, qui pose déjà `noValidate` pour cette raison.
+      noValidate
       onSubmit={(event) => {
         event.preventDefault();
         if (step < 3) {
           nextStep();
           return;
         }
-        if (canConfirm && !submitLockRef.current) {
+        if (
+          canConfirm &&
+          nombreOccupantsNum !== null &&
+          !submitLockRef.current
+        ) {
           submitLockRef.current = true;
-          onConfirm();
+          onConfirm(nombreOccupantsNum);
         }
       }}
     >
@@ -280,6 +317,24 @@ function ReservationCheckinForm({
             Motif de l’ajustement : {reservation.motifAjustement}
           </AlertMessage>
         )}
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="nombreOccupants">Nombre d'occupants</Label>
+          <Input
+            id="nombreOccupants"
+            type="number"
+            min={1}
+            max={capacite}
+            value={nombreOccupants}
+            onChange={(event) => setNombreOccupants(event.target.value)}
+            required
+          />
+          {nombreOccupants !== '' && !occupantsValid && (
+            <p className="text-destructive text-xs">
+              Doit être un entier entre 1 et {capacite} (capacité de la
+              chambre).
+            </p>
+          )}
+        </div>
       </section>
 
       <section className={step === 3 ? 'flex flex-col gap-4' : 'hidden'}>

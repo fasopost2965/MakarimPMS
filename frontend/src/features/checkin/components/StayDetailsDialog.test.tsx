@@ -22,6 +22,7 @@ const BASE_STAY: Stay = {
   dateCheckoutPrevue: '2026-08-07',
   dateCheckoutReelle: null,
   statut: 'EN_COURS',
+  nombreOccupants: 2,
   folios: [],
   policeRecord: null,
   createdAt: '2026-08-06T12:00:00.000Z',

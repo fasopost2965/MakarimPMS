@@ -48,6 +48,10 @@ export type CreateReservationConfirmInput = GuestSelection & {
   dateDepart: string;
   canal: CanalReservation;
   formule: FormuleHebergement;
+  // FIN-102 — optionnelle (CreateReservationDto.nombreOccupants) : quand
+  // connue dès la réservation, reprise telle quelle par le check-in ;
+  // jamais dérivée de RoomType.capacite si absente.
+  nombreOccupants?: number;
   prixTotalFinal?: number;
   motifAjustement?: string;
 };
@@ -160,6 +164,10 @@ function ReservationForm({
   );
   const [formule, setFormule] =
     useState<FormuleHebergement>('BED_AND_BREAKFAST');
+  // FIN-102 — optionnelle ici (jamais dérivée de selectedRoomType.capacite,
+  // interdiction absolue) : quand renseignée dès la réservation, le
+  // check-in la reprend telle quelle et n'a plus besoin de la redemander.
+  const [nombreOccupants, setNombreOccupants] = useState('');
   const [prixEstime, setPrixEstime] = useState<string | null>(null);
   const [estimating, setEstimating] = useState(false);
   const [manualOverride, setManualOverride] = useState(false);
@@ -241,12 +249,25 @@ function ReservationForm({
   const motifInvalide = manualOverride && motifAjustement.trim().length < 10;
   const prixFinalInvalide =
     manualOverride && (prixFinal === '' || Number(prixFinal) < 0);
+  // FIN-102 — optionnelle : un champ vide ne bloque jamais la soumission
+  // (CreateReservationDto.nombreOccupants est optionnel), mais une valeur
+  // saisie doit être plausible (entier, >= 1, <= capacité si connue).
+  const nombreOccupantsNum =
+    nombreOccupants === '' ? null : Number(nombreOccupants);
+  const nombreOccupantsInvalide =
+    nombreOccupants !== '' &&
+    (nombreOccupantsNum === null ||
+      !Number.isInteger(nombreOccupantsNum) ||
+      nombreOccupantsNum < 1 ||
+      (selectedRoomType !== undefined &&
+        nombreOccupantsNum > selectedRoomType.capacite));
   const canSubmit =
     guestSelection !== null &&
     roomId !== null &&
     !datesInvalides &&
     !motifInvalide &&
-    !prixFinalInvalide;
+    !prixFinalInvalide &&
+    !nombreOccupantsInvalide;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -258,6 +279,9 @@ function ReservationForm({
       dateDepart,
       canal,
       formule,
+      ...(nombreOccupantsNum !== null
+        ? { nombreOccupants: nombreOccupantsNum }
+        : {}),
       ...(manualOverride
         ? {
             prixTotalFinal: Number(prixFinal),
@@ -411,6 +435,28 @@ function ReservationForm({
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="nombreOccupants">
+            Nombre d'occupants (optionnel)
+          </Label>
+          <Input
+            id="nombreOccupants"
+            type="number"
+            min={1}
+            max={selectedRoomType?.capacite}
+            value={nombreOccupants}
+            onChange={(e) => setNombreOccupants(e.target.value)}
+            className="w-32"
+          />
+          {nombreOccupantsInvalide && (
+            <p className="text-destructive text-xs">
+              {selectedRoomType
+                ? `Doit être un entier entre 1 et ${selectedRoomType.capacite} (capacité de la chambre).`
+                : 'Doit être un entier supérieur ou égal à 1.'}
+            </p>
+          )}
         </div>
 
         <div className="bg-muted/40 flex flex-col gap-2.5 rounded-lg border p-4">
