@@ -71,24 +71,36 @@ export function RecordPaymentDialog({
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<FolioSummary | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(true);
+  // UX-001B — distinct de `error` (réservé aux échecs de POST /payments) :
+  // un échec de chargement du solde ne doit jamais être confondu avec un
+  // échec d'enregistrement, ni disparaître silencieusement derrière un
+  // formulaire qui aurait l'air normal.
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    // Repart de zéro à chaque changement de folio/séjour : jamais de fuite
+    // d'un montant/solde saisi ou chargé pour un folio précédent vers le
+    // suivant (un dialogue ré-ouvert sur un autre séjour doit toujours
+    // repartir d'un état vierge, jamais afficher un solde périmé).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingSummary(true);
+    setSummary(null);
+    setSummaryError(null);
+    setMontant('');
     getFolio(folioId)
       .then((folio) => {
         if (cancelled || !folio.synthese) return;
         setSummary(folio.synthese);
-        // Prérempli une seule fois, sans jamais écraser une saisie déjà
-        // commencée par l'agent (montant encore vide).
-        setMontant((current) =>
-          current === '' ? formatMontant(folio.synthese!.balanceTTC) : current,
-        );
+        setMontant(formatMontant(folio.synthese.balanceTTC));
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(
+          // Jamais de solde affiché en cas d'échec de chargement : un faux
+          // "0.00 MAD" laisserait croire à un séjour soldé alors que le
+          // solde réel est simplement inconnu (dangereux — voir summary
+          // resté `null` ci-dessus, jamais réécrit ici).
+          setSummaryError(
             err instanceof Error
               ? err.message
               : 'Erreur de chargement du solde',
@@ -127,6 +139,17 @@ export function RecordPaymentDialog({
 
         {loadingSummary ? (
           <p className="text-muted-foreground text-sm">Chargement du solde…</p>
+        ) : summaryError ? (
+          <div
+            role="alert"
+            className="border-destructive/50 bg-destructive/10 text-destructive rounded-md border p-3 text-sm"
+          >
+            <p className="font-medium">Impossible de charger le solde</p>
+            <p>
+              Le montant à encaisser n&apos;a pas été préempli. Vérifiez le
+              solde manuellement avant de saisir un montant.
+            </p>
+          </div>
         ) : (
           summary && (
             <div className="grid grid-cols-3 gap-2 rounded-md border bg-gray-50 p-3 text-sm">

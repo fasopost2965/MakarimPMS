@@ -110,7 +110,7 @@ function ReservationDetailsForm({
           </Label>
           <Input
             id="prixTotalCalcule"
-            value={`${reservation.prixTotalCalcule} DH`}
+            value={`${reservation.prixTotalCalcule} MAD`}
             readOnly
             disabled
           />

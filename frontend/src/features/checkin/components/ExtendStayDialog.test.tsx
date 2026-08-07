@@ -186,13 +186,13 @@ describe('ExtendStayDialog — comportement UI', () => {
     );
     expect(
       screen.getByText(
-        'Un paiement complémentaire de 350,00 DH est nécessaire avant de prolonger le séjour.',
+        'Un paiement complémentaire de 350,00 MAD est nécessaire avant de prolonger le séjour.',
       ),
     ).toBeVisible();
     expect(screen.queryByText('raw backend message')).not.toBeInTheDocument();
   });
 
-  it('PAYMENT_REQUIRED sans amountRequired : message générique sûr, jamais "undefined DH"', () => {
+  it('PAYMENT_REQUIRED sans amountRequired : message générique sûr, jamais "undefined MAD"', () => {
     const err = new ApiError(409, 'raw backend message', 'PAYMENT_REQUIRED', {
       code: 'PAYMENT_REQUIRED',
       message: 'raw backend message',
@@ -207,7 +207,7 @@ describe('ExtendStayDialog — comportement UI', () => {
         error={err}
       />,
     );
-    expect(screen.queryByText(/undefined DH/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/undefined MAD/)).not.toBeInTheDocument();
     expect(
       screen.getByText(
         "La prolongation n'a pas pu être enregistrée. Réessayez ou contactez un responsable si le problème persiste.",
@@ -215,7 +215,7 @@ describe('ExtendStayDialog — comportement UI', () => {
     ).toBeVisible();
   });
 
-  it('PAYMENT_REQUIRED avec amountRequired non numérique : jamais "NaN DH", ne plante pas', () => {
+  it('PAYMENT_REQUIRED avec amountRequired non numérique : jamais "NaN MAD", ne plante pas', () => {
     const err = new ApiError(409, 'raw backend message', 'PAYMENT_REQUIRED', {
       code: 'PAYMENT_REQUIRED',
       message: 'raw backend message',
@@ -231,7 +231,7 @@ describe('ExtendStayDialog — comportement UI', () => {
         error={err}
       />,
     );
-    expect(screen.queryByText(/NaN DH/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/NaN MAD/)).not.toBeInTheDocument();
     expect(screen.queryByText(/\[object Object\]/)).not.toBeInTheDocument();
     expect(
       screen.getByText(

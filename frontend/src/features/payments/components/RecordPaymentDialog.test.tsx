@@ -119,6 +119,115 @@ describe('RecordPaymentDialog — solde visible (UX-001B)', () => {
     });
     expect(screen.queryByText(/-0\.00/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^-/)).not.toBeInTheDocument();
+
+    // UX-001B — un solde soldé ne doit jamais préremplir un montant qui
+    // permettrait un encaissement positif accidentel : le champ reste à
+    // "0.00" (jamais > 0, jamais vide non plus qui laisserait deviner).
+    const montantInput = screen.getByLabelText(
+      'Montant à encaisser (MAD)',
+    ) as HTMLInputElement;
+    expect(montantInput.value).toBe('0.00');
+  });
+
+  // UX-001B — pas de fuite d'état entre deux ouvertures successives sur des
+  // séjours différents : un montant saisi (ou un solde chargé) pour un
+  // premier folio ne doit jamais réapparaître pour un second folio.
+  it('changement de folio : ne conserve pas le montant saisi pour le folio précédent', async () => {
+    vi.mocked(getFolio).mockResolvedValueOnce(
+      makeFolio({
+        totalChargesTTC: '1800.00',
+        totalPaidTTC: '0.00',
+        balanceTTC: '1800.00',
+      }),
+    );
+
+    const { rerender } = render(
+      <RecordPaymentDialog
+        open
+        folioId={42}
+        onClose={() => {}}
+        onRecorded={() => {}}
+      />,
+    );
+
+    const montantInput = (await screen.findByLabelText(
+      'Montant à encaisser (MAD)',
+    )) as HTMLInputElement;
+    await waitFor(() => expect(montantInput.value).toBe('1800.00'));
+
+    // L'agent modifie le montant préempli avant de changer de folio.
+    fireEvent.change(montantInput, { target: { value: '999.00' } });
+    expect(montantInput.value).toBe('999.00');
+
+    let resolveSecondFolio!: (folio: Folio) => void;
+    vi.mocked(getFolio).mockReturnValueOnce(
+      new Promise<Folio>((resolve) => {
+        resolveSecondFolio = resolve;
+      }),
+    );
+
+    rerender(
+      <RecordPaymentDialog
+        open
+        folioId={73}
+        onClose={() => {}}
+        onRecorded={() => {}}
+      />,
+    );
+
+    // Dès le changement de folio, l'ancien montant (999.00) doit disparaître
+    // — jamais réutilisé pour le nouveau folio, même pendant le chargement.
+    expect(
+      (screen.getByLabelText('Montant à encaisser (MAD)') as HTMLInputElement)
+        .value,
+    ).toBe('');
+
+    resolveSecondFolio(
+      makeFolio({
+        totalChargesTTC: '300.00',
+        totalPaidTTC: '0.00',
+        balanceTTC: '300.00',
+      }),
+    );
+
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText('Montant à encaisser (MAD)') as HTMLInputElement)
+          .value,
+      ).toBe('300.00'),
+    );
+  });
+
+  // UX-001B — un échec de chargement de la synthèse de solde ne doit jamais
+  // afficher un faux solde soldé (dangereux : un agent pourrait croire à
+  // tort qu'il n'y a rien à encaisser). Un état d'erreur explicite doit
+  // s'afficher à la place, et le montant ne doit jamais être préempli sur
+  // une valeur non fiable.
+  it("échec de chargement du solde : jamais de faux '0 MAD', état d'erreur explicite, pas de préremplissage", async () => {
+    vi.mocked(getFolio).mockRejectedValue(new Error('Network error'));
+
+    render(
+      <RecordPaymentDialog
+        open
+        folioId={42}
+        onClose={() => {}}
+        onRecorded={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+    });
+
+    // Aucun bandeau de solde (même à 0) ne doit apparaître.
+    expect(screen.queryByText(/^0\.00 MAD$/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Total du séjour')).not.toBeInTheDocument();
+    expect(screen.queryByText('Reste à payer')).not.toBeInTheDocument();
+
+    const montantInput = screen.getByLabelText(
+      'Montant à encaisser (MAD)',
+    ) as HTMLInputElement;
+    expect(montantInput.value).toBe('');
   });
 
   it('crée le paiement avec le montant affiché (partiel ou complet)', async () => {
