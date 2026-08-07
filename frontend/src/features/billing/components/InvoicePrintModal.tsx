@@ -203,7 +203,7 @@ export function InvoicePrintModal({
               <tr className="border-b text-left">
                 <th className="py-2 font-semibold">Description</th>
                 <th className="py-2 text-right font-semibold">
-                  Montant HT (MAD)
+                  Montant TTC (MAD)
                 </th>
               </tr>
             </thead>

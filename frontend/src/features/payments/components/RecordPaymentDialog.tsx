@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,6 +18,8 @@ import {
 } from '@/components/ui/select';
 import { createPayment } from '../api';
 import type { MoyenPaiement } from '../types';
+import { getFolio } from '@/features/billing/api';
+import type { FolioSummary } from '@/features/billing/types';
 
 const MOYENS: MoyenPaiement[] = ['ESPECES', 'CARTE', 'VIREMENT', 'ACOMPTE'];
 
@@ -35,10 +37,27 @@ interface Props {
   onRecorded: () => void;
 }
 
+// UX-001B — évite un solde négatif affiché (ex. -0.00 par arrondi) : le
+// solde dû réel ne devient jamais négatif (computeSoldeDu, backend), mais
+// un folio déjà réglé/trop réglé doit toujours s'afficher à 0.00, jamais
+// en négatif côté agent.
+function formatMontant(value: string): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '0.00';
+  return Math.max(n, 0).toFixed(2);
+}
+
 // Encaissement d'un règlement sur un folio (docs/modules/payments.md §4) —
 // idempotencyKey générée côté client à l'ouverture du dialogue, pas à
 // chaque frappe, pour qu'un double-clic sur "Enregistrer" ne crée jamais
 // deux paiements distincts.
+//
+// UX-001B — l'agent n'a plus à se souvenir d'un solde vu sur un autre écran
+// (StayDetailsDialog) : ce dialogue charge lui-même la synthèse de solde du
+// folio (GET /folios/:id, champ `synthese` — seule source de vérité,
+// jamais recalculée ici à partir des lignes) et préremplit le montant à
+// encaisser avec le reste à payer (FIN-001/ADR-008), tout en laissant
+// l'agent le réduire librement pour un paiement partiel.
 export function RecordPaymentDialog({
   open,
   folioId,
@@ -50,6 +69,39 @@ export function RecordPaymentDialog({
   const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<FolioSummary | null>(null);
+  const [loadingSummary, setLoadingSummary] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoadingSummary(true);
+    getFolio(folioId)
+      .then((folio) => {
+        if (cancelled || !folio.synthese) return;
+        setSummary(folio.synthese);
+        // Prérempli une seule fois, sans jamais écraser une saisie déjà
+        // commencée par l'agent (montant encore vide).
+        setMontant((current) =>
+          current === '' ? formatMontant(folio.synthese!.balanceTTC) : current,
+        );
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : 'Erreur de chargement du solde',
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingSummary(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [folioId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -73,6 +125,39 @@ export function RecordPaymentDialog({
           <DialogTitle>Encaisser un paiement</DialogTitle>
         </DialogHeader>
 
+        {loadingSummary ? (
+          <p className="text-muted-foreground text-sm">Chargement du solde…</p>
+        ) : (
+          summary && (
+            <div className="grid grid-cols-3 gap-2 rounded-md border bg-gray-50 p-3 text-sm">
+              <div>
+                <p className="text-muted-foreground text-xs uppercase">
+                  Total du séjour
+                </p>
+                <p className="font-mono font-medium">
+                  {formatMontant(summary.totalChargesTTC)} MAD
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs uppercase">
+                  Déjà payé
+                </p>
+                <p className="font-mono font-medium">
+                  {formatMontant(summary.totalPaidTTC)} MAD
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs uppercase">
+                  Reste à payer
+                </p>
+                <p className="font-mono font-semibold">
+                  {formatMontant(summary.balanceTTC)} MAD
+                </p>
+              </div>
+            </div>
+          )
+        )}
+
         <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="moyen">Moyen de paiement</Label>
@@ -95,7 +180,7 @@ export function RecordPaymentDialog({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="montant">Montant (MAD)</Label>
+            <Label htmlFor="montant">Montant à encaisser (MAD)</Label>
             <Input
               id="montant"
               type="number"

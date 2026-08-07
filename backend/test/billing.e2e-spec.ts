@@ -243,6 +243,188 @@ describe('Billing Module (5.13)', () => {
     });
   });
 
+  // UX-001B — synthèse de solde exposée sur GET /folios/:id
+  // (totalChargesTTC/totalPaidTTC/balanceTTC), consommée par
+  // RecordPaymentDialog côté frontend pour ne plus recalculer de solde en
+  // JS. balanceTTC doit rester égal à computeSoldeDu([folio]).
+  describe('GET /folios/:id — synthèse de solde (UX-001B)', () => {
+    it('expose totalChargesTTC/totalPaidTTC/balanceTTC cohérents avec computeSoldeDu', async () => {
+      const ts = Date.now();
+      const roomType = await prisma.roomType.create({
+        data: {
+          nom: `TEST-BILLING-SOLDE-${ts}`,
+          prixBase: new Prisma.Decimal(500),
+          capacite: 2,
+        },
+      });
+
+      const room = await prisma.room.create({
+        data: {
+          numero: `TEST-BILLING-SOLDE-${ts}`,
+          roomTypeId: roomType.id,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+
+      const guest = await prisma.guest.create({
+        data: { nom: 'Benali', prenom: 'Yasmine' },
+      });
+
+      const stay = await prisma.stay.create({
+        data: {
+          roomId: room.id,
+          guestId: guest.id,
+          dateCheckin: new Date(),
+          dateCheckoutPrevue: new Date(),
+        },
+      });
+
+      const folio = await prisma.folio.create({
+        data: { stayId: stay.id, libelle: 'Folio principal' },
+      });
+
+      await prisma.folioLine.create({
+        data: {
+          folioId: folio.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: 'Hébergement — 1 nuit',
+          montant: new Prisma.Decimal(1200),
+        },
+      });
+      await prisma.folioLine.create({
+        data: {
+          folioId: folio.id,
+          type: TypeLigneFolio.EXTRA,
+          libelle: 'Room service',
+          montant: new Prisma.Decimal(80),
+        },
+      });
+      // Ligne annulée : ne doit compter dans aucun des trois totaux.
+      await prisma.folioLine.create({
+        data: {
+          folioId: folio.id,
+          type: TypeLigneFolio.EXTRA,
+          libelle: 'Extra annulé',
+          montant: new Prisma.Decimal(500),
+          annulee: true,
+          motifAnnulation: 'Erreur de saisie corrigée avant paiement',
+        },
+      });
+      await prisma.folioLine.create({
+        data: {
+          folioId: folio.id,
+          type: TypeLigneFolio.PAIEMENT,
+          libelle: 'Acompte espèces',
+          montant: new Prisma.Decimal(700),
+        },
+      });
+
+      const res = await client.get(`/api/folios/${folio.id}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('synthese');
+      expect(Number(res.body.synthese.totalChargesTTC)).toBe(1280);
+      expect(Number(res.body.synthese.totalPaidTTC)).toBe(700);
+      expect(Number(res.body.synthese.balanceTTC)).toBe(580);
+
+      // Preuve de non-duplication : balanceTTC == computeSoldeDu([folio])
+      // recalculé à partir des mêmes lignes brutes renvoyées par l'API.
+      const lignesBrutes = res.body.lignes as Array<{
+        type: TypeLigneFolio;
+        montant: string;
+        annulee: boolean;
+      }>;
+      const recomputed = computeSoldeDu([
+        {
+          lignes: lignesBrutes.map((l) => ({
+            type: l.type,
+            montant: new Prisma.Decimal(l.montant),
+            annulee: l.annulee,
+          })),
+        },
+      ]);
+      expect(Number(res.body.synthese.balanceTTC)).toBe(recomputed.toNumber());
+
+      // Nettoyer
+      await prisma.folioLine.deleteMany({ where: { folioId: folio.id } });
+      await prisma.folio.deleteMany({ where: { stayId: stay.id } });
+      await prisma.roomNight.deleteMany({ where: { stayId: stay.id } });
+      await prisma.stay.deleteMany({ where: { id: stay.id } });
+      await prisma.room.deleteMany({ where: { id: room.id } });
+      await prisma.roomType.deleteMany({ where: { id: roomType.id } });
+      await prisma.guest.deleteMany({ where: { id: guest.id } });
+    });
+
+    it('solde entièrement soldé : balanceTTC à 0, pas négatif', async () => {
+      const ts = Date.now();
+      const roomType = await prisma.roomType.create({
+        data: {
+          nom: `TEST-BILLING-SOLDE0-${ts}`,
+          prixBase: new Prisma.Decimal(500),
+          capacite: 2,
+        },
+      });
+
+      const room = await prisma.room.create({
+        data: {
+          numero: `TEST-BILLING-SOLDE0-${ts}`,
+          roomTypeId: roomType.id,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+
+      const guest = await prisma.guest.create({
+        data: { nom: 'Fassi', prenom: 'Omar' },
+      });
+
+      const stay = await prisma.stay.create({
+        data: {
+          roomId: room.id,
+          guestId: guest.id,
+          dateCheckin: new Date(),
+          dateCheckoutPrevue: new Date(),
+        },
+      });
+
+      const folio = await prisma.folio.create({
+        data: { stayId: stay.id, libelle: 'Folio principal' },
+      });
+
+      await prisma.folioLine.create({
+        data: {
+          folioId: folio.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: 'Hébergement — 1 nuit',
+          montant: new Prisma.Decimal(1000),
+        },
+      });
+      await prisma.folioLine.create({
+        data: {
+          folioId: folio.id,
+          type: TypeLigneFolio.PAIEMENT,
+          libelle: 'Paiement carte',
+          montant: new Prisma.Decimal(1000),
+        },
+      });
+
+      const res = await client.get(`/api/folios/${folio.id}`);
+
+      expect(res.status).toBe(200);
+      expect(Number(res.body.synthese.balanceTTC)).toBe(0);
+      const balanceTTC = res.body.synthese.balanceTTC as string;
+      expect(balanceTTC.startsWith('-')).toBe(false);
+
+      // Nettoyer
+      await prisma.folioLine.deleteMany({ where: { folioId: folio.id } });
+      await prisma.folio.deleteMany({ where: { stayId: stay.id } });
+      await prisma.roomNight.deleteMany({ where: { stayId: stay.id } });
+      await prisma.stay.deleteMany({ where: { id: stay.id } });
+      await prisma.room.deleteMany({ where: { id: room.id } });
+      await prisma.roomType.deleteMany({ where: { id: roomType.id } });
+      await prisma.guest.deleteMany({ where: { id: guest.id } });
+    });
+  });
+
   // CH-040 (BR-AUD-002, docs/modules/billing.md §5) — annulation contrôlée
   // d'une ligne de folio d'extras. Vraie base MySQL, pas de mock.
   describe('Annulation de ligne de folio — CH-040', () => {

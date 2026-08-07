@@ -34,6 +34,15 @@ export interface Payment {
   createdAt: string;
 }
 
+// UX-001B — synthèse de solde renvoyée par GET /folios/:id, calculée côté
+// backend via computeFolioSummary (lui-même basé sur computeSoldeDu, LA
+// fonction canonique unique — jamais recalculée côté frontend).
+export interface FolioSummary {
+  totalChargesTTC: string;
+  totalPaidTTC: string;
+  balanceTTC: string;
+}
+
 export interface Folio {
   id: number;
   stayId: number;
@@ -41,4 +50,5 @@ export interface Folio {
   lignes: FolioLine[];
   invoices: Invoice[];
   createdAt: string;
+  synthese?: FolioSummary;
 }
