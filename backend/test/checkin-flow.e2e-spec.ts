@@ -129,16 +129,25 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
       900,
     );
 
-    const checkin = await client.post(`/api/checkin/${reservation.id}`).send();
+    // FIN-102B (INV-TEMP-001) — reservation.nombreOccupants absent : fourni
+    // ici dans le corps du check-in (occupation 1, capacité de chambre 2 —
+    // discriminant : la taxe doit être calculée pour 1, jamais 2).
+    const checkin = await client
+      .post(`/api/checkin/${reservation.id}`)
+      .send({ nombreOccupants: 1 });
     expect(checkin.status).toBe(201);
     const stay = checkin.body as StayResponse;
     expect(stay.reservationId).toBe(reservation.id);
 
     const principal = stay.folios.find((f) => f.libelle === 'Folio principal');
     expect(principal).toBeDefined();
-    expect(principal!.lignes).toHaveLength(1);
+    // HEBERGEMENT + TAXE_SEJOUR (FIN-102B : matérialisée dès le check-in,
+    // 2 nuits x 1 occupant x 3 MAD, TaxRateConfig du seed).
+    expect(principal!.lignes).toHaveLength(2);
     expect(principal!.lignes[0].type).toBe('HEBERGEMENT');
     expect(Number(principal!.lignes[0].montant)).toBe(900);
+    expect(principal!.lignes[1].type).toBe('TAXE_SEJOUR');
+    expect(Number(principal!.lignes[1].montant)).toBe(6);
 
     // La réservation d'origine est marquée transformée, et une chambre
     // occupée doit refuser une nouvelle vente sur les mêmes dates tant que
@@ -165,10 +174,17 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
       .send();
     expect(blockedCheckout.status).toBe(409);
 
+    // 900 (HEBERGEMENT, jamais recalculé) + 3 (TAXE_SEJOUR). Le check-out a
+    // lieu ici quelques instants après le check-in, alors que
+    // dateCheckoutPrevue est en 2027 : StayService.checkout traite donc ce
+    // départ comme un départ anticipé (FIN-102B, INV-TEMP-001) et réconcilie
+    // la taxe déjà matérialisée au check-in (6 MAD, 2 nuits x 1 occupant) à
+    // la seule nuit réellement écoulée (1 nuit x 1 occupant x 3 MAD = 3)
+    // avant même le contrôle de solde — jamais les 6 MAD d'origine.
     const paymentRes = await adminClient.post('/api/payments').send({
       folioId: principal!.id,
       moyen: 'ESPECES',
-      montant: '900.00',
+      montant: '903.00',
       idempotencyKey: `test-checkin-flow-payment-${stay.id}`,
     });
     expect(paymentRes.status).toBe(201);
@@ -212,6 +228,7 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
       roomId: room.id,
       dateCheckoutPrevue: dateCheckoutPrevue.toISOString().slice(0, 10),
       guest: { nom: 'Walk', prenom: 'In' },
+      nombreOccupants: 1,
     });
     expect(res.status).toBe(201);
     const stay = res.body as StayResponse;
@@ -258,6 +275,7 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
       roomId: room.id,
       dateCheckoutPrevue: dateCheckoutPrevue.toISOString().slice(0, 10),
       guest: { nom: 'Solde', prenom: 'Impaye' },
+      nombreOccupants: 1,
     });
     expect(res.status).toBe(201);
     const stay = res.body as StayResponse;

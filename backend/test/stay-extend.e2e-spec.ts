@@ -249,6 +249,7 @@ describe('Stay - Extend (GL-003)', () => {
         dateCheckoutPrevue: isoDate(addDays(today, 2)),
         guestId: guest.id,
         formule: FormuleHebergement.ROOM_ONLY,
+        nombreOccupants: 2,
       });
       expect(walkinRes.status).toBe(201);
       stay = walkinRes.body as StayResponse;
@@ -395,6 +396,7 @@ describe('Stay - Extend (GL-003)', () => {
         dateCheckoutPrevue: isoDate(addDays(today, 2)),
         guestId: guest.id,
         formule: FormuleHebergement.HALF_BOARD,
+        nombreOccupants: 2,
       });
       const halfBoardStay = stayRes.body as StayResponse;
 
@@ -509,6 +511,7 @@ describe('Stay - Extend (GL-003)', () => {
         roomId: room5.id,
         dateCheckoutPrevue: isoDate(addDays(today, 2)),
         guestId: guest.id,
+        nombreOccupants: 2,
       });
       const otherStay = otherStayRes.body as StayResponse;
       await prisma.roomNight.create({
@@ -738,13 +741,15 @@ describe('Stay - Extend (GL-003)', () => {
 
         const folioId = stay.folios[0].id;
         // Crédit disponible = paiements − charges déjà existantes (hors
-        // PAIEMENT) : la charge HEBERGEMENT initiale (200 = 2 nuits x 100)
-        // doit d'abord être couverte avant que le supplément de 200 requis
-        // ne soit lui-même disponible en crédit — encaisser 400 au total.
+        // PAIEMENT) : la charge initiale (200 HEBERGEMENT + 12 TAXE_SEJOUR,
+        // FIN-102B, matérialisée dès le check-in = 212) doit d'abord être
+        // couverte avant que le supplément de 200 requis (montantSupplement
+        // n'inclut jamais la taxe, voir extendStay) ne soit lui-même
+        // disponible en crédit — encaisser 412 au total.
         const paymentRes = await adminClient.post('/api/payments').send({
           folioId,
           moyen: 'ESPECES',
-          montant: '400.00',
+          montant: '412.00',
           idempotencyKey: `gl003-payment-${stay.id}-${Date.now()}`,
         });
         expect(paymentRes.status).toBe(201);
@@ -841,11 +846,14 @@ describe('Stay - Extend (GL-003)', () => {
 
         const folioId = stay.folios[0].id;
         // Crédit réuni AVANT la course, exactement à hauteur du besoin :
-        // charge initiale (200) + supplément à venir (200) = 400.
+        // charge initiale (200 HEBERGEMENT + 12 TAXE_SEJOUR, FIN-102B,
+        // matérialisée dès le check-in) + supplément à venir (200,
+        // montantSupplement du contrôle de crédit n'inclut jamais la taxe,
+        // voir extendStay) = 412.
         const paymentRes = await adminClient.post('/api/payments').send({
           folioId,
           moyen: 'ESPECES',
-          montant: '400.00',
+          montant: '412.00',
           idempotencyKey: `gl003j-payment-base-${stay.id}-${Date.now()}`,
         });
         expect(paymentRes.status).toBe(201);
@@ -988,9 +996,13 @@ describe('Stay - Extend (GL-003)', () => {
         });
 
         const folioId = stay.folios[0].id;
-        // Charge initiale = 200 (2 nuits x 100), supplément requis = 200 —
-        // 500 encaissés couvrent les deux (400) et laissent un reliquat de
-        // 100 après application de la prolongation.
+        // Charge initiale = 200 (2 nuits x 100) + 12 TAXE_SEJOUR (FIN-102B,
+        // 2 nuits x 2 occupants x 3 MAD, matérialisée dès le check-in) = 212.
+        // Supplément requis à la prolongation = 200 (delta HEBERGEMENT,
+        // montantSupplement du contrôle de crédit n'inclut jamais la taxe,
+        // voir extendStay) + 12 (delta TAXE_SEJOUR, matérialisé lui aussi
+        // dans folioLines) = 212. 500 encaissés couvrent 212 + 212 = 424 et
+        // laissent un reliquat de 76 après application de la prolongation.
         const paymentRes = await adminClient.post('/api/payments').send({
           folioId,
           moyen: 'ESPECES',
@@ -1016,10 +1028,10 @@ describe('Stay - Extend (GL-003)', () => {
         const charges = folioLines
           .filter((l) => l.type !== TypeLigneFolio.PAIEMENT && !l.annulee)
           .reduce((sum, l) => sum + Number(l.montant), 0);
-        // Reliquat = 500 (paiement) − (200 initial + 200 supplément) = 100,
+        // Reliquat = 500 (paiement) − (212 initial + 212 supplément) = 76,
         // toujours présent après application (jamais perdu/écrêté) :
         // paiements > charges de précisément ce reliquat.
-        expect(paiements - charges).toBeCloseTo(100);
+        expect(paiements - charges).toBeCloseTo(76);
       });
     });
 
@@ -1085,7 +1097,10 @@ describe('Stay - Extend (GL-003)', () => {
       expect(stayAfter.dateCheckoutPrevue.toISOString().slice(0, 10)).toBe(
         isoDate(addDays(today, 2)),
       );
-      expect(linesAfter).toBe(1); // seule la ligne HEBERGEMENT initiale
+      // HEBERGEMENT + TAXE_SEJOUR initiales du check-in (FIN-102B,
+      // matérialisée dès le check-in) — le rollback intégral de la
+      // prolongation sabotée ne doit en ajouter aucune.
+      expect(linesAfter).toBe(2);
 
       jest.restoreAllMocks();
       const retry = await receptionClient

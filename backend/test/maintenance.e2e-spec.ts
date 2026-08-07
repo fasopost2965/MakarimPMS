@@ -164,6 +164,7 @@ describe('Maintenance — tickets et connexion au statut chambre (e2e)', () => {
           .toISOString()
           .slice(0, 10),
         guest: { nom: 'Maintenance', prenom: 'Occupee' },
+        nombreOccupants: 1,
       });
       expect(checkin.status).toBe(201);
       const stayId = (checkin.body as StayResponse).id;

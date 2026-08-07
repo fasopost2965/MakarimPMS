@@ -179,6 +179,7 @@ describe('Dashboard — résumé (e2e)', () => {
           .toISOString()
           .slice(0, 10),
         guest: { nom: 'Dashboard', prenom: 'Depart' },
+        nombreOccupants: 1,
       });
       expect(checkin.status).toBe(201);
       const stayId = (checkin.body as StayResponse).id;
@@ -255,6 +256,7 @@ describe('Dashboard — résumé (e2e)', () => {
         .toISOString()
         .slice(0, 10),
       guest: { nom: 'Dashboard', prenom: 'Encaisse' },
+      nombreOccupants: 1,
     });
     expect(checkinRes.status).toBe(201);
     const paymentStayId = (

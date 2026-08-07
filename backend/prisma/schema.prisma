@@ -388,6 +388,14 @@ model Reservation {
   // principe que prixTotalCalcule/prixTotalFinal : on gèle ce qui a été
   // décidé, pas une valeur dérivée à la volée).
   montantPenalite      Decimal?                  @db.Decimal(10, 2)
+  // FIN-102B — occupation réelle, saisie à la réservation quand elle est
+  // connue à l'avance (jamais déduite de RoomType.capacite, INV-TEMP-001) :
+  // reprise telle quelle par StayService.checkinFromReservation pour
+  // calculer TAXE_SEJOUR dès le check-in. Optionnelle : une réservation
+  // créée avant cette migration, ou sans occupation connue à l'avance,
+  // reste NULL — le check-in doit alors la demander explicitement (voir
+  // CheckinFromReservationDto).
+  nombreOccupants      Int?
   nights               RoomNight[]
   stay                 Stay?
   deposits             ReservationDeposit[]
@@ -502,6 +510,15 @@ model Stay {
   // une FolioLine EXTRA "repas" est créée au check-in
   // (StayService.createFolioPrincipal).
   formule            FormuleHebergement @default(BED_AND_BREAKFAST)
+  // FIN-102B (ADR-008, INV-TEMP-001) — nombre réel d'occupants, toujours
+  // résolu avant la création d'un nouveau Stay (checkinFromReservation/
+  // checkinWalkIn) pour matérialiser TAXE_SEJOUR dès le check-in, jamais
+  // déduite de room.roomType.capacite (interdiction absolue, voir
+  // StayService). NULL uniquement pour les séjours déjà en base avant
+  // cette migration — marqueur legacy consommé par le seul fallback de
+  // BillingService.generateInvoice (critère de suppression documenté
+  // là-bas), jamais réutilisé pour un nouveau check-in.
+  nombreOccupants    Int?
   nights             RoomNight[]
   folios             Folio[]
   policeRecord       PoliceRecord?
@@ -1435,6 +1452,12 @@ enum AuditAction {
   // GL-003 — prolongation de séjour (StayService.extendStay), réservé à la
   // permission dédiée stay:extend (Administrateur + Réception).
   EXTEND_STAY
+  // FIN-102B (INV-TEMP-001) — réconciliation de TAXE_SEJOUR au check-out
+  // (BillingService.reconcilierTaxeSejourDepartAnticipe, appelée
+  // uniquement par StayService.checkout) : annulation de la ligne
+  // matérialisée en trop puis recréation au montant réellement dû
+  // (jamais de montant négatif, contrainte CHECK MySQL sur FolioLine).
+  RECONCILE_TAXE_SEJOUR
 }
 
 // ------------------------------------------------------------------

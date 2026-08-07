@@ -21,6 +21,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { getTodayRange } from '../../common/utils/date-range';
+import { assertNombreOccupantsValide } from '../../common/utils/occupancy';
 import { getNightsBetween } from '../reservations/utils/nights';
 import {
   calculateFormuleTotal,
@@ -45,6 +46,7 @@ import {
   type HousekeepingTaskWriter,
 } from '../housekeeping/housekeeping-task-writer.token';
 import { WalkinDto } from './dto/walkin.dto';
+import { CheckinFromReservationDto } from './dto/checkin-from-reservation.dto';
 import { ForceCheckoutDto } from './dto/force-checkout.dto';
 import { computeSoldeDu } from './utils/solde';
 import { CheckoutEffectueEvent } from './events/checkout-effectue.event';
@@ -89,7 +91,11 @@ export class StayService {
   // création de la réservation (RoomNight) : on les rattache au séjour au
   // lieu d'en recréer, la contrainte unique (roomId, date) reste la même
   // ligne physique.
-  async checkinFromReservation(reservationId: number, userId?: number) {
+  async checkinFromReservation(
+    reservationId: number,
+    dto?: CheckinFromReservationDto,
+    userId?: number,
+  ) {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const reservation = await tx.reservation.findUnique({
@@ -106,6 +112,27 @@ export class StayService {
           );
         }
 
+        // FIN-102B (INV-TEMP-001) — nombreOccupants doit TOUJOURS être
+        // résolu avant la création du Stay : repris de la réservation si
+        // elle le renseigne déjà, sinon fourni dans le corps de cette
+        // requête. Jamais déduit de room.roomType.capacite (interdiction
+        // absolue). room chargé ici (avant la création du Stay, plutôt
+        // qu'après comme précédemment) car nécessaire à la validation de la
+        // capacité, en plus de son usage existant pour le calcul de formule
+        // ci-dessous.
+        const room = await this.roomsService.findByIdWithPricing(
+          reservation.roomId,
+          tx,
+        );
+        const nombreOccupants =
+          reservation.nombreOccupants ?? dto?.nombreOccupants;
+        if (nombreOccupants == null) {
+          throw new BadRequestException(
+            'nombreOccupants requis pour ce check-in : la réservation ne le renseigne pas — fournissez-le dans le corps de la requête (POST /checkin/:reservationId).',
+          );
+        }
+        assertNombreOccupantsValide(nombreOccupants, room.roomType.capacite);
+
         const stay = await tx.stay.create({
           data: {
             reservationId: reservation.id,
@@ -114,6 +141,7 @@ export class StayService {
             dateCheckin: new Date(),
             dateCheckoutPrevue: reservation.dateDepart,
             formule: reservation.formule,
+            nombreOccupants,
           },
         });
 
@@ -148,10 +176,6 @@ export class StayService {
         // l'éclatement (une ligne HEBERGEMENT unique, comportement
         // identique à avant Priorité 3) plutôt que produire un montant
         // négatif.
-        const room = await this.roomsService.findByIdWithPricing(
-          reservation.roomId,
-          tx,
-        );
         const formuleTotalBrut = calculateFormuleTotal(
           reservation.formule,
           room.roomType,
@@ -176,6 +200,7 @@ export class StayService {
           nights.length,
           reservation.formule,
           montantFormule,
+          nombreOccupants,
         );
         // Priorité 2 (acomptes) : un walk-in n'a jamais de réservation
         // préalable donc jamais d'acompte à imputer — cet appel n'existe
@@ -226,6 +251,14 @@ export class StayService {
           dto.roomId,
           tx,
         );
+        // FIN-102B (INV-TEMP-001) — nombreOccupants obligatoire dans
+        // WalkinDto (un walk-in n'a pas de Reservation à consulter),
+        // validé contre la capacité réelle de la chambre attribuée. Jamais
+        // déduit de room.roomType.capacite (interdiction absolue).
+        assertNombreOccupantsValide(
+          dto.nombreOccupants,
+          room.roomType.capacite,
+        );
 
         const guest = dto.guestId
           ? await this.guestsService.assertNotBlacklisted(dto.guestId, tx)
@@ -240,6 +273,7 @@ export class StayService {
             dateCheckin,
             dateCheckoutPrevue: new Date(dto.dateCheckoutPrevue),
             formule,
+            nombreOccupants: dto.nombreOccupants,
           },
         });
 
@@ -275,6 +309,7 @@ export class StayService {
           nights.length,
           formule,
           montantFormule,
+          dto.nombreOccupants,
         );
 
         const created = await tx.stay.findUniqueOrThrow({
@@ -299,6 +334,13 @@ export class StayService {
   // bonne ventilation TVA (hébergement et restauration ont des taux
   // différents, docs/modules/parameters.md — TVA_HEBERGEMENT vs
   // TVA_ANNEXE), jamais ajoutée pour ROOM_ONLY ni un montant à 0.
+  //
+  // FIN-102B (ADR-008, INV-TEMP-001) — matérialise aussi TAXE_SEJOUR dès le
+  // check-in (via BillingService.materialiserTaxesStatutaires), sur la base
+  // de montantHebergement (hors formule EXTRA, même sous-total que
+  // generateInvoice) et du nombreOccupants réel déjà résolu par l'appelant
+  // (jamais roomType.capacite) : computeSoldeDu doit refléter cette charge
+  // immédiatement après le check-in, avant toute facturation.
   private async createFolioPrincipal(
     tx: Prisma.TransactionClient,
     stayId: number,
@@ -306,6 +348,7 @@ export class StayService {
     nights: number,
     formule: FormuleHebergement,
     montantFormule: Prisma.Decimal,
+    nombreOccupants: number,
   ) {
     const folio = await tx.folio.create({
       data: { stayId, libelle: 'Folio principal' },
@@ -328,6 +371,13 @@ export class StayService {
         },
       });
     }
+    await this.billingService.materialiserTaxesStatutaires(
+      tx,
+      folio.id,
+      nights,
+      nombreOccupants,
+      montantHebergement,
+    );
     return folio;
   }
 
@@ -438,40 +488,108 @@ export class StayService {
   // même si le solde total est nul ou négatif. Même échappatoire
   // (force + motif + checkin:force-checkout), mais AuditAction distinct
   // (FORCE_CHECKOUT_RESTAURANT) pour ne pas confondre les deux causes.
+  // FIN-102B (ADR-008, INV-TEMP-001) — la réconciliation TAXE_SEJOUR (départ
+  // anticipé) doit avoir lieu AVANT le contrôle de solde qui bloque le
+  // check-out (BR-SEJ-004 ci-dessus), pour que le solde contrôlé soit déjà
+  // le solde corrigé — sinon un check-out pourrait être bloqué (ou
+  // faussement débloqué) sur une taxe de séjour qui ne correspond plus à la
+  // durée réelle du séjour. La réconciliation, le calcul du solde et le
+  // contrôle qui peut bloquer/forcer le check-out sont donc désormais dans
+  // la MÊME transaction verrouillée (même précédent que changeRoom/
+  // extendStay : verrou FOR UPDATE sur Stay, jamais l'objet lu avant la
+  // transaction pour les décisions qui suivent) — un rejet (409/403) fait
+  // strictement rollback, y compris la réconciliation, jamais d'effet de
+  // bord partiel.
   async checkout(
     id: number,
     dto?: ForceCheckoutDto,
     userId?: number,
     roleId?: number,
   ) {
-    const stay = await this.findOne(id);
-    if (stay.statut !== StatutSejour.EN_COURS) {
+    const initial = await this.findOne(id);
+    if (initial.statut !== StatutSejour.EN_COURS) {
       throw new ConflictException(
-        `Ce séjour est déjà clôturé (statut actuel : ${stay.statut}).`,
+        `Ce séjour est déjà clôturé (statut actuel : ${initial.statut}).`,
       );
     }
-
-    const soldeDu = computeSoldeDu(stay.folios);
-    const soldePositif = soldeDu.gt(0);
-    const restaurantNonAcquittee = stay.folios.some((folio) =>
-      folio.lignes.some(
-        (ligne) => ligne.type === TypeLigneFolio.RESTAURANT && !ligne.annulee,
-      ),
-    );
     const force = dto?.force === true;
+    const now = new Date();
 
-    if (soldePositif && !force) {
-      throw new ConflictException(
-        `Solde impayé (${soldeDu.toFixed(2)} MAD) : le check-out est bloqué tant que le solde n'est pas ramené à 0 (paiement ou avoir). Un check-out forcé est possible (force: true, motif ≥ 10 caractères), réservé à la permission checkin:force-checkout.`,
-      );
-    }
-    if (restaurantNonAcquittee && !force) {
-      throw new ConflictException(
-        `Une ou plusieurs notes restaurant n'ont pas été soldées pour ce séjour : le check-out est bloqué tant qu'elles ne sont pas annulées (correction) ou explicitement réglées. Un check-out forcé est possible (force: true, motif ≥ 10 caractères), réservé à la permission checkin:force-checkout.`,
-      );
-    }
+    let soldeDuFinal = new Prisma.Decimal(0);
 
     const updated = await this.prisma.$transaction(async (tx) => {
+      const stayLocked = await tx.$queryRaw<
+        Array<{
+          id: number;
+          statut: StatutSejour;
+          dateCheckin: Date;
+          nombreOccupants: number | null;
+        }>
+      >`
+        SELECT id, statut, dateCheckin, nombreOccupants
+        FROM Stay WHERE id = ${id} FOR UPDATE
+      `;
+      if (!stayLocked || stayLocked.length === 0) {
+        throw new NotFoundException(`Séjour ${id} introuvable.`);
+      }
+      const lockedStay = stayLocked[0];
+      if (lockedStay.statut !== StatutSejour.EN_COURS) {
+        throw new ConflictException(
+          `Ce séjour est déjà clôturé (statut actuel : ${lockedStay.statut}).`,
+        );
+      }
+
+      // Réconciliation TAXE_SEJOUR — uniquement pour un séjour "nouveau
+      // modèle" (nombreOccupants renseigné, voir StayService.
+      // createFolioPrincipal) : un séjour legacy n'a jamais eu TAXE_SEJOUR
+      // matérialisée avant la facturation, rien à réconcilier ici (elle
+      // sera calculée sur la durée réelle par le fallback de
+      // BillingService.generateInvoice, qui utilise déjà
+      // dateCheckoutReelle).
+      if (lockedStay.nombreOccupants != null) {
+        const folioPrincipal = await tx.folio.findFirst({
+          where: { stayId: id },
+          orderBy: { id: 'asc' },
+        });
+        if (folioPrincipal) {
+          const nightsReelles = getNightsBetween(
+            lockedStay.dateCheckin,
+            now,
+          ).length;
+          await this.billingService.reconcilierTaxeSejourDepartAnticipe(
+            tx,
+            folioPrincipal.id,
+            nightsReelles,
+            lockedStay.nombreOccupants,
+            userId,
+          );
+        }
+      }
+
+      const folios = await tx.folio.findMany({
+        where: { stayId: id },
+        include: { lignes: true },
+      });
+      const soldeDu = computeSoldeDu(folios);
+      soldeDuFinal = soldeDu;
+      const soldePositif = soldeDu.gt(0);
+      const restaurantNonAcquittee = folios.some((folio) =>
+        folio.lignes.some(
+          (ligne) => ligne.type === TypeLigneFolio.RESTAURANT && !ligne.annulee,
+        ),
+      );
+
+      if (soldePositif && !force) {
+        throw new ConflictException(
+          `Solde impayé (${soldeDu.toFixed(2)} MAD) : le check-out est bloqué tant que le solde n'est pas ramené à 0 (paiement ou avoir). Un check-out forcé est possible (force: true, motif ≥ 10 caractères), réservé à la permission checkin:force-checkout.`,
+        );
+      }
+      if (restaurantNonAcquittee && !force) {
+        throw new ConflictException(
+          `Une ou plusieurs notes restaurant n'ont pas été soldées pour ce séjour : le check-out est bloqué tant qu'elles ne sont pas annulées (correction) ou explicitement réglées. Un check-out forcé est possible (force: true, motif ≥ 10 caractères), réservé à la permission checkin:force-checkout.`,
+        );
+      }
+
       if ((soldePositif || restaurantNonAcquittee) && force) {
         const grant = await tx.permission.findFirst({
           where: {
@@ -516,7 +634,7 @@ export class StayService {
         where: { id },
         data: {
           statut: StatutSejour.CHECKOUT,
-          dateCheckoutReelle: new Date(),
+          dateCheckoutReelle: now,
         },
         include: STAY_INCLUDE,
       });
@@ -524,10 +642,10 @@ export class StayService {
 
     await this.eventEmitter.emitAsync(
       'checkout.effectue',
-      new CheckoutEffectueEvent(stay.roomId, stay.id, userId),
+      new CheckoutEffectueEvent(initial.roomId, initial.id, userId),
     );
 
-    return { ...updated, soldeDu: soldeDu.toFixed(2) };
+    return { ...updated, soldeDu: soldeDuFinal.toFixed(2) };
   }
 
   // Façade en lecture seule pour housekeeping (rattrapage quotidien du
@@ -828,9 +946,10 @@ export class StayService {
           statut: StatutSejour;
           dateCheckoutPrevue: Date;
           formule: FormuleHebergement;
+          nombreOccupants: number | null;
         }>
       >`
-        SELECT id, roomId, statut, dateCheckoutPrevue, formule
+        SELECT id, roomId, statut, dateCheckoutPrevue, formule, nombreOccupants
         FROM Stay WHERE id = ${id} FOR UPDATE
       `;
       if (!stayLocked || stayLocked.length === 0) {
@@ -1015,6 +1134,27 @@ export class StayService {
             montant: montantFormule.toFixed(2),
           },
           tx,
+        );
+      }
+
+      // 11bis. FIN-102B (ADR-008, INV-TEMP-001) — nouvelle ligne TAXE_SEJOUR
+      // pour le seul delta de nuits prolongées (deltaNuits ×
+      // Stay.nombreOccupants × taxe applicable), au taux ACTIF au moment de
+      // la prolongation (jamais celui figé au check-in — même logique que
+      // le delta HEBERGEMENT ci-dessus, qui relit déjà SeasonRate/prixBase
+      // frais). Ne touche jamais les lignes historiques (check-in ou
+      // prolongations précédentes). Séjours legacy (nombreOccupants NULL) :
+      // aucune ligne matérialisée ici, comportement inchangé (la taxe
+      // reste calculée sur la durée totale au moment de la facturation,
+      // fallback de BillingService.generateInvoice).
+      if (lockedStay.nombreOccupants != null) {
+        await this.billingService.materialiserTaxesStatutaires(
+          tx,
+          folioPrincipal.id,
+          nights.length,
+          lockedStay.nombreOccupants,
+          montantHebergement,
+          ' — Prolongation',
         );
       }
 

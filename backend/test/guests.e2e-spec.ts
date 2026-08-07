@@ -394,6 +394,7 @@ describe('Guests / CRM (e2e)', () => {
         .toISOString()
         .slice(0, 10),
       guestId,
+      nombreOccupants: 1,
     });
     expect(res.status).toBe(409);
   });
@@ -412,6 +413,7 @@ describe('Guests / CRM (e2e)', () => {
         .toISOString()
         .slice(0, 10),
       guestId,
+      nombreOccupants: 1,
     });
     expect(checkin.status).toBe(201);
     const stayId = (checkin.body as StayResponse).id;
@@ -439,6 +441,7 @@ describe('Guests / CRM (e2e)', () => {
         .toISOString()
         .slice(0, 10),
       guestId,
+      nombreOccupants: 1,
     });
     expect(checkin.status).toBe(201);
     const stayId = (checkin.body as StayResponse).id;
@@ -538,6 +541,7 @@ describe('Guests / CRM (e2e)', () => {
         prenom: 'Usurpe',
         pieceIdentite: 'TESTDEDUP-003',
       },
+      nombreOccupants: 1,
     });
     expect(res.status).toBe(409);
 

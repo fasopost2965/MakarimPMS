@@ -15,6 +15,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { getTodayRange } from '../../common/utils/date-range';
+import { assertNombreOccupantsValide } from '../../common/utils/occupancy';
 import { GuestsService } from '../guests/guests.service';
 import { AuditService } from '../audit/audit.service';
 import { RoomsService } from '../rooms/rooms.service';
@@ -177,6 +178,23 @@ export class ReservationsService {
       reservation = await this.prisma.$transaction(async (tx) => {
         const room = await this.roomsService.findByIdOrThrow(dto.roomId, tx);
 
+        // FIN-102B (INV-TEMP-001) — quand nombreOccupants est renseigné à
+        // la réservation, il doit déjà être physiquement plausible pour la
+        // chambre réservée (repris tel quel par
+        // StayService.checkinFromReservation, jamais recalculé). Optionnel :
+        // absent, il devra être fourni au moment du check-in. findByIdOrThrow
+        // ne charge pas la relation roomType (contrairement à
+        // findByIdWithPricing) : requête ciblée sur le seul champ requis
+        // plutôt que de changer le type de retour partagé par tous les
+        // autres appelants de findByIdOrThrow ci-dessous.
+        if (dto.nombreOccupants !== undefined) {
+          const roomType = await tx.roomType.findUniqueOrThrow({
+            where: { id: room.roomTypeId },
+            select: { capacite: true },
+          });
+          assertNombreOccupantsValide(dto.nombreOccupants, roomType.capacite);
+        }
+
         await this.assertRateRestrictionsSatisfied(
           tx,
           room.roomTypeId,
@@ -206,6 +224,7 @@ export class ReservationsService {
             sourceBrute: dto.sourceBrute,
             formule,
             cancellationPolicyId: dto.cancellationPolicyId,
+            nombreOccupants: dto.nombreOccupants,
             // À la création, prixTotalFinal suit toujours prixTotalCalcule
             // (pas d'ajustement manuel possible avant que la réservation
             // existe — voir update()).

@@ -8,6 +8,7 @@ import { randomBytes } from 'node:crypto';
 import {
   AuditAction,
   AuditEntity,
+  FolioLine,
   Prisma,
   TypeLigneFolio,
 } from '@prisma/client';
@@ -191,20 +192,213 @@ export class BillingService {
     return tx ? run(tx) : this.prisma.$transaction(run);
   }
 
+  // FIN-102B (ADR-008, INV-TEMP-001) — calcul PUR des taxes statutaires
+  // (TAXE_SEJOUR et toute taxe créée depuis /parameters/tax-rates,
+  // TVA_HEBERGEMENT/TVA_ANNEXE toujours exclues : elles restent une marge
+  // appliquée par calculateInvoiceTotal, jamais une FolioLine propre).
+  // Aucune écriture DB ici — seul materialiserTaxesStatutaires ci-dessous
+  // écrit des FolioLine. Séparation volontaire (verrou de conception
+  // FIN-102B) : le départ anticipé (StayService.checkout, via
+  // reconcilierTaxeSejourDepartAnticipe) a besoin de connaître le montant
+  // réellement dû SANS jamais créer de ligne temporaire qu'il faudrait
+  // ensuite annuler.
+  async calculerTaxesStatutaires(
+    tx: Prisma.TransactionClient,
+    nights: number,
+    nombreOccupants: number,
+    sousTotalHebergementHt: Prisma.Decimal,
+  ): Promise<
+    Array<{ taxRateConfigId: number; type: string; montant: Prisma.Decimal }>
+  > {
+    const applicableTaxes = await this.parametersService.getApplicableTaxes(tx);
+    const taxesStatutaires = applicableTaxes.filter(
+      (t) => t.type !== 'TVA_HEBERGEMENT' && t.type !== 'TVA_ANNEXE',
+    );
+    return taxesStatutaires.map((tax) => ({
+      taxRateConfigId: tax.id,
+      type: tax.type,
+      montant: computeTaxLineAmount(
+        tax,
+        nights,
+        nombreOccupants,
+        sousTotalHebergementHt,
+      ),
+    }));
+  }
+
+  // FIN-102B — écrit en FolioLine le résultat de calculerTaxesStatutaires
+  // ci-dessus. Réutilisée par StayService au check-in (createFolioPrincipal)
+  // et à la prolongation (extendStay, avec nights = delta et
+  // libelleSuffix = " — Prolongation") ainsi que par le fallback legacy de
+  // generateInvoice ci-dessous (nights = durée totale, comme le comportement
+  // avant cette mission).
+  async materialiserTaxesStatutaires(
+    tx: Prisma.TransactionClient,
+    folioId: number,
+    nights: number,
+    nombreOccupants: number,
+    sousTotalHebergementHt: Prisma.Decimal,
+    libelleSuffix = '',
+  ): Promise<FolioLine[]> {
+    const taxes = await this.calculerTaxesStatutaires(
+      tx,
+      nights,
+      nombreOccupants,
+      sousTotalHebergementHt,
+    );
+    const lignes: FolioLine[] = [];
+    for (const taxe of taxes) {
+      lignes.push(
+        await tx.folioLine.create({
+          data: {
+            folioId,
+            type: TypeLigneFolio.TAXE_SEJOUR,
+            libelle: `${taxe.type}${libelleSuffix}`,
+            montant: taxe.montant,
+            tauxTva: new Prisma.Decimal(0),
+            taxRateConfigId: taxe.taxRateConfigId,
+          },
+        }),
+      );
+    }
+    return lignes;
+  }
+
+  // FIN-102B (INV-TEMP-001) — réconciliation TAXE_SEJOUR au départ anticipé.
+  // Appelée UNIQUEMENT par StayService.checkout (jamais depuis un
+  // contrôleur public — verrou de conception distinct de cancelFolioLine,
+  // qui reste strictement borné à EXTRA/RESTAURANT, voir plus haut). La
+  // contrainte CHECK MySQL (montant >= 0, migration ch025) interdit tout
+  // delta négatif : la seule façon de corriger une taxe déjà matérialisée
+  // en trop est d'annuler (soft, jamais de suppression/mutation de montant)
+  // la ou les lignes existantes puis d'en recréer une au montant réellement
+  // dû. Raisonne sur la SOMME des lignes actives PAR taxRateConfigId — une
+  // même taxe peut avoir plusieurs lignes cumulées (check-in + delta(s) de
+  // prolongation).
+  async reconcilierTaxeSejourDepartAnticipe(
+    tx: Prisma.TransactionClient,
+    folioId: number,
+    nightsReelles: number,
+    nombreOccupants: number,
+    userId?: number,
+  ): Promise<void> {
+    const lignes = await tx.folioLine.findMany({ where: { folioId } });
+
+    const lignesTaxeActives = lignes.filter(
+      (l) => l.type === TypeLigneFolio.TAXE_SEJOUR && !l.annulee,
+    );
+    if (lignesTaxeActives.length === 0) {
+      // Rien à réconcilier — folio legacy (TAXE_SEJOUR jamais matérialisée
+      // avant facturation, voir fallback de generateInvoice ci-dessous).
+      return;
+    }
+
+    const sousTotalHebergementHt = lignes
+      .filter((l) => l.type === TypeLigneFolio.HEBERGEMENT && !l.annulee)
+      .reduce((acc, l) => acc.add(l.montant), new Prisma.Decimal(0));
+
+    const materialiseParTaxe = new Map<
+      number,
+      { montant: Prisma.Decimal; libelle: string }
+    >();
+    for (const ligne of lignesTaxeActives) {
+      if (ligne.taxRateConfigId == null) {
+        continue;
+      }
+      const courant = materialiseParTaxe.get(ligne.taxRateConfigId);
+      materialiseParTaxe.set(ligne.taxRateConfigId, {
+        montant: (courant?.montant ?? new Prisma.Decimal(0)).add(ligne.montant),
+        libelle: ligne.libelle,
+      });
+    }
+
+    const taxesDues = await this.calculerTaxesStatutaires(
+      tx,
+      nightsReelles,
+      nombreOccupants,
+      sousTotalHebergementHt,
+    );
+    const dueParTaxe = new Map(taxesDues.map((t) => [t.taxRateConfigId, t]));
+
+    for (const [taxRateConfigId, materialise] of materialiseParTaxe) {
+      const due =
+        dueParTaxe.get(taxRateConfigId)?.montant ?? new Prisma.Decimal(0);
+      // Jamais de correction à la hausse ici : un solde restant dû suite à
+      // un allongement de séjour passe déjà par materialiserTaxesStatutaires
+      // (extendStay), pas par cette réconciliation de départ ANTICIPÉ.
+      if (due.gte(materialise.montant)) {
+        continue;
+      }
+
+      const motif =
+        `Réconciliation TAXE_SEJOUR au départ anticipé (INV-TEMP-001) — ` +
+        `taxe déjà matérialisée ${materialise.montant.toFixed(2)} MAD, ` +
+        `montant réellement dû ${due.toFixed(2)} MAD.`;
+
+      await tx.folioLine.updateMany({
+        where: {
+          folioId,
+          type: TypeLigneFolio.TAXE_SEJOUR,
+          taxRateConfigId,
+          annulee: false,
+        },
+        data: { annulee: true, motifAnnulation: motif },
+      });
+
+      const nouvelleLigne = due.gt(0)
+        ? await tx.folioLine.create({
+            data: {
+              folioId,
+              type: TypeLigneFolio.TAXE_SEJOUR,
+              libelle: `${materialise.libelle} — réconciliation départ anticipé`,
+              montant: due,
+              tauxTva: new Prisma.Decimal(0),
+              taxRateConfigId,
+            },
+          })
+        : null;
+
+      await this.auditService.writeLog(tx, {
+        userId,
+        action: AuditAction.RECONCILE_TAXE_SEJOUR,
+        targetEntity: AuditEntity.Folio,
+        targetId: folioId,
+        oldValue: {
+          taxRateConfigId,
+          montantMaterialise: materialise.montant.toString(),
+        },
+        newValue: {
+          taxRateConfigId,
+          montantDu: due.toString(),
+          nouvelleLigneId: nouvelleLigne?.id ?? null,
+        },
+        motif,
+      });
+    }
+  }
+
   // Générer une facture depuis un folio. Règle non négociable : une fois
   // émise, une facture est immuable — elle est toujours EMISE, et ne peut
   // être modifiée que par un avoir (CreditNote — CH-001,
   // docs/governance/REGISTRE_CHANTIERS.md, avoir total uniquement : voir
   // createCreditNote ci-dessous).
   //
-  // Avant de calculer le total, matérialise en FolioLine chaque taxe
-  // configurable applicable (TAXE_SEJOUR et toute taxe créée depuis
-  // /parameters/tax-rates) — c'était le trou identifié dans le référentiel :
-  // TypeLigneFolio.TAXE_SEJOUR était géré partout en aval (invoice-calc,
-  // solde, ventilation fiscale) mais jamais généré en amont. La TVA
-  // (TVA_HEBERGEMENT/TVA_ANNEXE) reste appliquée en marge par
-  // calculateInvoiceTotal comme avant — elle est explicitement exclue de
-  // cette injection pour ne jamais être comptée deux fois.
+  // FIN-102B (ADR-008, INV-TEMP-001) : pour un séjour "nouveau modèle"
+  // (Stay.nombreOccupants renseigné), TAXE_SEJOUR est déjà matérialisée dès
+  // le check-in/la prolongation (StayService, materialiserTaxesStatutaires
+  // ci-dessus) — generateInvoice() ne doit plus jamais en créer de nouvelle
+  // ligne ici, sous peine de faire apparaître une dette qui n'existait pas
+  // dans computeSoldeDu l'instant d'avant.
+  //
+  // Fallback legacy (TEMPORAIRE) : uniquement pour les séjours créés avant
+  // cette migration (Stay.nombreOccupants IS NULL), qui n'ont jamais eu
+  // TAXE_SEJOUR matérialisée avant la facturation — comportement strictement
+  // identique à celui d'avant FIN-102B (y compris le respect des exclusions
+  // de taxe par folio, non gérées par calculerTaxesStatutaires puisqu'elle
+  // ne connaît pas le folioId — filtrées ici après coup, seulement sur ce
+  // chemin). Critère de suppression explicite de ce bloc : la requête
+  // `SELECT COUNT(*) FROM Stay WHERE nombreOccupants IS NULL AND statut !=
+  // 'CHECKOUT'` retourne durablement 0 (plus aucun séjour actif legacy).
   async generateInvoice(folioId: number) {
     return this.prisma.$transaction(async (tx) => {
       const folio = await tx.folio.findUnique({
@@ -240,73 +434,76 @@ export class BillingService {
         );
       }
 
-      // Taxes applicables chargées via le module parameters (jamais en dur,
-      // jamais de lecture Prisma directe de TaxRateConfig hors de ce
-      // module).
-      const applicableTaxes =
-        await this.parametersService.getApplicableTaxes(tx);
-      const excludedIds = new Set(
-        folio.taxExclusions.map((e) => e.taxRateConfigId),
-      );
-      // TVA_HEBERGEMENT/TVA_ANNEXE restent une marge appliquée par
-      // calculateInvoiceTotal, jamais une FolioLine propre — voir
-      // commentaire ci-dessus.
-      const taxesToApply = applicableTaxes.filter(
-        (t) =>
-          t.type !== 'TVA_HEBERGEMENT' &&
-          t.type !== 'TVA_ANNEXE' &&
-          !excludedIds.has(t.id),
-      );
+      if (folio.stay.nombreOccupants == null) {
+        const applicableTaxes =
+          await this.parametersService.getApplicableTaxes(tx);
+        const excludedIds = new Set(
+          folio.taxExclusions.map((e) => e.taxRateConfigId),
+        );
+        const taxesToApply = applicableTaxes.filter(
+          (t) =>
+            t.type !== 'TVA_HEBERGEMENT' &&
+            t.type !== 'TVA_ANNEXE' &&
+            !excludedIds.has(t.id),
+        );
 
-      // Ne jamais réinjecter les lignes TAXE_SEJOUR si une génération
-      // précédente (avant un avoir) les a déjà matérialisées sur ce folio —
-      // sinon une régénération après avoir double la taxe de séjour. Les
-      // lignes de taxe restent sur le folio après un avoir (l'avoir annule
-      // la facture, pas les charges réelles sous-jacentes).
-      const taxeDejaMaterialisee = folio.lignes.some(
-        (l) => l.type === TypeLigneFolio.TAXE_SEJOUR,
-      );
+        // Ne jamais réinjecter les lignes TAXE_SEJOUR si une génération
+        // précédente (avant un avoir) les a déjà matérialisées sur ce
+        // folio — sinon une régénération après avoir double la taxe de
+        // séjour. Les lignes de taxe restent sur le folio après un avoir
+        // (l'avoir annule la facture, pas les charges réelles
+        // sous-jacentes).
+        const taxeDejaMaterialisee = folio.lignes.some(
+          (l) => l.type === TypeLigneFolio.TAXE_SEJOUR,
+        );
 
-      const nouvellesLignes: Prisma.FolioLineCreateManyInput[] = [];
-      if (taxesToApply.length > 0 && !taxeDejaMaterialisee) {
-        const nights = getNightsBetween(
-          folio.stay.dateCheckin,
-          folio.stay.dateCheckoutReelle ?? folio.stay.dateCheckoutPrevue,
-        ).length;
-        // Proxy nombre d'adultes : RoomType.capacite (aucun champ dédié dans
-        // le schéma — même convention que Priorité 3 Formules
-        // d'hébergement, cf. reservations/utils/pricing.ts).
-        const nbPersonnes = folio.stay.room.roomType.capacite;
-        const sousTotalHebergementHt = folio.lignes
-          .filter((l) => l.type === TypeLigneFolio.HEBERGEMENT && !l.annulee)
-          .reduce((acc, l) => acc.add(l.montant), new Prisma.Decimal(0));
+        if (taxesToApply.length > 0 && !taxeDejaMaterialisee) {
+          const nights = getNightsBetween(
+            folio.stay.dateCheckin,
+            folio.stay.dateCheckoutReelle ?? folio.stay.dateCheckoutPrevue,
+          ).length;
+          // Proxy nombre d'adultes : RoomType.capacite (aucun champ dédié
+          // dans le schéma — même convention que Priorité 3 Formules
+          // d'hébergement, cf. reservations/utils/pricing.ts). Conservé tel
+          // quel pour ce fallback legacy uniquement : un séjour "nouveau
+          // modèle" utilise toujours Stay.nombreOccupants réel (jamais ce
+          // proxy), voir StayService.
+          const nbPersonnes = folio.stay.room.roomType.capacite;
+          const sousTotalHebergementHt = folio.lignes
+            .filter((l) => l.type === TypeLigneFolio.HEBERGEMENT && !l.annulee)
+            .reduce((acc, l) => acc.add(l.montant), new Prisma.Decimal(0));
 
-        for (const tax of taxesToApply) {
-          const montant = computeTaxLineAmount(
-            tax,
+          const taxesCalculees = await this.calculerTaxesStatutaires(
+            tx,
             nights,
             nbPersonnes,
             sousTotalHebergementHt,
           );
-          nouvellesLignes.push({
-            folioId,
-            type: TypeLigneFolio.TAXE_SEJOUR,
-            libelle: tax.type,
-            montant,
-            tauxTva: new Prisma.Decimal(0),
-            taxRateConfigId: tax.id,
-          });
+          for (const taxe of taxesCalculees) {
+            if (excludedIds.has(taxe.taxRateConfigId)) {
+              continue;
+            }
+            await tx.folioLine.create({
+              data: {
+                folioId,
+                type: TypeLigneFolio.TAXE_SEJOUR,
+                libelle: taxe.type,
+                montant: taxe.montant,
+                tauxTva: new Prisma.Decimal(0),
+                taxRateConfigId: taxe.taxRateConfigId,
+              },
+            });
+          }
         }
-        await tx.folioLine.createMany({ data: nouvellesLignes });
       }
 
-      // Re-lit les lignes complètes (avec id/createdAt) si de nouvelles
-      // lignes de taxe viennent d'être créées, pour donner à
-      // calculateInvoiceTotal des FolioLine réelles plutôt que les objets
-      // d'insertion — évite aussi de dupliquer la logique de filtrage.
-      const toutesLesLignes = nouvellesLignes.length
-        ? await tx.folioLine.findMany({ where: { folioId } })
-        : folio.lignes;
+      // Re-lit les lignes complètes (avec id/createdAt) — nécessaire si le
+      // fallback legacy ci-dessus vient de créer de nouvelles lignes, mais
+      // aussi la lecture la plus sûre dans tous les cas (jamais de
+      // divergence possible avec folio.lignes lu avant la transaction).
+      const toutesLesLignes = await tx.folioLine.findMany({
+        where: { folioId },
+      });
 
       // Marge TVA (HEBERGEMENT/EXTRA) chargée via le module parameters.
       const taxRateMap = await this.parametersService.getTaxRateMap(tx);
