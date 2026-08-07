@@ -132,6 +132,7 @@ jobs:
     needs: deploy
     if: failure()
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Redéployer la dernière image stable connue
         uses: appleboy/ssh-action@v1.0.3
@@ -139,7 +140,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_SSH_PORT }}
+          port: ${{ secrets.VPS_SSH_PORT || 22 }}
           script: |
             set -e
             cd /opt/makarimpms
