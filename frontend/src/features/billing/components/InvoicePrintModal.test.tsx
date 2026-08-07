@@ -163,8 +163,8 @@ describe('InvoicePrintModal — pas de données fabriquées, un seul total figé
     // Lignes PAIEMENT et annulées absentes du tableau imprimable.
     expect(screen.queryByText('Paiement espèces')).not.toBeInTheDocument();
     expect(screen.queryByText('Extra annulé')).not.toBeInTheDocument();
-    // Ligne hébergement bien présente avec son montant HT (pas de TVA
-    // recalculée dessus).
+    // Ligne hébergement bien présente avec son montant TTC (pas de TVA
+    // recalculée dessus — FIN-102/UX-001B).
     expect(screen.getByText(/Hébergement — 1 nuit/)).toBeInTheDocument();
     expect(screen.getByText('1200.00')).toBeInTheDocument();
   });

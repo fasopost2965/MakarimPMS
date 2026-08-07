@@ -76,7 +76,7 @@ export function AddFolioLineDialog({ open, folioId, onClose, onAdded }: Props) {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="ligne-montant">Montant HT (MAD)</Label>
+            <Label htmlFor="ligne-montant">Montant TTC (MAD)</Label>
             <Input
               id="ligne-montant"
               type="number"

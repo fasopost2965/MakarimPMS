@@ -17,6 +17,10 @@ import { AuditService } from '../audit/audit.service';
 // Utilitaire pur (aucun Prisma/DI), même précédent que
 // StayService.createFolioPrincipal — pas une façade de module à contourner.
 import { getNightsBetween } from '../reservations/utils/nights';
+// UX-001B — même précédent que getNightsBetween ci-dessus : utilitaire pur
+// (aucun Prisma/DI), computeFolioSummary délègue à computeSoldeDu (LA
+// fonction canonique unique de calcul du solde, jamais réimplémentée ici).
+import { computeFolioSummary } from '../stay/utils/solde';
 import { AddFolioLineDto } from './dto/add-folio-line.dto';
 import { ExcludeFolioTaxesDto } from './dto/exclude-folio-taxes.dto';
 import { CreateCreditNoteDto } from './dto/create-credit-note.dto';
@@ -504,7 +508,12 @@ export class BillingService {
     if (!folio) {
       throw new NotFoundException(`Folio ${id} introuvable.`);
     }
-    return folio;
+    // UX-001B — synthèse de solde (totalChargesTTC/totalPaidTTC/balanceTTC),
+    // calculée sur ce seul folio via computeFolioSummary (computeSoldeDu en
+    // interne pour balanceTTC, jamais une seconde formule) : évite que le
+    // frontend (RecordPaymentDialog notamment) n'ait à recalculer un solde
+    // à partir des lignes brutes.
+    return { ...folio, synthese: computeFolioSummary([folio]) };
   }
 
   // CH-050 (docs/execution/PLAN_MODULE_FACTURATION.md) — génère le PDF d'une

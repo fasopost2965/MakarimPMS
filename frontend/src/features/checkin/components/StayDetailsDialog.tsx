@@ -124,7 +124,7 @@ export function StayDetailsDialog({
                         >
                           {ligne.libelle}
                         </span>
-                        <span>{ligne.montant} DH</span>
+                        <span>{ligne.montant} MAD</span>
                       </li>
                     ))}
                   </ul>
@@ -132,7 +132,7 @@ export function StayDetailsDialog({
 
                 {soldeDu !== null && (
                   <p className="text-sm font-medium">
-                    Solde dû au check-out : {soldeDu} DH
+                    Solde dû au check-out : {soldeDu} MAD
                   </p>
                 )}
               </div>
