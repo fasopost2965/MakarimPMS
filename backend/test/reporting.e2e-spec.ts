@@ -186,10 +186,19 @@ describe('Reporting — ventilation fiscale et rapport de police (e2e)', () => {
       const deltaTvaExtras =
         Number(apres.tvaExtrasCollectee) - Number(avant.tvaExtrasCollectee);
 
-      expect(deltaHt).toBeCloseTo(montantHebergement, 2);
-      expect(deltaExtras).toBeCloseTo(100, 2);
-      expect(deltaTvaHeb).toBeCloseTo(montantHebergement * 0.1, 2);
-      expect(deltaTvaExtras).toBeCloseTo(20, 2);
+      // FIN-101B (ADR-008) : FolioLine.montant est déjà TTC — la
+      // ventilation fiscale extrait désormais le HT/TVA depuis ce montant
+      // TTC (ventilerMontantTTC), elle ne le traite plus comme un montant
+      // HT auquel il faudrait ajouter une marge.
+      const htHebergementAttendu = montantHebergement / 1.1;
+      const htExtrasAttendu = 100 / 1.2;
+      expect(deltaHt).toBeCloseTo(htHebergementAttendu, 2);
+      expect(deltaExtras).toBeCloseTo(htExtrasAttendu, 2);
+      expect(deltaTvaHeb).toBeCloseTo(
+        montantHebergement - htHebergementAttendu,
+        2,
+      );
+      expect(deltaTvaExtras).toBeCloseTo(100 - htExtrasAttendu, 2);
 
       // Recoupement avec la facture immuable (SPRINT_13.md §4 : comparer les
       // totaux consolidés avec la somme brute des factures émises).
@@ -201,10 +210,10 @@ describe('Reporting — ventilation fiscale et rapport de police (e2e)', () => {
       const ligneTaxeSejour = await prisma.folioLine.findFirstOrThrow({
         where: { folioId, type: 'TAXE_SEJOUR' },
       });
+      // FIN-101B (ADR-008) : montantTotal = somme des charges TTC actives,
+      // aucune TVA n'est plus ajoutée par-dessus (calculateInvoiceTotal).
       const ttcAttendu =
-        montantHebergement * 1.1 +
-        100 * 1.2 +
-        ligneTaxeSejour.montant.toNumber();
+        montantHebergement + 100 + ligneTaxeSejour.montant.toNumber();
       expect(Number(invoiceBody.montantTotal)).toBeCloseTo(ttcAttendu, 2);
     });
   });
