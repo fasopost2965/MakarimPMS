@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { Folio } from '@/features/billing/types';
+import { ApiError } from '@/lib/api-client';
 
 vi.mock('@/features/billing/api', () => ({
   getFolio: vi.fn(),
@@ -269,5 +270,156 @@ describe('RecordPaymentDialog — solde visible (UX-001B)', () => {
     expect(createPayment).toHaveBeenCalledWith(
       expect.objectContaining({ folioId: 42, montant: '580.00' }),
     );
+  });
+});
+
+// PAY-001B — garde UX minimale contre le surpaiement (backend reste
+// l'arbitre final, PaymentsService.createPayment). Ces tests ne couvrent
+// que le confort client, jamais un remplacement de la vérification serveur.
+describe('RecordPaymentDialog — garde surpaiement (PAY-001B)', () => {
+  it('solde à 0 : le champ montant et le bouton sont désactivés, texte "Séjour entièrement réglé"', async () => {
+    vi.mocked(getFolio).mockResolvedValue(
+      makeFolio({
+        totalChargesTTC: '1000.00',
+        totalPaidTTC: '1000.00',
+        balanceTTC: '0.00',
+      }),
+    );
+
+    render(
+      <RecordPaymentDialog
+        open
+        folioId={42}
+        onClose={() => {}}
+        onRecorded={() => {}}
+      />,
+    );
+
+    const montantInput = (await screen.findByLabelText(
+      'Montant à encaisser (MAD)',
+    )) as HTMLInputElement;
+    await waitFor(() => expect(montantInput).toBeDisabled());
+
+    const submitButton = screen.getByRole('button', {
+      name: 'Séjour entièrement réglé',
+    });
+    expect(submitButton).toBeDisabled();
+  });
+
+  it('montant saisi > reste à payer : le bouton "Enregistrer" est bloqué et un message s’affiche', async () => {
+    vi.mocked(getFolio).mockResolvedValue(
+      makeFolio({
+        totalChargesTTC: '500.00',
+        totalPaidTTC: '0.00',
+        balanceTTC: '500.00',
+      }),
+    );
+
+    render(
+      <RecordPaymentDialog
+        open
+        folioId={42}
+        onClose={() => {}}
+        onRecorded={() => {}}
+      />,
+    );
+
+    const montantInput = (await screen.findByLabelText(
+      'Montant à encaisser (MAD)',
+    )) as HTMLInputElement;
+    await waitFor(() => expect(montantInput.value).toBe('500.00'));
+
+    fireEvent.change(montantInput, { target: { value: '600.00' } });
+
+    expect(
+      screen.getByText(/dépasse le reste à payer \(500\.00 MAD\)/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Enregistrer/ })).toBeDisabled();
+  });
+
+  it('affiche un message propre sur une erreur OVERPAYMENT renvoyée par le serveur', async () => {
+    vi.mocked(getFolio).mockResolvedValue(
+      makeFolio({
+        totalChargesTTC: '500.00',
+        totalPaidTTC: '0.00',
+        balanceTTC: '500.00',
+      }),
+    );
+    vi.mocked(createPayment).mockRejectedValue(
+      new ApiError(
+        409,
+        'Le montant saisi dépasse le reste à payer.',
+        'OVERPAYMENT',
+      ),
+    );
+
+    render(
+      <RecordPaymentDialog
+        open
+        folioId={42}
+        onClose={() => {}}
+        onRecorded={() => {}}
+      />,
+    );
+
+    const montantInput = (await screen.findByLabelText(
+      'Montant à encaisser (MAD)',
+    )) as HTMLInputElement;
+    await waitFor(() => expect(montantInput.value).toBe('500.00'));
+
+    fireEvent.click(screen.getByRole('button', { name: /Enregistrer/ }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'Le montant saisi dépasse le reste à payer sur ce dossier.',
+        ),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('affiche un message propre sur une erreur PAYMENT_NOT_REQUIRED renvoyée par le serveur', async () => {
+    // Solde encore positif au chargement, mais le serveur refuse quand même
+    // (course résiduelle : un autre paiement a soldé le folio entre-temps) —
+    // le frontend ne doit jamais masquer cette réponse serveur derrière un
+    // texte brut.
+    vi.mocked(getFolio).mockResolvedValue(
+      makeFolio({
+        totalChargesTTC: '500.00',
+        totalPaidTTC: '0.00',
+        balanceTTC: '500.00',
+      }),
+    );
+    vi.mocked(createPayment).mockRejectedValue(
+      new ApiError(
+        409,
+        'Ce dossier est déjà entièrement réglé.',
+        'PAYMENT_NOT_REQUIRED',
+      ),
+    );
+
+    render(
+      <RecordPaymentDialog
+        open
+        folioId={42}
+        onClose={() => {}}
+        onRecorded={() => {}}
+      />,
+    );
+
+    const montantInput = (await screen.findByLabelText(
+      'Montant à encaisser (MAD)',
+    )) as HTMLInputElement;
+    await waitFor(() => expect(montantInput.value).toBe('500.00'));
+
+    fireEvent.click(screen.getByRole('button', { name: /Enregistrer/ }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'Ce dossier est déjà entièrement réglé, aucun paiement supplémentaire n’est requis.',
+        ),
+      ).toBeInTheDocument();
+    });
   });
 });

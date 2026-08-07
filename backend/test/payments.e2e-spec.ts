@@ -186,6 +186,319 @@ describe('Payments Module', () => {
     await cleanup(ctx);
   });
 
+  // PAY-001B — protection transactionnelle contre le surpaiement (incident
+  // réel de production, voir CLAUDE.md / rapport PAY-001A). Avant cette
+  // mission, PaymentsService.createPayment n'appelait jamais computeSoldeDu
+  // : un paiement était accepté et persisté quel que soit son montant, même
+  // sur un folio déjà entièrement réglé.
+  describe('PAY-001B — protection contre le surpaiement', () => {
+    it('accepte un paiement partiel (montant < solde)', async () => {
+      const ctx = await createStayWithFolio('pay001b-partial');
+
+      const res = await comptableClient.post('/api/payments').send({
+        folioId: ctx.folio.id,
+        moyen: MoyenPaiement.ESPECES,
+        montant: '200.00',
+        idempotencyKey: `test-pay001b-partial-${Date.now()}`,
+      });
+
+      expect(res.status).toBe(201);
+      const lignes = await prisma.folioLine.findMany({
+        where: { folioId: ctx.folio.id, type: TypeLigneFolio.PAIEMENT },
+      });
+      expect(lignes).toHaveLength(1);
+
+      await cleanup(ctx);
+    });
+
+    it('accepte un paiement exact (montant == solde) et ramène le solde à 0', async () => {
+      const ctx = await createStayWithFolio('pay001b-exact');
+
+      const res = await comptableClient.post('/api/payments').send({
+        folioId: ctx.folio.id,
+        moyen: MoyenPaiement.CARTE,
+        montant: '500.00',
+        idempotencyKey: `test-pay001b-exact-${Date.now()}`,
+      });
+
+      expect(res.status).toBe(201);
+      const lignes = await prisma.folioLine.findMany({
+        where: { folioId: ctx.folio.id },
+      });
+      const balance = lignes.reduce(
+        (total, l) =>
+          l.type === TypeLigneFolio.PAIEMENT
+            ? total - Number(l.montant)
+            : total + Number(l.montant),
+        0,
+      );
+      expect(balance).toBe(0);
+
+      await cleanup(ctx);
+    });
+
+    it('refuse un surpaiement (montant > solde > 0) — 409 OVERPAYMENT, aucune écriture', async () => {
+      const ctx = await createStayWithFolio('pay001b-overpay');
+
+      const res = await comptableClient.post('/api/payments').send({
+        folioId: ctx.folio.id,
+        moyen: MoyenPaiement.CARTE,
+        montant: '600.00',
+        idempotencyKey: `test-pay001b-overpay-${Date.now()}`,
+      });
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('OVERPAYMENT');
+      expect(res.body.balanceTTC).toBe('500.00');
+      expect(res.body.montantDemande).toBe('600.00');
+
+      const paymentCount = await prisma.payment.count({
+        where: { folioId: ctx.folio.id },
+      });
+      expect(paymentCount).toBe(0);
+      const lignes = await prisma.folioLine.findMany({
+        where: { folioId: ctx.folio.id, type: TypeLigneFolio.PAIEMENT },
+      });
+      expect(lignes).toHaveLength(0);
+
+      await cleanup(ctx);
+    });
+
+    it('refuse tout paiement une fois le solde à 0 — 409 PAYMENT_NOT_REQUIRED, aucune écriture', async () => {
+      const ctx = await createStayWithFolio('pay001b-notrequired');
+
+      const first = await comptableClient.post('/api/payments').send({
+        folioId: ctx.folio.id,
+        moyen: MoyenPaiement.CARTE,
+        montant: '500.00',
+        idempotencyKey: `test-pay001b-notrequired-1-${Date.now()}`,
+      });
+      expect(first.status).toBe(201);
+
+      const second = await comptableClient.post('/api/payments').send({
+        folioId: ctx.folio.id,
+        moyen: MoyenPaiement.ESPECES,
+        montant: '50.00',
+        idempotencyKey: `test-pay001b-notrequired-2-${Date.now()}`,
+      });
+
+      expect(second.status).toBe(409);
+      expect(second.body.code).toBe('PAYMENT_NOT_REQUIRED');
+      expect(second.body.balanceTTC).toBe('0.00');
+
+      const paymentCount = await prisma.payment.count({
+        where: { folioId: ctx.folio.id },
+      });
+      expect(paymentCount).toBe(1);
+
+      await cleanup(ctx);
+    });
+
+    it('un rejeu idempotent après solde=0 renvoie le paiement existant, jamais PAYMENT_NOT_REQUIRED', async () => {
+      const ctx = await createStayWithFolio('pay001b-idem-zero');
+      const idempotencyKey = `test-pay001b-idem-zero-${Date.now()}`;
+
+      const first = await comptableClient.post('/api/payments').send({
+        folioId: ctx.folio.id,
+        moyen: MoyenPaiement.CARTE,
+        montant: '500.00',
+        idempotencyKey,
+      });
+      expect(first.status).toBe(201);
+
+      // Le solde est désormais à 0 ; rejouer EXACTEMENT la même requête
+      // (même idempotencyKey) doit renvoyer le paiement déjà créé, pas
+      // devenir une PAYMENT_NOT_REQUIRED (comportement explicitement exigé
+      // par PAY-001B).
+      const replay = await comptableClient.post('/api/payments').send({
+        folioId: ctx.folio.id,
+        moyen: MoyenPaiement.CARTE,
+        montant: '500.00',
+        idempotencyKey,
+      });
+      expect(replay.status).toBe(201);
+      expect(replay.body.id).toBe(first.body.id);
+
+      const paymentCount = await prisma.payment.count({
+        where: { idempotencyKey },
+      });
+      expect(paymentCount).toBe(1);
+
+      await cleanup(ctx);
+    });
+
+    // Reproduction exacte de l'incident de production ayant motivé PAY-001B :
+    // charges 1700 MAD, paiements 750 puis 950 (solde ramené à 0), puis
+    // tentative de 1500 MAD — refusée. Balance déjà à 0 avant cette
+    // troisième tentative : c'est donc PAYMENT_NOT_REQUIRED (pas
+    // OVERPAYMENT), conformément à la règle exacte du point 4 de la
+    // mission.
+    it('reproduction incident — 1700 de charges, 750+950 acceptés, 1500 refusé (PAYMENT_NOT_REQUIRED)', async () => {
+      const ts = Date.now();
+      const roomType = await prisma.roomType.create({
+        data: {
+          nom: `TEST-PAY001B-INCIDENT-TYPE-${ts}`,
+          prixBase: new Prisma.Decimal(1700),
+          capacite: 2,
+        },
+      });
+      const room = await prisma.room.create({
+        data: {
+          numero: `TEST-PAY001B-INCIDENT-${ts}`,
+          roomTypeId: roomType.id,
+          statut: StatutChambre.OCCUPEE,
+        },
+      });
+      const guest = await prisma.guest.create({
+        data: { nom: 'Incident', prenom: 'PAY001B' },
+      });
+      const stay = await prisma.stay.create({
+        data: {
+          roomId: room.id,
+          guestId: guest.id,
+          dateCheckin: new Date(),
+          dateCheckoutPrevue: new Date(),
+        },
+      });
+      const folio = await prisma.folio.create({
+        data: { stayId: stay.id, libelle: 'Folio principal' },
+      });
+      await prisma.folioLine.create({
+        data: {
+          folioId: folio.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: 'Hébergement — reproduction incident',
+          montant: new Prisma.Decimal(1700),
+        },
+      });
+      const ctx = { roomType, room, guest, stay, folio };
+
+      const p1 = await comptableClient.post('/api/payments').send({
+        folioId: folio.id,
+        moyen: MoyenPaiement.ESPECES,
+        montant: '750.00',
+        idempotencyKey: `test-incident-750-${ts}`,
+      });
+      expect(p1.status).toBe(201);
+
+      const p2 = await comptableClient.post('/api/payments').send({
+        folioId: folio.id,
+        moyen: MoyenPaiement.ESPECES,
+        montant: '950.00',
+        idempotencyKey: `test-incident-950-${ts}`,
+      });
+      expect(p2.status).toBe(201);
+
+      const p3 = await comptableClient.post('/api/payments').send({
+        folioId: folio.id,
+        moyen: MoyenPaiement.ESPECES,
+        montant: '1500.00',
+        idempotencyKey: `test-incident-1500-${ts}`,
+      });
+      expect(p3.status).toBe(409);
+      expect(p3.body.code).toBe('PAYMENT_NOT_REQUIRED');
+
+      const paymentCount = await prisma.payment.count({
+        where: { folioId: folio.id },
+      });
+      expect(paymentCount).toBe(2);
+
+      const lignes = await prisma.folioLine.findMany({
+        where: { folioId: folio.id, type: TypeLigneFolio.PAIEMENT },
+      });
+      const montantsPayes = lignes
+        .map((l) => Number(l.montant))
+        .sort((a, b) => a - b);
+      expect(montantsPayes).toEqual([750, 950]);
+
+      const totalPaidTTC = montantsPayes.reduce((a, b) => a + b, 0);
+      expect(totalPaidTTC).toBe(1700);
+
+      const allLignes = await prisma.folioLine.findMany({
+        where: { folioId: folio.id },
+      });
+      const balanceTTC = allLignes.reduce(
+        (total, l) =>
+          l.type === TypeLigneFolio.PAIEMENT
+            ? total - Number(l.montant)
+            : total + Number(l.montant),
+        0,
+      );
+      expect(balanceTTC).toBe(0);
+
+      await cleanup(ctx);
+    });
+
+    // Test de concurrence réel (Promise.all, pas séquentiel) : deux paiements
+    // simultanés de 700 MAD chacun sur un folio dont le solde est de 1000 MAD
+    // (somme demandée 1400 > 1000). Un seul doit être commité (celui qui
+    // obtient le verrou FOR UPDATE sur le Folio en premier voit un solde de
+    // 1000 et passe ; l'autre relit ensuite un solde de 300 sous le même
+    // verrou et se voit refuser en OVERPAYMENT).
+    //
+    // Preuve de rigueur sabotage/restore (CLAUDE.md — règle non négociable) :
+    // effectuée pendant l'implémentation en retirant temporairement les deux
+    // clauses `FOR UPDATE` de PaymentsService.createPayment (verrou Folio et
+    // verrou FolioLine). Sans le verrou, ce test échoue bien de la manière
+    // attendue : les deux requêtes lisent concurremment le même solde de
+    // 1000 MAD avant qu'aucune n'ait committé, passent toutes les deux la
+    // garde OVERPAYMENT (700 <= 1000), et les deux paiements sont acceptés
+    // (deux 201 au lieu d'un seul) — solde final constaté négatif (-400),
+    // exactement le bug de l'incident réel reproduit par le verrou retiré.
+    // Les `FOR UPDATE` ont ensuite été restaurés et la suite revérifiée
+    // verte (un seul 201, un seul 409, solde final 300).
+    it('deux paiements concurrents dont la somme dépasse le solde : un seul est commité', async () => {
+      const ctx = await createStayWithFolio('pay001b-concurrency');
+      // Solde de départ porté à 1000 MAD (charge additionnelle) pour laisser
+      // de la marge de lecture entre les deux requêtes concurrentes.
+      await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: 'Supplément — concurrence',
+          montant: new Prisma.Decimal(500),
+        },
+      });
+
+      const payload = (suffix: string) => ({
+        folioId: ctx.folio.id,
+        moyen: MoyenPaiement.CARTE,
+        montant: '700.00',
+        idempotencyKey: `test-pay001b-concurrency-${suffix}-${Date.now()}`,
+      });
+
+      const [resA, resB] = await Promise.all([
+        comptableClient.post('/api/payments').send(payload('A')),
+        comptableClient.post('/api/payments').send(payload('B')),
+      ]);
+
+      const statuses = [resA.status, resB.status].sort();
+      expect(statuses).toEqual([201, 409]);
+
+      const failed = resA.status === 409 ? resA : resB;
+      expect(failed.body.code).toBe('OVERPAYMENT');
+
+      const lignes = await prisma.folioLine.findMany({
+        where: { folioId: ctx.folio.id },
+      });
+      const balanceTTC = lignes.reduce(
+        (total, l) =>
+          l.type === TypeLigneFolio.PAIEMENT
+            ? total - Number(l.montant)
+            : total + Number(l.montant),
+        0,
+      );
+      expect(balanceTTC).toBe(300);
+
+      const paymentCount = await prisma.payment.count({
+        where: { folioId: ctx.folio.id },
+      });
+      expect(paymentCount).toBe(1);
+
+      await cleanup(ctx);
+    });
+  });
+
   describe('Permissions', () => {
     it("la Réception n'a pas le droit d'enregistrer un règlement (payments:write)", async () => {
       const ctx = await createStayWithFolio('rbac-write');
