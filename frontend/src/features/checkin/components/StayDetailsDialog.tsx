@@ -55,7 +55,7 @@ export function StayDetailsDialog({
 
   return (
     <Dialog open={stay !== null} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
         {stay && (
           <>
             <DialogHeader>

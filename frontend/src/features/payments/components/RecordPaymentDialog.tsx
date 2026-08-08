@@ -163,7 +163,7 @@ export function RecordPaymentDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Encaisser un paiement</DialogTitle>
         </DialogHeader>
@@ -183,7 +183,7 @@ export function RecordPaymentDialog({
           </div>
         ) : (
           summary && (
-            <div className="grid grid-cols-3 gap-2 rounded-md border bg-gray-50 p-3 text-sm">
+            <div className="bg-muted grid grid-cols-3 gap-2 rounded-md border p-3 text-sm">
               <div>
                 <p className="text-muted-foreground text-xs uppercase">
                   Total du séjour
