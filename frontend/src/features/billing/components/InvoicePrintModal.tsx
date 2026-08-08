@@ -116,6 +116,24 @@ export function InvoicePrintModal({
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   )[0];
 
+  // UX-001E — "Déjà réglé"/"Reste à payer" : agrégation locale sur les
+  // lignes PAIEMENT déjà chargées dans `folio.lignes` (jamais
+  // `invoice.payments`, quasi toujours vide en pratique — `RecordPaymentDialog`
+  // n'y renseigne jamais `invoiceId`), et jamais `computeSoldeDu` (solde de
+  // folio VIVANT, potentiellement multi-factures — sans rapport avec cet
+  // agrégat immuable propre à CETTE facture déjà émise). Invoice.montantTotal
+  // n'est jamais recalculé ici, uniquement réutilisé tel quel (ADR-004).
+  const dejaRegle = folio.lignes
+    .filter((l) => l.type === 'PAIEMENT' && !l.annulee)
+    .reduce((acc, l) => acc + Number(l.montant), 0);
+  const totalTTC = Number(invoice.montantTotal);
+  const resteAPayer = Math.max(0, totalTTC - dejaRegle);
+  // UX-001E (correction complémentaire) — un trop-perçu (GL-003B avance de
+  // prolongation encaissée avant que le supplément ne soit matérialisé, ou
+  // tout acompte dépassant les charges déjà facturées) ne doit jamais
+  // disparaître silencieusement derrière un "Reste à payer : 0.00".
+  const creditClient = Math.max(0, dejaRegle - totalTTC);
+
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
@@ -234,6 +252,30 @@ export function InvoicePrintModal({
                   {Number(invoice.montantTotal).toFixed(2)} MAD
                 </span>
               </div>
+              {dejaRegle > 0 && (
+                <>
+                  <div className="text-muted-foreground flex justify-between">
+                    <span>Déjà réglé</span>
+                    <span className="font-mono">
+                      {dejaRegle.toFixed(2)} MAD
+                    </span>
+                  </div>
+                  <div className="text-muted-foreground flex justify-between">
+                    <span>Reste à payer</span>
+                    <span className="font-mono">
+                      {resteAPayer.toFixed(2)} MAD
+                    </span>
+                  </div>
+                  {creditClient > 0 && (
+                    <div className="flex justify-between font-medium text-emerald-700">
+                      <span>Crédit client / Trop-perçu</span>
+                      <span className="font-mono">
+                        {creditClient.toFixed(2)} MAD
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
 

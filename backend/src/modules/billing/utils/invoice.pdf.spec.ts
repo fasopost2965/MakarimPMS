@@ -1,4 +1,38 @@
+import { inflateSync } from 'zlib';
 import { buildInvoicePdf, InvoicePdfData } from './invoice.pdf';
+
+// UX-001E — pdfkit encode le texte en hex dans des opérateurs Tj/TJ à
+// l'intérieur de flux compressés FlateDecode (constaté empiriquement, pas de
+// bibliothèque d'extraction PDF disponible dans ce projet — voir
+// invoice.pdf.spec.ts historique : "on ne peut pas grep le texte brut dans
+// le buffer compressé"). Cette fonction décompresse chaque flux `stream …
+// endstream` du PDF avec zlib (déjà en dépendance standard Node, aucune
+// nouvelle dépendance npm) puis décode les chaînes hexadécimales `<...>`
+// portées par les opérateurs Tj/TJ en texte lisible, pour permettre des
+// assertions de contenu réel (et non plus seulement structurelles).
+function extractPdfText(pdf: Buffer): string {
+  const latin1 = pdf.toString('latin1');
+  let out = '';
+  let cursor = 0;
+  for (;;) {
+    const streamStart = latin1.indexOf('stream\n', cursor);
+    if (streamStart === -1) break;
+    const streamEnd = latin1.indexOf('endstream', streamStart);
+    if (streamEnd === -1) break;
+    const raw = pdf.subarray(streamStart + 7, streamEnd - 1);
+    try {
+      out += inflateSync(raw).toString('latin1');
+    } catch {
+      // Flux non-FlateDecode (police, métadonnées…) — ignoré, on ne
+      // s'intéresse qu'au contenu texte des pages.
+    }
+    cursor = streamEnd + 9;
+  }
+  const hexStrings: string[] = out.match(/<([0-9a-fA-F]+)>/g) ?? [];
+  return hexStrings
+    .map((h: string) => Buffer.from(h.slice(1, -1), 'hex').toString('latin1'))
+    .join('');
+}
 
 function sampleData(overrides: Partial<InvoicePdfData> = {}): InvoicePdfData {
   return {
@@ -19,12 +53,23 @@ function sampleData(overrides: Partial<InvoicePdfData> = {}): InvoicePdfData {
       statut: 'EMISE',
     },
     lignes: [
-      { libelle: 'Hébergement — 3 nuits', montant: '1000.00', annulee: false },
-      { libelle: 'Extra — mini-bar', montant: '150.00', annulee: false },
+      {
+        libelle: 'Hébergement — 3 nuits',
+        montant: '1000.00',
+        annulee: false,
+        type: 'HEBERGEMENT',
+      },
+      {
+        libelle: 'Extra — mini-bar',
+        montant: '150.00',
+        annulee: false,
+        type: 'EXTRA',
+      },
       {
         libelle: 'Ligne annulée (ne doit pas apparaître)',
         montant: '999.00',
         annulee: true,
+        type: 'EXTRA',
       },
     ],
     ...overrides,
@@ -120,5 +165,197 @@ describe('buildInvoicePdf', () => {
       }),
     );
     expect(pdfA.equals(pdfB)).toBe(false);
+  });
+});
+
+// UX-001E — les lignes PAIEMENT ne doivent plus apparaître dans le tableau
+// "Détail" (elles ne sont pas des prestations), et un nouveau bloc
+// "Déjà réglé"/"Reste à payer" doit refléter fidèlement les règlements
+// réels, sans jamais recalculer Invoice.montantTotal.
+describe('buildInvoicePdf — UX-001E (paiements exclus du détail)', () => {
+  it("n'affiche jamais une ligne PAIEMENT dans le tableau des prestations, et affiche Déjà réglé/Reste à payer pour un paiement partiel", async () => {
+    const data = sampleData({
+      invoice: {
+        numero: 'FAC-202608-000001',
+        createdAt: new Date('2026-08-01T10:00:00.000Z'),
+        montantTotal: '1700.00',
+        statut: 'EMISE',
+      },
+      lignes: [
+        {
+          libelle: 'Hébergement',
+          montant: '1594.00',
+          annulee: false,
+          type: 'HEBERGEMENT',
+        },
+        { libelle: 'Extra', montant: '100.00', annulee: false, type: 'EXTRA' },
+        {
+          libelle: 'Taxe de séjour',
+          montant: '6.00',
+          annulee: false,
+          type: 'TAXE_SEJOUR',
+        },
+        {
+          libelle: 'Règlement espèces',
+          montant: '750.00',
+          annulee: false,
+          type: 'PAIEMENT',
+        },
+      ],
+    });
+
+    const pdf = await buildInvoicePdf(data);
+    const text = extractPdfText(pdf);
+
+    expect(text).not.toContain('Règlement espèces');
+    expect(text).toContain('Déjà réglé : 750.00 MAD');
+    expect(text).toContain('Reste à payer : 950.00 MAD');
+  });
+
+  it('cas de reproduction de l’incident — charges 1594+100+6=1700, réglé en deux fois (750+950=1700), reste à payer = 0', async () => {
+    const data = sampleData({
+      invoice: {
+        numero: 'FAC-202608-000002',
+        createdAt: new Date('2026-08-01T10:00:00.000Z'),
+        montantTotal: '1700.00',
+        statut: 'EMISE',
+      },
+      lignes: [
+        {
+          libelle: 'Hébergement',
+          montant: '1594.00',
+          annulee: false,
+          type: 'HEBERGEMENT',
+        },
+        { libelle: 'Extra', montant: '100.00', annulee: false, type: 'EXTRA' },
+        {
+          libelle: 'Taxe de séjour',
+          montant: '6.00',
+          annulee: false,
+          type: 'TAXE_SEJOUR',
+        },
+        {
+          libelle: 'Règlement espèces',
+          montant: '750.00',
+          annulee: false,
+          type: 'PAIEMENT',
+        },
+        {
+          libelle: 'Règlement carte',
+          montant: '950.00',
+          annulee: false,
+          type: 'PAIEMENT',
+        },
+      ],
+    });
+
+    const pdf = await buildInvoicePdf(data);
+    const text = extractPdfText(pdf);
+
+    // Les charges du "Détail" (hors PAIEMENT) totalisent bien 1700.00, comme
+    // Invoice.montantTotal — sans qu'aucun recalcul ne soit fait ici.
+    expect(text).not.toContain('Règlement espèces');
+    expect(text).not.toContain('Règlement carte');
+    expect(text).toContain('Total TTC : 1700.00 MAD');
+    expect(text).toContain('Déjà réglé : 1700.00 MAD');
+    expect(text).toContain('Reste à payer : 0.00 MAD');
+  });
+
+  it("n'affiche pas de bloc Déjà réglé quand aucun paiement n'existe", async () => {
+    const data = sampleData({
+      invoice: {
+        numero: 'FAC-202608-000003',
+        createdAt: new Date('2026-08-01T10:00:00.000Z'),
+        montantTotal: '1150.00',
+        statut: 'EMISE',
+      },
+      lignes: [
+        {
+          libelle: 'Hébergement',
+          montant: '1000.00',
+          annulee: false,
+          type: 'HEBERGEMENT',
+        },
+        {
+          libelle: 'Extra',
+          montant: '150.00',
+          annulee: false,
+          type: 'EXTRA',
+        },
+      ],
+    });
+
+    const pdf = await buildInvoicePdf(data);
+    const text = extractPdfText(pdf);
+
+    expect(text).toContain('Total TTC : 1150.00 MAD');
+    expect(text).not.toContain('Déjà réglé');
+    expect(text).not.toContain('Reste à payer');
+  });
+
+  // GL-003B (avance de prolongation) encaisse volontairement plus que le
+  // solde courant pour préfinancer un supplément pas encore matérialisé —
+  // une facture peut être générée dans cette fenêtre (generateInvoice ne
+  // vérifie aucun solde). Le trop-perçu ne doit jamais disparaître
+  // silencieusement derrière un "Reste à payer : 0.00".
+  it('affiche un crédit client distinct quand le total réglé dépasse le total TTC (trop-perçu, plusieurs paiements)', async () => {
+    const data = sampleData({
+      invoice: {
+        numero: 'FAC-202608-000004',
+        createdAt: new Date('2026-08-08T10:00:00.000Z'),
+        montantTotal: '200.00',
+        statut: 'EMISE',
+      },
+      lignes: [
+        {
+          libelle: 'Hébergement',
+          montant: '200.00',
+          annulee: false,
+          type: 'HEBERGEMENT',
+        },
+        {
+          libelle: 'Règlement espèces',
+          montant: '200.00',
+          annulee: false,
+          type: 'PAIEMENT',
+        },
+        {
+          libelle: 'Avance prolongation ESPECES',
+          montant: '200.00',
+          annulee: false,
+          type: 'PAIEMENT',
+        },
+      ],
+    });
+
+    const pdf = await buildInvoicePdf(data);
+    const text = extractPdfText(pdf);
+
+    expect(text).not.toContain('Règlement espèces');
+    expect(text).not.toContain('Avance prolongation');
+    expect(text).toContain('Total TTC : 200.00 MAD');
+    expect(text).toContain('Déjà réglé : 400.00 MAD');
+    expect(text).toContain('Reste à payer : 0.00 MAD');
+    expect(text).toContain('Crédit client / Trop-perçu : 200.00 MAD');
+  });
+
+  it("n'affiche pas de ligne crédit client quand il n'y a pas de trop-perçu", async () => {
+    const pdf = await buildInvoicePdf(
+      sampleData({
+        lignes: [
+          ...sampleData().lignes,
+          {
+            libelle: 'Règlement carte',
+            montant: '1150.00',
+            annulee: false,
+            type: 'PAIEMENT',
+          },
+        ],
+      }),
+    );
+    const text = extractPdfText(pdf);
+
+    expect(text).toContain('Reste à payer : 100.00 MAD');
+    expect(text).not.toContain('Crédit client');
   });
 });
