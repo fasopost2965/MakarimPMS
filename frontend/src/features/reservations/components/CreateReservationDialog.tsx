@@ -109,7 +109,7 @@ export function CreateReservationDialog({
 }: Props) {
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="sm:max-w-[640px]">
+      <DialogContent className="sm:max-w-2xl">
         {open && (
           // Clé = remonte le formulaire (champs vides) à chaque nouvelle
           // ouverture, sans passer par un effect pour resynchroniser l'état.

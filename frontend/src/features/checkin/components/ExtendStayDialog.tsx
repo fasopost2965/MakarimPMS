@@ -339,7 +339,7 @@ export function ExtendStayDialog({
           librairie (base-ui Dialog.Popup `initialFocus`) plutôt qu'un appel
           manuel en useEffect qui serait de toute façon écrasé par son focus
           par défaut ("premier élément tabbable") — voir DialogPopup.d.mts. */}
-      <DialogContent initialFocus={dateInputRef}>
+      <DialogContent initialFocus={dateInputRef} className="sm:max-w-lg">
         {stay && (
           <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
             <DialogHeader>
