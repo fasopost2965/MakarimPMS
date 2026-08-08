@@ -280,7 +280,7 @@ export function ChangeRoomDialog({
     <Dialog open={stay !== null} onOpenChange={handleOpenChange}>
       <DialogContent
         initialFocus={titleRef}
-        className="max-h-[90vh] overflow-y-auto sm:max-w-lg"
+        className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"
       >
         {stay && (
           <div className="flex flex-col gap-4">
