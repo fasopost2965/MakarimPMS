@@ -1,6 +1,8 @@
 import { apiRequest } from '@/lib/api-client';
+import type { MoyenPaiement } from '../payments/types';
 import type {
   CheckinGuestSummary,
+  ExtensionDepositResult,
   ReservationDeposit,
   RoomAvailability,
   Stay,
@@ -87,6 +89,31 @@ export function extendStay(
     method: 'POST',
     body: JSON.stringify({ nouvelleDateCheckoutPrevue, motif }),
   });
+}
+
+// GL-003B — avance bornée pour financer le supplément d'une prolongation
+// (POST /stays/:id/extension-deposit), montant calculé exclusivement par le
+// serveur (jamais transmis par le client — voir ExtensionDepositDto côté
+// backend, aucun champ `montant`). N'appelle jamais RecordPaymentDialog/
+// createPayment (module payments) : la garde OVERPAYMENT (PAY-001B)
+// refuserait désormais ce flux, ce nouvel endpoint dédié le remplace.
+export function createExtensionDeposit(
+  stayId: number,
+  nouvelleDateCheckoutPrevue: string,
+  moyen: MoyenPaiement,
+  idempotencyKey: string,
+) {
+  return apiRequest<ExtensionDepositResult>(
+    `/stays/${stayId}/extension-deposit`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        nouvelleDateCheckoutPrevue,
+        moyen,
+        idempotencyKey,
+      }),
+    },
+  );
 }
 
 // GL-002 (MX-002C) — même remarque que extendStay ci-dessus : la réponse

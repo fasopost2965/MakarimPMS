@@ -737,7 +737,7 @@ describe('Stay - Extend (GL-003)', () => {
         );
       });
 
-      it('Paiement enregistré séparément puis nouvel appel réussit', async () => {
+      it('Avance de prolongation (GL-003B) encaissée séparément puis nouvel appel réussit', async () => {
         await prisma.hotelConfig.updateMany({
           data: { paiementImmediatProlongationObligatoire: true },
         });
@@ -750,18 +750,23 @@ describe('Stay - Extend (GL-003)', () => {
           });
         expect(firstAttempt.status).toBe(409);
 
-        const folioId = stay.folios[0].id;
-        // Crédit disponible = paiements − charges déjà existantes (hors
-        // PAIEMENT) : la charge HEBERGEMENT initiale (200 = 2 nuits x 100)
-        // doit d'abord être couverte avant que le supplément de 200 requis
-        // ne soit lui-même disponible en crédit — encaisser 400 au total.
-        const paymentRes = await adminClient.post('/api/payments').send({
-          folioId,
-          moyen: 'ESPECES',
-          montant: '400.00',
-          idempotencyKey: `gl003-payment-${stay.id}-${Date.now()}`,
-        });
-        expect(paymentRes.status).toBe(201);
+        // GL-003B — POST /payments brut refuserait désormais ce montant
+        // (PAY-001B, OVERPAYMENT : 400 > 200 dû). Le flux dédié
+        // extension-deposit calcule seul le montant exact requis : charge
+        // HEBERGEMENT initiale (200) + supplément de la prolongation visée
+        // (200) = 400 — réservé à payments:write (adminClient), la
+        // Réception n'a que payments:read (voir prisma/seed.ts).
+        const depositRes = await adminClient
+          .post(`/api/stays/${stay.id}/extension-deposit`)
+          .send({
+            nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+            moyen: 'ESPECES',
+            idempotencyKey: `gl003b-deposit-${stay.id}-${Date.now()}`,
+          });
+        expect(depositRes.status).toBe(201);
+        expect(
+          (depositRes.body as { montantEncaisse: string }).montantEncaisse,
+        ).toBe('400.00');
 
         const retry = await receptionClient
           .post(`/api/stays/${stay.id}/extend`)
@@ -855,14 +860,18 @@ describe('Stay - Extend (GL-003)', () => {
 
         const folioId = stay.folios[0].id;
         // Crédit réuni AVANT la course, exactement à hauteur du besoin :
-        // charge initiale (200) + supplément à venir (200) = 400.
-        const paymentRes = await adminClient.post('/api/payments').send({
-          folioId,
-          moyen: 'ESPECES',
-          montant: '400.00',
-          idempotencyKey: `gl003j-payment-base-${stay.id}-${Date.now()}`,
-        });
-        expect(paymentRes.status).toBe(201);
+        // charge initiale (200) + supplément à venir (200) = 400. GL-003B —
+        // POST /payments brut refuserait désormais ce montant (PAY-001B,
+        // OVERPAYMENT), on encaisse donc via le flux dédié
+        // extension-deposit (montant calculé serveur).
+        const depositRes = await adminClient
+          .post(`/api/stays/${stay.id}/extension-deposit`)
+          .send({
+            nouvelleDateCheckoutPrevue: isoDate(addDays(today, 4)),
+            moyen: 'ESPECES',
+            idempotencyKey: `gl003j-deposit-base-${stay.id}-${Date.now()}`,
+          });
+        expect(depositRes.status).toBe(201);
         const paymentLine = await prisma.folioLine.findFirstOrThrow({
           where: { folioId, type: TypeLigneFolio.PAIEMENT },
         });
@@ -1002,16 +1011,30 @@ describe('Stay - Extend (GL-003)', () => {
         });
 
         const folioId = stay.folios[0].id;
-        // Charge initiale = 200 (2 nuits x 100), supplément requis = 200 —
-        // 500 encaissés couvrent les deux (400) et laissent un reliquat de
-        // 100 après application de la prolongation.
-        const paymentRes = await adminClient.post('/api/payments').send({
-          folioId,
-          moyen: 'ESPECES',
-          montant: '500.00',
-          idempotencyKey: `gl003-payment-surplus-${stay.id}-${Date.now()}`,
-        });
-        expect(paymentRes.status).toBe(201);
+        // GL-003B — POST /payments brut d'un montant de 500 serait désormais
+        // refusé (PAY-001B, OVERPAYMENT : le solde dû n'est que de 200 à cet
+        // instant). Le flux dédié extension-deposit calcule seul le montant
+        // exact requis pour la date visée : ici on demande volontairement
+        // une avance pour une date de départ plus lointaine (+5 jours, 3
+        // nuits de supplément = 300) que la prolongation réellement
+        // appliquée ensuite (+4 jours, 2 nuits = 200) — charge initiale
+        // (200) + supplément visé (300) = 500 encaissés, dont seuls 400
+        // seront consommés par la prolongation réellement appliquée,
+        // laissant un reliquat de 100 (même montant que l'ancien scénario,
+        // obtenu différemment : extension-deposit ne surpaie jamais de
+        // lui-même, le reliquat vient ici du fait que la prolongation
+        // effectivement appliquée est plus courte que celle provisionnée).
+        const depositRes = await adminClient
+          .post(`/api/stays/${stay.id}/extension-deposit`)
+          .send({
+            nouvelleDateCheckoutPrevue: isoDate(addDays(today, 5)),
+            moyen: 'ESPECES',
+            idempotencyKey: `gl003b-deposit-surplus-${stay.id}-${Date.now()}`,
+          });
+        expect(depositRes.status).toBe(201);
+        expect(
+          (depositRes.body as { montantEncaisse: string }).montantEncaisse,
+        ).toBe('500.00');
 
         const res = await receptionClient
           .post(`/api/stays/${stay.id}/extend`)

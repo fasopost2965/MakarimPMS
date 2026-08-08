@@ -12,9 +12,15 @@ import { AuditModule } from '../audit/audit.module';
 // pour la traçabilité des acomptes (CREATE_DEPOSIT/REFUND_DEPOSIT).
 // DepositsService ne lit jamais Reservation directement : une réservation
 // inexistante échoue nativement sur la contrainte de clé étrangère.
+// GL-003B — PaymentsService est désormais exporté : StayModule l'importe en
+// façade pour déléguer l'écriture financière de l'avance de prolongation
+// bornée (createExtensionDeposit) sans dupliquer la logique Payment/
+// FolioLine. Aucun risque de cycle : PaymentsModule n'importe StayModule ni
+// aucun module qui en dépendrait (voir commentaire dans stay.module.ts).
 @Module({
   imports: [BillingModule, AuditModule],
   controllers: [PaymentsController, DepositsController],
   providers: [PaymentsService, DepositsService],
+  exports: [PaymentsService],
 })
 export class PaymentsModule {}

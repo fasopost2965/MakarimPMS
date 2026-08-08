@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { MoyenPaiement, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
 import { computeSoldeDu } from '../stay/utils/solde';
@@ -159,6 +159,47 @@ export class PaymentsService {
       }
       throw error;
     }
+  }
+
+  // GL-003B — écriture financière déléguée par StayService.createExtensionDeposit
+  // (POST /stays/:id/extension-deposit, avance bornée de prolongation).
+  // Distincte de createPayment à dessein : le montant est ici déjà calculé
+  // et pré-autorisé par l'appelant (StayService.computeExtensionPricing +
+  // computeSoldeDu sous verrou) — jamais fourni par le client, donc les
+  // gardes OVERPAYMENT/PAYMENT_NOT_REQUIRED de createPayment ne s'appliquent
+  // pas ici. `tx` est obligatoire et n'est JAMAIS une nouvelle transaction :
+  // l'appelant détient déjà les verrous FOR UPDATE (Stay/Room/RoomNight/
+  // Folio/FolioLine) nécessaires à l'atomicité de ce calcul — ouvrir une
+  // seconde transaction ici casserait cette garantie. L'idempotence
+  // (pré-check par idempotencyKey, filet P2002) reste de la responsabilité
+  // de l'appelant, exactement comme createPayment le fait pour la sienne.
+  async createExtensionDeposit(
+    folioId: number,
+    moyen: MoyenPaiement,
+    montant: Prisma.Decimal,
+    idempotencyKey: string,
+    reference: string | undefined,
+    tx: Prisma.TransactionClient,
+  ) {
+    const payment = await tx.payment.create({
+      data: {
+        folioId,
+        moyen,
+        montant,
+        idempotencyKey,
+      },
+    });
+
+    await this.billingService.creditFolioLine(
+      folioId,
+      montant,
+      reference
+        ? `Avance prolongation ${moyen} — ${reference}`
+        : `Avance prolongation ${moyen}`,
+      tx,
+    );
+
+    return payment;
   }
 
   async findById(id: number) {
