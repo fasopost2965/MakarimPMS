@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { listTickets } from '../../maintenance/api';
 import type { MaintenanceTicket } from '../../maintenance/types';
 
@@ -43,51 +44,53 @@ export function OpenMaintenanceWidget({ onNavigate }: Props) {
   ];
 
   return (
-    <div className="bg-card flex flex-col gap-3 rounded-lg border p-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold">Tickets de maintenance ouverts</h3>
+    <Card>
+      <CardHeader>
+        <CardTitle>Tickets de maintenance ouverts</CardTitle>
         <button
           type="button"
           onClick={onNavigate}
-          className="text-primary text-xs hover:underline"
+          className="text-primary focus-visible:ring-ring/50 min-h-11 rounded-md text-xs hover:underline focus-visible:ring-3 focus-visible:outline-none sm:min-h-0"
         >
           Voir la maintenance →
         </button>
-      </div>
-      {tickets.length === 0 ? (
-        <p className="text-muted-foreground text-xs">
-          Aucune intervention ouverte ou urgente pour le moment.
-        </p>
-      ) : (
-        <>
-          <p className="text-muted-foreground text-xs" aria-live="polite">
-            {urgentCount === 0
-              ? 'Aucune intervention urgente'
-              : `${urgentCount} intervention${urgentCount > 1 ? 's' : ''} urgente${urgentCount > 1 ? 's' : ''}`}
+      </CardHeader>
+      <CardContent className="gap-3 pt-2">
+        {tickets.length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            Aucune intervention ouverte ou urgente pour le moment.
           </p>
-          <ul className="flex flex-col gap-1.5">
-            {orderedTickets.slice(0, 5).map((ticket) => (
-              <li
-                key={ticket.id}
-                className="flex items-center justify-between gap-2 text-xs"
-              >
-                <span className="truncate">
-                  {ticket.room ? `Ch. ${ticket.room.numero} — ` : ''}
-                  {ticket.typePanne}
-                </span>
-                <Badge variant={PRIORITE_VARIANT[ticket.priorite]}>
-                  {ticket.priorite}
-                </Badge>
-              </li>
-            ))}
-            {orderedTickets.length > 5 && (
-              <li className="text-muted-foreground text-xs">
-                + {orderedTickets.length - 5} autre(s)
-              </li>
-            )}
-          </ul>
-        </>
-      )}
-    </div>
+        ) : (
+          <>
+            <p className="text-muted-foreground text-xs" aria-live="polite">
+              {urgentCount === 0
+                ? 'Aucune intervention urgente'
+                : `${urgentCount} intervention${urgentCount > 1 ? 's' : ''} urgente${urgentCount > 1 ? 's' : ''}`}
+            </p>
+            <ul className="flex flex-col gap-1.5">
+              {orderedTickets.slice(0, 5).map((ticket) => (
+                <li
+                  key={ticket.id}
+                  className="flex items-center justify-between gap-2 text-xs"
+                >
+                  <span className="truncate">
+                    {ticket.room ? `Ch. ${ticket.room.numero} — ` : ''}
+                    {ticket.typePanne}
+                  </span>
+                  <Badge variant={PRIORITE_VARIANT[ticket.priorite]}>
+                    {ticket.priorite}
+                  </Badge>
+                </li>
+              ))}
+              {orderedTickets.length > 5 && (
+                <li className="text-muted-foreground text-xs">
+                  + {orderedTickets.length - 5} autre(s)
+                </li>
+              )}
+            </ul>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
