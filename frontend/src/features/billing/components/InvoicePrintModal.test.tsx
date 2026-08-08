@@ -319,4 +319,90 @@ describe('InvoicePrintModal — UX-001E (déjà réglé / reste à payer)', () =
     expect(screen.queryByText('Déjà réglé')).not.toBeInTheDocument();
     expect(screen.queryByText('Reste à payer')).not.toBeInTheDocument();
   });
+
+  // GL-003B (avance de prolongation) encaisse volontairement plus que le
+  // solde courant pour préfinancer un supplément pas encore matérialisé —
+  // une facture peut être générée dans cette fenêtre. Le trop-perçu ne doit
+  // jamais disparaître silencieusement derrière un "Reste à payer : 0.00".
+  it('affiche un crédit client distinct quand le total réglé dépasse le total TTC (trop-perçu, plusieurs paiements)', async () => {
+    const invoiceCredit: Invoice = { ...invoice, montantTotal: '200.00' };
+    const folioCredit: Pick<Folio, 'libelle' | 'lignes'> = {
+      libelle: 'Folio principal',
+      lignes: [
+        {
+          id: 30,
+          type: 'HEBERGEMENT',
+          libelle: 'Hébergement',
+          montant: '200.00',
+          tauxTva: '0',
+          annulee: false,
+          createdAt: ISO,
+        },
+        {
+          id: 31,
+          type: 'PAIEMENT',
+          libelle: 'Règlement espèces',
+          montant: '200.00',
+          tauxTva: '0',
+          annulee: false,
+          createdAt: ISO,
+        },
+        {
+          id: 32,
+          type: 'PAIEMENT',
+          libelle: 'Avance prolongation ESPECES',
+          montant: '200.00',
+          tauxTva: '0',
+          annulee: false,
+          createdAt: ISO,
+        },
+      ],
+    };
+
+    render(
+      <InvoicePrintModal
+        open
+        onClose={() => {}}
+        invoice={invoiceCredit}
+        folio={folioCredit}
+        guest={guest}
+        room={room}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Total TTC')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Déjà réglé')).toBeInTheDocument();
+    expect(screen.getByText('400.00 MAD')).toBeInTheDocument();
+    expect(screen.getByText('Reste à payer')).toBeInTheDocument();
+    expect(screen.getByText('Crédit client / Trop-perçu')).toBeInTheDocument();
+    // "200.00 MAD" apparaît deux fois (Total TTC ET Crédit client, montants
+    // identiques dans ce scénario) — les deux occurrences sont attendues.
+    expect(screen.getAllByText('200.00 MAD')).toHaveLength(2);
+    expect(screen.queryByText('Règlement espèces')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Avance prolongation ESPECES'),
+    ).not.toBeInTheDocument();
+  });
+
+  it("n'affiche pas de ligne crédit client quand il n'y a pas de trop-perçu", async () => {
+    render(
+      <InvoicePrintModal
+        open
+        onClose={() => {}}
+        invoice={invoice}
+        folio={folio}
+        guest={guest}
+        room={room}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Total TTC')).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText('Crédit client / Trop-perçu'),
+    ).not.toBeInTheDocument();
+  });
 });

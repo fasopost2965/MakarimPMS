@@ -125,8 +125,14 @@ export function InvoicePrintModal({
   // n'est jamais recalculé ici, uniquement réutilisé tel quel (ADR-004).
   const dejaRegle = folio.lignes
     .filter((l) => l.type === 'PAIEMENT' && !l.annulee)
-    .reduce((acc, l) => acc + Math.abs(Number(l.montant)), 0);
-  const resteAPayer = Math.max(0, Number(invoice.montantTotal) - dejaRegle);
+    .reduce((acc, l) => acc + Number(l.montant), 0);
+  const totalTTC = Number(invoice.montantTotal);
+  const resteAPayer = Math.max(0, totalTTC - dejaRegle);
+  // UX-001E (correction complémentaire) — un trop-perçu (GL-003B avance de
+  // prolongation encaissée avant que le supplément ne soit matérialisé, ou
+  // tout acompte dépassant les charges déjà facturées) ne doit jamais
+  // disparaître silencieusement derrière un "Reste à payer : 0.00".
+  const creditClient = Math.max(0, dejaRegle - totalTTC);
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -260,6 +266,14 @@ export function InvoicePrintModal({
                       {resteAPayer.toFixed(2)} MAD
                     </span>
                   </div>
+                  {creditClient > 0 && (
+                    <div className="flex justify-between font-medium text-emerald-700">
+                      <span>Crédit client / Trop-perçu</span>
+                      <span className="font-mono">
+                        {creditClient.toFixed(2)} MAD
+                      </span>
+                    </div>
+                  )}
                 </>
               )}
             </div>

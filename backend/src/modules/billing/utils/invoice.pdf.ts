@@ -182,14 +182,21 @@ export function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
     // recalculé ici, uniquement réaffiché tel quel (ADR-004).
     const dejaRegle = lignes
       .filter((l) => !l.annulee && l.type === 'PAIEMENT')
-      .reduce((acc, l) => acc + Math.abs(Number(l.montant)), 0);
-    const resteAPayer = Math.max(0, Number(invoice.montantTotal) - dejaRegle);
+      .reduce((acc, l) => acc + Number(l.montant), 0);
+    const totalTTC = Number(invoice.montantTotal);
+    const resteAPayer = Math.max(0, totalTTC - dejaRegle);
+    // UX-001E (correction complémentaire) — un trop-perçu (GL-003B avance de
+    // prolongation encaissée avant que le supplément ne soit matérialisé,
+    // ou tout acompte dépassant les charges déjà facturées) ne doit jamais
+    // disparaître silencieusement derrière un `Reste à payer : 0.00` : le
+    // client a réellement un crédit, distinct d'un solde simplement nul.
+    const creditClient = Math.max(0, dejaRegle - totalTTC);
 
     doc.moveDown(1);
     doc
       .font('Helvetica-Bold')
       .fontSize(12)
-      .text(`Total TTC : ${Number(invoice.montantTotal).toFixed(2)} MAD`, {
+      .text(`Total TTC : ${totalTTC.toFixed(2)} MAD`, {
         align: 'right',
       });
     // Volontairement moins proéminent que le Total TTC ci-dessus (police
@@ -205,6 +212,12 @@ export function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
         .text(`Reste à payer : ${resteAPayer.toFixed(2)} MAD`, {
           align: 'right',
         });
+      if (creditClient > 0) {
+        doc.text(
+          `Crédit client / Trop-perçu : ${creditClient.toFixed(2)} MAD`,
+          { align: 'right' },
+        );
+      }
     }
 
     doc

@@ -292,4 +292,70 @@ describe('buildInvoicePdf — UX-001E (paiements exclus du détail)', () => {
     expect(text).not.toContain('Déjà réglé');
     expect(text).not.toContain('Reste à payer');
   });
+
+  // GL-003B (avance de prolongation) encaisse volontairement plus que le
+  // solde courant pour préfinancer un supplément pas encore matérialisé —
+  // une facture peut être générée dans cette fenêtre (generateInvoice ne
+  // vérifie aucun solde). Le trop-perçu ne doit jamais disparaître
+  // silencieusement derrière un "Reste à payer : 0.00".
+  it('affiche un crédit client distinct quand le total réglé dépasse le total TTC (trop-perçu, plusieurs paiements)', async () => {
+    const data = sampleData({
+      invoice: {
+        numero: 'FAC-202608-000004',
+        createdAt: new Date('2026-08-08T10:00:00.000Z'),
+        montantTotal: '200.00',
+        statut: 'EMISE',
+      },
+      lignes: [
+        {
+          libelle: 'Hébergement',
+          montant: '200.00',
+          annulee: false,
+          type: 'HEBERGEMENT',
+        },
+        {
+          libelle: 'Règlement espèces',
+          montant: '200.00',
+          annulee: false,
+          type: 'PAIEMENT',
+        },
+        {
+          libelle: 'Avance prolongation ESPECES',
+          montant: '200.00',
+          annulee: false,
+          type: 'PAIEMENT',
+        },
+      ],
+    });
+
+    const pdf = await buildInvoicePdf(data);
+    const text = extractPdfText(pdf);
+
+    expect(text).not.toContain('Règlement espèces');
+    expect(text).not.toContain('Avance prolongation');
+    expect(text).toContain('Total TTC : 200.00 MAD');
+    expect(text).toContain('Déjà réglé : 400.00 MAD');
+    expect(text).toContain('Reste à payer : 0.00 MAD');
+    expect(text).toContain('Crédit client / Trop-perçu : 200.00 MAD');
+  });
+
+  it("n'affiche pas de ligne crédit client quand il n'y a pas de trop-perçu", async () => {
+    const pdf = await buildInvoicePdf(
+      sampleData({
+        lignes: [
+          ...sampleData().lignes,
+          {
+            libelle: 'Règlement carte',
+            montant: '1150.00',
+            annulee: false,
+            type: 'PAIEMENT',
+          },
+        ],
+      }),
+    );
+    const text = extractPdfText(pdf);
+
+    expect(text).toContain('Reste à payer : 100.00 MAD');
+    expect(text).not.toContain('Crédit client');
+  });
 });
