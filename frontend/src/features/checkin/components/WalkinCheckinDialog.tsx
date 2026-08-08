@@ -54,7 +54,7 @@ export function WalkinCheckinDialog({
 }: Props) {
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-2xl">
         {/* Le formulaire n'est monté que pendant l'ouverture : il repart
             toujours d'un état vide sans avoir besoin d'un effect de reset. */}
         {open && (

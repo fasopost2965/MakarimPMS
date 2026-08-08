@@ -300,241 +300,243 @@ function ReservationForm({
         Canal, client, chambre et tarification en une seule fiche.
       </p>
 
-      <form
-        className="flex max-h-[70vh] flex-col gap-5 overflow-y-auto pr-1"
-        onSubmit={handleSubmit}
-      >
-        <div className="flex flex-col gap-2">
-          <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-            Canal
-          </span>
-          <div className="flex flex-wrap gap-2">
-            {CANAL_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setCanal(option.value)}
-                className={`rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors ${
-                  canal === option.value
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'text-muted-foreground hover:bg-muted border-input'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-            Client
-          </span>
-          <GuestPicker onChange={setGuestSelection} />
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-            Chambre &amp; dates
-          </span>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="roomTypeId">Type de chambre</Label>
-              <Select
-                value={roomTypeId ? String(roomTypeId) : ''}
-                onValueChange={(v) => v && handleRoomTypeChange(Number(v))}
-              >
-                <SelectTrigger id="roomTypeId" className="w-full">
-                  <SelectValue>
-                    {() =>
-                      selectedRoomType
-                        ? `${selectedRoomType.nom} — dès ${Number(selectedRoomType.prixBase).toFixed(0)} MAD/nuit`
-                        : 'Sélectionner…'
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {roomTypes.map((rt) => (
-                    <SelectItem key={rt.id} value={String(rt.id)}>
-                      {rt.nom} — dès {Number(rt.prixBase).toFixed(0)} MAD/nuit
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="roomId">Chambre</Label>
-              <Select
-                value={roomId ? String(roomId) : ''}
-                onValueChange={(v) => v && setRoomId(Number(v))}
-              >
-                <SelectTrigger id="roomId" className="w-full">
-                  <SelectValue>
-                    {() => {
-                      const r = roomsOfType.find((x) => x.id === roomId);
-                      return r
-                        ? `${r.numero} — ${STATUT_LABEL[r.statut]}`
-                        : 'Sélectionner…';
-                    }}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {roomsOfType.map((r) => (
-                    <SelectItem key={r.id} value={String(r.id)}>
-                      {r.numero} — {STATUT_LABEL[r.statut]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="dateArrivee">Arrivée</Label>
-              <Input
-                id="dateArrivee"
-                type="date"
-                value={dateArrivee}
-                onChange={(e) => setDateArrivee(e.target.value)}
-                required
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="dateDepart">Départ</Label>
-              <Input
-                id="dateDepart"
-                type="date"
-                value={dateDepart}
-                onChange={(e) => setDateDepart(e.target.value)}
-                required
-              />
+      <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
+        <div className="flex max-h-[70vh] flex-col gap-5 overflow-y-auto pr-1">
+          <div className="flex flex-col gap-2">
+            <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+              Canal
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {CANAL_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setCanal(option.value)}
+                  className={`rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors ${
+                    canal === option.value
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'text-muted-foreground hover:bg-muted border-input'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
           </div>
-          {datesInvalides && dateArrivee && dateDepart && (
-            <p className="text-destructive text-xs">
-              La date de départ doit être postérieure à la date d'arrivée.
-            </p>
-          )}
-        </div>
 
-        <div className="flex flex-col gap-2">
-          <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-            Formule d'hébergement
-          </span>
-          <div className="grid grid-cols-4 gap-2">
-            {FORMULE_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setFormule(option.value)}
-                className={`rounded-md border px-2 py-2 text-center text-xs font-semibold transition-colors ${
-                  formule === option.value
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'text-muted-foreground hover:bg-muted border-input'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
+          <div className="flex flex-col gap-2">
+            <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+              Client
+            </span>
+            <GuestPicker onChange={setGuestSelection} />
           </div>
-        </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="nombreOccupants">
-            Nombre d'occupants (optionnel)
-          </Label>
-          <Input
-            id="nombreOccupants"
-            type="number"
-            min={1}
-            max={selectedRoomType?.capacite}
-            value={nombreOccupants}
-            onChange={(e) => setNombreOccupants(e.target.value)}
-            className="w-32"
-          />
-          {nombreOccupantsInvalide && (
-            <p className="text-destructive text-xs">
-              {selectedRoomType
-                ? `Doit être un entier entre 1 et ${selectedRoomType.capacite} (capacité de la chambre).`
-                : 'Doit être un entier supérieur ou égal à 1.'}
-            </p>
-          )}
-        </div>
+          <div className="flex flex-col gap-2">
+            <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+              Chambre &amp; dates
+            </span>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="roomTypeId">Type de chambre</Label>
+                <Select
+                  value={roomTypeId ? String(roomTypeId) : ''}
+                  onValueChange={(v) => v && handleRoomTypeChange(Number(v))}
+                >
+                  <SelectTrigger id="roomTypeId" className="w-full">
+                    <SelectValue>
+                      {() =>
+                        selectedRoomType
+                          ? `${selectedRoomType.nom} — dès ${Number(selectedRoomType.prixBase).toFixed(0)} MAD/nuit`
+                          : 'Sélectionner…'
+                      }
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roomTypes.map((rt) => (
+                      <SelectItem key={rt.id} value={String(rt.id)}>
+                        {rt.nom} — dès {Number(rt.prixBase).toFixed(0)} MAD/nuit
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="roomId">Chambre</Label>
+                <Select
+                  value={roomId ? String(roomId) : ''}
+                  onValueChange={(v) => v && setRoomId(Number(v))}
+                >
+                  <SelectTrigger id="roomId" className="w-full">
+                    <SelectValue>
+                      {() => {
+                        const r = roomsOfType.find((x) => x.id === roomId);
+                        return r
+                          ? `${r.numero} — ${STATUT_LABEL[r.statut]}`
+                          : 'Sélectionner…';
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roomsOfType.map((r) => (
+                      <SelectItem key={r.id} value={String(r.id)}>
+                        {r.numero} — {STATUT_LABEL[r.statut]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="dateArrivee">Arrivée</Label>
+                <Input
+                  id="dateArrivee"
+                  type="date"
+                  value={dateArrivee}
+                  onChange={(e) => setDateArrivee(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="dateDepart">Départ</Label>
+                <Input
+                  id="dateDepart"
+                  type="date"
+                  value={dateDepart}
+                  onChange={(e) => setDateDepart(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+            {datesInvalides && dateArrivee && dateDepart && (
+              <p className="text-destructive text-xs">
+                La date de départ doit être postérieure à la date d'arrivée.
+              </p>
+            )}
+          </div>
 
-        <div className="bg-muted/40 flex flex-col gap-2.5 rounded-lg border p-4">
-          <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-            Tarification
-          </span>
-          {selectedRoomType && !datesInvalides && (
-            <div className="text-muted-foreground flex justify-between text-xs">
+          <div className="flex flex-col gap-2">
+            <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+              Formule d'hébergement
+            </span>
+            <div className="grid grid-cols-4 gap-2">
+              {FORMULE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setFormule(option.value)}
+                  className={`rounded-md border px-2 py-2 text-center text-xs font-semibold transition-colors ${
+                    formule === option.value
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'text-muted-foreground hover:bg-muted border-input'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="nombreOccupants">
+              Nombre d'occupants (optionnel)
+            </Label>
+            <Input
+              id="nombreOccupants"
+              type="number"
+              min={1}
+              max={selectedRoomType?.capacite}
+              value={nombreOccupants}
+              onChange={(e) => setNombreOccupants(e.target.value)}
+              className="w-32"
+            />
+            {nombreOccupantsInvalide && (
+              <p className="text-destructive text-xs">
+                {selectedRoomType
+                  ? `Doit être un entier entre 1 et ${selectedRoomType.capacite} (capacité de la chambre).`
+                  : 'Doit être un entier supérieur ou égal à 1.'}
+              </p>
+            )}
+          </div>
+
+          <div className="bg-muted/40 flex flex-col gap-2.5 rounded-lg border p-4">
+            <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+              Tarification
+            </span>
+            {selectedRoomType && !datesInvalides && (
+              <div className="text-muted-foreground flex justify-between text-xs">
+                <span>
+                  {estimating
+                    ? 'Calcul…'
+                    : `${Number(selectedRoomType.prixBase).toFixed(0)} MAD × ${nights} nuit${nights > 1 ? 's' : ''} (${selectedRoomType.nom})`}
+                </span>
+                <span>
+                  {prixEstime !== null
+                    ? `${Number(prixEstime).toFixed(2)} MAD`
+                    : '—'}
+                </span>
+              </div>
+            )}
+            <div className="flex justify-between border-t pt-2 text-sm font-bold">
+              <span>Prix calculé</span>
               <span>
                 {estimating
-                  ? 'Calcul…'
-                  : `${Number(selectedRoomType.prixBase).toFixed(0)} MAD × ${nights} nuit${nights > 1 ? 's' : ''} (${selectedRoomType.nom})`}
-              </span>
-              <span>
-                {prixEstime !== null
-                  ? `${Number(prixEstime).toFixed(2)} MAD`
-                  : '—'}
+                  ? '…'
+                  : prixEstime !== null
+                    ? `${Number(prixEstime).toFixed(2)} MAD`
+                    : '—'}
               </span>
             </div>
-          )}
-          <div className="flex justify-between border-t pt-2 text-sm font-bold">
-            <span>Prix calculé</span>
-            <span>
-              {estimating
-                ? '…'
-                : prixEstime !== null
-                  ? `${Number(prixEstime).toFixed(2)} MAD`
-                  : '—'}
-            </span>
-          </div>
-          <label className="mt-1 flex items-center gap-2 text-xs">
-            <input
-              type="checkbox"
-              checked={manualOverride}
-              onChange={(e) => handleManualOverrideChange(e.target.checked)}
-              className="size-4"
-            />
-            Ajustement manuel du prix final
-          </label>
-          <div className="grid grid-cols-[140px_1fr] items-end gap-2.5">
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="prixFinal" className="text-xs font-normal">
-                Prix final (MAD)
-              </Label>
-              <Input
-                id="prixFinal"
-                type="number"
-                min="0"
-                step="0.01"
-                disabled={!manualOverride}
-                value={prixFinal}
-                onChange={(e) => setManualPrixFinal(e.target.value)}
-                className="h-9"
+            <label className="mt-1 flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={manualOverride}
+                onChange={(e) => handleManualOverrideChange(e.target.checked)}
+                className="size-4"
               />
+              Ajustement manuel du prix final
+            </label>
+            <div className="grid grid-cols-[140px_1fr] items-end gap-2.5">
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="prixFinal" className="text-xs font-normal">
+                  Prix final (MAD)
+                </Label>
+                <Input
+                  id="prixFinal"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  disabled={!manualOverride}
+                  value={prixFinal}
+                  onChange={(e) => setManualPrixFinal(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label
+                  htmlFor="motifAjustement"
+                  className="text-xs font-normal"
+                >
+                  Motif de l'ajustement (obligatoire si modifié)
+                </Label>
+                <Input
+                  id="motifAjustement"
+                  type="text"
+                  placeholder="Ex. Tarif négocié agence Voyages Atlas"
+                  disabled={!manualOverride}
+                  value={motifAjustement}
+                  onChange={(e) => setMotifAjustement(e.target.value)}
+                  className="h-9"
+                />
+              </div>
             </div>
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="motifAjustement" className="text-xs font-normal">
-                Motif de l'ajustement (obligatoire si modifié)
-              </Label>
-              <Input
-                id="motifAjustement"
-                type="text"
-                placeholder="Ex. Tarif négocié agence Voyages Atlas"
-                disabled={!manualOverride}
-                value={motifAjustement}
-                onChange={(e) => setMotifAjustement(e.target.value)}
-                className="h-9"
-              />
-            </div>
+            {motifInvalide && (
+              <p className="text-destructive text-xs">
+                Le motif doit comporter au moins 10 caractères.
+              </p>
+            )}
           </div>
-          {motifInvalide && (
-            <p className="text-destructive text-xs">
-              Le motif doit comporter au moins 10 caractères.
-            </p>
-          )}
-        </div>
 
-        {error && <p className="text-destructive text-sm">{error}</p>}
+          {error && <p className="text-destructive text-sm">{error}</p>}
+        </div>
 
         <DialogFooter>
           <Button
