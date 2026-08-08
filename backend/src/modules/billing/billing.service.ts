@@ -573,6 +573,7 @@ export class BillingService {
         libelle: l.libelle,
         montant: l.montant.toString(),
         annulee: l.annulee,
+        type: l.type,
       })),
     });
   }

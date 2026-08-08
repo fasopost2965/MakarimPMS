@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import type { HotelConfig } from '@/features/parameters/types';
 import type { Folio, Invoice } from '../types';
@@ -167,5 +167,156 @@ describe('InvoicePrintModal — pas de données fabriquées, un seul total figé
     // recalculée dessus — FIN-102/UX-001B).
     expect(screen.getByText(/Hébergement — 1 nuit/)).toBeInTheDocument();
     expect(screen.getByText('1200.00')).toBeInTheDocument();
+  });
+});
+
+// UX-001E — bloc "Déjà réglé"/"Reste à payer" ajouté sous le Total TTC,
+// calculé par agrégation locale sur `folio.lignes` (jamais `invoice.payments`
+// ni `computeSoldeDu`, voir InvoicePrintModal.tsx).
+describe('InvoicePrintModal — UX-001E (déjà réglé / reste à payer)', () => {
+  beforeEach(() => {
+    vi.mocked(getHotelConfig).mockResolvedValue(null as unknown as HotelConfig);
+  });
+
+  it('affiche Déjà réglé et Reste à payer pour un paiement partiel', async () => {
+    // Charges 1200 + 12 = 1212, Total TTC figé = 1572.00 (invoice mock
+    // ci-dessus) ; un seul paiement PAIEMENT de 500.00 dans folio.lignes.
+    render(
+      <InvoicePrintModal
+        open
+        onClose={() => {}}
+        invoice={invoice}
+        folio={folio}
+        guest={guest}
+        room={room}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Déjà réglé')).toBeInTheDocument();
+    });
+    expect(screen.getByText('500.00 MAD')).toBeInTheDocument();
+    expect(screen.getByText('Reste à payer')).toBeInTheDocument();
+    expect(screen.getByText('1072.00 MAD')).toBeInTheDocument();
+  });
+
+  it('affiche Reste à payer = 0.00 MAD quand la facture est intégralement réglée (reproduction incident : 1594+100+6=1700, réglé 750+950)', async () => {
+    const invoiceReglee: Invoice = {
+      ...invoice,
+      montantTotal: '1700.00',
+    };
+    const folioRegle: Pick<Folio, 'libelle' | 'lignes'> = {
+      libelle: 'Folio principal',
+      lignes: [
+        {
+          id: 10,
+          type: 'HEBERGEMENT',
+          libelle: 'Hébergement',
+          montant: '1594.00',
+          tauxTva: '0',
+          annulee: false,
+          createdAt: ISO,
+        },
+        {
+          id: 11,
+          type: 'EXTRA',
+          libelle: 'Extra',
+          montant: '100.00',
+          tauxTva: '0',
+          annulee: false,
+          createdAt: ISO,
+        },
+        {
+          id: 12,
+          type: 'TAXE_SEJOUR',
+          libelle: 'Taxe de séjour',
+          montant: '6.00',
+          tauxTva: '0',
+          annulee: false,
+          createdAt: ISO,
+        },
+        {
+          id: 13,
+          type: 'PAIEMENT',
+          libelle: 'Règlement espèces',
+          montant: '750.00',
+          tauxTva: '0',
+          annulee: false,
+          createdAt: ISO,
+        },
+        {
+          id: 14,
+          type: 'PAIEMENT',
+          libelle: 'Règlement carte',
+          montant: '950.00',
+          tauxTva: '0',
+          annulee: false,
+          createdAt: ISO,
+        },
+      ],
+    };
+
+    render(
+      <InvoicePrintModal
+        open
+        onClose={() => {}}
+        invoice={invoiceReglee}
+        folio={folioRegle}
+        guest={guest}
+        room={room}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Total TTC')).toBeInTheDocument();
+    });
+    // Total TTC et Déjà réglé affichent tous deux 1700.00 MAD ici (facture
+    // intégralement réglée) — les deux occurrences sont attendues.
+    expect(screen.getAllByText('1700.00 MAD')).toHaveLength(2);
+    expect(screen.getByText('Déjà réglé')).toBeInTheDocument();
+    expect(screen.getByText('Reste à payer')).toBeInTheDocument();
+    expect(screen.getByText('0.00 MAD')).toBeInTheDocument();
+    // Les lignes de règlement n'apparaissent jamais dans le tableau des
+    // prestations.
+    expect(screen.queryByText('Règlement espèces')).not.toBeInTheDocument();
+    expect(screen.queryByText('Règlement carte')).not.toBeInTheDocument();
+  });
+
+  it("n'affiche pas le bloc Déjà réglé/Reste à payer quand aucun paiement n'existe", async () => {
+    const folioSansPaiement: Pick<Folio, 'libelle' | 'lignes'> = {
+      libelle: 'Folio principal',
+      lignes: [
+        {
+          id: 20,
+          type: 'HEBERGEMENT',
+          libelle: 'Hébergement',
+          montant: '1200.00',
+          tauxTva: '0',
+          annulee: false,
+          createdAt: ISO,
+        },
+      ],
+    };
+    const invoiceSansPaiement: Invoice = {
+      ...invoice,
+      montantTotal: '1200.00',
+    };
+
+    render(
+      <InvoicePrintModal
+        open
+        onClose={() => {}}
+        invoice={invoiceSansPaiement}
+        folio={folioSansPaiement}
+        guest={guest}
+        room={room}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Total TTC')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Déjà réglé')).not.toBeInTheDocument();
+    expect(screen.queryByText('Reste à payer')).not.toBeInTheDocument();
   });
 });

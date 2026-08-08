@@ -7,6 +7,12 @@ export interface InvoicePdfLigne {
   libelle: string;
   montant: string;
   annulee: boolean;
+  // UX-001E — type de la ligne (ex. 'PAIEMENT'), utilisé uniquement pour
+  // exclure les règlements du tableau "Détail" (ce ne sont pas des
+  // prestations) et calculer "Déjà réglé"/"Reste à payer" ci-dessous. Reste
+  // un `string` (pas le type Prisma `TypeLigneFolio`) pour préserver la
+  // discipline d'utilitaire pur sans dépendance Prisma déjà documentée ici.
+  type: string;
 }
 
 export interface InvoicePdfData {
@@ -148,8 +154,17 @@ export function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
     row('Date de facture', formatDate(invoice.createdAt));
 
     section('Détail');
-    for (const ligne of lignes) {
-      if (ligne.annulee) continue;
+    // UX-001E — un règlement (ligne PAIEMENT) n'est pas une prestation :
+    // l'afficher dans ce tableau avec les mêmes libellé/style que les
+    // charges (sans signe ni distinction) avait déjà induit un incident réel
+    // en production (le total additionnable par le client ne correspondait
+    // plus au "Total TTC" imprimé, qui reste — lui — la somme des seules
+    // charges). Les lignes PAIEMENT sont désormais résumées séparément dans
+    // le bloc "Déjà réglé"/"Reste à payer" ci-dessous.
+    const lignesPrestations = lignes.filter(
+      (l) => !l.annulee && l.type !== 'PAIEMENT',
+    );
+    for (const ligne of lignesPrestations) {
       // FIN-102 — correction de libellé uniquement (bug de présentation
       // confirmé) : chaque ligne est déjà TTC (ADR-008/FIN-101B, jamais de
       // TVA ajoutée à part), afficher "(HT)" était donc trompeur.
@@ -158,6 +173,18 @@ export function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
       );
     }
 
+    // UX-001E — "Déjà réglé"/"Reste à payer" : pure agrégation de
+    // présentation sur les lignes PAIEMENT déjà chargées (jamais
+    // Invoice.payments, quasi toujours vide en pratique — voir CreatePaymentDto
+    // §invoiceId optionnel) ni computeSoldeDu (solde de folio VIVANT,
+    // potentiellement multi-factures — sans rapport avec l'agrégat immuable
+    // propre à CETTE facture déjà émise). Invoice.montantTotal n'est jamais
+    // recalculé ici, uniquement réaffiché tel quel (ADR-004).
+    const dejaRegle = lignes
+      .filter((l) => !l.annulee && l.type === 'PAIEMENT')
+      .reduce((acc, l) => acc + Math.abs(Number(l.montant)), 0);
+    const resteAPayer = Math.max(0, Number(invoice.montantTotal) - dejaRegle);
+
     doc.moveDown(1);
     doc
       .font('Helvetica-Bold')
@@ -165,6 +192,20 @@ export function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
       .text(`Total TTC : ${Number(invoice.montantTotal).toFixed(2)} MAD`, {
         align: 'right',
       });
+    // Volontairement moins proéminent que le Total TTC ci-dessus (police
+    // normale, pas de gras) : ce sont des informations de suivi du
+    // règlement, pas le montant contractuel de la facture. "Déjà réglé"
+    // n'est affiché que si un règlement existe réellement, pour ne pas
+    // polluer une facture jamais payée d'une ligne à 0.00 MAD sans intérêt.
+    if (dejaRegle > 0) {
+      doc
+        .font('Helvetica')
+        .fontSize(10)
+        .text(`Déjà réglé : ${dejaRegle.toFixed(2)} MAD`, { align: 'right' })
+        .text(`Reste à payer : ${resteAPayer.toFixed(2)} MAD`, {
+          align: 'right',
+        });
+    }
 
     doc
       .fontSize(8)

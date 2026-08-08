@@ -116,6 +116,18 @@ export function InvoicePrintModal({
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   )[0];
 
+  // UX-001E — "Déjà réglé"/"Reste à payer" : agrégation locale sur les
+  // lignes PAIEMENT déjà chargées dans `folio.lignes` (jamais
+  // `invoice.payments`, quasi toujours vide en pratique — `RecordPaymentDialog`
+  // n'y renseigne jamais `invoiceId`), et jamais `computeSoldeDu` (solde de
+  // folio VIVANT, potentiellement multi-factures — sans rapport avec cet
+  // agrégat immuable propre à CETTE facture déjà émise). Invoice.montantTotal
+  // n'est jamais recalculé ici, uniquement réutilisé tel quel (ADR-004).
+  const dejaRegle = folio.lignes
+    .filter((l) => l.type === 'PAIEMENT' && !l.annulee)
+    .reduce((acc, l) => acc + Math.abs(Number(l.montant)), 0);
+  const resteAPayer = Math.max(0, Number(invoice.montantTotal) - dejaRegle);
+
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
@@ -234,6 +246,22 @@ export function InvoicePrintModal({
                   {Number(invoice.montantTotal).toFixed(2)} MAD
                 </span>
               </div>
+              {dejaRegle > 0 && (
+                <>
+                  <div className="text-muted-foreground flex justify-between">
+                    <span>Déjà réglé</span>
+                    <span className="font-mono">
+                      {dejaRegle.toFixed(2)} MAD
+                    </span>
+                  </div>
+                  <div className="text-muted-foreground flex justify-between">
+                    <span>Reste à payer</span>
+                    <span className="font-mono">
+                      {resteAPayer.toFixed(2)} MAD
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
