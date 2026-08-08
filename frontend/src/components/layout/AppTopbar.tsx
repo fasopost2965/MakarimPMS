@@ -68,7 +68,9 @@ export function AppTopbar({
           id="btn-logout"
           variant="ghost"
           size="sm"
-          className="min-h-11 sm:min-h-8"
+          // §8 — 44×44px minimum en mobile, où le libellé est masqué et le
+          // bouton se réduit à sa seule icône.
+          className="min-h-11 min-w-11 sm:min-h-8 sm:min-w-0"
           onClick={onLogout}
           aria-label="Déconnexion"
         >

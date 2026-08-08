@@ -170,10 +170,18 @@ export function OccupancyForecastCard() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <ul className="text-muted-foreground grid grid-cols-2 gap-x-3 gap-y-1 text-xs sm:grid-cols-4">
+            {/* Équivalent textuel du graphique — une colonne par jour, dans
+                le même ordre que les barres, pour que la donnée reste
+                lisible sans le SVG (lecteur d'écran, impression). */}
+            <ul className="grid grid-cols-4 gap-1 text-xs sm:grid-cols-7">
               {jours.map((jour) => (
-                <li key={jour.date} className="flex justify-between gap-1">
-                  <span className="truncate">{jour.label}</span>
+                <li
+                  key={jour.date}
+                  className="bg-surface-2 flex flex-col items-center rounded-md px-1 py-1"
+                >
+                  <span className="text-muted-foreground truncate">
+                    {jour.label}
+                  </span>
                   <span className="text-foreground font-mono font-semibold tabular-nums">
                     {jour.tauxOccupation}%
                   </span>

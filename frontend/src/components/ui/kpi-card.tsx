@@ -68,8 +68,13 @@ export function KpiCard({
       data-slot="kpi-card"
       className={cn(
         'bg-card border-border flex flex-col gap-2 rounded-lg border p-[var(--card-padding)] shadow-[var(--shadow-card)]',
+        // §8 — focus clavier toujours visible. Un `ring-*` Tailwind ne
+        // fonctionnerait pas ici : la carte porte déjà une `shadow-[...]`
+        // arbitraire, qui occupe la même propriété `box-shadow` (vérifié en
+        // navigateur : l'anneau restait à 0px). Un `outline` réel est
+        // indépendant de l'ombre, donc toujours visible.
         clickable &&
-          'hover:border-primary/40 focus-visible:ring-ring/50 cursor-pointer transition-[box-shadow,border-color,transform] duration-[var(--duration-fast)] ease-[var(--ease-out-brand)] hover:-translate-y-px hover:shadow-[var(--shadow-card-hover)] focus-visible:ring-3 focus-visible:outline-none',
+          'hover:border-primary/40 cursor-pointer transition-[box-shadow,border-color,transform] duration-[var(--duration-fast)] ease-[var(--ease-out-brand)] hover:-translate-y-px hover:shadow-[var(--shadow-card-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]',
         className,
       )}
       onClick={onClick}

@@ -215,7 +215,11 @@ export function AppSidebar({
                           key={tab}
                           id={`nav-${tab}`}
                           type="button"
-                          title={showLabels ? undefined : label}
+                          // Toujours renseigné, pas seulement en mode
+                          // icônes : à 192px (§1.3) les libellés les plus
+                          // longs sont tronqués par `truncate`, le titre
+                          // natif restitue le libellé complet au survol.
+                          title={label}
                           aria-current={active ? 'page' : undefined}
                           onClick={() => handleNavigate(tab)}
                           className={cn(

@@ -171,7 +171,7 @@ export function DashboardPage({ onNavigate, permissions }: Props) {
       {loading && (
         <div
           aria-label="Chargement des indicateurs"
-          className="grid gap-3 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
+          className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6"
         >
           {Array.from({ length: 6 }, (_, index) => (
             <KpiCardSkeleton key={index} />
@@ -189,7 +189,7 @@ export function DashboardPage({ onNavigate, permissions }: Props) {
       {resume && !loading && (
         <>
           {/* §4 — 6 colonnes desktop / 3 tablette / 2 mobile. */}
-          <div className="grid gap-3 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
             <KpiCard
               label="Taux d'occupation"
               value={`${resume.tauxOccupation}%`}
@@ -254,9 +254,13 @@ export function DashboardPage({ onNavigate, permissions }: Props) {
               // §1.4 / §8 — tout montant MAD en font-mono tabular-nums,
               // jamais animé (§7 : pas de count-up financier).
               value={
+                // 19px (au lieu des 26px d'une valeur KPI nue) +
+                // whitespace-nowrap : mesuré en navigateur, à 768px la
+                // carte fait 168px de large et « 3100.00 MAD » passait à la
+                // ligne en 22px — un montant coupé en deux se lit mal.
                 <MoneyDisplay
                   value={resume.encaisseAujourdhui}
-                  className="text-[22px]"
+                  className="text-[19px] whitespace-nowrap"
                 />
               }
               hint="Paiements du jour"
