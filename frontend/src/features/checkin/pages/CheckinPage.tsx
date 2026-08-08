@@ -399,17 +399,20 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="relative">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative w-full sm:w-64">
             <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Rechercher un client ou une chambre…"
-              className="w-64 pl-8"
+              className="w-full pl-8"
             />
           </div>
-          <Button onClick={() => setWalkinOpen(true)}>
+          <Button
+            onClick={() => setWalkinOpen(true)}
+            className="w-full sm:w-auto"
+          >
             + Check-in walk-in
           </Button>
         </div>
