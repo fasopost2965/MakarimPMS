@@ -106,7 +106,7 @@ export async function makeRoomNeedsCleaning(
   await expect(stayRow).toBeVisible();
   await stayRow.click();
 
-  await page.getByRole('button', { name: 'Facturation' }).click();
+  await page.getByRole('tab', { name: 'Facturation' }).click();
   await page.getByRole('button', { name: 'Encaisser un paiement' }).click();
   // PAY-001B — le dialogue préremplit déjà le montant avec le reste à payer
   // exact (GET /folios/:id, `synthese.balanceTTC`) ; un montant saisi
@@ -116,7 +116,7 @@ export async function makeRoomNeedsCleaning(
   await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
   await expect(page.locator('#montant')).not.toBeVisible();
 
-  await page.getByRole('button', { name: 'Détails' }).click();
+  await page.getByRole('tab', { name: 'Détails' }).click();
   await page.getByRole('button', { name: 'Check-out', exact: true }).click();
   await expect(page.getByText('Check-out effectué')).toBeVisible();
   await page.getByRole('button', { name: 'Fermer' }).click();

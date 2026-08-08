@@ -4,6 +4,18 @@ import userEvent from '@testing-library/user-event';
 import { StayDetailsDialog } from './StayDetailsDialog';
 import type { Stay } from '../types';
 
+// UX-003B — migration des faux onglets (boutons) vers le composant Tabs
+// partagé : BillingTabContent/PoliceRecordForm font de vrais appels réseau
+// à leur montage, hors de portée d'un test unitaire de ce dialogue (déjà
+// couverts par leurs propres suites). Mockés ici uniquement pour vérifier
+// le comportement de bascule d'onglet lui-même.
+vi.mock('@/features/billing/components/BillingTabContent', () => ({
+  BillingTabContent: () => <div>Contenu facturation</div>,
+}));
+vi.mock('@/features/police/components/PoliceRecordForm', () => ({
+  PoliceRecordForm: () => <div>Contenu police</div>,
+}));
+
 const BASE_STAY: Stay = {
   id: 6,
   reservationId: null,
@@ -30,6 +42,58 @@ const BASE_STAY: Stay = {
 };
 
 const noop = () => {};
+
+describe('StayDetailsDialog — onglets (UX-003B, migration vers Tabs)', () => {
+  it('expose une sémantique de vrais onglets (role="tablist"/"tab") et bascule le contenu affiché au clic', async () => {
+    const user = userEvent.setup();
+    render(
+      <StayDetailsDialog
+        stay={BASE_STAY}
+        onClose={noop}
+        onCheckout={noop}
+        checkingOut={false}
+        error={null}
+        soldeDu={null}
+        permissions={null}
+      />,
+    );
+
+    expect(screen.getByRole('tablist')).toBeVisible();
+    const detailsTab = screen.getByRole('tab', { name: 'Détails' });
+    const facturationTab = screen.getByRole('tab', { name: 'Facturation' });
+    expect(detailsTab).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('Folio principal')).toBeVisible();
+    expect(screen.queryByText('Contenu facturation')).not.toBeInTheDocument();
+
+    await user.click(facturationTab);
+
+    expect(facturationTab).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('Contenu facturation')).toBeVisible();
+    expect(screen.queryByText('Folio principal')).not.toBeInTheDocument();
+  });
+
+  it('signale visuellement une fiche police manquante sur l’onglet Police (icône, plus le caractère « ⚠ » brut)', () => {
+    render(
+      <StayDetailsDialog
+        stay={BASE_STAY}
+        onClose={noop}
+        onCheckout={noop}
+        checkingOut={false}
+        error={null}
+        soldeDu={null}
+        permissions={null}
+      />,
+    );
+
+    const policeTab = screen.getByRole('tab', { name: /Police/ });
+    expect(policeTab).toBeVisible();
+    expect(policeTab).toHaveAttribute(
+      'title',
+      'Fiche de police (registre légal DGSN) non renseignée',
+    );
+    expect(policeTab.textContent).not.toContain('⚠');
+  });
+});
 
 describe('StayDetailsDialog — bouton Prolonger (GL-003, MX-002A)', () => {
   it('absent si le séjour n’est pas EN_COURS, même avec la permission', () => {
