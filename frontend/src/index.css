@@ -47,13 +47,29 @@
     --color-info: var(--info);
     --color-violet-foreground: var(--violet-foreground);
     --color-violet: var(--violet);
-    /* Or de la marque (étoiles du logo) — accent volontairement séparé du
-       primary/accent shadcn standard (qui restent des tons neutres de
-       hover/surface) pour ne jamais dégrader le contraste des composants
-       primitifs (menus, select). Utilisé avec parcimonie (badges, logo,
-       éléments de marque), jamais comme couleur de fond de page. */
-    --color-gold: var(--gold);
-    --color-gold-foreground: var(--gold-foreground);
+    /* Makarim Design System 2026 §1.1 (DESIGN-002) — tokens nommés du
+       référentiel figé, exposés en utilitaires Tailwind. Les tokens shadcn
+       historiques ci-dessus ne sont pas supprimés : ils sont recolorés dans
+       :root pour que les écrans pas encore migrés adoptent la nouvelle
+       palette sans être touchés (migration progressive, pas big-bang). */
+    --color-surface: var(--surface);
+    --color-surface-2: var(--surface-2);
+    --color-chrome-bg: var(--chrome-bg);
+    --color-chrome-text: var(--chrome-text);
+    --color-chrome-border: var(--chrome-border);
+    --color-primary-soft: var(--primary-soft);
+    --color-primary-hover: var(--primary-hover);
+    --color-primary-ink: var(--primary-ink);
+    --color-text-secondary: var(--text-secondary);
+    --color-text-tertiary: var(--text-tertiary);
+    --color-success-soft: var(--success-soft);
+    --color-warning-soft: var(--warning-soft);
+    --color-destructive-soft: var(--destructive-soft);
+    --color-info-soft: var(--info-soft);
+    --color-violet-soft: var(--violet-soft);
+    /* §1.1 — remplace définitivement l'ancien token --gold (canal Walk-in). */
+    --color-canal-walkin: var(--canal-walkin);
+    --color-canal-walkin-soft: var(--canal-walkin-soft);
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -64,129 +80,188 @@
 }
 
 /*
- * Identité "Marine & Or" — remplace l'ancienne palette "Ardoise & Laiton".
- * Structure inspirée du design token system Booking.com (échelle de rayons
- * sm/md/pill, ombres teintées à la couleur de marque plutôt que gris pur,
- * tokens de motion nommés) — mais recolorée avec les couleurs réelles de
- * l'hôtel (logo Hôtel Makarim Tétouan) : bleu marine #283379 (converti en
- * OKLCH ci-dessous) comme couleur primaire, or/champagne en accent de
- * marque rare (étoiles du logo). Le bleu/jaune vif de Booking.com lui-même
- * n'a jamais été repris tel quel — il ne correspond pas à l'identité de
- * marque réelle de l'établissement.
+ * Makarim Design System 2026 — direction B « Modern Operations »
+ * (docs/MAKARIM_DESIGN_SYSTEM_2026.md, lot DESIGN-002).
+ *
+ * Remplace l'identité « Marine & Or » : le marine sombre #283379 et l'accent
+ * or/champagne (--gold) sont définitivement retirés (§1.1). --primary
+ * devient un bleu net #175CD3, le chrome applicatif (sidebar + topbar) passe
+ * en clair (§1.1bis), et le gris secondaire unique est scindé en deux
+ * niveaux (--text-secondary lisible / --text-tertiary décoratif, §1.2).
+ *
+ * Les noms de tokens shadcn historiques (--background, --foreground,
+ * --muted-foreground, --sidebar-*, …) sont conservés et simplement
+ * recolorés : les écrans non encore migrés suivent la nouvelle palette sans
+ * être modifiés fichier par fichier (migration progressive, §10).
  */
 :root {
-    --background: oklch(0.99 0.003 272);
-    --foreground: oklch(0.22 0.02 272);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.22 0.02 272);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.22 0.02 272);
-    /* #283379 exact, mesuré depuis le logo. */
-    --primary: oklch(0.355 0.119 272.1);
-    --primary-foreground: oklch(0.99 0.005 272);
-    --secondary: oklch(0.95 0.01 272);
-    --secondary-foreground: oklch(0.25 0.02 272);
-    --muted: oklch(0.95 0.008 272);
-    --muted-foreground: oklch(0.48 0.02 272);
-    --accent: oklch(0.94 0.015 272);
-    --accent-foreground: oklch(0.25 0.02 272);
-    --destructive: oklch(0.55 0.19 25);
-    --border: oklch(0.9 0.012 272);
-    --input: oklch(0.9 0.012 272);
-    --ring: oklch(0.355 0.119 272.1);
-    --success: oklch(0.55 0.11 155);
-    --success-foreground: oklch(0.98 0.01 155);
-    --warning: oklch(0.7 0.15 80);
-    --warning-foreground: oklch(0.2 0.03 80);
-    --info: oklch(0.5 0.1 265);
-    --info-foreground: oklch(0.98 0.01 265);
-    /* CH-063 (handoff design_handoff_exploitation_hotel) — seul ajout hors
-       palette existante : distingue EN_NETTOYAGE (en cours) de A_NETTOYER
-       (--warning, en attente) sur la grille Housekeeping, deux statuts
-       manuels adjacents que --warning seul ne différenciait pas visuellement
-       dans la nouvelle table dense à puces. */
-    --violet: oklch(0.5 0.14 300);
-    --violet-foreground: oklch(0.98 0.01 300);
-    --chart-1: oklch(0.355 0.119 272.1);
-    --chart-2: oklch(0.728 0.138 89.7);
-    --chart-3: oklch(0.55 0.11 155);
-    --chart-4: oklch(0.7 0.15 80);
-    --chart-5: oklch(0.48 0.02 272);
-    /* Rayons resserrés (4/8px de base) — même échelle sm/md que
-       Booking.com, plus dense/produit que l'ancien --radius: 0.625rem. */
-    --radius: 0.5rem;
-    /* Sidebar en marine plus sombre que --primary : profondeur de surface
-       distincte, l'élément actif se détache en or (--sidebar-primary). */
-    --sidebar: oklch(0.288 0.091 271.8);
-    --sidebar-foreground: oklch(0.99 0 0);
-    --sidebar-primary: oklch(0.728 0.138 89.7);
-    --sidebar-primary-foreground: oklch(0.2 0.03 90);
-    --sidebar-accent: oklch(0.34 0.09 272);
-    --sidebar-accent-foreground: oklch(0.99 0 0);
-    --sidebar-border: oklch(0.34 0.09 272);
-    --sidebar-ring: oklch(0.728 0.138 89.7);
-    --gold: oklch(0.728 0.138 89.7);
-    --gold-foreground: oklch(0.2 0.03 90);
-    /* Tokens de motion (structure Booking.com : fast/base/slow + easing
-       ease-out nommé) — appliqués aux transitions déjà présentes sur les
-       boutons, dialogs et le tiroir mobile de la sidebar plutôt qu'à des
-       valeurs ad hoc dispersées dans chaque composant. */
+    /* §1.1 — tokens nommés du design system. */
+    --surface: #ffffff;
+    --surface-2: #e6ecf5;
+    --text: #101828;
+    --text-secondary: #475467;
+    /* §1.2 — rehaussé depuis #8D97A8 pour ne jamais tomber sous AA. */
+    --text-tertiary: #6b7280;
+    --primary-hover: #134fb4;
+    --primary-ink: #ffffff;
+    --primary-soft: #dce8fb;
+    --success-soft: #ddf3e7;
+    --warning-soft: #fbe7d6;
+    --destructive-soft: #fadddb;
+    --info-soft: #d8f0fa;
+    --violet-soft: #e8e2fe;
+    /* §1.1 — canal Walk-in, remplace définitivement --gold. */
+    --canal-walkin: #0e9384;
+    --canal-walkin-soft: #d3f0ec;
+    /* §1.1bis — chrome clair (sidebar + topbar), cible retenue par défaut.
+       Le repli sombre --chrome-bg-alt-dark n'est volontairement pas défini :
+       il exigerait une justification explicite au moment de l'appliquer. */
+    --chrome-bg: var(--surface);
+    --chrome-text: #344154;
+    --chrome-border: #e1e7f0;
+
+    /* Tokens shadcn historiques, recolorés sur la palette ci-dessus. */
+    --background: #eff3f8;
+    --foreground: var(--text);
+    --card: var(--surface);
+    --card-foreground: var(--text);
+    --popover: var(--surface);
+    --popover-foreground: var(--text);
+    --primary: #175cd3;
+    --primary-foreground: var(--primary-ink);
+    --secondary: var(--surface-2);
+    --secondary-foreground: var(--text);
+    --muted: var(--surface-2);
+    /* §1.2 — un seul gris faible (oklch(0.48 0.02 272)) remplacé par le
+       niveau lisible ~7.9:1 : corrige directement le défaut « textes gris
+       trop faibles ». */
+    --muted-foreground: var(--text-secondary);
+    --accent: var(--surface-2);
+    --accent-foreground: var(--text);
+    --destructive: #c4271e;
+    --border: #d3dce8;
+    --input: #d3dce8;
+    --ring: #175cd3;
+    --success: #0b8a55;
+    --success-foreground: #ffffff;
+    --warning: #b54708;
+    --warning-foreground: #ffffff;
+    --info: #0086c9;
+    --info-foreground: #ffffff;
+    /* CH-063 — distingue EN_NETTOYAGE (en cours) de A_NETTOYER (--warning,
+       en attente) sur la grille Housekeeping ; §1.1 conserve ce double
+       usage (canal Airbnb + statut ménage) tel quel. */
+    --violet: #7a5af8;
+    --violet-foreground: #ffffff;
+    /* Séries de graphiques (Recharts, §6) — tirées exclusivement de la
+       palette ci-dessus, jamais des couleurs par défaut de la librairie. */
+    --chart-1: var(--primary);
+    --chart-2: var(--canal-walkin);
+    --chart-3: var(--success);
+    --chart-4: var(--warning);
+    --chart-5: var(--violet);
+    /* §1.3 — 10px cartes/dialogs/inputs (--radius-sm dérivé ≈ 6px, proche
+       des 7px du référentiel pour badges/boutons). */
+    --radius: 0.625rem;
+    /* §1.1bis — chrome clair : la séparation avec le contenu vient de
+       --chrome-border et de l'ombre, plus d'un contraste de teinte. */
+    --sidebar: var(--chrome-bg);
+    --sidebar-foreground: var(--chrome-text);
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: var(--primary-ink);
+    --sidebar-accent: var(--primary-soft);
+    --sidebar-accent-foreground: var(--primary);
+    --sidebar-border: var(--chrome-border);
+    --sidebar-ring: var(--primary);
+    /* Tokens de motion (§7) — inchangés, déjà la référence du projet ;
+       DESIGN-002 les réutilise tels quels plutôt que d'en inventer. */
     --duration-fast: 120ms;
     --duration-base: 220ms;
     --duration-slow: 300ms;
     --ease-out-brand: cubic-bezier(0.2, 0, 0.4, 0.8);
-    --shadow-card: 0 2px 8px oklch(0.22 0.05 272 / 0.14);
-    --shadow-elevated: 0 8px 24px oklch(0.22 0.05 272 / 0.18);
+    /* §1.3 */
+    --shadow-card:
+        0 1px 2px rgba(16, 24, 40, 0.05), 0 4px 10px rgba(16, 24, 40, 0.06);
+    --shadow-card-hover:
+        0 2px 4px rgba(16, 24, 40, 0.08), 0 10px 20px rgba(16, 24, 40, 0.1);
+    --shadow-elevated: 0 12px 32px rgba(16, 24, 40, 0.14);
+    --gap: 12px;
+    --card-padding: 14px;
+    --sidebar-width: 192px;
+    --sidebar-width-collapsed: 64px;
 }
 
+/* Thème sombre — aucun sélecteur d'apparence n'existe aujourd'hui dans
+   l'application (`.dark` n'est jamais posé sur <html>), ce bloc reste une
+   réserve de cohérence. Recoloré ici sur la même palette 2026 pour ne pas
+   laisser subsister l'ancienne identité marine/or dans un coin du fichier. */
 .dark {
-    --background: oklch(0.16 0.02 272);
-    --foreground: oklch(0.94 0.01 272);
-    --card: oklch(0.2 0.025 272);
-    --card-foreground: oklch(0.94 0.01 272);
-    --popover: oklch(0.2 0.025 272);
-    --popover-foreground: oklch(0.94 0.01 272);
-    --primary: oklch(0.445 0.136 273);
-    --primary-foreground: oklch(0.98 0.008 272);
-    --secondary: oklch(0.26 0.03 272);
-    --secondary-foreground: oklch(0.94 0.01 272);
-    --muted: oklch(0.26 0.03 272);
-    --muted-foreground: oklch(0.68 0.02 272);
-    --accent: oklch(0.28 0.035 272);
-    --accent-foreground: oklch(0.94 0.01 272);
-    --destructive: oklch(0.65 0.18 25);
-    --border: oklch(0.3 0.03 272);
-    --input: oklch(0.3 0.03 272);
-    --ring: oklch(0.445 0.136 273);
-    --success: oklch(0.65 0.12 155);
-    --success-foreground: oklch(0.18 0.02 155);
-    --warning: oklch(0.75 0.14 80);
-    --warning-foreground: oklch(0.2 0.03 80);
-    --info: oklch(0.68 0.1 260);
-    --info-foreground: oklch(0.18 0.02 260);
-    --violet: oklch(0.62 0.14 300);
-    --violet-foreground: oklch(0.18 0.03 300);
-    --chart-1: oklch(0.445 0.136 273);
-    --chart-2: oklch(0.728 0.138 89.7);
-    --chart-3: oklch(0.65 0.12 155);
-    --chart-4: oklch(0.75 0.14 80);
-    --chart-5: oklch(0.68 0.02 272);
-    --sidebar: oklch(0.12 0.02 272);
-    --sidebar-foreground: oklch(0.95 0.01 272);
-    --sidebar-primary: oklch(0.728 0.138 89.7);
-    --sidebar-primary-foreground: oklch(0.2 0.03 90);
-    --sidebar-accent: oklch(0.2 0.03 272);
-    --sidebar-accent-foreground: oklch(0.95 0.01 272);
-    --sidebar-border: oklch(0.22 0.03 272);
-    --sidebar-ring: oklch(0.728 0.138 89.7);
-    --gold: oklch(0.75 0.14 89.7);
-    --gold-foreground: oklch(0.18 0.03 90);
+    --surface: #101828;
+    --surface-2: #1d2939;
+    --text: #f2f4f7;
+    --text-secondary: #cbd5e1;
+    --text-tertiary: #98a2b3;
+    --primary-hover: #4b8bef;
+    --primary-ink: #06182f;
+    --primary-soft: #1c3a66;
+    --success-soft: #123526;
+    --warning-soft: #3a2110;
+    --destructive-soft: #3c1512;
+    --info-soft: #0c2f3f;
+    --violet-soft: #2a2350;
+    --canal-walkin: #3ec3b4;
+    --canal-walkin-soft: #10352f;
+    --chrome-bg: var(--surface);
+    --chrome-text: #cbd5e1;
+    --chrome-border: #2a3546;
+
+    --background: #0b1220;
+    --foreground: var(--text);
+    --card: var(--surface);
+    --card-foreground: var(--text);
+    --popover: var(--surface);
+    --popover-foreground: var(--text);
+    --primary: #5b9bf5;
+    --primary-foreground: var(--primary-ink);
+    --secondary: var(--surface-2);
+    --secondary-foreground: var(--text);
+    --muted: var(--surface-2);
+    --muted-foreground: var(--text-secondary);
+    --accent: var(--surface-2);
+    --accent-foreground: var(--text);
+    --destructive: #f27a72;
+    --border: #2a3546;
+    --input: #2a3546;
+    --ring: #5b9bf5;
+    --success: #45c08c;
+    --success-foreground: #06231a;
+    --warning: #e08a4a;
+    --warning-foreground: #2a1607;
+    --info: #4ec0ec;
+    --info-foreground: #05202c;
+    --violet: #a892fb;
+    --violet-foreground: #150f33;
+    --chart-1: var(--primary);
+    --chart-2: var(--canal-walkin);
+    --chart-3: var(--success);
+    --chart-4: var(--warning);
+    --chart-5: var(--violet);
+    --sidebar: var(--chrome-bg);
+    --sidebar-foreground: var(--chrome-text);
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: var(--primary-ink);
+    --sidebar-accent: var(--primary-soft);
+    --sidebar-accent-foreground: var(--primary);
+    --sidebar-border: var(--chrome-border);
+    --sidebar-ring: var(--primary);
     --duration-fast: 120ms;
     --duration-base: 220ms;
     --duration-slow: 300ms;
     --ease-out-brand: cubic-bezier(0.2, 0, 0.4, 0.8);
-    --shadow-card: 0 2px 8px oklch(0 0 0 / 0.32);
-    --shadow-elevated: 0 8px 24px oklch(0 0 0 / 0.4);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 10px rgba(0, 0, 0, 0.36);
+    --shadow-card-hover:
+        0 2px 4px rgba(0, 0, 0, 0.46), 0 10px 20px rgba(0, 0, 0, 0.44);
+    --shadow-elevated: 0 12px 32px rgba(0, 0, 0, 0.55);
 }
 
 @layer base {
@@ -199,4 +274,20 @@
   html {
     @apply font-sans;
     }
+}
+
+/* §7 — « Respect de prefers-reduced-motion : toutes les transitions sont
+   désactivables globalement pour les utilisateurs qui le demandent au
+   niveau système. » Règle globale plutôt qu'un garde-fou réécrit dans
+   chaque composant. Les états de chargement (Skeleton) restent visibles,
+   simplement sans pulsation. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

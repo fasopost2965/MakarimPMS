@@ -39,14 +39,16 @@ const CANAL_LABEL: Record<Reservation['canal'], string> = {
 };
 const CANAL_BAR_CLASS: Record<Reservation['canal'], string> = {
   DIRECT: 'bg-primary text-primary-foreground',
-  WALK_IN: 'bg-gold text-gold-foreground',
+  // DESIGN-002 (§1.1) — --gold retiré du design system, le canal Walk-in
+  // a désormais son propre token fonctionnel --canal-walkin (teal).
+  WALK_IN: 'bg-canal-walkin text-primary-ink',
   BOOKING_COM: 'bg-info text-info-foreground',
   EXPEDIA: 'bg-warning text-warning-foreground',
   AIRBNB: 'bg-violet text-violet-foreground',
 };
 const CANAL_DOT_CLASS: Record<Reservation['canal'], string> = {
   DIRECT: 'bg-primary',
-  WALK_IN: 'bg-gold',
+  WALK_IN: 'bg-canal-walkin',
   BOOKING_COM: 'bg-info',
   EXPEDIA: 'bg-warning',
   AIRBNB: 'bg-violet',

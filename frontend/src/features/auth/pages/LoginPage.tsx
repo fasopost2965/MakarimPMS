@@ -67,12 +67,14 @@ export function LoginPage({
   return (
     <div className="bg-muted flex h-screen items-center justify-center p-6">
       <div className="bg-card flex w-full max-w-[420px] flex-col overflow-hidden rounded-xl shadow-[var(--shadow-elevated)]">
-        {/* Liseré de marque marine → or — seul élément sans équivalent
-            shadcn/ui existant, cf. docs/design/design_handoff_login_dashboard. */}
+        {/* Liseré de marque — DESIGN-002 (§1.1) : le dégradé marine → or a
+            été remplacé par une variation d'intensité de --primary, l'or
+            n'existant plus dans le design system 2026. */}
         <div
           className="h-1.5 shrink-0"
           style={{
-            background: 'linear-gradient(90deg, var(--primary), var(--gold))',
+            background:
+              'linear-gradient(90deg, var(--primary), var(--primary-soft))',
           }}
         />
 
@@ -84,7 +86,7 @@ export function LoginPage({
               className="size-[34px] shrink-0 rounded-[9px] object-contain"
             />
           ) : (
-            <span className="bg-primary text-gold flex size-[34px] shrink-0 items-center justify-center rounded-[9px] text-[15px] font-bold">
+            <span className="bg-primary text-primary-ink flex size-[34px] shrink-0 items-center justify-center rounded-[9px] text-[15px] font-bold">
               M
             </span>
           )}
