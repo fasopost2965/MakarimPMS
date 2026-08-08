@@ -6,12 +6,13 @@ import {
   useState,
   type RefObject,
 } from 'react';
-import { AlertTriangle, Search } from 'lucide-react';
+import { AlertTriangle, BedDouble, LogIn, LogOut, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toastManager } from '@/components/ui/toast';
 import { arrivalsToday, listRooms } from '../../reservations/api';
+import { toISODate } from '../../reservations/date-utils';
 import type {
   CanalReservation,
   Reservation,
@@ -139,6 +140,11 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
   const [changeRoomError, setChangeRoomError] = useState<unknown>(null);
 
   const [search, setSearch] = useState('');
+  // UX-003B — pur affichage, aucune donnée nouvelle : distingue un départ
+  // aujourd'hui (urgent) d'un départ dans plusieurs jours au sein de la même
+  // liste "Séjours en cours" (qui, contrairement à departsRef, n'est pas
+  // filtrée sur la seule journée en cours).
+  const todayISO = toISODate(new Date());
   const arrivalsRef = useRef<HTMLElement>(null);
   const departsRef = useRef<HTMLElement>(null);
   const staysRef = useRef<HTMLElement>(null);
@@ -354,6 +360,7 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
             onClick={() => scrollToSection(arrivalsRef)}
             className="border-info/30 bg-info/10 text-info flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-info/20"
           >
+            <LogIn className="size-3.5" />
             <span className="text-sm font-bold">{arrivals.length}</span>
             arrivée{arrivals.length > 1 ? 's' : ''} aujourd'hui
           </button>
@@ -362,6 +369,7 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
             onClick={() => scrollToSection(departsRef)}
             className="border-warning/30 bg-warning/10 text-warning flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-warning/20"
           >
+            <LogOut className="size-3.5" />
             <span className="text-sm font-bold">{departs.length}</span>
             départ{departs.length > 1 ? 's' : ''} aujourd'hui
           </button>
@@ -370,6 +378,7 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
             onClick={() => scrollToSection(staysRef)}
             className="border-success/30 bg-success/10 text-success flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-success/20"
           >
+            <BedDouble className="size-3.5" />
             <span className="text-sm font-bold">{staysEnCours.length}</span>
             séjour{staysEnCours.length > 1 ? 's' : ''} en cours
           </button>
@@ -417,7 +426,10 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
             ref={arrivalsRef}
             className="bg-card flex flex-col gap-2 rounded-lg border p-4"
           >
-            <h2 className="text-xs font-bold">Arrivées du jour</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <LogIn className="text-muted-foreground size-4" />
+              Arrivées du jour
+            </h2>
             {filteredArrivals.length === 0 && (
               <p className="text-muted-foreground text-sm">
                 {arrivals.length === 0
@@ -441,7 +453,7 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
                       )}
                     </span>
                     <span className="flex min-w-0 flex-col">
-                      <span className="truncate font-medium">
+                      <span className="truncate font-semibold">
                         {reservation.guest.nom} {reservation.guest.prenom}
                       </span>
                       <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
@@ -475,7 +487,10 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
             ref={departsRef}
             className="bg-card flex flex-col gap-2 rounded-lg border p-4"
           >
-            <h2 className="text-xs font-bold">Départs du jour</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <LogOut className="text-muted-foreground size-4" />
+              Départs du jour
+            </h2>
             {filteredDeparts.length === 0 && (
               <p className="text-muted-foreground text-sm">
                 {departs.length === 0
@@ -488,7 +503,7 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
                 <li key={stay.id}>
                   <button
                     type="button"
-                    className="bg-background hover:border-primary/50 flex w-full cursor-pointer items-center justify-between gap-2 rounded-md border p-2 text-left text-sm transition-colors"
+                    className="bg-background hover:border-primary/40 flex w-full cursor-pointer items-center justify-between gap-2 rounded-md border p-2 text-left text-sm transition-[box-shadow,border-color] hover:shadow-[var(--shadow-card)]"
                     onClick={() => openStay(stay)}
                   >
                     <span className="flex min-w-0 items-center gap-2">
@@ -498,13 +513,18 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
                         {initials(stay.guest.nom, stay.guest.prenom)}
                       </span>
                       <span className="flex min-w-0 flex-col gap-0.5">
-                        <span className="truncate font-medium">
+                        <span className="truncate font-semibold">
                           {stay.guest.nom} {stay.guest.prenom}
                         </span>
-                        <span className="flex items-center gap-1.5">
+                        <span className="flex flex-wrap items-center gap-1.5">
                           <Badge variant="outline" className="h-4 px-1.5">
                             Ch. {stay.room.numero}
                           </Badge>
+                          <span
+                            className={`text-xs ${CANAL_TEXT_CLASS[resolveCanal(stay.reservation)]}`}
+                          >
+                            {CANAL_LABEL[resolveCanal(stay.reservation)]}
+                          </span>
                           {!stay.policeRecord && (
                             <Badge
                               variant="warning"
@@ -530,7 +550,10 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
             ref={staysRef}
             className="bg-card flex flex-col gap-2 rounded-lg border p-4 md:col-span-2"
           >
-            <h2 className="text-xs font-bold">Séjours en cours</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <BedDouble className="text-muted-foreground size-4" />
+              Séjours en cours
+            </h2>
             {filteredStaysEnCours.length === 0 && (
               <p className="text-muted-foreground text-sm">
                 {staysEnCours.length === 0
@@ -543,7 +566,7 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
                 <li key={stay.id}>
                   <button
                     type="button"
-                    className="bg-background hover:border-primary/50 flex w-full cursor-pointer items-center justify-between gap-2 rounded-md border p-2 text-left text-sm transition-colors"
+                    className="bg-background hover:border-primary/40 flex w-full cursor-pointer items-center justify-between gap-2 rounded-md border p-2 text-left text-sm transition-[box-shadow,border-color] hover:shadow-[var(--shadow-card)]"
                     onClick={() => openStay(stay)}
                   >
                     <span className="flex min-w-0 items-center gap-2">
@@ -553,13 +576,18 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
                         {initials(stay.guest.nom, stay.guest.prenom)}
                       </span>
                       <span className="flex min-w-0 flex-col gap-0.5">
-                        <span className="truncate font-medium">
+                        <span className="truncate font-semibold">
                           {stay.guest.nom} {stay.guest.prenom}
                         </span>
-                        <span className="flex items-center gap-1.5">
+                        <span className="flex flex-wrap items-center gap-1.5">
                           <Badge variant="outline" className="h-4 px-1.5">
                             Ch. {stay.room.numero}
                           </Badge>
+                          <span
+                            className={`text-xs ${CANAL_TEXT_CLASS[resolveCanal(stay.reservation)]}`}
+                          >
+                            {CANAL_LABEL[resolveCanal(stay.reservation)]}
+                          </span>
                           {!stay.policeRecord && (
                             <Badge
                               variant="warning"
@@ -572,7 +600,13 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
                         </span>
                       </span>
                     </span>
-                    <span className="text-muted-foreground shrink-0 text-xs">
+                    <span
+                      className={`shrink-0 text-xs ${
+                        stay.dateCheckoutPrevue.slice(0, 10) === todayISO
+                          ? 'text-warning font-semibold'
+                          : 'text-muted-foreground'
+                      }`}
+                    >
                       Départ prévu {stay.dateCheckoutPrevue.slice(0, 10)}
                     </span>
                   </button>

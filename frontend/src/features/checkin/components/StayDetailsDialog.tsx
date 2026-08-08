@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -8,6 +9,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsPanel, TabsTrigger } from '@/components/ui/tabs';
 import { BillingTabContent } from '@/features/billing/components/BillingTabContent';
 import { PoliceRecordForm } from '@/features/police/components/PoliceRecordForm';
 import type { Stay } from '../types';
@@ -64,52 +66,51 @@ export function StayDetailsDialog({
               </DialogTitle>
             </DialogHeader>
 
-            <p className="text-muted-foreground text-sm">
-              Chambre {stay.room.numero} ({stay.room.roomType.nom}) — arrivée{' '}
-              {new Date(stay.dateCheckin).toLocaleString('fr-FR')}, départ prévu{' '}
-              {stay.dateCheckoutPrevue.slice(0, 10)}
-            </p>
-
-            <div className="flex items-center gap-2">
-              <Badge
-                variant={stay.statut === 'EN_COURS' ? 'default' : 'secondary'}
-              >
-                {STATUT_LABEL[stay.statut]}
-              </Badge>
-              {stay.reservationId === null && (
-                <Badge variant="outline">Walk-in</Badge>
-              )}
-            </div>
-
-            <div className="flex gap-2 border-b">
-              <Button
-                variant={activeTab === 'details' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setActiveTab('details')}
-              >
-                Détails
-              </Button>
-              <Button
-                variant={activeTab === 'facturation' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setActiveTab('facturation')}
-              >
-                Facturation
-              </Button>
-              <Button
-                variant={activeTab === 'police' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setActiveTab('police')}
-              >
-                Police
-                {!stay.policeRecord && (
-                  <span className="text-warning ml-1">⚠</span>
+            <div className="bg-muted/30 flex flex-col gap-2 rounded-lg border p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  variant={stay.statut === 'EN_COURS' ? 'success' : 'secondary'}
+                >
+                  {STATUT_LABEL[stay.statut]}
+                </Badge>
+                {stay.reservationId === null && (
+                  <Badge variant="outline">Walk-in</Badge>
                 )}
-              </Button>
+              </div>
+              <p className="text-muted-foreground text-sm">
+                Chambre{' '}
+                <span className="text-foreground font-medium">
+                  {stay.room.numero}
+                </span>{' '}
+                ({stay.room.roomType.nom}) — arrivée{' '}
+                {new Date(stay.dateCheckin).toLocaleString('fr-FR')}, départ
+                prévu {stay.dateCheckoutPrevue.slice(0, 10)}
+              </p>
             </div>
 
-            {activeTab === 'details' && (
-              <div className="flex flex-col gap-2">
+            <Tabs
+              value={activeTab}
+              onValueChange={(value) => value && setActiveTab(value)}
+            >
+              <TabsList>
+                <TabsTrigger value="details">Détails</TabsTrigger>
+                <TabsTrigger value="facturation">Facturation</TabsTrigger>
+                <TabsTrigger
+                  value="police"
+                  title={
+                    !stay.policeRecord
+                      ? 'Fiche de police (registre légal DGSN) non renseignée'
+                      : undefined
+                  }
+                >
+                  Police
+                  {!stay.policeRecord && (
+                    <AlertTriangle className="text-warning size-3.5" />
+                  )}
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsPanel value="details" className="flex flex-col gap-2 pt-3">
                 <p className="text-sm font-medium">Folio principal</p>
                 {stay.folios.map((folio) => (
                   <ul key={folio.id} className="flex flex-col gap-1 text-sm">
@@ -124,7 +125,7 @@ export function StayDetailsDialog({
                         >
                           {ligne.libelle}
                         </span>
-                        <span>{ligne.montant} MAD</span>
+                        <span className="font-mono">{ligne.montant} MAD</span>
                       </li>
                     ))}
                   </ul>
@@ -132,27 +133,28 @@ export function StayDetailsDialog({
 
                 {soldeDu !== null && (
                   <p className="text-sm font-medium">
-                    Solde dû au check-out : {soldeDu} MAD
+                    Solde dû au check-out :{' '}
+                    <span className="font-mono">{soldeDu} MAD</span>
                   </p>
                 )}
-              </div>
-            )}
+              </TabsPanel>
 
-            {activeTab === 'facturation' && (
-              <BillingTabContent
-                stayId={stay.id}
-                guest={stay.guest}
-                room={stay.room}
-              />
-            )}
+              <TabsPanel value="facturation" className="pt-3">
+                <BillingTabContent
+                  stayId={stay.id}
+                  guest={stay.guest}
+                  room={stay.room}
+                />
+              </TabsPanel>
 
-            {activeTab === 'police' && (
-              <PoliceRecordForm
-                stayId={stay.id}
-                reservationId={stay.reservationId}
-                onSaved={onPoliceRecordSaved}
-              />
-            )}
+              <TabsPanel value="police" className="pt-3">
+                <PoliceRecordForm
+                  stayId={stay.id}
+                  reservationId={stay.reservationId}
+                  onSaved={onPoliceRecordSaved}
+                />
+              </TabsPanel>
+            </Tabs>
 
             {error && <p className="text-destructive text-sm">{error}</p>}
 
