@@ -6,6 +6,7 @@ import { GuestsModule } from '../guests/guests.module';
 import { BillingModule } from '../billing/billing.module';
 import { AuditModule } from '../audit/audit.module';
 import { ParametersModule } from '../parameters/parameters.module';
+import { PaymentsModule } from '../payments/payments.module';
 
 // BillingModule : imputation des acomptes (ReservationDeposit) au folio
 // principal via BillingService.creditFolioLine au check-in — dépendance
@@ -27,6 +28,13 @@ import { ParametersModule } from '../parameters/parameters.module';
 // saisonnière via ParametersService.getSeasonRatesForRoomType — module
 // feuille, aucun risque de cycle (parameters.module.ts n'importe que
 // AuditModule).
+// PaymentsModule (GL-003B) : StayService.createExtensionDeposit délègue
+// l'écriture Payment/FolioLine de l'avance bornée de prolongation à
+// PaymentsService.createExtensionDeposit, jamais un tx.payment.create
+// dupliqué localement. Vérifié sans risque de cycle (payments.module.ts
+// n'importe que BillingModule/AuditModule, jamais StayModule) — extendStay
+// lui-même reste inchangé et continue de n'utiliser que les FolioLine déjà
+// chargées (computeSoldeDu), jamais PaymentsService/la table Payment.
 @Module({
   imports: [
     RoomsModule,
@@ -34,6 +42,7 @@ import { ParametersModule } from '../parameters/parameters.module';
     BillingModule,
     AuditModule,
     ParametersModule,
+    PaymentsModule,
   ],
   controllers: [StayController],
   providers: [StayService],

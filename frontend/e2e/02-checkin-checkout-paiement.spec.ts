@@ -44,7 +44,11 @@ test('check-in walk-in, check-out bloqué sur solde impayé, débloqué après p
 
   await page.getByRole('button', { name: 'Facturation' }).click();
   await page.getByRole('button', { name: 'Encaisser un paiement' }).click();
-  await page.locator('#montant').fill('5000');
+  // PAY-001B — le dialogue préremplit déjà le montant avec le reste à payer
+  // exact (GET /folios/:id, `synthese.balanceTTC`) ; un montant saisi
+  // dépassant ce solde est désormais bloqué côté serveur (409 OVERPAYMENT)
+  // et côté client (bouton désactivé) — on encaisse donc le solde exact tel
+  // que préaffiché, jamais un montant arbitraire.
   await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
   await expect(page.locator('#montant')).not.toBeVisible();
 

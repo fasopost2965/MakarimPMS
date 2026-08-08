@@ -114,6 +114,16 @@ export interface PaymentRequiredErrorDetails {
   availableCredit: string;
 }
 
+// GL-003B — réponse de POST /stays/:id/extension-deposit
+// (StayService.createExtensionDeposit). `payment` reste `null` quand le
+// crédit déjà disponible couvrait déjà le supplément visé (aucun
+// encaissement créé) — voir montantAEncaisser ci-dessous côté backend.
+export interface ExtensionDepositResult {
+  payment: { id: number; montant: string } | null;
+  montantEncaisse: string;
+  message?: string;
+}
+
 // L'un des deux champs client est requis (module CRM 5.7) : guestId pour
 // réutiliser un client existant (déclenche le contrôle blacklist côté
 // serveur), guest pour en saisir un nouveau — voir GuestPicker.

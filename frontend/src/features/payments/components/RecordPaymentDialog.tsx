@@ -20,6 +20,7 @@ import { createPayment } from '../api';
 import type { MoyenPaiement } from '../types';
 import { getFolio } from '@/features/billing/api';
 import type { FolioSummary } from '@/features/billing/types';
+import { ApiError } from '@/lib/api-client';
 
 const MOYENS: MoyenPaiement[] = ['ESPECES', 'CARTE', 'VIREMENT', 'ACOMPTE'];
 
@@ -115,16 +116,46 @@ export function RecordPaymentDialog({
     };
   }, [folioId]);
 
+  // PAY-001B — solde déjà entièrement réglé : plus aucun paiement positif
+  // n'est recevable (backend : garde PAYMENT_NOT_REQUIRED). `<= 0` couvre
+  // aussi un éventuel solde négatif résiduel (folio historique déjà trop
+  // réglé avant ce correctif), même logique de clamp que formatMontant.
+  const soldeNul = summary !== null && Number(summary.balanceTTC) <= 0;
+  const montantSaisi = Number(montant);
+  const depasseLeSolde =
+    summary !== null &&
+    Number.isFinite(montantSaisi) &&
+    montantSaisi > Number(summary.balanceTTC);
+
+  // PAY-001B — le backend reste l'arbitre final (PaymentsService.createPayment,
+  // gardes OVERPAYMENT/PAYMENT_NOT_REQUIRED) : ce blocage côté client n'est
+  // qu'un confort UX pour éviter un aller-retour serveur inutile, jamais un
+  // remplacement de la vérification serveur.
+  const soumissionBloquee = !montant || soldeNul || depasseLeSolde;
+
+  function errorMessage(err: unknown): string {
+    if (err instanceof ApiError) {
+      if (err.code === 'OVERPAYMENT') {
+        return 'Le montant saisi dépasse le reste à payer sur ce dossier.';
+      }
+      if (err.code === 'PAYMENT_NOT_REQUIRED') {
+        return 'Ce dossier est déjà entièrement réglé, aucun paiement supplémentaire n’est requis.';
+      }
+      return err.message;
+    }
+    return err instanceof Error ? err.message : 'Erreur';
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!montant) return;
+    if (soumissionBloquee) return;
     setSubmitting(true);
     setError(null);
     try {
       await createPayment({ folioId, moyen, montant, idempotencyKey });
       onRecorded();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur');
+      setError(errorMessage(err));
     } finally {
       setSubmitting(false);
     }
@@ -212,7 +243,14 @@ export function RecordPaymentDialog({
               value={montant}
               onChange={(e) => setMontant(e.target.value)}
               required
+              disabled={soldeNul}
             />
+            {depasseLeSolde && !soldeNul && (
+              <p className="text-destructive text-xs">
+                Le montant saisi dépasse le reste à payer (
+                {formatMontant(summary!.balanceTTC)} MAD).
+              </p>
+            )}
           </div>
 
           {error && <p className="text-destructive text-sm">{error}</p>}
@@ -226,8 +264,12 @@ export function RecordPaymentDialog({
             >
               Annuler
             </Button>
-            <Button type="submit" disabled={submitting || !montant}>
-              {submitting ? 'Enregistrement…' : 'Enregistrer'}
+            <Button type="submit" disabled={submitting || soumissionBloquee}>
+              {submitting
+                ? 'Enregistrement…'
+                : soldeNul
+                  ? 'Séjour entièrement réglé'
+                  : 'Enregistrer'}
             </Button>
           </DialogFooter>
         </form>

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ApiError } from '@/lib/api-client';
+import { createExtensionDeposit } from '../api';
 import type { Stay } from '../types';
 
 interface Props {
@@ -142,7 +143,20 @@ function translateExtendStayError(error: unknown): ExtendStayErrorTranslation {
   return { kind: 'unknown' };
 }
 
-function ExtendStayErrorMessage({ error }: { error: unknown }) {
+// GL-003B — bouton "Encaisser le montant requis" affiché uniquement sur le
+// cas PAYMENT_REQUIRED. Appelle exclusivement le flux dédié et borné
+// POST /stays/:id/extension-deposit (montant calculé serveur) — jamais
+// RecordPaymentDialog/createPayment (module payments), qui refuserait
+// désormais ce montant (garde OVERPAYMENT, PAY-001B).
+function ExtendStayErrorMessage({
+  error,
+  onPayDeposit,
+  payingDeposit,
+}: {
+  error: unknown;
+  onPayDeposit: () => void;
+  payingDeposit: boolean;
+}) {
   if (!error) return null;
   const translation = translateExtendStayError(error);
 
@@ -151,7 +165,7 @@ function ExtendStayErrorMessage({ error }: { error: unknown }) {
       const { amountRequired, availableCredit } = translation;
       const hasCredit = availableCredit !== null && availableCredit > 0;
       return (
-        <div className="border-destructive/30 bg-destructive/10 text-destructive flex flex-col gap-1 rounded-md border p-3 text-sm">
+        <div className="border-destructive/30 bg-destructive/10 text-destructive flex flex-col gap-2 rounded-md border p-3 text-sm">
           <p>
             Un paiement complémentaire de {formatMontant(amountRequired)} est
             nécessaire avant de prolonger le séjour.
@@ -161,6 +175,16 @@ function ExtendStayErrorMessage({ error }: { error: unknown }) {
               Crédit actuellement disponible : {formatMontant(availableCredit)}
             </p>
           )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="self-start"
+            onClick={onPayDeposit}
+            disabled={payingDeposit}
+          >
+            {payingDeposit ? 'Encaissement…' : 'Encaisser le montant requis'}
+          </Button>
         </div>
       );
     }
@@ -251,6 +275,14 @@ export function ExtendStayDialog({
   const isMotifValid = motif.trim().length >= 10;
   const canConfirm = isDateValid && isMotifValid && !submitting;
 
+  // GL-003B — état local du bouton "Encaisser le montant requis"
+  // (PAYMENT_REQUIRED). Auto-géré ici plutôt que remonté à CheckinPage :
+  // l'appel à l'endpoint dédié n'a besoin d'aucune donnée que ce dialogue ne
+  // possède pas déjà (stay.id, nouvelleDate). Moyen de paiement fixé à
+  // ESPECES — aucun choix de moyen dans ce flux minimal (pas de redesign de
+  // la modale), cohérent avec le périmètre de cette mission.
+  const [payingDeposit, setPayingDeposit] = useState(false);
+
   useEffect(() => {
     submitLockRef.current = false;
   }, [stay?.id]);
@@ -271,6 +303,34 @@ export function ExtendStayDialog({
     if (!canConfirm || submitLockRef.current) return;
     submitLockRef.current = true;
     onConfirm(nouvelleDate, motif.trim());
+  }
+
+  // GL-003B — encaisse l'avance bornée (montant calculé serveur) puis
+  // relance automatiquement la tentative de prolongation avec les mêmes
+  // valeurs de formulaire déjà saisies (même nouvelleDate, même motif) —
+  // jamais via RecordPaymentDialog/createPayment (garde OVERPAYMENT,
+  // PAY-001B, refuserait ce montant). Un échec de l'encaissement laisse le
+  // formulaire intact ; l'erreur de prolongation encore affichée (PAYMENT_
+  // REQUIRED) reste visible, seul le bouton redevient cliquable.
+  async function handlePayDeposit() {
+    if (!stay || payingDeposit) return;
+    setPayingDeposit(true);
+    try {
+      await createExtensionDeposit(
+        stay.id,
+        nouvelleDate,
+        'ESPECES',
+        crypto.randomUUID(),
+      );
+      onConfirm(nouvelleDate, motif.trim());
+    } catch {
+      // Erreur silencieuse ici : la garde d'affichage reste celle du
+      // dernier essai de prolongation (`error`, prop du dialogue) — un
+      // échec de l'encaissement lui-même n'a pas de traduction dédiée dans
+      // ce périmètre minimal, l'utilisateur peut réessayer le bouton.
+    } finally {
+      setPayingDeposit(false);
+    }
   }
 
   return (
@@ -324,7 +384,11 @@ export function ExtendStayDialog({
               />
             </div>
 
-            <ExtendStayErrorMessage error={error} />
+            <ExtendStayErrorMessage
+              error={error}
+              onPayDeposit={handlePayDeposit}
+              payingDeposit={payingDeposit}
+            />
 
             <DialogFooter>
               <Button

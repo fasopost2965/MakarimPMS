@@ -5,6 +5,16 @@ import { ApiError } from '@/lib/api-client';
 import { ExtendStayDialog } from './ExtendStayDialog';
 import type { Stay } from '../types';
 
+// GL-003B — mock du seul point d'entrée réseau utilisé par le bouton
+// "Encaisser le montant requis" (createExtensionDeposit). Le reste du
+// module ../api n'est jamais appelé directement par ExtendStayDialog.
+const { createExtensionDepositMock } = vi.hoisted(() => ({
+  createExtensionDepositMock: vi.fn(),
+}));
+vi.mock('../api', () => ({
+  createExtensionDeposit: createExtensionDepositMock,
+}));
+
 const STAY: Stay = {
   id: 6,
   reservationId: null,
@@ -469,5 +479,125 @@ describe('ExtendStayDialog — comportement UI', () => {
         "La prolongation n'a pas pu être enregistrée. Réessayez ou contactez un responsable si le problème persiste.",
       ),
     ).toBeVisible();
+  });
+
+  // GL-003B
+  describe('GL-003B — bouton "Encaisser le montant requis" (PAYMENT_REQUIRED)', () => {
+    const paymentRequiredError = new ApiError(
+      409,
+      'raw backend message',
+      'PAYMENT_REQUIRED',
+      {
+        code: 'PAYMENT_REQUIRED',
+        message: 'raw backend message',
+        amountRequired: '400.00',
+        availableCredit: '0.00',
+      },
+    );
+
+    it('apparaît uniquement sur PAYMENT_REQUIRED, jamais sur les autres traductions', () => {
+      render(
+        <ExtendStayDialog
+          stay={STAY}
+          onClose={noop}
+          onConfirm={noop}
+          submitting={false}
+          error={new ApiError(400, 'date invalide')}
+        />,
+      );
+      expect(
+        screen.queryByRole('button', { name: /Encaisser le montant requis/ }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('encaisse l’avance puis relance automatiquement la prolongation (onConfirm) avec les mêmes valeurs de formulaire', async () => {
+      createExtensionDepositMock.mockResolvedValueOnce({
+        payment: { id: 1, montant: '400.00' },
+        montantEncaisse: '400.00',
+      });
+      const user = userEvent.setup();
+      const onConfirm = vi.fn();
+      render(
+        <ExtendStayDialog
+          stay={STAY}
+          onClose={noop}
+          onConfirm={onConfirm}
+          submitting={false}
+          error={paymentRequiredError}
+        />,
+      );
+      await user.type(
+        screen.getByLabelText('Nouvelle date de départ'),
+        '2026-08-10',
+      );
+      await user.type(
+        screen.getByLabelText(/Motif/),
+        'Prolongation demandée par le client',
+      );
+
+      await user.click(
+        screen.getByRole('button', { name: 'Encaisser le montant requis' }),
+      );
+
+      await waitFor(() =>
+        expect(createExtensionDepositMock).toHaveBeenCalledTimes(1),
+      );
+      expect(createExtensionDepositMock).toHaveBeenCalledWith(
+        STAY.id,
+        '2026-08-10',
+        'ESPECES',
+        expect.any(String),
+      );
+      expect(onConfirm).toHaveBeenCalledWith(
+        '2026-08-10',
+        'Prolongation demandée par le client',
+      );
+    });
+
+    it('affiche un état de chargement pendant l’encaissement et redevient cliquable après un échec', async () => {
+      let rejectDeposit!: (error: unknown) => void;
+      createExtensionDepositMock.mockReturnValueOnce(
+        new Promise((_resolve, reject) => {
+          rejectDeposit = reject;
+        }),
+      );
+      const user = userEvent.setup();
+      const onConfirm = vi.fn();
+      render(
+        <ExtendStayDialog
+          stay={STAY}
+          onClose={noop}
+          onConfirm={onConfirm}
+          submitting={false}
+          error={paymentRequiredError}
+        />,
+      );
+      await user.type(
+        screen.getByLabelText('Nouvelle date de départ'),
+        '2026-08-10',
+      );
+      await user.type(
+        screen.getByLabelText(/Motif/),
+        'Prolongation demandée par le client',
+      );
+
+      const depositButton = screen.getByRole('button', {
+        name: 'Encaisser le montant requis',
+      });
+      await user.click(depositButton);
+
+      expect(
+        screen.getByRole('button', { name: 'Encaissement…' }),
+      ).toBeDisabled();
+
+      rejectDeposit(new ApiError(409, 'echec encaissement'));
+
+      await waitFor(() =>
+        expect(
+          screen.getByRole('button', { name: 'Encaisser le montant requis' }),
+        ).not.toBeDisabled(),
+      );
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
   });
 });

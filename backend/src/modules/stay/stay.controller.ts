@@ -16,6 +16,7 @@ import { CheckinFromReservationDto } from './dto/checkin-from-reservation.dto';
 import { ForceCheckoutDto } from './dto/force-checkout.dto';
 import { ChangeRoomDto } from './dto/change-room.dto';
 import { ExtendStayDto } from './dto/extend-stay.dto';
+import { ExtensionDepositDto } from './dto/extension-deposit.dto';
 
 // Routes HTTP et clé de permission ('checkin') volontairement inchangées
 // malgré le renommage du module (voir CLAUDE.md) — aucun consommateur
@@ -141,6 +142,33 @@ export class StayController {
       id,
       dto.nouvelleDateCheckoutPrevue,
       dto.motif,
+      user.sub,
+      user.roleId,
+    );
+  }
+
+  // GL-003B — avance de prolongation bornée côté serveur, remplace le flux
+  // historique (POST /payments brut préfinançant volontairement un
+  // supplément) devenu incompatible avec la garde OVERPAYMENT de PAY-001B.
+  // stay:extend reste la barrière statique principale (même convention que
+  // changeRoom/extendStay ci-dessus) ; StayService vérifie EN PLUS,
+  // dynamiquement, payments:write (un vrai encaissement, pas seulement une
+  // prolongation) — non exprimable par @RequirePermission (une seule paire
+  // module/action à la fois), même pattern que checkin:force-checkout.
+  @RequirePermission('stay', 'extend')
+  @ApiOperation({
+    summary:
+      "Avance bornée pour financer le supplément d'une prolongation (GL-003B) — montant calculé par le serveur, jamais par le client, réservé à stay:extend + payments:write",
+  })
+  @Post('stays/:id/extension-deposit')
+  createExtensionDeposit(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ExtensionDepositDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.stayService.createExtensionDeposit(
+      id,
+      dto,
       user.sub,
       user.roleId,
     );
