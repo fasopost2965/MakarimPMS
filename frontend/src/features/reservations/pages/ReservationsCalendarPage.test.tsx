@@ -109,11 +109,51 @@ describe('ReservationsCalendarPage — sécurité DESIGN-003S', () => {
   it('expose un agenda mobile sémantique sans dupliquer le planning en tableau', async () => {
     render(<ReservationsCalendarPage permissions={['reservations:read']} />);
 
-    expect(await screen.findByText('Agenda des arrivées')).toBeVisible();
+    expect(await screen.findByText('Agenda des réservations')).toBeVisible();
+    expect(screen.queryByText('Agenda des arrivées')).not.toBeInTheDocument();
     expect(
       screen.getByRole('button', {
         name: 'Ouvrir la réservation de AvantFenetre Client',
       }),
+    ).toBeInTheDocument();
+  });
+
+  it('n’expose aucun filtre mort pour les réservations annulées exclues du planning actif', async () => {
+    vi.mocked(listReservations).mockResolvedValue([
+      reservation(),
+      reservation({
+        id: 21,
+        statut: 'ANNULEE',
+        guest: {
+          ...reservation().guest,
+          id: 31,
+          nom: 'ReservationAnnulee',
+        },
+      }),
+    ]);
+
+    render(<ReservationsCalendarPage permissions={['reservations:read']} />);
+
+    await screen.findAllByText('AvantFenetre Client');
+    expect(
+      screen.queryByRole('option', { name: 'Annulées' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('ReservationAnnulee Client'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('décrit une réservation transformée sans prétendre que son Stay est actif', async () => {
+    vi.mocked(listReservations).mockResolvedValue([
+      reservation({ statut: 'TRANSFORMEE_EN_SEJOUR' }),
+    ]);
+
+    render(<ReservationsCalendarPage permissions={['reservations:read']} />);
+
+    expect(await screen.findByText('Transformée en séjour')).toBeVisible();
+    expect(screen.queryByText('En séjour')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('option', { name: 'Transformées en séjour' }),
     ).toBeInTheDocument();
   });
 

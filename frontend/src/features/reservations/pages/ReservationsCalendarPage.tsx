@@ -53,11 +53,10 @@ import { ReservationDetailsDialog } from '../components/ReservationDetailsDialog
 const VISIBLE_DAYS = 14;
 const ROW_HEIGHT = 52;
 const LABEL_COL_WIDTH = 154;
-const STATUS_LABEL: Record<StatutReservation, string> = {
+const STATUS_LABEL: Partial<Record<StatutReservation, string>> = {
   CONFIRMEE: 'Confirmées',
-  ANNULEE: 'Annulées',
   NO_SHOW: 'No-show',
-  TRANSFORMEE_EN_SEJOUR: 'En séjour',
+  TRANSFORMEE_EN_SEJOUR: 'Transformées en séjour',
 };
 const CANAL_BAR_CLASS: Record<Reservation['canal'], string> = {
   DIRECT: 'border-primary/40 bg-primary-soft text-primary',
@@ -784,7 +783,7 @@ function MobileAgenda({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 xl:hidden">
       <SectionHeader
-        title="Agenda des arrivées"
+        title="Agenda des réservations"
         description="Réservations classées par date d’arrivée"
       />
       {Object.keys(groups).length === 0 ? (

@@ -12,7 +12,10 @@ const STATUS: Record<
   CONFIRMEE: { label: 'Confirmée', variant: 'success' },
   ANNULEE: { label: 'Annulée', variant: 'destructive' },
   NO_SHOW: { label: 'No-show', variant: 'warning' },
-  TRANSFORMEE_EN_SEJOUR: { label: 'En séjour', variant: 'info' },
+  TRANSFORMEE_EN_SEJOUR: {
+    label: 'Transformée en séjour',
+    variant: 'info',
+  },
 };
 
 const CANAL_CLASS: Record<Reservation['canal'], string> = {

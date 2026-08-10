@@ -69,7 +69,7 @@ test('Réservations Modern Operations — planning, wizard, détail et agenda mo
   await page.getByRole('button', { name: 'Fermer' }).click();
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByText('Agenda des arrivées')).toBeVisible();
+  await expect(page.getByText('Agenda des réservations')).toBeVisible();
   await expect(
     page.getByRole('button', {
       name: `Ouvrir la réservation de ${guest.nom} ${guest.prenom}`,
