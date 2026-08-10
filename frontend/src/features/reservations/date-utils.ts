@@ -37,3 +37,31 @@ export function formatDayLabel(date: Date): string {
     timeZone: 'UTC',
   });
 }
+
+export function getVisibleReservationSpan(
+  dateArrivee: string,
+  dateDepart: string,
+  days: Date[],
+): { startIndex: number; span: number } | null {
+  if (days.length === 0) return null;
+
+  const arrivee = startOfDay(new Date(dateArrivee));
+  const depart = startOfDay(new Date(dateDepart));
+  const firstVisibleDay = days[0];
+  const lastVisibleBoundary = addDays(days[days.length - 1], 1);
+  if (depart <= firstVisibleDay || arrivee >= lastVisibleBoundary) return null;
+
+  const startIndex = Math.max(
+    0,
+    days.findIndex((day) => day >= arrivee),
+  );
+  let span = 0;
+  for (
+    let index = startIndex;
+    index < days.length && days[index] < depart;
+    index++
+  ) {
+    span++;
+  }
+  return span > 0 ? { startIndex, span } : null;
+}

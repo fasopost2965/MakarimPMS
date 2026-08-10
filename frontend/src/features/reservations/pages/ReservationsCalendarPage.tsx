@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
   cancelReservation,
   createReservation,
   listReservations,
@@ -11,6 +20,7 @@ import {
   addDays,
   formatDayLabel,
   getDateRange,
+  getVisibleReservationSpan,
   isSameDay,
   startOfDay,
   toISODate,
@@ -60,7 +70,13 @@ interface Selecting {
   endIdx: number;
 }
 
-export function ReservationsCalendarPage() {
+export function ReservationsCalendarPage({
+  permissions,
+}: {
+  permissions: string[];
+}) {
+  const canWrite = permissions.includes('reservations:write');
+  const canDelete = permissions.includes('reservations:delete');
   const [rooms, setRooms] = useState<Room[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [windowStart, setWindowStart] = useState(() => startOfDay(new Date()));
@@ -89,6 +105,11 @@ export function ReservationsCalendarPage() {
     useState<Reservation | null>(null);
   const [savingDetails, setSavingDetails] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
+  const [cancellingReservation, setCancellingReservation] =
+    useState<Reservation | null>(null);
+  const [cancelMotif, setCancelMotif] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const days = useMemo(
     () => getDateRange(windowStart, VISIBLE_DAYS),
@@ -234,15 +255,21 @@ export function ReservationsCalendarPage() {
     }
   }
 
-  async function handleCancel(reservationId: number) {
-    setActionError(null);
+  async function handleCancel() {
+    if (!cancellingReservation || cancelMotif.trim().length < 10) return;
+    setCancelling(true);
+    setCancelError(null);
     try {
-      await cancelReservation(reservationId);
+      await cancelReservation(cancellingReservation.id, cancelMotif.trim());
+      setCancellingReservation(null);
+      setCancelMotif('');
       await refetch();
     } catch (err) {
-      setActionError(
+      setCancelError(
         err instanceof Error ? err.message : "Erreur d'annulation",
       );
+    } finally {
+      setCancelling(false);
     }
   }
 
@@ -294,9 +321,11 @@ export function ReservationsCalendarPage() {
           >
             Semaine suivante →
           </Button>
-          <Button onClick={() => setManualCreateOpen(true)}>
-            + Nouvelle réservation
-          </Button>
+          {canWrite && (
+            <Button onClick={() => setManualCreateOpen(true)}>
+              + Nouvelle réservation
+            </Button>
+          )}
         </div>
         <div className="text-muted-foreground flex items-center gap-3.5 text-xs">
           {(Object.keys(CANAL_LABEL) as Reservation['canal'][]).map((canal) => (
@@ -346,6 +375,22 @@ export function ReservationsCalendarPage() {
               const roomReservations = reservations.filter(
                 (r) => r.roomId === room.id,
               );
+              const visibleReservations = roomReservations
+                .map((reservation) => ({
+                  reservation,
+                  placement: getVisibleReservationSpan(
+                    reservation.dateArrivee,
+                    reservation.dateDepart,
+                    days,
+                  ),
+                }))
+                .filter(
+                  (
+                    entry,
+                  ): entry is typeof entry & {
+                    placement: { startIndex: number; span: number };
+                  } => entry.placement !== null,
+                );
               return (
                 <div key={room.id} className="contents">
                   <div
@@ -364,10 +409,9 @@ export function ReservationsCalendarPage() {
                       const depart = startOfDay(new Date(r.dateDepart));
                       return day >= arrivee && day < depart;
                     });
-                    const isStart =
-                      reservationHere &&
-                      toISODate(new Date(reservationHere.dateArrivee)) ===
-                        toISODate(day);
+                    const visibleReservation = visibleReservations.find(
+                      ({ placement }) => placement.startIndex === dayIndex,
+                    );
 
                     return (
                       // jsx-a11y/no-static-element-interactions désactivé
@@ -388,7 +432,7 @@ export function ReservationsCalendarPage() {
                         className="relative border-b border-l"
                         style={{ height: ROW_HEIGHT }}
                         onMouseDown={() => {
-                          if (!reservationHere) {
+                          if (canWrite && !reservationHere) {
                             beginSelection(room.id, dayIndex);
                           }
                         }}
@@ -400,8 +444,11 @@ export function ReservationsCalendarPage() {
                             setSelecting(next);
                           }
                         }}
-                        onDragOver={(e) => e.preventDefault()}
+                        onDragOver={(e) => {
+                          if (canWrite) e.preventDefault();
+                        }}
                         onDrop={(e) => {
+                          if (!canWrite) return;
                           e.preventDefault();
                           const id = Number(
                             e.dataTransfer.getData('text/plain'),
@@ -418,14 +465,31 @@ export function ReservationsCalendarPage() {
                             <div className="bg-primary/20 absolute inset-0.5 rounded" />
                           )}
 
-                        {reservationHere && isStart && (
+                        {visibleReservation && (
                           <ReservationBar
-                            reservation={reservationHere}
-                            days={days}
-                            dayIndex={dayIndex}
-                            onCancel={() => handleCancel(reservationHere.id)}
+                            reservation={visibleReservation.reservation}
+                            span={visibleReservation.placement.span}
+                            canMove={
+                              canWrite &&
+                              visibleReservation.reservation.statut ===
+                                'CONFIRMEE'
+                            }
+                            canCancel={
+                              canDelete &&
+                              visibleReservation.reservation.statut ===
+                                'CONFIRMEE'
+                            }
+                            onCancel={() => {
+                              setCancellingReservation(
+                                visibleReservation.reservation,
+                              );
+                              setCancelMotif('');
+                              setCancelError(null);
+                            }}
                             onView={() =>
-                              setViewingReservation(reservationHere)
+                              setViewingReservation(
+                                visibleReservation.reservation,
+                              )
                             }
                             // Pendant un drag de création, la barre ne doit
                             // pas intercepter les événements souris des
@@ -445,10 +509,13 @@ export function ReservationsCalendarPage() {
         </div>
       )}
 
-      <p className="text-muted-foreground text-xs">
-        Glisser-déposer sur des cases vides pour créer une réservation. Glisser
-        une réservation existante vers une autre case pour la déplacer.
-      </p>
+      {canWrite && (
+        <p className="text-muted-foreground text-xs">
+          Glisser-déposer sur des cases vides pour créer une réservation.
+          Glisser une réservation confirmée vers une autre case pour la
+          déplacer.
+        </p>
+      )}
 
       <CreateReservationDialog
         open={pendingSelection !== null || manualCreateOpen}
@@ -473,38 +540,91 @@ export function ReservationsCalendarPage() {
         onSave={handleSaveDetails}
         saving={savingDetails}
         error={detailsError}
+        canWrite={canWrite}
       />
+
+      <Dialog
+        open={cancellingReservation !== null}
+        onOpenChange={(open) => {
+          if (!open && !cancelling) {
+            setCancellingReservation(null);
+            setCancelMotif('');
+            setCancelError(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Annuler la réservation</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="cancel-motif">Motif de l'annulation</Label>
+            <Input
+              id="cancel-motif"
+              value={cancelMotif}
+              onChange={(event) => setCancelMotif(event.target.value)}
+              minLength={10}
+              required
+              disabled={cancelling}
+            />
+            <p className="text-muted-foreground text-xs">
+              10 caractères minimum.
+            </p>
+          </div>
+          {cancelError && (
+            <p className="text-destructive text-sm">{cancelError}</p>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={cancelling}
+              onClick={() => setCancellingReservation(null)}
+            >
+              Fermer
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={cancelling || cancelMotif.trim().length < 10}
+              onClick={() => void handleCancel()}
+            >
+              {cancelling ? 'Annulation…' : 'Confirmer l’annulation'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
 function ReservationBar({
   reservation,
-  days,
-  dayIndex,
+  span,
+  canMove,
+  canCancel,
   onCancel,
   onView,
   disablePointerEvents,
 }: {
   reservation: Reservation;
-  days: Date[];
-  dayIndex: number;
+  span: number;
+  canMove: boolean;
+  canCancel: boolean;
   onCancel: () => void;
   onView: () => void;
   disablePointerEvents: boolean;
 }) {
-  const depart = startOfDay(new Date(reservation.dateDepart));
-  let span = 0;
-  for (let i = dayIndex; i < days.length && days[i] < depart; i++) span++;
-
   return (
     <div
-      draggable
+      draggable={canMove}
       role="button"
       tabIndex={0}
-      onDragStart={(e) =>
-        e.dataTransfer.setData('text/plain', String(reservation.id))
-      }
+      onDragStart={(e) => {
+        if (canMove) {
+          e.dataTransfer.setData('text/plain', String(reservation.id));
+        }
+      }}
       onClick={onView}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -512,7 +632,7 @@ function ReservationBar({
           onView();
         }
       }}
-      className={`absolute inset-y-0.5 left-0.5 z-10 flex cursor-grab items-center justify-between gap-1 truncate rounded px-2 text-xs active:cursor-grabbing ${CANAL_BAR_CLASS[reservation.canal]} ${disablePointerEvents ? 'pointer-events-none' : ''}`}
+      className={`absolute inset-y-0.5 left-0.5 z-10 flex items-center justify-between gap-1 truncate rounded px-2 text-xs ${canMove ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${CANAL_BAR_CLASS[reservation.canal]} ${disablePointerEvents ? 'pointer-events-none' : ''}`}
       style={{ width: `calc(${span * 100}% - 4px)` }}
       title={`${reservation.guest.nom} ${reservation.guest.prenom} — ${reservation.dateArrivee.slice(0, 10)} → ${reservation.dateDepart.slice(0, 10)} — ${reservation.prixTotalFinal} MAD${reservation.ajustementManuel ? ' (ajusté)' : ''}`}
     >
@@ -520,17 +640,19 @@ function ReservationBar({
         {reservation.guest.nom} {reservation.guest.prenom}
         {reservation.ajustementManuel && ' *'}
       </span>
-      <button
-        type="button"
-        className="shrink-0 opacity-70 hover:opacity-100"
-        onClick={(e) => {
-          e.stopPropagation();
-          onCancel();
-        }}
-        aria-label="Annuler la réservation"
-      >
-        ×
-      </button>
+      {canCancel && (
+        <button
+          type="button"
+          className="shrink-0 opacity-70 hover:opacity-100"
+          onClick={(e) => {
+            e.stopPropagation();
+            onCancel();
+          }}
+          aria-label="Annuler la réservation"
+        >
+          ×
+        </button>
+      )}
     </div>
   );
 }

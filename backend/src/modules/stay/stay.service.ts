@@ -132,6 +132,12 @@ export class StayService {
   ) {
     try {
       return await this.prisma.$transaction(async (tx) => {
+        // Même verrou que ReservationsService.update() : un déplacement et
+        // une transformation en séjour ne peuvent pas valider tous deux une
+        // lecture CONFIRMEE concurrente.
+        await tx.$queryRaw`
+          SELECT id FROM Reservation WHERE id = ${reservationId} FOR UPDATE
+        `;
         const reservation = await tx.reservation.findUnique({
           where: { id: reservationId },
         });

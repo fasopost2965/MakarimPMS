@@ -80,6 +80,43 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
     });
   });
 
+  async function createRaceFixture(
+    label: string,
+    dateArrivee: string,
+    dateDepart: string,
+  ) {
+    const suffix = `${label}-${Date.now()}`;
+    const room = await prisma.room.create({
+      data: { numero: `TEST-RACE-${suffix}`, roomTypeId },
+    });
+    const targetRoom = await prisma.room.create({
+      data: { numero: `TEST-RACE-TARGET-${suffix}`, roomTypeId },
+    });
+    const created = await client.post('/api/reservations').send({
+      roomId: room.id,
+      dateArrivee,
+      dateDepart,
+      nombreOccupants: 1,
+      guest: { nom: `Race-${label}`, prenom: 'Concurrence' },
+    });
+    expect(created.status).toBe(201);
+    return {
+      reservation: created.body as ReservationResponse,
+      room,
+      targetRoom,
+    };
+  }
+
+  function expectOneConcurrentWinner(
+    statuses: number[],
+    successStatuses: number[],
+  ) {
+    expect(
+      statuses.filter((status) => successStatuses.includes(status)),
+    ).toHaveLength(1);
+    expect(statuses.filter((status) => status === 409)).toHaveLength(1);
+  }
+
   afterAll(async () => {
     await prisma.roomNight.deleteMany({ where: { room: { roomTypeId } } });
     await prisma.payment.deleteMany({
@@ -262,6 +299,241 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
     });
     await prisma.folio.deleteMany({ where: { stayId: stay.id } });
     await prisma.stay.delete({ where: { id: stay.id } });
+  });
+
+  it('refuse de déplacer une réservation TRANSFORMEE_EN_SEJOUR et conserve Stay/RoomNight intacts', async () => {
+    const room = await prisma.room.create({
+      data: { numero: `TEST-CHECKIN-SAFE-${Date.now()}`, roomTypeId },
+    });
+    const targetRoom = await prisma.room.create({
+      data: { numero: `TEST-CHECKIN-TARGET-${Date.now()}`, roomTypeId },
+    });
+    const created = await client.post('/api/reservations').send({
+      roomId: room.id,
+      dateArrivee: '2027-04-20',
+      dateDepart: '2027-04-22',
+      nombreOccupants: 1,
+      guest: { nom: 'Transformee', prenom: 'Intacte' },
+    });
+    expect(created.status).toBe(201);
+    const reservation = created.body as ReservationResponse;
+
+    const checkin = await client
+      .post(`/api/checkin/${reservation.id}`)
+      .send({ nombreOccupants: 1 });
+    expect(checkin.status).toBe(201);
+    const stay = checkin.body as StayResponse;
+    const stayBefore = await prisma.stay.findUniqueOrThrow({
+      where: { id: stay.id },
+    });
+    const nightsBefore = await prisma.roomNight.findMany({
+      where: { reservationId: reservation.id },
+      orderBy: { id: 'asc' },
+    });
+
+    const moved = await client
+      .patch(`/api/reservations/${reservation.id}`)
+      .send({
+        roomId: targetRoom.id,
+        dateArrivee: '2027-04-23',
+        dateDepart: '2027-04-25',
+      });
+    expect(moved.status).toBe(409);
+
+    const stayAfter = await prisma.stay.findUniqueOrThrow({
+      where: { id: stay.id },
+    });
+    const nightsAfter = await prisma.roomNight.findMany({
+      where: { reservationId: reservation.id },
+      orderBy: { id: 'asc' },
+    });
+    expect(stayAfter).toEqual(stayBefore);
+    expect(nightsAfter).toEqual(nightsBefore);
+    expect(nightsAfter.every(({ stayId }) => stayId === stay.id)).toBe(true);
+  });
+
+  it('sérialise déplacement et annulation concurrents sans RoomNight fantôme', async () => {
+    const { reservation, room, targetRoom } = await createRaceFixture(
+      'MOVE-CANCEL',
+      '2027-04-02',
+      '2027-04-04',
+    );
+
+    const [move, cancel] = await Promise.all([
+      client.patch(`/api/reservations/${reservation.id}`).send({
+        roomId: targetRoom.id,
+        dateArrivee: '2027-04-05',
+        dateDepart: '2027-04-07',
+      }),
+      adminClient.delete(`/api/reservations/${reservation.id}`).send({
+        motif: 'Annulation concurrente de recette',
+      }),
+    ]);
+    expect(cancel.status).toBe(200);
+    expect([200, 409]).toContain(move.status);
+
+    const finalReservation = await prisma.reservation.findUniqueOrThrow({
+      where: { id: reservation.id },
+    });
+    const nights = await prisma.roomNight.findMany({
+      where: { reservationId: reservation.id },
+    });
+    expect(
+      await prisma.reservation.count({ where: { id: reservation.id } }),
+    ).toBe(1);
+    expect(
+      await prisma.stay.count({ where: { reservationId: reservation.id } }),
+    ).toBe(0);
+    if (finalReservation.statut === 'ANNULEE') {
+      expect(nights).toHaveLength(0);
+    } else {
+      expect(finalReservation.statut).toBe('CONFIRMEE');
+      expect(finalReservation.roomId).toBe(targetRoom.id);
+      expect(nights).toHaveLength(2);
+      expect(nights.every(({ roomId }) => roomId === targetRoom.id)).toBe(true);
+    }
+    expect(
+      await prisma.roomNight.count({
+        where: { roomId: room.id, reservationId: reservation.id },
+      }),
+    ).toBe(0);
+  });
+
+  it('sérialise déplacement et no-show concurrents sans RoomNight fantôme', async () => {
+    const { reservation, room, targetRoom } = await createRaceFixture(
+      'MOVE-NOSHOW',
+      '2027-04-08',
+      '2027-04-10',
+    );
+
+    const [move, noShow] = await Promise.all([
+      client.patch(`/api/reservations/${reservation.id}`).send({
+        roomId: targetRoom.id,
+        dateArrivee: '2027-04-11',
+        dateDepart: '2027-04-13',
+      }),
+      adminClient.post(`/api/reservations/${reservation.id}/no-show`).send({
+        motif: 'Non-présentation concurrente de recette',
+      }),
+    ]);
+    expect(noShow.status).toBe(201);
+    expect([200, 409]).toContain(move.status);
+
+    const finalReservation = await prisma.reservation.findUniqueOrThrow({
+      where: { id: reservation.id },
+    });
+    const nights = await prisma.roomNight.findMany({
+      where: { reservationId: reservation.id },
+    });
+    expect(
+      await prisma.reservation.count({ where: { id: reservation.id } }),
+    ).toBe(1);
+    expect(
+      await prisma.stay.count({ where: { reservationId: reservation.id } }),
+    ).toBe(0);
+    if (finalReservation.statut === 'NO_SHOW') {
+      expect(nights).toHaveLength(0);
+    } else {
+      expect(finalReservation.statut).toBe('CONFIRMEE');
+      expect(finalReservation.roomId).toBe(targetRoom.id);
+      expect(nights).toHaveLength(2);
+      expect(nights.every(({ roomId }) => roomId === targetRoom.id)).toBe(true);
+    }
+    expect(
+      await prisma.roomNight.count({
+        where: { roomId: room.id, reservationId: reservation.id },
+      }),
+    ).toBe(0);
+  });
+
+  it('sérialise check-in et annulation concurrents sans Stay/RoomNight incohérent', async () => {
+    const { reservation, room } = await createRaceFixture(
+      'CHECKIN-CANCEL',
+      '2027-04-14',
+      '2027-04-16',
+    );
+
+    const [checkin, cancel] = await Promise.all([
+      client
+        .post(`/api/checkin/${reservation.id}`)
+        .send({ nombreOccupants: 1 }),
+      adminClient.delete(`/api/reservations/${reservation.id}`).send({
+        motif: 'Annulation concurrente au check-in',
+      }),
+    ]);
+    expectOneConcurrentWinner([checkin.status, cancel.status], [200, 201]);
+
+    const finalReservation = await prisma.reservation.findUniqueOrThrow({
+      where: { id: reservation.id },
+    });
+    const stays = await prisma.stay.findMany({
+      where: { reservationId: reservation.id },
+    });
+    const nights = await prisma.roomNight.findMany({
+      where: { reservationId: reservation.id },
+    });
+    const finalRoom = await prisma.room.findUniqueOrThrow({
+      where: { id: room.id },
+    });
+    expect(
+      await prisma.reservation.count({ where: { id: reservation.id } }),
+    ).toBe(1);
+    if (finalReservation.statut === 'ANNULEE') {
+      expect(stays).toHaveLength(0);
+      expect(nights).toHaveLength(0);
+      expect(finalRoom.statut).toBe('LIBRE_PROPRE');
+    } else {
+      expect(finalReservation.statut).toBe('TRANSFORMEE_EN_SEJOUR');
+      expect(stays).toHaveLength(1);
+      expect(nights).toHaveLength(2);
+      expect(nights.every(({ stayId }) => stayId === stays[0].id)).toBe(true);
+      expect(finalRoom.statut).toBe('OCCUPEE');
+    }
+  });
+
+  it('sérialise check-in et no-show concurrents sans Stay/RoomNight incohérent', async () => {
+    const { reservation, room } = await createRaceFixture(
+      'CHECKIN-NOSHOW',
+      '2027-04-17',
+      '2027-04-19',
+    );
+
+    const [checkin, noShow] = await Promise.all([
+      client
+        .post(`/api/checkin/${reservation.id}`)
+        .send({ nombreOccupants: 1 }),
+      adminClient.post(`/api/reservations/${reservation.id}/no-show`).send({
+        motif: 'Non-présentation concurrente au check-in',
+      }),
+    ]);
+    expectOneConcurrentWinner([checkin.status, noShow.status], [200, 201]);
+
+    const finalReservation = await prisma.reservation.findUniqueOrThrow({
+      where: { id: reservation.id },
+    });
+    const stays = await prisma.stay.findMany({
+      where: { reservationId: reservation.id },
+    });
+    const nights = await prisma.roomNight.findMany({
+      where: { reservationId: reservation.id },
+    });
+    const finalRoom = await prisma.room.findUniqueOrThrow({
+      where: { id: room.id },
+    });
+    expect(
+      await prisma.reservation.count({ where: { id: reservation.id } }),
+    ).toBe(1);
+    if (finalReservation.statut === 'NO_SHOW') {
+      expect(stays).toHaveLength(0);
+      expect(nights).toHaveLength(0);
+      expect(finalRoom.statut).toBe('LIBRE_PROPRE');
+    } else {
+      expect(finalReservation.statut).toBe('TRANSFORMEE_EN_SEJOUR');
+      expect(stays).toHaveLength(1);
+      expect(nights).toHaveLength(2);
+      expect(nights.every(({ stayId }) => stayId === stays[0].id)).toBe(true);
+      expect(finalRoom.statut).toBe('OCCUPEE');
+    }
   });
 
   // CH-005 : un solde positif bloque désormais le check-out (arbitrage
