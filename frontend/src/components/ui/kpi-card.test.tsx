@@ -18,7 +18,9 @@ describe('KpiCard', () => {
         icon={Gauge}
       />,
     );
-    expect(screen.getByText("Taux d'occupation")).toBeVisible();
+    const label = screen.getByText("Taux d'occupation");
+    expect(label).toBeVisible();
+    expect(label).not.toHaveClass('uppercase');
     expect(screen.getByText('75%')).toBeVisible();
     expect(screen.getByText('Sur les 24 chambres')).toBeVisible();
   });

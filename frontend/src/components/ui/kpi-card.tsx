@@ -38,7 +38,7 @@ const TONE_BAR: Record<KpiTone, string> = {
 };
 
 interface KpiCardProps {
-  /** Micro-label / eyebrow (§1.4 : 10-11px uppercase autorisé ici seulement). */
+  /** Libellé court en casse naturelle, lisible pendant l'usage prolongé. */
   label: string;
   /** Valeur principale — chaîne ou nœud (ex. <MoneyDisplay/>). */
   value: ReactNode;
@@ -92,12 +92,7 @@ export function KpiCard({
       tabIndex={clickable ? 0 : undefined}
     >
       <div className="flex items-start justify-between gap-2">
-        <p
-          className={cn(
-            'text-[11px] leading-4 font-bold tracking-[0.03em] uppercase',
-            TONE_ACCENT[tone],
-          )}
-        >
+        <p className={cn('text-xs leading-4 font-semibold', TONE_ACCENT[tone])}>
           {label}
         </p>
         {Icon && (

@@ -41,6 +41,10 @@ describe('DashboardPage — personnalisation par permissions', () => {
     expect(screen.getByText('Chambres à nettoyer')).toBeVisible();
     expect(screen.getByText("Encaissé aujourd'hui")).toBeVisible();
     expect(screen.getByText('1250.00 MAD')).toBeVisible();
+    expect(screen.getByText('Chambres actuellement occupées')).toBeVisible();
+    expect(screen.getByText('En attente de nettoyage')).toBeVisible();
+    expect(screen.queryByText(/Statut OCCUPEE/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Statut A_NETTOYER/)).not.toBeInTheDocument();
   });
 
   it('ne monte ni action ni widget sans la permission correspondante', async () => {

@@ -151,14 +151,14 @@ export function DashboardPage({ onNavigate, permissions }: Props) {
       </div>
 
       {quickActions.length > 0 && (
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           {quickActions.map(({ label, icon: Icon, target }) => (
             <Button
               key={target}
               id={`quick-action-${target}`}
               type="button"
               variant="secondary"
-              className="min-h-11"
+              className="min-h-11 w-full justify-start sm:w-auto"
               onClick={() => onNavigate(target)}
             >
               <Icon />
@@ -209,7 +209,7 @@ export function DashboardPage({ onNavigate, permissions }: Props) {
             <KpiCard
               label="Chambres occupées"
               value={`${resume.chambresOccupees} / ${resume.totalChambres}`}
-              hint="Statut OCCUPEE en ce moment"
+              hint="Chambres actuellement occupées"
               icon={BedDouble}
               onClick={
                 can('housekeeping:read')
@@ -240,7 +240,7 @@ export function DashboardPage({ onNavigate, permissions }: Props) {
             <KpiCard
               label="Chambres à nettoyer"
               value={String(resume.chambresANettoyer)}
-              hint="Statut A_NETTOYER"
+              hint="En attente de nettoyage"
               icon={Sparkles}
               tone={resume.chambresANettoyer > 0 ? 'warning' : 'neutral'}
               onClick={
@@ -338,15 +338,15 @@ export function DashboardPage({ onNavigate, permissions }: Props) {
 }
 
 const TILE_TONE: Record<string, string> = {
-  success: 'bg-success-soft border-success/25',
-  warning: 'bg-warning-soft border-warning/25',
-  primary: 'bg-primary-soft border-primary/25',
+  success: 'border-success/30',
+  warning: 'border-warning/30',
+  primary: 'border-primary/30',
 };
 
 const TILE_ICON_TONE: Record<string, string> = {
-  success: 'text-success',
-  warning: 'text-warning',
-  primary: 'text-primary',
+  success: 'bg-success-soft text-success',
+  warning: 'bg-warning-soft text-warning',
+  primary: 'bg-primary-soft text-primary',
 };
 
 // Tuile d'action : le compteur reste la donnée réelle du résumé ; l'état
@@ -374,17 +374,20 @@ function TodoTile({
     <div
       className={cn(
         'flex flex-col gap-2 rounded-lg border p-[var(--card-padding)]',
-        vide ? 'bg-card border-border' : TILE_TONE[tone],
+        'bg-card',
+        vide ? 'border-border' : TILE_TONE[tone],
       )}
     >
       <div className="flex items-center gap-2">
-        <Icon
+        <span
           aria-hidden="true"
           className={cn(
-            'size-4 shrink-0',
-            vide ? 'text-muted-foreground' : TILE_ICON_TONE[tone],
+            'flex size-7 shrink-0 items-center justify-center rounded-md',
+            vide ? 'bg-surface-2 text-muted-foreground' : TILE_ICON_TONE[tone],
           )}
-        />
+        >
+          <Icon className="size-4" />
+        </span>
         <p className="text-sm font-semibold">{label}</p>
       </div>
       <p className="text-2xl leading-7 font-extrabold tabular-nums">{count}</p>

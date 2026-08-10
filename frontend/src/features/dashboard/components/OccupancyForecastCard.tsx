@@ -3,7 +3,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -41,15 +40,6 @@ function isoDay(offset: number) {
   d.setHours(12, 0, 0, 0);
   d.setDate(d.getDate() + offset);
   return d.toISOString().slice(0, 10);
-}
-
-function barTone(taux: number) {
-  // Mêmes seuils que classifyOccupancy côté backend (≥80 % / <40 %) —
-  // repris ici uniquement pour la teinte, jamais pour produire une
-  // recommandation tarifaire côté client.
-  if (taux >= 80) return 'var(--success)';
-  if (taux < 40) return 'var(--warning)';
-  return 'var(--primary)';
 }
 
 export function OccupancyForecastCard() {
@@ -159,14 +149,11 @@ export function OccupancyForecastCard() {
                       'Occupation nette',
                     ]}
                   />
-                  <Bar dataKey="tauxOccupation" radius={[4, 4, 0, 0]}>
-                    {jours.map((jour) => (
-                      <Cell
-                        key={jour.date}
-                        fill={barTone(jour.tauxOccupation)}
-                      />
-                    ))}
-                  </Bar>
+                  <Bar
+                    dataKey="tauxOccupation"
+                    fill="var(--chart-1)"
+                    radius={[4, 4, 0, 0]}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             </div>
