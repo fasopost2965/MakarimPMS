@@ -1,17 +1,22 @@
 import { expect, test } from '@playwright/test';
-import { ADMIN, gotoTab, RECEPTION, uniqueGuestName } from './helpers';
+import {
+  ADMIN_AUTH_STATE,
+  gotoTab,
+  openAuthenticatedApp,
+  RECEPTION_AUTH_STATE,
+  uniqueGuestName,
+} from './helpers';
+
+test.use({ storageState: RECEPTION_AUTH_STATE });
 
 test('Réservations Modern Operations — planning, wizard, détail et agenda mobile', async ({
+  browser,
   page,
 }) => {
   const guest = uniqueGuestName('Design003B');
 
   await page.setViewportSize({ width: 1366, height: 768 });
-  await page.goto('/');
-  await page.locator('#email').fill(RECEPTION.email);
-  await page.locator('#motDePasse').fill(RECEPTION.password);
-  await page.getByRole('button', { name: 'Se connecter' }).click();
-  await expect(page.locator('#nav-dashboard')).toBeVisible({ timeout: 20_000 });
+  await openAuthenticatedApp(page);
   await gotoTab(page, 'reservations');
 
   await expect(
@@ -82,23 +87,28 @@ test('Réservations Modern Operations — planning, wizard, détail et agenda mo
   // le motif requis. Le scénario reste rejouable sans suppression directe
   // en base ni contournement RBAC.
   await page.setViewportSize({ width: 1366, height: 768 });
-  await page.context().clearCookies();
-  await page.goto('/');
-  await page.locator('#email').fill(ADMIN.email);
-  await page.locator('#motDePasse').fill(ADMIN.password);
-  await page.getByRole('button', { name: 'Se connecter' }).click();
-  await expect(page.locator('#nav-dashboard')).toBeVisible({ timeout: 20_000 });
-  await gotoTab(page, 'reservations');
-  await page.getByLabel('Rechercher une réservation').fill(guest.nom);
+  const adminContext = await browser.newContext({
+    storageState: ADMIN_AUTH_STATE,
+    viewport: { width: 1366, height: 768 },
+  });
+  const adminPage = await adminContext.newPage();
+  await openAuthenticatedApp(adminPage);
+  await gotoTab(adminPage, 'reservations');
+  await adminPage.getByLabel('Rechercher une réservation').fill(guest.nom);
   await expect(
-    page.getByRole('button', { name: `${guest.nom} ${guest.prenom}` }),
+    adminPage.getByRole('button', { name: `${guest.nom} ${guest.prenom}` }),
   ).toBeVisible({ timeout: 20_000 });
-  await page.getByRole('button', { name: 'Annuler la réservation' }).click();
-  await page
+  await adminPage
+    .getByRole('button', { name: 'Annuler la réservation' })
+    .click();
+  await adminPage
     .getByLabel(/Motif de l.annulation/)
     .fill('Nettoyage après recette Playwright');
-  await page.getByRole('button', { name: 'Confirmer l’annulation' }).click();
+  await adminPage
+    .getByRole('button', { name: 'Confirmer l’annulation' })
+    .click();
   await expect(
-    page.getByRole('button', { name: `${guest.nom} ${guest.prenom}` }),
+    adminPage.getByRole('button', { name: `${guest.nom} ${guest.prenom}` }),
   ).not.toBeVisible({ timeout: 20_000 });
+  await adminContext.close();
 });

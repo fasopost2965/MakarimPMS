@@ -1,9 +1,8 @@
 import { test, expect } from '@playwright/test';
 import {
-  ADMIN,
   completeHousekeepingTaskForRoom,
   gotoTab,
-  login,
+  openAuthenticatedApp,
   pickFromSelectSearch,
   uniqueGuestName,
 } from './helpers';
@@ -18,7 +17,7 @@ test('check-in walk-in, check-out bloqué sur solde impayé, débloqué après p
     .toISOString()
     .slice(0, 10);
 
-  await login(page, ADMIN);
+  await openAuthenticatedApp(page);
   await gotoTab(page, 'checkin');
 
   await page.getByRole('button', { name: '+ Check-in walk-in' }).click();

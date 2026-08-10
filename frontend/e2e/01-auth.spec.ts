@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ADMIN, login } from './helpers';
+import { ADMIN, ADMIN_AUTH_STATE, login } from './helpers';
 
 // CH-036 — parcours « connexion » et « déconnexion » du plan de mise en
 // production bêta (docs/execution/PLAN_MISE_EN_PRODUCTION_BETA.md, Phase A).
@@ -8,6 +8,9 @@ test.describe('Authentification', () => {
     await login(page, ADMIN);
     await expect(page.locator('#nav-dashboard')).toBeVisible();
     await expect(page.locator('#nav-reservations')).toBeVisible();
+    // Cette session, obtenue par le parcours de connexion précisément testé
+    // ici, devient l'état Administrateur réutilisé par les specs métier.
+    await page.context().storageState({ path: ADMIN_AUTH_STATE });
   });
 
   test('mot de passe incorrect affiche une erreur, reste sur la page de connexion', async ({

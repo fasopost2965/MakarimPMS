@@ -1,13 +1,12 @@
 import { test, expect } from '@playwright/test';
 import {
-  ADMIN,
   completeHousekeepingTaskForRoom,
-  login,
   makeRoomNeedsCleaning,
+  openAuthenticatedApp,
 } from './helpers';
 
 test('cycle nominal d’une tâche de ménage', async ({ page }) => {
-  await login(page, ADMIN);
+  await openAuthenticatedApp(page);
   await makeRoomNeedsCleaning(page, '101', 'E2E-Housekeeping');
   await completeHousekeepingTaskForRoom(page, '101');
 

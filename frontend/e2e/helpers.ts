@@ -1,5 +1,8 @@
 import { expect, type Page } from '@playwright/test';
 
+export const ADMIN_AUTH_STATE = 'playwright/.auth/admin.json';
+export const RECEPTION_AUTH_STATE = 'playwright/.auth/reception.json';
+
 // CH-036 — comptes de seed (backend/prisma/seed.ts), mot de passe commun
 // documenté dans CLAUDE.md. Jamais de mock : ces identifiants doivent
 // exister réellement en base (npx prisma db seed) avant toute exécution.
@@ -21,6 +24,11 @@ export async function login(
   await page.locator('#email').fill(creds.email);
   await page.locator('#motDePasse').fill(creds.password);
   await page.getByRole('button', { name: 'Se connecter' }).click();
+  await expect(page.locator('#nav-dashboard')).toBeVisible();
+}
+
+export async function openAuthenticatedApp(page: Page) {
+  await page.goto('/');
   await expect(page.locator('#nav-dashboard')).toBeVisible();
 }
 
