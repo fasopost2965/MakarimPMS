@@ -1,5 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const backendPort = process.env.PLAYWRIGHT_BACKEND_PORT ?? '3000';
+const backendUrl = `http://127.0.0.1:${backendPort}`;
+
 // CH-036 (docs/execution/PLAN_MISE_EN_PRODUCTION_BETA.md, Phase A) — le
 // backend n'a jamais de mock (CLAUDE.md : « toujours contre une vraie base
 // MySQL ») ; ces parcours e2e frontend suivent la même discipline : ils
@@ -46,9 +49,12 @@ export default defineConfig({
     {
       command: 'npm run start:dev',
       cwd: '../backend',
-      url: 'http://localhost:3000/api/health',
+      url: `${backendUrl}/api/health`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
+      env: {
+        PORT: backendPort,
+      },
     },
     {
       // --host 127.0.0.1 explicite : sans lui, Vite se lie sur la
@@ -76,7 +82,7 @@ export default defineConfig({
       // sur celle de la page (127.0.0.1), cohérent avec FRONTEND_URL déjà
       // en 127.0.0.1 dans ci.yml.
       env: {
-        VITE_API_URL: 'http://127.0.0.1:3000/api',
+        VITE_API_URL: `${backendUrl}/api`,
       },
     },
   ],
