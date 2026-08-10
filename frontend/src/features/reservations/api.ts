@@ -61,8 +61,11 @@ export function updateReservation(id: number, input: UpdateReservationInput) {
   });
 }
 
-export function cancelReservation(id: number) {
-  return apiRequest<Reservation>(`/reservations/${id}`, { method: 'DELETE' });
+export function cancelReservation(id: number, motif: string) {
+  return apiRequest<Reservation>(`/reservations/${id}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ motif }),
+  });
 }
 
 // CH-007 (F6, self-checkin) — génère (ou régénère) le lien pré-arrivée,

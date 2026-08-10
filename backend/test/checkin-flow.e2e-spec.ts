@@ -264,6 +264,57 @@ describe('Checkin — cycle réservation → séjour → check-out (e2e)', () =>
     await prisma.stay.delete({ where: { id: stay.id } });
   });
 
+  it('refuse de déplacer une réservation TRANSFORMEE_EN_SEJOUR et conserve Stay/RoomNight intacts', async () => {
+    const room = await prisma.room.create({
+      data: { numero: `TEST-CHECKIN-SAFE-${Date.now()}`, roomTypeId },
+    });
+    const targetRoom = await prisma.room.create({
+      data: { numero: `TEST-CHECKIN-TARGET-${Date.now()}`, roomTypeId },
+    });
+    const created = await client.post('/api/reservations').send({
+      roomId: room.id,
+      dateArrivee: '2027-04-20',
+      dateDepart: '2027-04-22',
+      nombreOccupants: 1,
+      guest: { nom: 'Transformee', prenom: 'Intacte' },
+    });
+    expect(created.status).toBe(201);
+    const reservation = created.body as ReservationResponse;
+
+    const checkin = await client
+      .post(`/api/checkin/${reservation.id}`)
+      .send({ nombreOccupants: 1 });
+    expect(checkin.status).toBe(201);
+    const stay = checkin.body as StayResponse;
+    const stayBefore = await prisma.stay.findUniqueOrThrow({
+      where: { id: stay.id },
+    });
+    const nightsBefore = await prisma.roomNight.findMany({
+      where: { reservationId: reservation.id },
+      orderBy: { id: 'asc' },
+    });
+
+    const moved = await client
+      .patch(`/api/reservations/${reservation.id}`)
+      .send({
+        roomId: targetRoom.id,
+        dateArrivee: '2027-04-23',
+        dateDepart: '2027-04-25',
+      });
+    expect(moved.status).toBe(409);
+
+    const stayAfter = await prisma.stay.findUniqueOrThrow({
+      where: { id: stay.id },
+    });
+    const nightsAfter = await prisma.roomNight.findMany({
+      where: { reservationId: reservation.id },
+      orderBy: { id: 'asc' },
+    });
+    expect(stayAfter).toEqual(stayBefore);
+    expect(nightsAfter).toEqual(nightsBefore);
+    expect(nightsAfter.every(({ stayId }) => stayId === stay.id)).toBe(true);
+  });
+
   // CH-005 : un solde positif bloque désormais le check-out (arbitrage
   // produit confirmé — blocage dur, avec échappatoire de check-out forcé
   // réservée à checkin:force-checkout/Administrateur, motif obligatoire).

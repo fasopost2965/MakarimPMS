@@ -331,7 +331,9 @@ function App() {
               {tab === 'dashboard' && (
                 <DashboardPage onNavigate={setTab} permissions={permissions} />
               )}
-              {tab === 'reservations' && <ReservationsCalendarPage />}
+              {tab === 'reservations' && (
+                <ReservationsCalendarPage permissions={permissions ?? []} />
+              )}
               {tab === 'checkin' && <CheckinPage permissions={permissions} />}
               {tab === 'housekeeping' && (
                 <HousekeepingPage permissions={permissions} />

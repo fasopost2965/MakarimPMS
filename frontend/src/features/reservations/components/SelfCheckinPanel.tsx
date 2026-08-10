@@ -7,6 +7,7 @@ import type { SelfCheckinLink, SelfCheckinPending } from '../types';
 interface Props {
   reservationId: number;
   guestEmail: string | null;
+  canWrite: boolean;
 }
 
 const TYPE_PIECE_LABEL: Record<string, string> = {
@@ -23,7 +24,11 @@ const TYPE_PIECE_LABEL: Record<string, string> = {
 // GET .../self-checkin-pending tels quels (voir CLAUDE.md, ce dernier est
 // déjà consommé côté Police pour le pré-remplissage, mais jamais affiché
 // tel quel avant l'arrivée du client).
-export function SelfCheckinPanel({ reservationId, guestEmail }: Props) {
+export function SelfCheckinPanel({
+  reservationId,
+  guestEmail,
+  canWrite,
+}: Props) {
   const [pending, setPending] = useState<SelfCheckinPending | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -124,28 +129,35 @@ export function SelfCheckinPanel({ reservationId, guestEmail }: Props) {
         </ul>
       )}
 
-      <div className="flex items-center gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={handleGenerate}
-          disabled={generating}
-        >
-          {generating
-            ? 'Génération…'
-            : pending
-              ? 'Régénérer le lien (efface les données soumises)'
-              : link
-                ? 'Régénérer le lien'
-                : 'Générer le lien'}
-        </Button>
-        {link && (
-          <Button type="button" variant="ghost" size="sm" onClick={handleCopy}>
-            {copied ? 'Copié !' : 'Copier le lien'}
+      {canWrite && (
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleGenerate}
+            disabled={generating}
+          >
+            {generating
+              ? 'Génération…'
+              : pending
+                ? 'Régénérer le lien (efface les données soumises)'
+                : link
+                  ? 'Régénérer le lien'
+                  : 'Générer le lien'}
           </Button>
-        )}
-      </div>
+          {link && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleCopy}
+            >
+              {copied ? 'Copié !' : 'Copier le lien'}
+            </Button>
+          )}
+        </div>
+      )}
 
       {linkError && <p className="text-destructive text-sm">{linkError}</p>}
 

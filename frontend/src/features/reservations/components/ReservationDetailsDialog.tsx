@@ -22,6 +22,7 @@ interface Props {
   }) => void;
   saving: boolean;
   error: string | null;
+  canWrite: boolean;
 }
 
 export function ReservationDetailsDialog({
@@ -30,6 +31,7 @@ export function ReservationDetailsDialog({
   onSave,
   saving,
   error,
+  canWrite,
 }: Props) {
   return (
     <Dialog
@@ -45,6 +47,7 @@ export function ReservationDetailsDialog({
             onSave={onSave}
             saving={saving}
             error={error}
+            canWrite={canWrite}
           />
         )}
       </DialogContent>
@@ -58,6 +61,7 @@ function ReservationDetailsForm({
   onSave,
   saving,
   error,
+  canWrite,
 }: Props & { reservation: Reservation }) {
   const [prixTotalFinal, setPrixTotalFinal] = useState(
     reservation.prixTotalFinal,
@@ -87,6 +91,7 @@ function ReservationDetailsForm({
         <SelfCheckinPanel
           reservationId={reservation.id}
           guestEmail={reservation.guest.email}
+          canWrite={canWrite}
         />
       )}
 
@@ -130,10 +135,11 @@ function ReservationDetailsForm({
             step="0.01"
             value={prixTotalFinal}
             onChange={(e) => setPrixTotalFinal(e.target.value)}
+            readOnly={!canWrite}
           />
         </div>
 
-        {(reservation.ajustementManuel || priceChanged) && (
+        {canWrite && (reservation.ajustementManuel || priceChanged) && (
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="motifAjustement">
               Motif de l'ajustement (optionnel)
@@ -158,9 +164,11 @@ function ReservationDetailsForm({
           >
             Fermer
           </Button>
-          <Button type="submit" disabled={saving || !priceChanged}>
-            {saving ? 'Enregistrement…' : 'Enregistrer le prix'}
-          </Button>
+          {canWrite && (
+            <Button type="submit" disabled={saving || !priceChanged}>
+              {saving ? 'Enregistrement…' : 'Enregistrer le prix'}
+            </Button>
+          )}
         </DialogFooter>
       </form>
     </>

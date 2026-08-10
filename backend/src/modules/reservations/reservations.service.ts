@@ -383,8 +383,6 @@ export class ReservationsService {
   }
 
   async update(id: number, dto: UpdateReservationDto, userId?: number) {
-    const existing = await this.findOne(id);
-
     // Chemin d'écriture unique pour ANNULEE/NO_SHOW (BR-RES-006) : seuls
     // remove() et markNoShow() calculent la pénalité et journalisent
     // l'action correcte — un PATCH générique ne doit jamais pouvoir les
@@ -399,20 +397,48 @@ export class ReservationsService {
       );
     }
 
-    const dateArrivee = dto.dateArrivee ?? existing.dateArrivee.toISOString();
-    const dateDepart = dto.dateDepart ?? existing.dateDepart.toISOString();
-    const roomId = dto.roomId ?? existing.roomId;
     const datesOrRoomChanged =
       dto.roomId !== undefined ||
       dto.dateArrivee !== undefined ||
       dto.dateDepart !== undefined;
 
-    if (datesOrRoomChanged) {
-      this.assertDateRangeValid(dateArrivee, dateDepart);
-    }
-
     try {
       return await this.prisma.$transaction(async (tx) => {
+        // Sérialise un déplacement avec le check-in : la décision repose sur
+        // le statut réellement courant, jamais sur une lecture effectuée
+        // avant la transaction. Les deux chemins verrouillent la même ligne.
+        await tx.$queryRaw`
+          SELECT id FROM Reservation WHERE id = ${id} FOR UPDATE
+        `;
+        const existing = await tx.reservation.findUnique({
+          where: { id },
+          include: RESERVATION_INCLUDE,
+        });
+        if (!existing) {
+          throw new NotFoundException(`Réservation ${id} introuvable.`);
+        }
+
+        // La machine d'état existante ne permet les opérations métier
+        // (annulation, no-show, transformation en séjour) qu'à partir de
+        // CONFIRMEE. Le déplacement chambre/dates suit la même règle : il ne
+        // doit jamais détacher les RoomNight d'un séjour déjà créé.
+        if (
+          datesOrRoomChanged &&
+          existing.statut !== StatutReservation.CONFIRMEE
+        ) {
+          throw new ConflictException(
+            `Cette réservation ne peut pas être déplacée (statut actuel : ${existing.statut}).`,
+          );
+        }
+
+        const dateArrivee =
+          dto.dateArrivee ?? existing.dateArrivee.toISOString();
+        const dateDepart = dto.dateDepart ?? existing.dateDepart.toISOString();
+        const roomId = dto.roomId ?? existing.roomId;
+        if (datesOrRoomChanged) {
+          this.assertDateRangeValid(dateArrivee, dateDepart);
+        }
+
         // Prix : recalculé chaque fois que les dates/la chambre changent
         // (base de calcul différente). prixTotalFinal :
         //  - un prixTotalFinal explicite dans la requête = ajustement
