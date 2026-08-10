@@ -530,44 +530,49 @@ export class ReservationsService {
   // physique (historique client conservé). Opération sensible auditée
   // (ADR-005 §6.1, BR-AUD-002 — "Annulation... d'une réservation").
   async remove(id: number, dto: CancelReservationDto, userId?: number) {
-    const existing = await this.findOne(id);
-    // Une réservation déjà transformée en séjour (module stay) partage
-    // ses lignes RoomNight avec ce séjour actif : les annuler ici casserait
-    // le verrou anti-double-occupation en place. L'annulation d'un séjour se
-    // fait via le check-out, pas via cette route.
-    if (existing.statut === StatutReservation.TRANSFORMEE_EN_SEJOUR) {
-      throw new ConflictException(
-        'Cette réservation a déjà été transformée en séjour — utilisez le check-out pour la clôturer.',
-      );
-    }
-    // Une réservation déjà ANNULEE ou NO_SHOW est dans un état terminal —
-    // la ré-annuler n'a pas de sens et produirait une entrée AuditLog
-    // trompeuse (ADR-005, retour utilisateur du 2026-07-19).
-    if (existing.statut !== StatutReservation.CONFIRMEE) {
-      throw new ConflictException(
-        `Cette réservation ne peut pas être annulée (statut actuel : ${existing.statut}).`,
-      );
-    }
-
-    // BR-RES-006 : pénalité calculée et figée ici (jamais recalculée après
-    // coup) — voir schema.prisma, commentaire Reservation.montantPenalite.
-    // Écart documenté (CLAUDE.md) : la règle mentionne une "ligne de folio
-    // de pénalité", mais une réservation annulée n'a jamais de Stay/Folio
-    // (ADR-002 : un Folio appartient toujours à un Stay, et une réservation
-    // déjà TRANSFORMEE_EN_SEJOUR ne peut plus être annulée ici, voir
-    // ci-dessus). Le montant est donc enregistré sur Reservation.montantPenalite
-    // — son recouvrement (retenue sur acompte via /rembourser, ou
-    // facturation manuelle) reste une décision humaine de la réception/
-    // comptabilité, hors périmètre de cette écriture.
-    const montantPenalite = computeCancellationPenalty(
-      existing.cancellationPolicy,
-      existing.prixTotalFinal,
-      existing.dateArrivee,
-      new Date(),
-      false,
-    );
-
     return this.prisma.$transaction(async (tx) => {
+      // Même verrou et même ordre que update()/checkinFromReservation() :
+      // aucune décision d'annulation ne repose sur un statut lu avant la
+      // transaction, et aucune RoomNight n'est touchée avant cette décision.
+      await tx.$queryRaw`
+        SELECT id FROM Reservation WHERE id = ${id} FOR UPDATE
+      `;
+      const existing = await tx.reservation.findUnique({
+        where: { id },
+        include: RESERVATION_INCLUDE,
+      });
+      if (!existing) {
+        throw new NotFoundException(`Réservation ${id} introuvable.`);
+      }
+
+      // Une réservation déjà transformée en séjour (module stay) partage
+      // ses lignes RoomNight avec ce séjour actif : les annuler ici casserait
+      // le verrou anti-double-occupation en place. L'annulation d'un séjour se
+      // fait via le check-out, pas via cette route.
+      if (existing.statut === StatutReservation.TRANSFORMEE_EN_SEJOUR) {
+        throw new ConflictException(
+          'Cette réservation a déjà été transformée en séjour — utilisez le check-out pour la clôturer.',
+        );
+      }
+      // Une réservation déjà ANNULEE ou NO_SHOW est dans un état terminal —
+      // la ré-annuler n'a pas de sens et produirait une entrée AuditLog
+      // trompeuse (ADR-005, retour utilisateur du 2026-07-19).
+      if (existing.statut !== StatutReservation.CONFIRMEE) {
+        throw new ConflictException(
+          `Cette réservation ne peut pas être annulée (statut actuel : ${existing.statut}).`,
+        );
+      }
+
+      // BR-RES-006 : pénalité calculée et figée ici (jamais recalculée après
+      // coup) — voir schema.prisma, commentaire Reservation.montantPenalite.
+      const montantPenalite = computeCancellationPenalty(
+        existing.cancellationPolicy,
+        existing.prixTotalFinal,
+        existing.dateArrivee,
+        new Date(),
+        false,
+      );
+
       await tx.roomNight.deleteMany({ where: { reservationId: id } });
 
       await this.auditService.writeLog(tx, {
@@ -601,27 +606,38 @@ export class ReservationsService {
   // infrastructure de cron dans ce projet, CLAUDE.md — pas de bascule
   // automatique à l'heure limite).
   async markNoShow(id: number, dto: NoShowReservationDto, userId?: number) {
-    const existing = await this.findOne(id);
-    if (existing.statut === StatutReservation.TRANSFORMEE_EN_SEJOUR) {
-      throw new ConflictException(
-        'Cette réservation a déjà été transformée en séjour — un client présent ne peut pas être marqué non-présentation.',
-      );
-    }
-    if (existing.statut !== StatutReservation.CONFIRMEE) {
-      throw new ConflictException(
-        `Cette réservation ne peut pas être marquée non-présentation (statut actuel : ${existing.statut}).`,
-      );
-    }
-
-    const montantPenalite = computeCancellationPenalty(
-      existing.cancellationPolicy,
-      existing.prixTotalFinal,
-      existing.dateArrivee,
-      new Date(),
-      true,
-    );
-
     return this.prisma.$transaction(async (tx) => {
+      // Même sérialisation que déplacement, check-in et annulation : la
+      // transition NO_SHOW décide et écrit sous le verrou Reservation.
+      await tx.$queryRaw`
+        SELECT id FROM Reservation WHERE id = ${id} FOR UPDATE
+      `;
+      const existing = await tx.reservation.findUnique({
+        where: { id },
+        include: RESERVATION_INCLUDE,
+      });
+      if (!existing) {
+        throw new NotFoundException(`Réservation ${id} introuvable.`);
+      }
+      if (existing.statut === StatutReservation.TRANSFORMEE_EN_SEJOUR) {
+        throw new ConflictException(
+          'Cette réservation a déjà été transformée en séjour — un client présent ne peut pas être marqué non-présentation.',
+        );
+      }
+      if (existing.statut !== StatutReservation.CONFIRMEE) {
+        throw new ConflictException(
+          `Cette réservation ne peut pas être marquée non-présentation (statut actuel : ${existing.statut}).`,
+        );
+      }
+
+      const montantPenalite = computeCancellationPenalty(
+        existing.cancellationPolicy,
+        existing.prixTotalFinal,
+        existing.dateArrivee,
+        new Date(),
+        true,
+      );
+
       await tx.roomNight.deleteMany({ where: { reservationId: id } });
 
       await this.auditService.writeLog(tx, {
