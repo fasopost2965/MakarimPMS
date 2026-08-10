@@ -93,7 +93,8 @@ export function ForgotPasswordPage({
         <div
           className="h-1.5 shrink-0"
           style={{
-            background: 'linear-gradient(90deg, var(--primary), var(--gold))',
+            background:
+              'linear-gradient(90deg, var(--primary), var(--primary-soft))',
           }}
         />
 
@@ -105,7 +106,7 @@ export function ForgotPasswordPage({
               className="size-[34px] shrink-0 rounded-[9px] object-contain"
             />
           ) : (
-            <span className="bg-primary text-gold flex size-[34px] shrink-0 items-center justify-center rounded-[9px] text-[15px] font-bold">
+            <span className="bg-primary text-primary-ink flex size-[34px] shrink-0 items-center justify-center rounded-[9px] text-[15px] font-bold">
               M
             </span>
           )}

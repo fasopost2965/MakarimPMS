@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { listRooms } from '../../reservations/api';
 import type { Room } from '../../reservations/types';
 
@@ -47,38 +48,40 @@ export function RoomsToCleanWidget({ onNavigate }: Props) {
   const blockedRooms = rooms.filter((room) => room.statut === 'EN_MAINTENANCE');
 
   return (
-    <div className="bg-card flex flex-col gap-3 rounded-lg border p-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold">État des chambres</h3>
+    <Card>
+      <CardHeader>
+        <CardTitle>État des chambres</CardTitle>
         <button
           type="button"
           onClick={onNavigate}
-          className="text-primary text-xs hover:underline"
+          className="text-primary focus-visible:ring-ring/50 min-h-11 rounded-md text-xs hover:underline focus-visible:ring-3 focus-visible:outline-none sm:min-h-0"
         >
           Voir le ménage →
         </button>
-      </div>
-      {rooms.length === 0 ? (
-        <p className="text-muted-foreground text-xs">
-          Aucune chambre à nettoyer ou bloquée pour maintenance.
-        </p>
-      ) : (
-        <div className="flex flex-col gap-3">
-          <RoomStatusSection
-            title="À nettoyer / En nettoyage"
-            rooms={cleaningRooms}
-            emptyLabel="Aucune chambre à traiter."
-            variant="warning"
-          />
-          <RoomStatusSection
-            title="Bloquées pour maintenance"
-            rooms={blockedRooms}
-            emptyLabel="Aucune chambre bloquée."
-            variant="destructive"
-          />
-        </div>
-      )}
-    </div>
+      </CardHeader>
+      <CardContent className="gap-3 pt-2">
+        {rooms.length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            Aucune chambre à nettoyer ou bloquée pour maintenance.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <RoomStatusSection
+              title="À nettoyer / En nettoyage"
+              rooms={cleaningRooms}
+              emptyLabel="Aucune chambre à traiter."
+              variant="warning"
+            />
+            <RoomStatusSection
+              title="Bloquées pour maintenance"
+              rooms={blockedRooms}
+              emptyLabel="Aucune chambre bloquée."
+              variant="destructive"
+            />
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
