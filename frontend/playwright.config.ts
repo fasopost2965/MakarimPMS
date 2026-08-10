@@ -1,4 +1,17 @@
 import { defineConfig, devices } from '@playwright/test';
+import { ADMIN_AUTH_STATE } from './e2e/helpers';
+
+const backendPort = process.env.PLAYWRIGHT_BACKEND_PORT ?? '3000';
+const backendUrl = `http://127.0.0.1:${backendPort}`;
+const desktopChrome = {
+  ...devices['Desktop Chrome'],
+  // Le navigateur Chromium pré-installé de cet environnement
+  // (/opt/pw-browsers) n'est pas garanti d'être exactement la révision que
+  // @playwright/test téléchargerait. N'affecte ni un poste standard ni la CI.
+  launchOptions: process.env.PLAYWRIGHT_BROWSERS_PATH
+    ? { executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' }
+    : {},
+};
 
 // CH-036 (docs/execution/PLAN_MISE_EN_PRODUCTION_BETA.md, Phase A) — le
 // backend n'a jamais de mock (CLAUDE.md : « toujours contre une vraie base
@@ -23,22 +36,22 @@ export default defineConfig({
   },
   projects: [
     {
+      name: 'auth-setup',
+      testMatch: /auth\.setup\.ts/,
+      use: desktopChrome,
+    },
+    {
+      name: 'auth',
+      testMatch: /01-auth\.spec\.ts/,
+      use: desktopChrome,
+    },
+    {
       name: 'chromium',
+      testIgnore: [/auth\.setup\.ts/, /01-auth\.spec\.ts/],
+      dependencies: ['auth-setup', 'auth'],
       use: {
-        ...devices['Desktop Chrome'],
-        // Le navigateur Chromium pré-installé de cet environnement
-        // (/opt/pw-browsers) n'est pas garanti d'être exactement la
-        // révision que la version installée de @playwright/test
-        // téléchargerait par défaut (chromium_headless_shell) — chemin
-        // explicite plutôt que de déclencher un téléchargement réseau.
-        // N'affecte pas un poste développeur standard (PLAYWRIGHT_BROWSERS_PATH
-        // non défini) ni la CI (browsers installés via `playwright install`).
-        launchOptions: process.env.PLAYWRIGHT_BROWSERS_PATH
-          ? {
-              executablePath:
-                '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-            }
-          : {},
+        ...desktopChrome,
+        storageState: ADMIN_AUTH_STATE,
       },
     },
   ],
@@ -46,9 +59,12 @@ export default defineConfig({
     {
       command: 'npm run start:dev',
       cwd: '../backend',
-      url: 'http://localhost:3000/api/health',
+      url: `${backendUrl}/api/health`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
+      env: {
+        PORT: backendPort,
+      },
     },
     {
       // --host 127.0.0.1 explicite : sans lui, Vite se lie sur la
@@ -76,7 +92,7 @@ export default defineConfig({
       // sur celle de la page (127.0.0.1), cohérent avec FRONTEND_URL déjà
       // en 127.0.0.1 dans ci.yml.
       env: {
-        VITE_API_URL: 'http://127.0.0.1:3000/api',
+        VITE_API_URL: `${backendUrl}/api`,
       },
     },
   ],
