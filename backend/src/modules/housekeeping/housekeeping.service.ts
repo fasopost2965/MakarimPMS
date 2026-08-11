@@ -6,6 +6,8 @@ import { RoomsService } from '../rooms/rooms.service';
 import { ReservationsService } from '../reservations/reservations.service';
 import { StayService } from '../stay/stay.service';
 import { NettoyageValideEvent } from './events/nettoyage-valide.event';
+import { PrismaService } from '../../prisma/prisma.service';
+import { MaintenanceService } from '../maintenance/maintenance.service';
 
 const STATUTS_A_NETTOYER: StatutChambre[] = [
   StatutChambre.A_NETTOYER,
@@ -15,10 +17,12 @@ const STATUTS_A_NETTOYER: StatutChambre[] = [
 @Injectable()
 export class HousekeepingService {
   constructor(
+    private readonly prisma: PrismaService,
     private readonly roomsService: RoomsService,
     private readonly reservationsService: ReservationsService,
     private readonly stayService: StayService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly maintenanceService: MaintenanceService,
   ) {}
 
   async findAllRooms() {
@@ -52,21 +56,29 @@ export class HousekeepingService {
     userId?: number,
     commentaire?: string,
   ) {
-    const room = await this.roomsService.findByIdOrThrow(id);
+    const { room, updated } = await this.prisma.$transaction(async (tx) => {
+      const lockedRoom = await this.roomsService.lockRoomForUpdate(id, tx);
 
-    if (
-      room.statut === StatutChambre.OCCUPEE ||
-      room.statut === StatutChambre.DEPART_PREVU
-    ) {
-      throw new ConflictException(
-        'Chambre occupée ou en départ prévu : le statut ne peut être changé que via le check-out (module checkin).',
-      );
-    }
+      if (
+        lockedRoom.statut === StatutChambre.OCCUPEE ||
+        lockedRoom.statut === StatutChambre.DEPART_PREVU
+      ) {
+        throw new ConflictException(
+          'Chambre occupée ou en départ prévu : le statut ne peut être changé que via le check-out (module checkin).',
+        );
+      }
 
-    const updated = await this.roomsService.transitionRoom(id, statut, {
-      expectedFrom: room.statut,
-      motif: commentaire ?? 'Changement manuel',
-      userId,
+      if (statut !== StatutChambre.EN_MAINTENANCE) {
+        await this.maintenanceService.assertNoActiveSalesBlocker(id, tx);
+      }
+
+      const transitioned = await this.roomsService.transitionRoom(id, statut, {
+        expectedFrom: lockedRoom.statut,
+        motif: commentaire ?? 'Changement manuel',
+        userId,
+        tx,
+      });
+      return { room: lockedRoom, updated: transitioned };
     });
 
     // BR-STK-001 : équivalent de la validation "CONTROLEE" côté stock (voir

@@ -25,10 +25,12 @@ export const ROOM_TRANSITIONS: Record<StatutChambre, StatutChambre[]> = {
   [StatutChambre.OCCUPEE]: [
     StatutChambre.DEPART_PREVU,
     StatutChambre.A_NETTOYER,
+    StatutChambre.EN_MAINTENANCE,
   ],
   [StatutChambre.DEPART_PREVU]: [
     StatutChambre.OCCUPEE,
     StatutChambre.A_NETTOYER,
+    StatutChambre.EN_MAINTENANCE,
   ],
   [StatutChambre.A_NETTOYER]: [
     StatutChambre.EN_NETTOYAGE,
@@ -42,6 +44,9 @@ export const ROOM_TRANSITIONS: Record<StatutChambre, StatutChambre[]> = {
   [StatutChambre.EN_MAINTENANCE]: [
     StatutChambre.LIBRE_PROPRE,
     StatutChambre.A_NETTOYER,
+    // Reprise d'une tâche restée EN_COURS/TERMINEE pendant une panne :
+    // l'inspection Housekeeping reste obligatoire avant LIBRE_PROPRE.
+    StatutChambre.EN_NETTOYAGE,
   ],
 };
 

@@ -14,6 +14,7 @@ import { RequirePermission } from '../../common/decorators/require-permission.de
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { MaintenanceService } from './maintenance.service';
+import { ClassifyMaintenanceTicketDto } from './dto/classify-maintenance-ticket.dto';
 import { CreateMaintenanceTicketDto } from './dto/create-maintenance-ticket.dto';
 
 @ApiTags('maintenance')
@@ -30,6 +31,20 @@ export class MaintenanceController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.maintenanceService.createTicket(dto, user.sub);
+  }
+
+  @RequirePermission('maintenance', 'read')
+  @ApiOperation({
+    summary:
+      'Classe un ticket ouvert comme bloquant ou non bloquant pour la vente',
+  })
+  @Patch(':id/classification')
+  classify(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ClassifyMaintenanceTicketDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.maintenanceService.classify(id, dto, user.sub);
   }
 
   @RequirePermission('maintenance', 'read')

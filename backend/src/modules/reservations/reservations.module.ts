@@ -7,9 +7,16 @@ import { GuestsModule } from '../guests/guests.module';
 import { AuditModule } from '../audit/audit.module';
 import { RoomsModule } from '../rooms/rooms.module';
 import { ParametersModule } from '../parameters/parameters.module';
+import { MaintenanceModule } from '../maintenance/maintenance.module';
 
 @Module({
-  imports: [GuestsModule, AuditModule, RoomsModule, ParametersModule],
+  imports: [
+    GuestsModule,
+    AuditModule,
+    RoomsModule,
+    ParametersModule,
+    MaintenanceModule,
+  ],
   controllers: [ReservationsController, CancellationPolicyController],
   providers: [ReservationsService, CancellationPolicyService],
   exports: [ReservationsService],

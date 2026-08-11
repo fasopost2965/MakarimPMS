@@ -7,6 +7,7 @@ import { BillingModule } from '../billing/billing.module';
 import { AuditModule } from '../audit/audit.module';
 import { ParametersModule } from '../parameters/parameters.module';
 import { PaymentsModule } from '../payments/payments.module';
+import { MaintenanceModule } from '../maintenance/maintenance.module';
 
 // BillingModule : imputation des acomptes (ReservationDeposit) au folio
 // principal via BillingService.creditFolioLine au check-in — dépendance
@@ -43,6 +44,7 @@ import { PaymentsModule } from '../payments/payments.module';
     AuditModule,
     ParametersModule,
     PaymentsModule,
+    MaintenanceModule,
   ],
   controllers: [StayController],
   providers: [StayService],

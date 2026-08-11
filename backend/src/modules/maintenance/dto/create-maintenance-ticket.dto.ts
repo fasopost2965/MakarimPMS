@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEnum,
   IsInt,
   IsOptional,
@@ -43,4 +44,8 @@ export class CreateMaintenanceTicketDto {
   @IsOptional()
   @IsString()
   assigneA?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  bloqueVente?: boolean;
 }

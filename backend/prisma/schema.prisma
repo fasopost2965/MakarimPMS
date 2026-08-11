@@ -938,15 +938,19 @@ enum PrioriteTicket {
 // EN_MAINTENANCE de la chambre via HousekeepingService.transitionRoom (le
 // seul chemin d'écriture de Room.statut) — jamais d'écriture directe ici.
 model MaintenanceTicket {
-  id        Int            @id @default(autoincrement())
-  roomId    Int?
-  room      Room?          @relation(fields: [roomId], references: [id])
-  typePanne String
-  priorite  PrioriteTicket @default(MOYENNE)
-  photoUrl  String?        @db.LongText
-  assigneA  String?
-  resoluAt  DateTime?
-  createdAt DateTime       @default(now())
+  id          Int            @id @default(autoincrement())
+  roomId      Int?
+  room        Room?          @relation(fields: [roomId], references: [id])
+  typePanne   String
+  priorite    PrioriteTicket @default(MOYENNE)
+  photoUrl    String?        @db.LongText
+  assigneA    String?
+  // Un ticket lié à une chambre bloque la vente par défaut. Les incidents
+  // explicitement non bloquants restent visibles sans modifier la
+  // vendabilité ni la projection opérationnelle de Room.statut.
+  bloqueVente Boolean        @default(true)
+  resoluAt    DateTime?
+  createdAt   DateTime       @default(now())
 }
 
 // ------------------------------------------------------------------

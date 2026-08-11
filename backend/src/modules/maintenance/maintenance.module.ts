@@ -7,5 +7,6 @@ import { RoomsModule } from '../rooms/rooms.module';
   imports: [RoomsModule],
   controllers: [MaintenanceController],
   providers: [MaintenanceService],
+  exports: [MaintenanceService],
 })
 export class MaintenanceModule {}

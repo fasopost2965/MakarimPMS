@@ -19,6 +19,7 @@ import { GuestsService } from '../guests/guests.service';
 import { AuditService } from '../audit/audit.service';
 import { RoomsService } from '../rooms/rooms.service';
 import { ParametersService } from '../parameters/parameters.service';
+import { MaintenanceService } from '../maintenance/maintenance.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationDto } from './dto/update-reservation.dto';
 import { CheckAvailabilityDto } from './dto/check-availability.dto';
@@ -57,6 +58,7 @@ export class ReservationsService {
     private readonly roomsService: RoomsService,
     private readonly parametersService: ParametersService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly maintenanceService: MaintenanceService,
   ) {}
 
   private assertDateRangeValid(dateArrivee: string, dateDepart: string) {
@@ -189,7 +191,11 @@ export class ReservationsService {
     let reservation: ReservationWithIncludes;
     try {
       reservation = await this.prisma.$transaction(async (tx) => {
-        const room = await this.roomsService.findByIdOrThrow(dto.roomId, tx);
+        const room = await this.roomsService.lockRoomForUpdate(dto.roomId, tx);
+        await this.maintenanceService.assertNoActiveSalesBlocker(
+          dto.roomId,
+          tx,
+        );
 
         await this.assertRateRestrictionsSatisfied(
           tx,
@@ -304,17 +310,22 @@ export class ReservationsService {
     this.assertDateRangeValid(dto.dateDebut, dto.dateFin);
     const nights = getNightsBetween(dto.dateDebut, dto.dateFin);
 
-    const occupiedRoomIds = await this.prisma.roomNight.findMany({
-      where: { date: { in: nights } },
-      select: { roomId: true },
-      distinct: ['roomId'],
-    });
+    const [occupiedRoomIds, blockingRoomIds] = await Promise.all([
+      this.prisma.roomNight.findMany({
+        where: { date: { in: nights } },
+        select: { roomId: true },
+        distinct: ['roomId'],
+      }),
+      this.maintenanceService.findActiveBlockingRoomIds(),
+    ]);
     const occupiedIds = new Set(occupiedRoomIds.map((r) => r.roomId));
+    const blockedIds = new Set(blockingRoomIds);
 
     const allRooms = await this.roomsService.findAllWithType();
     return allRooms.filter(
       (room) =>
         !occupiedIds.has(room.id) &&
+        !blockedIds.has(room.id) &&
         (dto.roomTypeId === undefined || room.roomTypeId === dto.roomTypeId),
     );
   }
@@ -337,6 +348,8 @@ export class ReservationsService {
     const nights = getNightsBetween(dto.dateArrivee, dto.dateDepart);
 
     const room = await this.roomsService.findByIdOrThrow(dto.roomId);
+    const hasBlockingTicket =
+      await this.maintenanceService.hasActiveSalesBlocker(dto.roomId);
 
     const conflits = await this.prisma.roomNight.findMany({
       where: {
@@ -350,7 +363,9 @@ export class ReservationsService {
     });
 
     let motifIndisponibilite: string | undefined;
-    if (conflits.length === 0) {
+    if (hasBlockingTicket) {
+      motifIndisponibilite = 'Panne de maintenance ouverte bloquant la vente.';
+    } else if (conflits.length === 0) {
       try {
         await this.assertRateRestrictionsSatisfied(
           this.prisma,
@@ -365,7 +380,8 @@ export class ReservationsService {
     }
 
     return {
-      disponible: conflits.length === 0 && !motifIndisponibilite,
+      disponible:
+        !hasBlockingTicket && conflits.length === 0 && !motifIndisponibilite,
       datesConflit: conflits.map((n) => n.date.toISOString().slice(0, 10)),
       motifIndisponibilite,
     };
@@ -449,7 +465,8 @@ export class ReservationsService {
         //    valeur fournie), on ne l'écrase pas silencieusement.
         let prixTotalCalcule: Prisma.Decimal | undefined;
         if (datesOrRoomChanged) {
-          const room = await this.roomsService.findByIdOrThrow(roomId, tx);
+          const room = await this.roomsService.lockRoomForUpdate(roomId, tx);
+          await this.maintenanceService.assertNoActiveSalesBlocker(roomId, tx);
           const nights = getNightsBetween(dateArrivee, dateDepart);
 
           // B5 — avant de toucher RoomNight : un déplacement (drag-and-drop
