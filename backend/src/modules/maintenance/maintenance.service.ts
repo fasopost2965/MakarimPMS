@@ -31,7 +31,7 @@ export class MaintenanceService {
     return this.prisma.$transaction(async (tx) => {
       let room: Room | null = null;
       if (dto.roomId) {
-        room = await this.roomsService.findByIdOrThrow(dto.roomId, tx);
+        room = await this.roomsService.lockRoomForUpdate(dto.roomId, tx);
       }
 
       const ticket = await tx.maintenanceTicket.create({
@@ -49,7 +49,12 @@ export class MaintenanceService {
         await this.roomsService.transitionRoom(
           room.id,
           StatutChambre.EN_MAINTENANCE,
-          { motif: dto.typePanne, userId, tx },
+          {
+            expectedFrom: room.statut,
+            motif: dto.typePanne,
+            userId,
+            tx,
+          },
         );
       }
 
@@ -62,9 +67,37 @@ export class MaintenanceService {
   // reste bloquée jusqu'à résolution de tous ses tickets.
   async resolve(id: number, userId?: number) {
     return this.prisma.$transaction(async (tx) => {
-      const ticket = await tx.maintenanceTicket.findUnique({ where: { id } });
-      if (!ticket) {
+      const ticketHint = await tx.maintenanceTicket.findUnique({
+        where: { id },
+        select: { roomId: true },
+      });
+      if (!ticketHint) {
         throw new NotFoundException(`Ticket ${id} introuvable.`);
+      }
+
+      // Ordre partagé avec createTicket() et les writers Housekeeping :
+      // Room d'abord, puis l'objet métier qui motive la transition. Le hint
+      // non verrouillé ne sert qu'à trouver la Room ; toute décision repose
+      // sur le ticket relu sous verrou ci-dessous.
+      const room = ticketHint.roomId
+        ? await this.roomsService.lockRoomForUpdate(ticketHint.roomId, tx)
+        : null;
+      const tickets = await tx.$queryRaw<
+        Array<{ id: number; roomId: number | null; resoluAt: Date | null }>
+      >`
+        SELECT id, roomId, resoluAt
+        FROM MaintenanceTicket
+        WHERE id = ${id}
+        FOR UPDATE
+      `;
+      if (tickets.length === 0) {
+        throw new NotFoundException(`Ticket ${id} introuvable.`);
+      }
+      const ticket = tickets[0];
+      if (ticket.roomId !== ticketHint.roomId) {
+        throw new ConflictException(
+          `Le rattachement chambre du ticket ${id} a changé pendant sa résolution.`,
+        );
       }
       if (ticket.resoluAt) {
         throw new ConflictException('Ce ticket est déjà résolu.');
@@ -82,12 +115,16 @@ export class MaintenanceService {
         });
 
         if (otherOpenTickets === 0) {
-          const room = await this.roomsService.findById(ticket.roomId, tx);
           if (room && room.statut === StatutChambre.EN_MAINTENANCE) {
             await this.roomsService.transitionRoom(
               ticket.roomId,
               StatutChambre.A_NETTOYER,
-              { motif: 'Ticket de maintenance résolu', userId, tx },
+              {
+                expectedFrom: room.statut,
+                motif: 'Ticket de maintenance résolu',
+                userId,
+                tx,
+              },
             );
           }
         }

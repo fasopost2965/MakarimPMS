@@ -751,17 +751,15 @@ describe('HousekeepingTaskService — Domaine, Transactions, Verrous et Concurre
         const originalLock = roomsService.lockRoomForUpdate.bind(
           roomsService,
         ) as (roomId: number, tx: Prisma.TransactionClient) => Promise<Room>;
-        const originalFindRoom = roomsService.findByIdOrThrow.bind(
-          roomsService,
-        ) as (roomId: number, tx?: Prisma.TransactionClient) => Promise<Room>;
         let releaseHousekeeping!: () => void;
         let housekeepingLocked!: () => void;
-        let maintenanceRead!: () => void;
+        let maintenanceLockAttempted!: () => void;
+        let roomLockCalls = 0;
         const housekeepingHasLock = new Promise<void>((resolve) => {
           housekeepingLocked = resolve;
         });
-        const maintenanceHasRead = new Promise<void>((resolve) => {
-          maintenanceRead = resolve;
+        const maintenanceIsWaitingForRoom = new Promise<void>((resolve) => {
+          maintenanceLockAttempted = resolve;
         });
         const releaseHousekeepingLock = new Promise<void>((resolve) => {
           releaseHousekeeping = resolve;
@@ -769,19 +767,15 @@ describe('HousekeepingTaskService — Domaine, Transactions, Verrous et Concurre
         const lockSpy = jest
           .spyOn(roomsService, 'lockRoomForUpdate')
           .mockImplementation(async (...args) => {
+            const currentCall =
+              args[0] === room.id ? ++roomLockCalls : roomLockCalls;
+            if (currentCall === 2) maintenanceLockAttempted();
             const locked = await originalLock(...args);
-            if (args[0] === room.id) {
+            if (currentCall === 1) {
               housekeepingLocked();
               await releaseHousekeepingLock;
             }
             return locked;
-          });
-        const findSpy = jest
-          .spyOn(roomsService, 'findByIdOrThrow')
-          .mockImplementation(async (...args) => {
-            const found = await originalFindRoom(...args);
-            if (args[0] === room.id) maintenanceRead();
-            return found;
           });
 
         const housekeepingRun = validateTask
@@ -793,14 +787,13 @@ describe('HousekeepingTaskService — Domaine, Transactions, Verrous et Concurre
           typePanne: 'Panne concurrente contrôlée',
           priorite: 'HAUTE',
         });
-        await maintenanceHasRead;
+        await maintenanceIsWaitingForRoom;
         releaseHousekeeping();
         const results = await Promise.allSettled([
           housekeepingRun,
           maintenanceRun,
         ]);
         lockSpy.mockRestore();
-        findSpy.mockRestore();
 
         expect(results.every((result) => result.status === 'fulfilled')).toBe(
           true,

@@ -21,6 +21,7 @@ import { CreateRoomTypeDto } from './dto/create-room-type.dto';
 import { UpdateRoomTypeDto } from './dto/update-room-type.dto';
 
 interface TransitionOptions {
+  expectedFrom: StatutChambre;
   motif?: string;
   userId?: number;
   tx?: Prisma.TransactionClient;
@@ -51,31 +52,59 @@ export class RoomsService {
   async transitionRoom(
     roomId: number,
     to: StatutChambre,
-    opts: TransitionOptions = {},
+    opts: TransitionOptions,
   ) {
-    const client = opts.tx ?? this.prisma;
-
-    const room = await client.room.findUnique({ where: { id: roomId } });
-    if (!room) {
-      throw new NotFoundException(`Chambre ${roomId} introuvable.`);
+    if (opts.tx) {
+      return this.transitionRoomInTransaction(roomId, to, opts, opts.tx);
     }
 
-    if (!canTransition(room.statut, to)) {
+    return this.prisma.$transaction((tx) =>
+      this.transitionRoomInTransaction(roomId, to, opts, tx),
+    );
+  }
+
+  private async transitionRoomInTransaction(
+    roomId: number,
+    to: StatutChambre,
+    opts: TransitionOptions,
+    tx: Prisma.TransactionClient,
+  ) {
+    const room = await this.lockRoomForUpdate(roomId, tx);
+
+    if (room.statut !== opts.expectedFrom) {
       throw new ConflictException(
-        `Transition de statut invalide : ${room.statut} → ${to}.`,
+        `Conflit concurrent sur la chambre ${roomId} : statut attendu ${opts.expectedFrom}, statut actuel ${room.statut}.`,
       );
     }
 
-    const updated = await client.room.update({
-      where: { id: roomId },
+    if (!canTransition(opts.expectedFrom, to)) {
+      throw new ConflictException(
+        `Transition de statut invalide : ${opts.expectedFrom} → ${to}.`,
+      );
+    }
+
+    const write = await tx.room.updateMany({
+      where: { id: roomId, statut: opts.expectedFrom },
       data: { statut: to },
+    });
+    if (write.count !== 1) {
+      throw new ConflictException(
+        `Conflit concurrent sur la chambre ${roomId} : le statut ${opts.expectedFrom} n'est plus courant.`,
+      );
+    }
+
+    const updated = await tx.room.findUnique({
+      where: { id: roomId },
       include: { roomType: true },
     });
+    if (!updated) {
+      throw new NotFoundException(`Chambre ${roomId} introuvable.`);
+    }
 
-    await client.roomStatusLog.create({
+    await tx.roomStatusLog.create({
       data: {
         roomId,
-        ancienStatut: room.statut,
+        ancienStatut: opts.expectedFrom,
         nouveauStatut: to,
         motif: opts.motif,
         userId: opts.userId,

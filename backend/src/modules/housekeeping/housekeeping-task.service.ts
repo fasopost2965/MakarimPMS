@@ -569,6 +569,7 @@ export class HousekeepingTaskService {
         task.roomId,
         StatutChambre.EN_NETTOYAGE,
         {
+          expectedFrom: room.statut,
           motif: `Démarrage du nettoyage (Tâche #${taskId}).`,
           userId: actorUserId,
           tx: t,
@@ -765,6 +766,7 @@ export class HousekeepingTaskService {
         task.roomId,
         StatutChambre.LIBRE_PROPRE,
         {
+          expectedFrom: room.statut,
           motif: `Validation du nettoyage (Tâche #${taskId}).`,
           userId: actorUserId,
           tx: t,
@@ -1093,6 +1095,7 @@ export class HousekeepingTaskService {
         task.roomId,
         StatutChambre.A_NETTOYER,
         {
+          expectedFrom: room.statut,
           motif: `Réouverture du nettoyage (Tâche #${taskId}).`,
           userId: actorUserId,
           tx: t,
@@ -1186,6 +1189,7 @@ export class HousekeepingTaskService {
           roomId,
           StatutChambre.A_NETTOYER,
           {
+            expectedFrom: room.statut,
             motif: `Checkout du séjour #${stayId} - passage à A_NETTOYER.`,
             userId: undefined, // System action
             tx: t,
