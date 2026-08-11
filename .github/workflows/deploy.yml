@@ -76,6 +76,8 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     environment: production
+    outputs:
+      succeeded: ${{ steps.prepare.outcome == 'success' }}
     steps:
       - name: Contexte du runner
         shell: bash
@@ -93,6 +95,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Initialiser l'état PRE_MUTATION sous verrou
+        id: prepare
+        continue-on-error: true
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -135,9 +139,11 @@ jobs:
 
   prepare-deploy-state-2:
     needs: [build-and-push, prepare-deploy-state-1]
-    if: ${{ always() && needs.build-and-push.result == 'success' && needs.prepare-deploy-state-1.result == 'failure' }}
+    if: ${{ always() && needs.build-and-push.result == 'success' && needs.prepare-deploy-state-1.outputs.succeeded != 'true' }}
     runs-on: ubuntu-latest
     environment: production
+    outputs:
+      succeeded: ${{ steps.prepare.outcome == 'success' }}
     steps:
       - name: Contexte du runner de préparation 2/2
         shell: bash
@@ -155,6 +161,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Seconde et dernière tentative d'initialisation PRE_MUTATION
+        id: prepare
+        continue-on-error: true
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -197,11 +205,13 @@ jobs:
 
   deploy-attempt-1:
     needs: [build-and-push, prepare-deploy-state-1, prepare-deploy-state-2]
-    if: ${{ always() && needs.build-and-push.result == 'success' && (needs.prepare-deploy-state-1.result == 'success' || needs.prepare-deploy-state-2.result == 'success') }}
+    if: ${{ always() && needs.build-and-push.result == 'success' && (needs.prepare-deploy-state-1.outputs.succeeded == 'true' || needs.prepare-deploy-state-2.outputs.succeeded == 'true') }}
     runs-on: ubuntu-latest
     environment: production
     permissions:
       packages: write
+    outputs:
+      succeeded: ${{ steps.deploy.outcome == 'success' }}
     steps:
       - name: Contexte tentative 1
         shell: bash
@@ -219,6 +229,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Déployer sur le VPS via SSH — tentative 1/2
+        id: deploy
+        continue-on-error: true
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -311,11 +323,13 @@ jobs:
 
   deploy-attempt-2:
     needs: [build-and-push, prepare-deploy-state-1, prepare-deploy-state-2, deploy-attempt-1]
-    if: ${{ always() && needs.build-and-push.result == 'success' && (needs.prepare-deploy-state-1.result == 'success' || needs.prepare-deploy-state-2.result == 'success') && needs.deploy-attempt-1.result == 'failure' }}
+    if: ${{ always() && needs.build-and-push.result == 'success' && (needs.prepare-deploy-state-1.outputs.succeeded == 'true' || needs.prepare-deploy-state-2.outputs.succeeded == 'true') && needs.deploy-attempt-1.outputs.succeeded != 'true' }}
     runs-on: ubuntu-latest
     environment: production
     permissions:
       packages: write
+    outputs:
+      succeeded: ${{ steps.deploy.outcome == 'success' }}
     steps:
       - name: Contexte tentative 2
         shell: bash
@@ -333,6 +347,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Retry conditionnel sous verrou — tentative 2/2
+        id: deploy
+        continue-on-error: true
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -422,7 +438,7 @@ jobs:
 
   rollback:
     needs: [build-and-push, prepare-deploy-state-1, prepare-deploy-state-2, deploy-attempt-1, deploy-attempt-2]
-    if: ${{ always() && needs.build-and-push.result == 'success' && (needs.prepare-deploy-state-1.result == 'success' || needs.prepare-deploy-state-2.result == 'success') && needs.deploy-attempt-1.result == 'failure' && needs.deploy-attempt-2.result != 'success' }}
+    if: ${{ always() && needs.build-and-push.result == 'success' && (needs.prepare-deploy-state-1.outputs.succeeded == 'true' || needs.prepare-deploy-state-2.outputs.succeeded == 'true') && needs.deploy-attempt-1.outputs.succeeded != 'true' && needs.deploy-attempt-2.outputs.succeeded != 'true' }}
     runs-on: ubuntu-latest
     environment: production
     permissions:
@@ -512,7 +528,7 @@ jobs:
 
   promote-stable:
     needs: [build-and-push, deploy-attempt-1, deploy-attempt-2]
-    if: ${{ always() && (needs.deploy-attempt-1.result == 'success' || needs.deploy-attempt-2.result == 'success') }}
+    if: ${{ always() && (needs.deploy-attempt-1.outputs.succeeded == 'true' || needs.deploy-attempt-2.outputs.succeeded == 'true') }}
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -543,3 +559,23 @@ jobs:
             echo "- résultat promotion: ${{ job.status }}"
             echo "- un échec de promotion ne déclenche aucun rollback applicatif"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  deployment-result:
+    needs: [build-and-push, prepare-deploy-state-1, prepare-deploy-state-2, deploy-attempt-1, deploy-attempt-2, rollback, promote-stable]
+    if: ${{ always() && github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Conclure explicitement le déploiement
+        shell: bash
+        env:
+          DEPLOY_1_SUCCEEDED: ${{ needs.deploy-attempt-1.outputs.succeeded }}
+          DEPLOY_2_SUCCEEDED: ${{ needs.deploy-attempt-2.outputs.succeeded }}
+          PROMOTION_RESULT: ${{ needs.promote-stable.result }}
+        run: |
+          if { [ "$DEPLOY_1_SUCCEEDED" = true ] || [ "$DEPLOY_2_SUCCEEDED" = true ]; } \
+            && [ "$PROMOTION_RESULT" = success ]; then
+            echo "OPS-003B: déploiement HEALTHY et promotion stable réussie."
+            exit 0
+          fi
+          echo "OPS-003B: déploiement final non validé ou promotion stable en échec."
+          exit 1
