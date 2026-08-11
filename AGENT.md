@@ -1,6 +1,12 @@
 # AGENT.md
 
-Ce fichier fournit le contexte du projet à tout agent IA (Antigravity, Claude Code, Cursor, Copilot, etc.) ou développeur humain travaillant dans ce dépôt. Copie fonctionnellement identique de `CLAUDE.md` (lu par Claude Code) — les deux fichiers doivent rester synchronisés ; toute mise à jour de l'un doit être reportée dans l'autre.
+> **Statut : référence historique non canonique.** Ce fichier n'est pas chargé
+> automatiquement par Codex et n'est plus présenté comme une copie synchronisée
+> de `CLAUDE.md`. Les règles de travail partagées ont pour source canonique
+> `AGENTS.md` ; `CLAUDE.md` conserve le contexte technique détaillé destiné à
+> Claude. Le contenu ci-dessous est préservé pour compatibilité et historique ;
+> tout fait susceptible d'avoir évolué doit être vérifié dans le code et les
+> sources citées par `AGENTS.md`.
 
 ## Projet
 

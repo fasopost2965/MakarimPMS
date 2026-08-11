@@ -1,0 +1,4 @@
+interface:
+  display_name: "Makarim Change Gate"
+  short_description: "Validation proportionnée des changements Makarim"
+  default_prompt: "Utilise $makarim-change-gate pour qualifier et valider cette mission MakarimPMS."

@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Les règles de travail partagées et leur priorité sont définies dans `AGENTS.md`,
+à lire avant ce contexte technique détaillé. En cas de divergence opératoire,
+`AGENTS.md` prévaut ; les faits techniques doivent être confirmés dans le code.
+
 ## Projet
 
 PMS Hôtel Makarim — projet interne (pas de logique SaaS multi-hôtels). Hôtel 3 étoiles, 24 chambres, Tétouan. Monorepo `backend/` (NestJS + Prisma + MySQL 8) + `frontend/` (React + Vite + TS + Tailwind + shadcn/ui), auth JWT (access + refresh), déploiement VPS Hostinger via Docker Compose + Nginx + Certbot.
