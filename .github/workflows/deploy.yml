@@ -8,7 +8,9 @@ name: Deploy
 # aucune valeur réelle n'est connue de ce dépôt, à renseigner par l'opérateur ayant
 # l'accès VPS avant la première exécution :
 #   VPS_HOST      : IP ou nom d'hôte du VPS Hostinger
-#   VPS_USER      : utilisateur SSH non-root de déploiement
+#   VPS_USER      : utilisateur SSH de déploiement configuré dans les secrets GitHub
+#                   (la production utilise actuellement root ; la migration vers un
+#                   compte dédié relève d'un chantier de durcissement séparé)
 #   VPS_SSH_KEY   : clé privée SSH dédiée au déploiement (paire générée pour ce seul usage)
 #   VPS_SSH_PORT  : optionnel, 22 par défaut
 # Prérequis sur le VPS (une fois, hors pipeline) : dépôt cloné dans /opt/makarimpms,
