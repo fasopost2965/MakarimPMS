@@ -11,6 +11,8 @@ import { ReservationsModule } from '../reservations/reservations.module';
 import { StayModule } from '../stay/stay.module';
 import { AuthModule } from '../auth/auth.module';
 import { AuditModule } from '../audit/audit.module';
+import { MaintenanceModule } from '../maintenance/maintenance.module';
+import { HOUSEKEEPING_MAINTENANCE_PROJECTION } from './housekeeping-maintenance-projection.token';
 
 // F9 — AuthModule importé uniquement pour AuthService.loginMobile()
 // (façade, jamais de logique d'authentification dupliquée ici).
@@ -31,6 +33,7 @@ import { AuditModule } from '../audit/audit.module';
     StayModule,
     AuthModule,
     AuditModule,
+    MaintenanceModule,
   ],
   controllers: [
     HousekeepingController,
@@ -42,11 +45,16 @@ import { AuditModule } from '../audit/audit.module';
     HousekeepingTaskService,
     CheckoutEffectueListener,
     { provide: HOUSEKEEPING_TASK_WRITER, useExisting: HousekeepingTaskService },
+    {
+      provide: HOUSEKEEPING_MAINTENANCE_PROJECTION,
+      useExisting: HousekeepingTaskService,
+    },
   ],
   exports: [
     HousekeepingService,
     HousekeepingTaskService,
     HOUSEKEEPING_TASK_WRITER,
+    HOUSEKEEPING_MAINTENANCE_PROJECTION,
   ],
 })
 export class HousekeepingModule {}

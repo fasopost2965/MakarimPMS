@@ -33,6 +33,7 @@ describe('HousekeepingTaskService.reconcileDirtyRooms — relecture verrouillée
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     await expect(service.reconcileDirtyRooms(1)).resolves.toEqual({

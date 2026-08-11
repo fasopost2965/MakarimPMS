@@ -19,6 +19,7 @@ import { RoomsService } from '../rooms/rooms.service';
 import { AuditService } from '../audit/audit.service';
 import { AuthService } from '../auth/auth.service';
 import { StayService } from '../stay/stay.service';
+import { MaintenanceService } from '../maintenance/maintenance.service';
 import { HousekeepingTaskQueryDto } from './dto/housekeeping-task-query.dto';
 
 // createTask() implémente aussi HousekeepingTaskWriter (voir
@@ -33,7 +34,32 @@ export class HousekeepingTaskService {
     private readonly auditService: AuditService,
     private readonly authService: AuthService,
     private readonly stayService: StayService,
+    private readonly maintenanceService: MaintenanceService,
   ) {}
+
+  async getRoomStatusAfterMaintenance(
+    roomId: number,
+    tx: Prisma.TransactionClient,
+  ): Promise<StatutChambre> {
+    // La Room est déjà verrouillée par MaintenanceService. Une current read
+    // verrouillante évite qu'un snapshot REPEATABLE READ établi avant
+    // l'attente de Room masque une réaffectation Housekeeping committée entre
+    // temps, tout en conservant l'ordre Room -> HousekeepingTask.
+    const tasks = await tx.$queryRaw<
+      Array<{ statut: StatutTacheHousekeeping }>
+    >`
+      SELECT statut
+      FROM HousekeepingTask
+      WHERE activeRoomKey = ${roomId}
+      LIMIT 1
+      FOR UPDATE
+    `;
+    const activeTask = tasks[0];
+    return activeTask?.statut === StatutTacheHousekeeping.EN_COURS ||
+      activeTask?.statut === StatutTacheHousekeeping.TERMINEE
+      ? StatutChambre.EN_NETTOYAGE
+      : StatutChambre.A_NETTOYER;
+  }
 
   async findAll(
     query: HousekeepingTaskQueryDto = {} as HousekeepingTaskQueryDto,
@@ -517,6 +543,10 @@ export class HousekeepingTaskService {
         taskTemp.roomId,
         t,
       );
+      await this.maintenanceService.assertNoActiveSalesBlocker(
+        taskTemp.roomId,
+        t,
+      );
 
       // 2. Verrou Task (and get fresh state directly from DB to bypass stale repeatable read snapshot cache)
       const task = await this.lockTaskForUpdate(taskId, t);
@@ -621,6 +651,10 @@ export class HousekeepingTaskService {
         taskTemp.roomId,
         t,
       );
+      await this.maintenanceService.assertNoActiveSalesBlocker(
+        taskTemp.roomId,
+        t,
+      );
 
       // 2. Verrou Task (and get fresh state directly from DB to bypass stale repeatable read snapshot cache)
       const task = await this.lockTaskForUpdate(taskId, t);
@@ -714,6 +748,10 @@ export class HousekeepingTaskService {
 
       // 1. Verrou Room
       const room = await this.roomsService.lockRoomForUpdate(
+        taskTemp.roomId,
+        t,
+      );
+      await this.maintenanceService.assertNoActiveSalesBlocker(
         taskTemp.roomId,
         t,
       );
@@ -1147,6 +1185,8 @@ export class HousekeepingTaskService {
 
       // 1. Verrou Room
       const room = await this.roomsService.lockRoomForUpdate(roomId, t);
+      const hasBlockingTicket =
+        await this.maintenanceService.hasActiveSalesBlocker(roomId, t);
 
       // 2. Créer ou récupérer la tâche idempotente
       let task = await t.housekeepingTask.findFirst({
@@ -1184,7 +1224,7 @@ export class HousekeepingTaskService {
       }
 
       // 3. Transitionner la chambre vers A_NETTOYER si nécessaire
-      if (room.statut !== StatutChambre.A_NETTOYER) {
+      if (!hasBlockingTicket && room.statut !== StatutChambre.A_NETTOYER) {
         await this.roomsService.transitionRoom(
           roomId,
           StatutChambre.A_NETTOYER,

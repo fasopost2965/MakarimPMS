@@ -66,6 +66,7 @@ import { CheckoutEffectueEvent } from './events/checkout-effectue.event';
 // GL-003B — façade PaymentsModule (voir stay.module.ts) uniquement pour
 // createExtensionDeposit, jamais consommé par extendStay lui-même.
 import { PaymentsService } from '../payments/payments.service';
+import { MaintenanceService } from '../maintenance/maintenance.service';
 
 const STAY_INCLUDE = {
   reservation: true,
@@ -101,6 +102,7 @@ export class StayService {
     private readonly eventEmitter: EventEmitter2,
     private readonly moduleRef: ModuleRef,
     private readonly paymentsService: PaymentsService,
+    private readonly maintenanceService: MaintenanceService,
   ) {}
 
   // FIN-102 — taxes statutaires à matérialiser au check-in/à la
@@ -165,6 +167,10 @@ export class StayService {
           );
         }
         const lockedRoom = await this.roomsService.lockRoomForUpdate(
+          reservation.roomId,
+          tx,
+        );
+        await this.maintenanceService.assertNoActiveSalesBlocker(
           reservation.roomId,
           tx,
         );
@@ -286,6 +292,10 @@ export class StayService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const lockedRoom = await this.roomsService.lockRoomForUpdate(
+          dto.roomId,
+          tx,
+        );
+        await this.maintenanceService.assertNoActiveSalesBlocker(
           dto.roomId,
           tx,
         );
@@ -689,13 +699,23 @@ export class StayService {
         lockedStay.roomId,
         tx,
       );
-      if (room.statut !== StatutChambre.A_NETTOYER) {
+      const hasBlockingTicket =
+        await this.maintenanceService.hasActiveSalesBlocker(
+          lockedStay.roomId,
+          tx,
+        );
+      const checkoutTarget = hasBlockingTicket
+        ? StatutChambre.EN_MAINTENANCE
+        : StatutChambre.A_NETTOYER;
+      if (room.statut !== checkoutTarget) {
         await this.roomsService.transitionRoom(
           lockedStay.roomId,
-          StatutChambre.A_NETTOYER,
+          checkoutTarget,
           {
             expectedFrom: room.statut,
-            motif: `Checkout du séjour #${lockedStay.id} - passage à A_NETTOYER.`,
+            motif: hasBlockingTicket
+              ? `Checkout du séjour #${lockedStay.id} - panne bloquant la vente toujours ouverte.`
+              : `Checkout du séjour #${lockedStay.id} - passage à A_NETTOYER.`,
             userId,
             tx,
           },
@@ -967,6 +987,10 @@ export class StayService {
       const resolvedOldRoom =
         firstRoomLocked.id === oldRoomId ? firstRoomLocked : secondRoomLocked;
 
+      await this.maintenanceService.assertNoActiveSalesBlocker(newRoomId, tx);
+      const oldRoomHasBlockingTicket =
+        await this.maintenanceService.hasActiveSalesBlocker(oldRoomId, tx);
+
       // 3. Vérifier que la cible est LIBRE_PROPRE
       if (resolvedNewRoom.statut !== StatutChambre.LIBRE_PROPRE) {
         throw new ConflictException(
@@ -1039,10 +1063,14 @@ export class StayService {
       // RoomsService.transitionRoom comme seul chemin d'écriture.
       await this.roomsService.transitionRoom(
         oldRoomId,
-        StatutChambre.A_NETTOYER,
+        oldRoomHasBlockingTicket
+          ? StatutChambre.EN_MAINTENANCE
+          : StatutChambre.A_NETTOYER,
         {
           expectedFrom: resolvedOldRoom.statut,
-          motif: `Changement de chambre depuis séjour #${id} → ${newRoomId}.`,
+          motif: oldRoomHasBlockingTicket
+            ? `Changement de chambre depuis séjour #${id} → ${newRoomId}; panne bloquant la vente toujours ouverte.`
+            : `Changement de chambre depuis séjour #${id} → ${newRoomId}.`,
           userId,
           tx,
         },
@@ -1386,15 +1414,28 @@ export class StayService {
     // détecté sur une nuit du delta. Aucun changement de chambre n'est
     // jamais effectué automatiquement ici — recherche d'alternatives
     // purement informative pour le réceptionniste.
+    const hasBlockingTicket =
+      await this.maintenanceService.hasActiveSalesBlocker(
+        lockedStay.roomId,
+        tx,
+      );
     const chambreIndisponible =
       lockedRoom.statut === StatutChambre.EN_MAINTENANCE ||
+      hasBlockingTicket ||
       conflictingNights.length > 0;
     if (chambreIndisponible) {
-      const alternatives = await this.roomsService.findCompatibleAvailableRooms(
-        lockedRoom.roomTypeId,
-        nights,
-        lockedRoom.id,
-        tx,
+      const [candidateAlternatives, blockingRoomIds] = await Promise.all([
+        this.roomsService.findCompatibleAvailableRooms(
+          lockedRoom.roomTypeId,
+          nights,
+          lockedRoom.id,
+          tx,
+        ),
+        this.maintenanceService.findActiveBlockingRoomIds(tx),
+      ]);
+      const blockedIds = new Set(blockingRoomIds);
+      const alternatives = candidateAlternatives.filter(
+        (room) => !blockedIds.has(room.id),
       );
       throw new ConflictException({
         code: 'ROOM_UNAVAILABLE',
