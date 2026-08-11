@@ -64,6 +64,7 @@ export class HousekeepingService {
     }
 
     const updated = await this.roomsService.transitionRoom(id, statut, {
+      expectedFrom: room.statut,
       motif: commentaire ?? 'Changement manuel',
       userId,
     });
@@ -117,7 +118,10 @@ export class HousekeepingService {
           await this.roomsService.transitionRoom(
             room.id,
             StatutChambre.RESERVEE,
-            { motif: "Calculé automatiquement — arrivée prévue aujourd'hui" },
+            {
+              expectedFrom: room.statut,
+              motif: "Calculé automatiquement — arrivée prévue aujourd'hui",
+            },
           );
         }
       } else if (room.statut === StatutChambre.RESERVEE) {
@@ -131,6 +135,7 @@ export class HousekeepingService {
             room.id,
             StatutChambre.LIBRE_PROPRE,
             {
+              expectedFrom: room.statut,
               motif:
                 "Calculé automatiquement — plus de réservation arrivant aujourd'hui",
             },
@@ -148,7 +153,10 @@ export class HousekeepingService {
           await this.roomsService.transitionRoom(
             room.id,
             StatutChambre.DEPART_PREVU,
-            { motif: "Calculé automatiquement — départ prévu aujourd'hui" },
+            {
+              expectedFrom: room.statut,
+              motif: "Calculé automatiquement — départ prévu aujourd'hui",
+            },
           );
         }
       } else if (room.statut === StatutChambre.DEPART_PREVU) {
@@ -163,7 +171,10 @@ export class HousekeepingService {
           await this.roomsService.transitionRoom(
             room.id,
             StatutChambre.OCCUPEE,
-            { motif: 'Calculé automatiquement — départ reporté' },
+            {
+              expectedFrom: room.statut,
+              motif: 'Calculé automatiquement — départ reporté',
+            },
           );
         }
       }

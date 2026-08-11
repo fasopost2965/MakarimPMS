@@ -164,6 +164,10 @@ export class StayService {
             'nombreOccupants requis pour ce check-in (ni la réservation ni la requête ne le renseignent).',
           );
         }
+        const lockedRoom = await this.roomsService.lockRoomForUpdate(
+          reservation.roomId,
+          tx,
+        );
         const room = await this.roomsService.findByIdWithPricing(
           reservation.roomId,
           tx,
@@ -194,7 +198,12 @@ export class StayService {
         await this.roomsService.transitionRoom(
           reservation.roomId,
           StatutChambre.OCCUPEE,
-          { motif: 'Check-in depuis réservation', userId, tx },
+          {
+            expectedFrom: lockedRoom.statut,
+            motif: 'Check-in depuis réservation',
+            userId,
+            tx,
+          },
         );
 
         const nights = getNightsBetween(
@@ -276,6 +285,10 @@ export class StayService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
+        const lockedRoom = await this.roomsService.lockRoomForUpdate(
+          dto.roomId,
+          tx,
+        );
         const room = await this.roomsService.findByIdWithPricing(
           dto.roomId,
           tx,
@@ -316,6 +329,7 @@ export class StayService {
         });
 
         await this.roomsService.transitionRoom(room.id, StatutChambre.OCCUPEE, {
+          expectedFrom: lockedRoom.statut,
           motif: 'Check-in walk-in',
           userId,
           tx,
@@ -596,6 +610,24 @@ export class StayService {
     const dateCheckoutReelle = new Date();
 
     const updated = await this.prisma.$transaction(async (tx) => {
+      const lockedStays = await tx.$queryRaw<
+        Array<{ id: number; roomId: number; statut: StatutSejour }>
+      >`
+        SELECT id, roomId, statut
+        FROM Stay
+        WHERE id = ${id}
+        FOR UPDATE
+      `;
+      if (lockedStays.length === 0) {
+        throw new NotFoundException(`Séjour ${id} introuvable.`);
+      }
+      const lockedStay = lockedStays[0];
+      if (lockedStay.statut !== StatutSejour.EN_COURS) {
+        throw new ConflictException(
+          `Ce séjour est déjà clôturé (statut actuel : ${lockedStay.statut}).`,
+        );
+      }
+
       if ((soldePositif || restaurantNonAcquittee) && force) {
         const grant = await tx.permission.findFirst({
           where: {
@@ -653,23 +685,27 @@ export class StayService {
       // effet Housekeeping post-commit échoue, la chambre devient sale dans
       // la transaction du séjour et reste donc récupérable par la
       // réconciliation normale.
-      const room = await this.roomsService.lockRoomForUpdate(stay.roomId, tx);
+      const room = await this.roomsService.lockRoomForUpdate(
+        lockedStay.roomId,
+        tx,
+      );
       if (room.statut !== StatutChambre.A_NETTOYER) {
         await this.roomsService.transitionRoom(
-          stay.roomId,
+          lockedStay.roomId,
           StatutChambre.A_NETTOYER,
           {
-            motif: `Checkout du séjour #${stay.id} - passage à A_NETTOYER.`,
+            expectedFrom: room.statut,
+            motif: `Checkout du séjour #${lockedStay.id} - passage à A_NETTOYER.`,
             userId,
             tx,
           },
         );
       }
 
-      await tx.roomNight.deleteMany({ where: { stayId: id } });
+      await tx.roomNight.deleteMany({ where: { stayId: lockedStay.id } });
 
       return tx.stay.update({
-        where: { id },
+        where: { id: lockedStay.id },
         data: {
           statut: StatutSejour.CHECKOUT,
           dateCheckoutReelle,
@@ -680,7 +716,7 @@ export class StayService {
 
     await this.eventEmitter.emitAsync(
       'checkout.effectue',
-      new CheckoutEffectueEvent(stay.roomId, stay.id, userId),
+      new CheckoutEffectueEvent(updated.roomId, updated.id, userId),
     );
 
     return { ...updated, soldeDu: soldeDu.toFixed(2) };
@@ -928,6 +964,8 @@ export class StayService {
       );
       const resolvedNewRoom =
         firstRoomLocked.id === newRoomId ? firstRoomLocked : secondRoomLocked;
+      const resolvedOldRoom =
+        firstRoomLocked.id === oldRoomId ? firstRoomLocked : secondRoomLocked;
 
       // 3. Vérifier que la cible est LIBRE_PROPRE
       if (resolvedNewRoom.statut !== StatutChambre.LIBRE_PROPRE) {
@@ -1003,12 +1041,14 @@ export class StayService {
         oldRoomId,
         StatutChambre.A_NETTOYER,
         {
+          expectedFrom: resolvedOldRoom.statut,
           motif: `Changement de chambre depuis séjour #${id} → ${newRoomId}.`,
           userId,
           tx,
         },
       );
       await this.roomsService.transitionRoom(newRoomId, StatutChambre.OCCUPEE, {
+        expectedFrom: resolvedNewRoom.statut,
         motif: `Changement de chambre depuis séjour #${id} (${oldRoomId} → ${newRoomId}).`,
         userId,
         tx,
