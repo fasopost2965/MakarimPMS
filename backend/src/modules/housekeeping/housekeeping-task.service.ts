@@ -1151,12 +1151,33 @@ export class HousekeepingTaskService {
       });
 
       if (!task) {
-        task = await this.createTask(
-          roomId,
-          OrigineTacheHousekeeping.CHECKOUT,
-          sourceEventKey,
-          t,
-        );
+        // Une réconciliation peut avoir convergé avant le retry ciblé du
+        // listener. Réutiliser alors la tâche active au lieu d'échouer sur
+        // activeRoomKey rend le retry idempotent dans les deux ordres.
+        task = await t.housekeepingTask.findUnique({
+          where: { activeRoomKey: roomId },
+        });
+        if (
+          task &&
+          task.sourceEventKey === null &&
+          task.origine === OrigineTacheHousekeeping.REPRISE
+        ) {
+          task = await t.housekeepingTask.update({
+            where: { id: task.id },
+            data: { sourceEventKey },
+          });
+        } else if (task) {
+          throw new ConflictException(
+            `Checkout #${stayId} non rattaché : la chambre ${roomId} possède déjà une tâche active d'origine ${task.origine}`,
+          );
+        } else if (!task) {
+          task = await this.createTask(
+            roomId,
+            OrigineTacheHousekeeping.CHECKOUT,
+            sourceEventKey,
+            t,
+          );
+        }
       }
 
       // 3. Transitionner la chambre vers A_NETTOYER si nécessaire
@@ -1176,24 +1197,36 @@ export class HousekeepingTaskService {
     });
   }
 
-  async reconcileDirtyRooms(
-    actorUserId: number,
-    tx?: Prisma.TransactionClient,
-  ) {
-    return this.runInTx(tx, async (t) => {
-      // Find all rooms in A_NETTOYER or EN_NETTOYAGE statuses
-      const dirtyRooms = await t.room.findMany({
-        where: {
-          statut: {
-            in: [StatutChambre.A_NETTOYER, StatutChambre.EN_NETTOYAGE],
-          },
+  async reconcileDirtyRooms(actorUserId: number) {
+    void actorUserId;
+    // La liste est un ensemble de candidats uniquement. Chaque chambre est
+    // réconciliée dans sa propre transaction Room -> HousekeepingTask afin de
+    // ne jamais conserver plusieurs verrous Room simultanément.
+    const dirtyRooms = await this.prisma.room.findMany({
+      where: {
+        statut: {
+          in: [StatutChambre.A_NETTOYER, StatutChambre.EN_NETTOYAGE],
         },
-      });
+      },
+    });
 
-      const results = { created: 0, skipped: 0 };
+    const results = { created: 0, skipped: 0 };
 
-      for (const room of dirtyRooms) {
-        // Find active task for room
+    for (const roomHint of dirtyRooms) {
+      const created = await this.prisma.$transaction(async (t) => {
+        // The initial list is only a candidate snapshot. Re-read and lock
+        // each room before deciding whether a task is still required; a
+        // concurrent validation may have moved it to LIBRE_PROPRE meanwhile.
+        const room = await this.roomsService.lockRoomForUpdate(roomHint.id, t);
+        if (
+          room.statut !== StatutChambre.A_NETTOYER &&
+          room.statut !== StatutChambre.EN_NETTOYAGE
+        ) {
+          return false;
+        }
+
+        // Le verrou Room sérialise tous les writers de tâche pour cette
+        // chambre; la transaction précédente a donc committé avant ce read.
         const activeTask = await t.housekeepingTask.findUnique({
           where: { activeRoomKey: room.id },
         });
@@ -1226,13 +1259,16 @@ export class HousekeepingTaskService {
             },
           });
 
-          results.created++;
-        } else {
-          results.skipped++;
+          return true;
         }
-      }
 
-      return results;
-    });
+        return false;
+      });
+
+      if (created) results.created++;
+      else results.skipped++;
+    }
+
+    return results;
   }
 }

@@ -3,6 +3,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/prisma/prisma.service';
+import { HousekeepingTaskService } from './../src/modules/housekeeping/housekeeping-task.service';
 import { authedRequest, loginAs } from './helpers/auth';
 
 interface RoomResponse {
@@ -132,6 +133,82 @@ describe('Housekeeping — machine à états complète (e2e)', () => {
       expect(log!.motif).toContain('Checkout');
     },
   );
+
+  it('converge après une panne post-checkout sans doubler le séjour ni la tâche', async () => {
+    const roomId = await createRoom();
+    const taskService = app.get(HousekeepingTaskService);
+    const checkin = await client.post('/api/checkin/walk-in').send({
+      roomId,
+      dateCheckoutPrevue: new Date(Date.now() + 2 * 86_400_000)
+        .toISOString()
+        .slice(0, 10),
+      nombreOccupants: 1,
+      guest: { nom: 'Convergence', prenom: 'Checkout' },
+    });
+    const stayId = (checkin.body as StayResponse).id;
+
+    const failure = jest
+      .spyOn(taskService, 'handleCheckoutEffectue')
+      .mockRejectedValueOnce(new Error('panne Housekeeping post-commit'));
+    const checkout = await client.post(`/api/checkout/${stayId}`).send({
+      force: true,
+      motif: 'Preuve convergence checkout housekeeping',
+    });
+    expect(checkout.status).toBe(201);
+    failure.mockRestore();
+
+    const persistedStay = await prisma.stay.findUniqueOrThrow({
+      where: { id: stayId },
+    });
+    expect(persistedStay.statut).toBe('CHECKOUT');
+    expect(await prisma.roomNight.count({ where: { stayId } })).toBe(0);
+    expect(
+      (await prisma.room.findUniqueOrThrow({ where: { id: roomId } })).statut,
+    ).toBe('A_NETTOYER');
+    expect(await prisma.housekeepingTask.count({ where: { roomId } })).toBe(0);
+
+    await taskService.reconcileDirtyRooms(0);
+    await taskService.handleCheckoutEffectue(stayId, roomId);
+    await taskService.handleCheckoutEffectue(stayId, roomId);
+
+    const tasks = await prisma.housekeepingTask.findMany({
+      where: { roomId },
+    });
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0].activeRoomKey).toBe(roomId);
+    expect(tasks[0].sourceEventKey).toBe(`checkout:${stayId}`);
+    expect(
+      await prisma.stay.count({ where: { id: stayId, statut: 'CHECKOUT' } }),
+    ).toBe(1);
+  });
+
+  it("refuse de rattacher un checkout à la tâche active d'un autre événement", async () => {
+    const roomId = await createRoom();
+    const taskService = app.get(HousekeepingTaskService);
+    await prisma.room.update({
+      where: { id: roomId },
+      data: { statut: 'A_NETTOYER' },
+    });
+    const foreignTask = await prisma.housekeepingTask.create({
+      data: {
+        roomId,
+        statut: 'A_FAIRE',
+        origine: 'CHECKOUT',
+        sourceEventKey: 'checkout:999999',
+        activeRoomKey: roomId,
+      },
+    });
+
+    await expect(
+      taskService.handleCheckoutEffectue(888888, roomId),
+    ).rejects.toThrow('possède déjà une tâche active');
+
+    const persisted = await prisma.housekeepingTask.findUniqueOrThrow({
+      where: { id: foreignTask.id },
+    });
+    expect(persisted.sourceEventKey).toBe('checkout:999999');
+    expect(persisted.origine).toBe('CHECKOUT');
+  });
 
   it('déroule le cycle de nettoyage manuel complet : À nettoyer → En nettoyage → Libre&propre', async () => {
     const roomId = await createRoom();

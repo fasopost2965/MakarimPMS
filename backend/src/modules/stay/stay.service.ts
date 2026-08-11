@@ -649,6 +649,23 @@ export class StayService {
         userId,
       );
 
+      // Le checkout possède l'invariant physique minimal : même si son
+      // effet Housekeeping post-commit échoue, la chambre devient sale dans
+      // la transaction du séjour et reste donc récupérable par la
+      // réconciliation normale.
+      const room = await this.roomsService.lockRoomForUpdate(stay.roomId, tx);
+      if (room.statut !== StatutChambre.A_NETTOYER) {
+        await this.roomsService.transitionRoom(
+          stay.roomId,
+          StatutChambre.A_NETTOYER,
+          {
+            motif: `Checkout du séjour #${stay.id} - passage à A_NETTOYER.`,
+            userId,
+            tx,
+          },
+        );
+      }
+
       await tx.roomNight.deleteMany({ where: { stayId: id } });
 
       return tx.stay.update({
