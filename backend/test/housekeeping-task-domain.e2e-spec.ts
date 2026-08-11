@@ -7,6 +7,8 @@ import {
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/prisma/prisma.service';
 import { HousekeepingTaskService } from './../src/modules/housekeeping/housekeeping-task.service';
+import { RoomsService } from './../src/modules/rooms/rooms.service';
+import { MaintenanceService } from './../src/modules/maintenance/maintenance.service';
 import {
   OrigineTacheHousekeeping,
   StatutChambre,
@@ -15,6 +17,7 @@ import {
   AuditAction,
   Role,
   Permission,
+  Prisma,
   User,
   Room,
 } from '@prisma/client';
@@ -129,6 +132,9 @@ describe('HousekeepingTaskService — Domaine, Transactions, Verrous et Concurre
     // Cleanup Test Users, Roles, Rooms, etc.
     if (prisma) {
       if (roomTypeId) {
+        await prisma.maintenanceTicket.deleteMany({
+          where: { room: { roomTypeId } },
+        });
         await prisma.housekeepingTaskLog.deleteMany({
           where: { task: { room: { roomTypeId } } },
         });
@@ -616,6 +622,212 @@ describe('HousekeepingTaskService — Domaine, Transactions, Verrous et Concurre
       expect(rejected).toHaveLength(1);
       expect(rejected[0].reason).toBeInstanceOf(ConflictException);
     });
+
+    it('sérialise deux réconciliations chevauchantes sans doublon ni deadlock', async () => {
+      const roomA = await createRoom('R21', StatutChambre.A_NETTOYER);
+      const roomB = await createRoom('R22', StatutChambre.A_NETTOYER);
+      const roomsService = app.get(RoomsService);
+      const firstDirty = await prisma.room.findFirstOrThrow({
+        where: {
+          statut: {
+            in: [StatutChambre.A_NETTOYER, StatutChambre.EN_NETTOYAGE],
+          },
+        },
+        orderBy: { id: 'asc' },
+      });
+
+      let releaseExternal!: () => void;
+      let externalLocked!: () => void;
+      const externalLockReady = new Promise<void>((resolve) => {
+        externalLocked = resolve;
+      });
+      const releaseExternalLock = new Promise<void>((resolve) => {
+        releaseExternal = resolve;
+      });
+      const blocker = prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`
+          SELECT id FROM Room WHERE id = ${firstDirty.id} FOR UPDATE
+        `;
+        externalLocked();
+        await releaseExternalLock;
+      });
+      await externalLockReady;
+
+      const originalLock = roomsService.lockRoomForUpdate.bind(
+        roomsService,
+      ) as (roomId: number, tx: Prisma.TransactionClient) => Promise<Room>;
+      let contendersAtBarrier = 0;
+      let bothContenders!: () => void;
+      const bothAtBarrier = new Promise<void>((resolve) => {
+        bothContenders = resolve;
+      });
+      const lockSpy = jest
+        .spyOn(roomsService, 'lockRoomForUpdate')
+        .mockImplementation((roomId: number, tx: Prisma.TransactionClient) => {
+          if (roomId === firstDirty.id) {
+            contendersAtBarrier++;
+            if (contendersAtBarrier === 2) bothContenders();
+          }
+          return originalLock(roomId, tx);
+        });
+
+      const runs = [
+        service.reconcileDirtyRooms(userGouv.id),
+        service.reconcileDirtyRooms(userGouv.id),
+      ];
+      await bothAtBarrier;
+      releaseExternal();
+      await blocker;
+      const results = await Promise.allSettled(runs);
+      lockSpy.mockRestore();
+
+      expect(results.every((result) => result.status === 'fulfilled')).toBe(
+        true,
+      );
+      for (const room of [roomA, roomB]) {
+        expect(
+          await prisma.housekeepingTask.count({
+            where: { roomId: room.id, activeRoomKey: room.id },
+          }),
+        ).toBe(1);
+      }
+    });
+
+    it('relit sous verrou une chambre nettoyée après le snapshot candidat', async () => {
+      const room = await createRoom('R25', StatutChambre.A_NETTOYER);
+      let snapshotTaken!: () => void;
+      let releaseSnapshot!: () => void;
+      const snapshotReady = new Promise<void>((resolve) => {
+        snapshotTaken = resolve;
+      });
+      const snapshotRelease = new Promise<void>((resolve) => {
+        releaseSnapshot = resolve;
+      });
+      const findManySpy = jest
+        .spyOn(prisma.room, 'findMany')
+        .mockImplementationOnce(async () => {
+          snapshotTaken();
+          await snapshotRelease;
+          return [room];
+        });
+
+      const reconciliation = service.reconcileDirtyRooms(userGouv.id);
+      await snapshotReady;
+      await prisma.room.update({
+        where: { id: room.id },
+        data: { statut: StatutChambre.LIBRE_PROPRE },
+      });
+      releaseSnapshot();
+
+      await expect(reconciliation).resolves.toEqual({ created: 0, skipped: 1 });
+      expect(
+        await prisma.housekeepingTask.count({ where: { roomId: room.id } }),
+      ).toBe(0);
+      findManySpy.mockRestore();
+    });
+
+    it.each([
+      ['démarrage', false],
+      ['validation', true],
+    ] as const)(
+      'conserve un état cohérent lors de %s nettoyage ↔ ouverture Maintenance',
+      async (_label, validateTask) => {
+        const room = await createRoom(
+          validateTask ? 'R24' : 'R23',
+          StatutChambre.A_NETTOYER,
+        );
+        const task = await service.createTask(
+          room.id,
+          OrigineTacheHousekeeping.MANUELLE,
+        );
+        await service.assign(task.id, userAgent.id, userGouv.id);
+        if (validateTask) {
+          await service.start(task.id, userAgent.id);
+          await service.complete(task.id, userAgent.id);
+        }
+
+        const roomsService = app.get(RoomsService);
+        const maintenanceService = app.get(MaintenanceService);
+        const originalLock = roomsService.lockRoomForUpdate.bind(
+          roomsService,
+        ) as (roomId: number, tx: Prisma.TransactionClient) => Promise<Room>;
+        const originalFindRoom = roomsService.findByIdOrThrow.bind(
+          roomsService,
+        ) as (roomId: number, tx?: Prisma.TransactionClient) => Promise<Room>;
+        let releaseHousekeeping!: () => void;
+        let housekeepingLocked!: () => void;
+        let maintenanceRead!: () => void;
+        const housekeepingHasLock = new Promise<void>((resolve) => {
+          housekeepingLocked = resolve;
+        });
+        const maintenanceHasRead = new Promise<void>((resolve) => {
+          maintenanceRead = resolve;
+        });
+        const releaseHousekeepingLock = new Promise<void>((resolve) => {
+          releaseHousekeeping = resolve;
+        });
+        const lockSpy = jest
+          .spyOn(roomsService, 'lockRoomForUpdate')
+          .mockImplementation(async (...args) => {
+            const locked = await originalLock(...args);
+            if (args[0] === room.id) {
+              housekeepingLocked();
+              await releaseHousekeepingLock;
+            }
+            return locked;
+          });
+        const findSpy = jest
+          .spyOn(roomsService, 'findByIdOrThrow')
+          .mockImplementation(async (...args) => {
+            const found = await originalFindRoom(...args);
+            if (args[0] === room.id) maintenanceRead();
+            return found;
+          });
+
+        const housekeepingRun = validateTask
+          ? service.validate(task.id, userGouv.id, 'Contrôle concurrent')
+          : service.start(task.id, userAgent.id);
+        await housekeepingHasLock;
+        const maintenanceRun = maintenanceService.createTicket({
+          roomId: room.id,
+          typePanne: 'Panne concurrente contrôlée',
+          priorite: 'HAUTE',
+        });
+        await maintenanceHasRead;
+        releaseHousekeeping();
+        const results = await Promise.allSettled([
+          housekeepingRun,
+          maintenanceRun,
+        ]);
+        lockSpy.mockRestore();
+        findSpy.mockRestore();
+
+        expect(results.every((result) => result.status === 'fulfilled')).toBe(
+          true,
+        );
+        const freshRoom = await prisma.room.findUniqueOrThrow({
+          where: { id: room.id },
+        });
+        const freshTask = await prisma.housekeepingTask.findUniqueOrThrow({
+          where: { id: task.id },
+        });
+        const tickets = await prisma.maintenanceTicket.findMany({
+          where: { roomId: room.id, resoluAt: null },
+        });
+        expect(freshRoom.statut).toBe(StatutChambre.EN_MAINTENANCE);
+        expect(freshTask.statut).toBe(
+          validateTask
+            ? StatutTacheHousekeeping.VALIDEE
+            : StatutTacheHousekeeping.EN_COURS,
+        );
+        expect(tickets).toHaveLength(1);
+        expect(
+          await prisma.housekeepingTask.count({
+            where: { roomId: room.id, activeRoomKey: room.id },
+          }),
+        ).toBe(validateTask ? 0 : 1);
+      },
+    );
 
     it('assure l’atomicité et le rollback complet en cas d’erreur au démarrage', async () => {
       const room = await createRoom('R19', StatutChambre.A_NETTOYER);
