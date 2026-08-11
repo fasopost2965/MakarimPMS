@@ -20,6 +20,10 @@ on:
     types: [completed]
     branches: [main]
 
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
 jobs:
   build-and-push:
     if: github.event.workflow_run.conclusion == 'success'
@@ -66,60 +70,459 @@ jobs:
           build-args: |
             VITE_API_URL=https://api.hotelmakarim.cloud/api
 
-  deploy:
+  prepare-deploy-state-1:
     needs: build-and-push
     runs-on: ubuntu-latest
     environment: production
-    permissions:
-      packages: write
     steps:
-      - name: Déployer sur le VPS via SSH
+      - name: Contexte du runner
+        shell: bash
+        run: |
+          {
+            echo "### Préparation du déploiement"
+            echo "- run: $GITHUB_RUN_ID"
+            echo "- workflow attempt: $GITHUB_RUN_ATTEMPT"
+            echo "- runner: $RUNNER_NAME"
+            echo "- OS: $RUNNER_OS"
+            echo "- environment: $RUNNER_ENVIRONMENT"
+            echo "- image OS: ${ImageOS:-UNKNOWN}"
+            echo "- image version: ${ImageVersion:-UNKNOWN}"
+            echo "- region: UNKNOWN (non exposée par GitHub Actions)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Initialiser l'état PRE_MUTATION sous verrou
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_SSH_PORT || 22 }}
-          # set -e : tout échec (migration, healthcheck) doit interrompre le script
-          # et déclencher le job de rollback ci-dessous, jamais laisser un déploiement
-          # à moitié appliqué en place.
           script: |
-            set -e
+            set -eu
             cd /opt/makarimpms
-            export IMAGE_TAG="${{ needs.build-and-push.outputs.sha_tag }}"
-            echo "$IMAGE_TAG" > /tmp/makarimpms-deploy-tag
+            state_dir=/opt/makarimpms/.deploy-state
+            state_file="$state_dir/${{ github.run_id }}-${{ github.run_attempt }}-${{ needs.build-and-push.outputs.sha_tag }}.state"
+            lock_file=/opt/makarimpms/.deploy.lock
+            mkdir -p "$state_dir"
+            exec 9>"$lock_file"
+            if ! flock -n 9; then
+              echo "OPS-003B: verrou de déploiement occupé; arrêt fermé."
+              exit 75
+            fi
+            if [ -e "$state_file" ]; then
+              line_count=$(wc -l < "$state_file")
+              [ "$line_count" -eq 1 ] || {
+                echo "OPS-003B: état existant contradictoire; arrêt fermé."
+                exit 76
+              }
+              phase=$(cat "$state_file") || {
+                echo "OPS-003B: état existant illisible; arrêt fermé."
+                exit 76
+              }
+              if [ "$phase" != PRE_MUTATION ]; then
+                echo "OPS-003B: état existant inattendu; arrêt fermé."
+                exit 77
+              fi
+            else
+              tmp_state="$state_file.tmp.$$"
+              umask 077
+              printf '%s\n' PRE_MUTATION > "$tmp_state"
+              mv "$tmp_state" "$state_file"
+            fi
+            echo "OPS-003B phase=PRE_MUTATION"
 
+  prepare-deploy-state-2:
+    needs: [build-and-push, prepare-deploy-state-1]
+    if: ${{ always() && needs.build-and-push.result == 'success' && needs.prepare-deploy-state-1.result == 'failure' }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Contexte du runner de préparation 2/2
+        shell: bash
+        run: |
+          {
+            echo "### Préparation du déploiement — tentative réseau 2/2"
+            echo "- run: $GITHUB_RUN_ID"
+            echo "- workflow attempt: $GITHUB_RUN_ATTEMPT"
+            echo "- runner: $RUNNER_NAME"
+            echo "- OS: $RUNNER_OS"
+            echo "- environment: $RUNNER_ENVIRONMENT"
+            echo "- image OS: ${ImageOS:-UNKNOWN}"
+            echo "- image version: ${ImageVersion:-UNKNOWN}"
+            echo "- region: UNKNOWN (non exposée par GitHub Actions)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Seconde et dernière tentative d'initialisation PRE_MUTATION
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT || 22 }}
+          script: |
+            set -eu
+            cd /opt/makarimpms
+            state_dir=/opt/makarimpms/.deploy-state
+            state_file="$state_dir/${{ github.run_id }}-${{ github.run_attempt }}-${{ needs.build-and-push.outputs.sha_tag }}.state"
+            lock_file=/opt/makarimpms/.deploy.lock
+            mkdir -p "$state_dir"
+            exec 9>"$lock_file"
+            if ! flock -n 9; then
+              echo "OPS-003B: verrou de déploiement occupé; arrêt fermé."
+              exit 75
+            fi
+            if [ -e "$state_file" ]; then
+              line_count=$(wc -l < "$state_file")
+              [ "$line_count" -eq 1 ] || {
+                echo "OPS-003B: état existant contradictoire; arrêt fermé."
+                exit 76
+              }
+              phase=$(cat "$state_file") || {
+                echo "OPS-003B: état existant illisible; arrêt fermé."
+                exit 76
+              }
+              if [ "$phase" != PRE_MUTATION ]; then
+                echo "OPS-003B: état existant inattendu; arrêt fermé."
+                exit 77
+              fi
+            else
+              tmp_state="$state_file.tmp.$$"
+              umask 077
+              printf '%s\n' PRE_MUTATION > "$tmp_state"
+              mv "$tmp_state" "$state_file"
+            fi
+            echo "OPS-003B phase=PRE_MUTATION"
+
+  deploy-attempt-1:
+    needs: [build-and-push, prepare-deploy-state-1, prepare-deploy-state-2]
+    if: ${{ always() && needs.build-and-push.result == 'success' && (needs.prepare-deploy-state-1.result == 'success' || needs.prepare-deploy-state-2.result == 'success') }}
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      packages: write
+    steps:
+      - name: Contexte tentative 1
+        shell: bash
+        run: |
+          {
+            echo "### Déploiement — tentative réseau 1/2"
+            echo "- run: $GITHUB_RUN_ID"
+            echo "- workflow attempt: $GITHUB_RUN_ATTEMPT"
+            echo "- runner: $RUNNER_NAME"
+            echo "- OS: $RUNNER_OS"
+            echo "- environment: $RUNNER_ENVIRONMENT"
+            echo "- image OS: ${ImageOS:-UNKNOWN}"
+            echo "- image version: ${ImageVersion:-UNKNOWN}"
+            echo "- region: UNKNOWN (non exposée par GitHub Actions)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Déployer sur le VPS via SSH — tentative 1/2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT || 22 }}
+          script: |
+            set -eu
+            cd /opt/makarimpms
+            state_dir=/opt/makarimpms/.deploy-state
+            state_file="$state_dir/${{ github.run_id }}-${{ github.run_attempt }}-${{ needs.build-and-push.outputs.sha_tag }}.state"
+            rollback_safe_file="$state_file.rollback-safe"
+            lock_file=/opt/makarimpms/.deploy.lock
+
+            read_phase() {
+              [ -f "$state_file" ] || return 1
+              line_count=$(wc -l < "$state_file") || return 1
+              [ "$line_count" -eq 1 ] || return 1
+              phase=$(cat "$state_file") || return 1
+              case "$phase" in
+                PRE_MUTATION|MUTATION_STARTED|MIGRATION_STARTED|MIGRATION_VERIFIED|SWITCH_STARTED|HEALTHCHECK_STARTED|HEALTHY|ROLLBACK_STARTED|ROLLED_BACK) ;;
+                *) return 1 ;;
+              esac
+              printf '%s\n' "$phase"
+            }
+
+            transition() {
+              expected=$1
+              next=$2
+              current=$(read_phase) || {
+                echo "OPS-003B: état absent ou illisible; arrêt fermé."
+                exit 76
+              }
+              [ "$current" = "$expected" ] || {
+                echo "OPS-003B: transition refusée $current -> $next; arrêt fermé."
+                exit 77
+              }
+              tmp_state="$state_file.tmp.$$"
+              umask 077
+              printf '%s\n' "$next" > "$tmp_state"
+              mv "$tmp_state" "$state_file"
+              echo "OPS-003B phase=$next"
+            }
+
+            exec 9>"$lock_file"
+            if ! flock -n 9; then
+              echo "OPS-003B: verrou de déploiement occupé; arrêt fermé."
+              exit 75
+            fi
+
+            # Cette transition précède toute mutation distante applicative.
+            transition PRE_MUTATION MUTATION_STARTED
+            export IMAGE_TAG="${{ needs.build-and-push.outputs.sha_tag }}"
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend frontend
 
-            echo "Application des migrations (backend/Dockerfile ne migre jamais tout seul, voir OPERATIONS_RUNBOOK.md §3)"
+            # Un rollback automatique n'est sûr que si aucune migration n'était
+            # en attente avant ce déploiement. La décision repose sur le code de
+            # sortie Prisma, jamais sur le texte de sa sortie.
+            rm -f "$rollback_safe_file"
+            if docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm backend npx prisma migrate status; then
+              tmp_safe="$rollback_safe_file.tmp.$$"
+              umask 077
+              printf '%s\n' NO_SCHEMA_CHANGE > "$tmp_safe"
+              mv "$tmp_safe" "$rollback_safe_file"
+              echo "OPS-003B rollback_schema_compatible=true"
+            else
+              echo "OPS-003B rollback_schema_compatible=false"
+            fi
+            transition MUTATION_STARTED MIGRATION_STARTED
             docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm backend npx prisma migrate deploy
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm backend npx prisma migrate status
+            transition MIGRATION_STARTED MIGRATION_VERIFIED
 
-            echo "Bascule des conteneurs applicatifs (MySQL/Redis non touchés)"
+            transition MIGRATION_VERIFIED SWITCH_STARTED
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps backend frontend
 
-            echo "Vérification de santé post-déploiement"
+            transition SWITCH_STARTED HEALTHCHECK_STARTED
             for i in $(seq 1 10); do
               if curl -fsS http://127.0.0.1:3000/api/health > /dev/null; then
                 echo "Healthcheck OK (tentative $i)"
+                transition HEALTHCHECK_STARTED HEALTHY
                 exit 0
               fi
               echo "Healthcheck échoué (tentative $i/10), nouvelle tentative dans 3s..."
               sleep 3
             done
-            echo "Healthcheck en échec après 10 tentatives — arrêt pour déclencher le rollback." >&2
+            echo "Healthcheck en échec après 10 tentatives."
             exit 1
 
+  deploy-attempt-2:
+    needs: [build-and-push, prepare-deploy-state-1, prepare-deploy-state-2, deploy-attempt-1]
+    if: ${{ always() && needs.build-and-push.result == 'success' && (needs.prepare-deploy-state-1.result == 'success' || needs.prepare-deploy-state-2.result == 'success') && needs.deploy-attempt-1.result == 'failure' }}
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      packages: write
+    steps:
+      - name: Contexte tentative 2
+        shell: bash
+        run: |
+          {
+            echo "### Déploiement — tentative réseau 2/2"
+            echo "- run: $GITHUB_RUN_ID"
+            echo "- workflow attempt: $GITHUB_RUN_ATTEMPT"
+            echo "- runner: $RUNNER_NAME"
+            echo "- OS: $RUNNER_OS"
+            echo "- environment: $RUNNER_ENVIRONMENT"
+            echo "- image OS: ${ImageOS:-UNKNOWN}"
+            echo "- image version: ${ImageVersion:-UNKNOWN}"
+            echo "- region: UNKNOWN (non exposée par GitHub Actions)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Retry conditionnel sous verrou — tentative 2/2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT || 22 }}
+          script: |
+            set -eu
+            cd /opt/makarimpms
+            state_dir=/opt/makarimpms/.deploy-state
+            state_file="$state_dir/${{ github.run_id }}-${{ github.run_attempt }}-${{ needs.build-and-push.outputs.sha_tag }}.state"
+            rollback_safe_file="$state_file.rollback-safe"
+            lock_file=/opt/makarimpms/.deploy.lock
+
+            read_phase() {
+              [ -f "$state_file" ] || return 1
+              line_count=$(wc -l < "$state_file") || return 1
+              [ "$line_count" -eq 1 ] || return 1
+              phase=$(cat "$state_file") || return 1
+              case "$phase" in
+                PRE_MUTATION|MUTATION_STARTED|MIGRATION_STARTED|MIGRATION_VERIFIED|SWITCH_STARTED|HEALTHCHECK_STARTED|HEALTHY|ROLLBACK_STARTED|ROLLED_BACK) ;;
+                *) return 1 ;;
+              esac
+              printf '%s\n' "$phase"
+            }
+
+            transition() {
+              expected=$1
+              next=$2
+              current=$(read_phase) || {
+                echo "OPS-003B: état absent ou illisible; retry interdit."
+                exit 76
+              }
+              [ "$current" = "$expected" ] || {
+                echo "OPS-003B: phase $current; retry post-mutation interdit."
+                exit 78
+              }
+              tmp_state="$state_file.tmp.$$"
+              umask 077
+              printf '%s\n' "$next" > "$tmp_state"
+              mv "$tmp_state" "$state_file"
+              echo "OPS-003B phase=$next"
+            }
+
+            exec 9>"$lock_file"
+            if ! flock -n 9; then
+              echo "OPS-003B: première session encore active; retry interdit."
+              exit 75
+            fi
+
+            # PRE_MUTATION est la seule preuve autorisant cette seconde tentative.
+            transition PRE_MUTATION MUTATION_STARTED
+            export IMAGE_TAG="${{ needs.build-and-push.outputs.sha_tag }}"
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend frontend
+
+            rm -f "$rollback_safe_file"
+            if docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm backend npx prisma migrate status; then
+              tmp_safe="$rollback_safe_file.tmp.$$"
+              umask 077
+              printf '%s\n' NO_SCHEMA_CHANGE > "$tmp_safe"
+              mv "$tmp_safe" "$rollback_safe_file"
+              echo "OPS-003B rollback_schema_compatible=true"
+            else
+              echo "OPS-003B rollback_schema_compatible=false"
+            fi
+            transition MUTATION_STARTED MIGRATION_STARTED
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm backend npx prisma migrate deploy
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm backend npx prisma migrate status
+            transition MIGRATION_STARTED MIGRATION_VERIFIED
+
+            transition MIGRATION_VERIFIED SWITCH_STARTED
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps backend frontend
+
+            transition SWITCH_STARTED HEALTHCHECK_STARTED
+            for i in $(seq 1 10); do
+              if curl -fsS http://127.0.0.1:3000/api/health > /dev/null; then
+                echo "Healthcheck OK (tentative $i)"
+                transition HEALTHCHECK_STARTED HEALTHY
+                exit 0
+              fi
+              echo "Healthcheck échoué (tentative $i/10), nouvelle tentative dans 3s..."
+              sleep 3
+            done
+            echo "Healthcheck en échec après 10 tentatives."
+            exit 1
+
+  rollback:
+    needs: [build-and-push, prepare-deploy-state-1, prepare-deploy-state-2, deploy-attempt-1, deploy-attempt-2]
+    if: ${{ always() && needs.build-and-push.result == 'success' && (needs.prepare-deploy-state-1.result == 'success' || needs.prepare-deploy-state-2.result == 'success') && needs.deploy-attempt-1.result == 'failure' && needs.deploy-attempt-2.result != 'success' }}
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      packages: read
+    steps:
+      - name: Évaluer et appliquer le rollback seulement après bascule
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT || 22 }}
+          script: |
+            set -eu
+            cd /opt/makarimpms
+            state_dir=/opt/makarimpms/.deploy-state
+            state_file="$state_dir/${{ github.run_id }}-${{ github.run_attempt }}-${{ needs.build-and-push.outputs.sha_tag }}.state"
+            rollback_safe_file="$state_file.rollback-safe"
+            lock_file=/opt/makarimpms/.deploy.lock
+
+            read_phase() {
+              [ -f "$state_file" ] || return 1
+              line_count=$(wc -l < "$state_file") || return 1
+              [ "$line_count" -eq 1 ] || return 1
+              phase=$(cat "$state_file") || return 1
+              case "$phase" in
+                PRE_MUTATION|MUTATION_STARTED|MIGRATION_STARTED|MIGRATION_VERIFIED|SWITCH_STARTED|HEALTHCHECK_STARTED|HEALTHY|ROLLBACK_STARTED|ROLLED_BACK) ;;
+                *) return 1 ;;
+              esac
+              printf '%s\n' "$phase"
+            }
+
+            write_phase() {
+              next=$1
+              tmp_state="$state_file.tmp.$$"
+              umask 077
+              printf '%s\n' "$next" > "$tmp_state"
+              mv "$tmp_state" "$state_file"
+              echo "OPS-003B phase=$next"
+            }
+
+            exec 9>"$lock_file"
+            if ! flock -n 9; then
+              echo "OPS-003B: session distante encore active; rollback interdit."
+              exit 75
+            fi
+            phase=$(read_phase) || {
+              echo "OPS-003B: état absent ou illisible; rollback interdit."
+              exit 76
+            }
+
+            case "$phase" in
+              SWITCH_STARTED|HEALTHCHECK_STARTED)
+                [ -f "$rollback_safe_file" ] || {
+                  echo "OPS-003B: schéma potentiellement modifié; rollback automatique interdit."
+                  exit 79
+                }
+                safe_line_count=$(wc -l < "$rollback_safe_file") || exit 79
+                safe_value=$(cat "$rollback_safe_file") || exit 79
+                if [ "$safe_line_count" -ne 1 ] || [ "$safe_value" != NO_SCHEMA_CHANGE ]; then
+                  echo "OPS-003B: preuve de compatibilité rollback invalide; arrêt fermé."
+                  exit 79
+                fi
+                write_phase ROLLBACK_STARTED
+                export IMAGE_TAG=stable
+                echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+                docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend frontend
+                docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps backend frontend
+                write_phase ROLLED_BACK
+                echo "Rollback applicatif vers stable effectué."
+                ;;
+              HEALTHY)
+                echo "OPS-003B: application HEALTHY; rollback interdit."
+                ;;
+              PRE_MUTATION|MUTATION_STARTED)
+                echo "OPS-003B: aucune bascule applicative; rollback inutile et interdit."
+                ;;
+              MIGRATION_STARTED|MIGRATION_VERIFIED)
+                echo "OPS-003B: migration commencée sans bascule; STOP et intervention Ops."
+                exit 79
+                ;;
+              ROLLBACK_STARTED|ROLLED_BACK)
+                echo "OPS-003B: état de rollback déjà engagé; arrêt fermé."
+                exit 80
+                ;;
+            esac
+
+  promote-stable:
+    needs: [build-and-push, deploy-attempt-1, deploy-attempt-2]
+    if: ${{ always() && (needs.deploy-attempt-1.result == 'success' || needs.deploy-attempt-2.result == 'success') }}
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
       - name: Connexion à GitHub Container Registry
-        if: success()
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Marquer l'image comme stable (déploiement réussi)
-        if: success()
+      - name: Marquer les images HEALTHY comme stable
         run: |
           docker buildx imagetools create \
             -t ghcr.io/${{ github.repository_owner }}/makarimpms-backend:stable \
@@ -128,26 +531,13 @@ jobs:
             -t ghcr.io/${{ github.repository_owner }}/makarimpms-frontend:stable \
             ghcr.io/${{ github.repository_owner }}/makarimpms-frontend:${{ needs.build-and-push.outputs.sha_tag }}
 
-  rollback:
-    needs: deploy
-    if: failure()
-    runs-on: ubuntu-latest
-    environment: production
-    permissions:
-      packages: read
-    steps:
-      - name: Redéployer la dernière image stable connue
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_SSH_PORT || 22 }}
-          script: |
-            set -e
-            cd /opt/makarimpms
-            export IMAGE_TAG=stable
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend frontend
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps backend frontend
-            echo "Rollback vers l'image 'stable' effectué — voir OPERATIONS_RUNBOOK.md §4.1."
+      - name: Résumé de promotion
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          {
+            echo "### Promotion stable"
+            echo "- application distante: HEALTHY"
+            echo "- résultat promotion: ${{ job.status }}"
+            echo "- un échec de promotion ne déclenche aucun rollback applicatif"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -66,12 +66,16 @@ Jobs `backend` (lint, build, tests unitaires, tests e2e contre une vraie base My
 Déclenché par `workflow_run` sur la complétion réussie du workflow `CI` (branche `main`) — un déploiement ne part jamais si `ci.yml` est rouge.
 
 1.  **Build & push des images** : `docker build` des images `backend`/`frontend`, taguées `sha-<commit>` et poussées vers GitHub Container Registry (`ghcr.io/fasopost2965/makarimpms-backend`, `-frontend`) avec le jeton `GITHUB_TOKEN` intégré (pas de PAT séparé nécessaire pour un registre du même dépôt).
-2.  **Connexion SSH au VPS** (clé de déploiement dédiée stockée en secret GitHub `VPS_SSH_KEY`, hôte `VPS_HOST`, utilisateur `VPS_USER` — non-root, accès `sudo` limité à `docker`).
-3.  **Migrations** (voir §3) : `docker compose run --rm backend npx prisma migrate deploy` avec la nouvelle image, **avant** de basculer le trafic.
-4.  **Bascule des conteneurs applicatifs uniquement** (`--no-deps backend frontend`, MySQL/Redis ne sont jamais recréés à chaque déploiement) : `IMAGE_TAG=sha-<commit> docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps backend frontend`.
-5.  **Vérification de santé post-déploiement** : boucle de 10 tentatives (3s d'intervalle) sur `curl -f http://127.0.0.1:3000/api/health` **exécutée sur le VPS via SSH** (pas de dépendance DNS/TLS externe pour ce contrôle).
-6.  **Marquage "stable"** : si l'étape 5 réussit, `docker buildx imagetools create` republie l'image `sha-<commit>` sous le tag `stable` dans le registre (alias de manifeste, pas de rebuild) — c'est ce tag que le rollback (§4) redéploie en cas d'incident futur.
-7.  **Échec de l'étape 5** : rollback immédiat automatique, voir §4.1.
+2.  **Initialisation de l'état de déploiement** : une session SSH dédiée crée, sous verrou `flock`, un état durable `PRE_MUTATION` dans `/opt/makarimpms/.deploy-state/`. Le fichier est propre au run, à sa tentative GitHub et au SHA cible. Comme ce job ne touche jamais à l'application, un échec de sa première connexion autorise une seule seconde tentative depuis un nouveau runner. Après ces deux essais, un état absent, illisible ou contradictoire fait échouer le pipeline sans nouvelle mutation.
+3.  **Première tentative de déploiement** : un nouveau job GitHub-hosted acquiert le même verrou et fait progresser l'état de façon monotone. Il écrit `MUTATION_STARTED` avant `docker login`/`pull`, `MIGRATION_STARTED` avant Prisma, `SWITCH_STARTED` avant la bascule et `HEALTHCHECK_STARTED` avant le contrôle de santé.
+4.  **Retry de transport unique** : si la première tentative échoue, un seul nouveau job est autorisé à poursuivre, uniquement si le verrou est libre et si l'état distant vaut encore exactement `PRE_MUTATION`. Toute autre phase interdit le retry. La décision ne dépend jamais du texte d'une erreur SSH.
+5.  **Migrations** (voir §3) : un premier `prisma migrate status` en lecture seule détermine, par son code de sortie, si le schéma est déjà à jour avant ce déploiement. `prisma migrate deploy`, puis un second `prisma migrate status`, s'exécutent ensuite avec la nouvelle image avant la bascule. Dès `MIGRATION_STARTED`, aucun déploiement complet n'est rejoué automatiquement.
+6.  **Bascule des conteneurs applicatifs uniquement** (`--no-deps backend frontend`, MySQL/Redis ne sont jamais recréés à chaque déploiement) : `IMAGE_TAG=sha-<commit> docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps backend frontend`.
+7.  **Vérification de santé post-déploiement** : boucle de 10 tentatives (3s d'intervalle) sur `curl -f http://127.0.0.1:3000/api/health` **exécutée sur le VPS via SSH**. Le succès fait passer l'état à `HEALTHY`.
+8.  **Marquage "stable" séparé** : un job distinct, lancé uniquement après `HEALTHY`, republie les images `sha-<commit>` sous les tags `stable`. Un échec de cette promotion ne déclenche jamais de rollback d'une application saine.
+9.  **Rollback conditionnel** : il n'est autorisé que si `SWITCH_STARTED` ou `HEALTHCHECK_STARTED` est enregistré sans `HEALTHY` **et** si le contrôle Prisma antérieur prouve qu'aucune migration n'était en attente (`NO_SCHEMA_CHANGE` enregistré atomiquement). Un timeout pré-SSH, un simple pull, une migration appliquée/interrompue ou une panne de promotion GHCR ne déclenchent pas de rollback applicatif.
+
+Le workflow et le VPS portent chacun une sérialisation : `concurrency.group: production-deploy` côté GitHub Actions (`cancel-in-progress: false`) et `/opt/makarimpms/.deploy.lock` côté distant. Le verrou distant protège aussi le cas où une commande continuerait après la perte de la session SSH vue par GitHub.
 
 Séquence de référence originale : `.claude/skills/deploiement-vps/SKILL.md` (mis à jour par CH-046 pour ne plus référencer un `deploy.yml` ni un `docs/plan-execution-claude-code.md` inexistants).
 
@@ -87,7 +91,8 @@ Les modifications du schéma physique ne sont jamais exécutées à la main en p
     ```bash
     docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm backend npx prisma migrate deploy
     ```
-3.  **Vérification post-migration** : `npx prisma migrate status` doit rapporter "Database schema is up to date" avant l'étape de bascule des conteneurs (§2.2 étape 4) — le pipeline échoue explicitement sinon, sans jamais basculer le trafic vers une image dont le schéma attendu ne correspond pas à la base réelle.
+3.  **Vérification post-migration** : `npx prisma migrate status` doit rapporter "Database schema is up to date" avant l'étape de bascule des conteneurs — le pipeline échoue explicitement sinon, sans jamais basculer le trafic vers une image dont le schéma attendu ne correspond pas à la base réelle.
+4.  **Échec ou interruption** : dès que l'état distant vaut `MIGRATION_STARTED`, aucun retry complet n'est lancé. Un rollback applicatif automatique après bascule n'est permis que si le contrôle effectué avant `migrate deploy` avait déjà trouvé le schéma à jour, preuve qu'aucune migration de ce déploiement n'a modifié la base. Sinon, une intervention Ops doit déterminer l'état Prisma et la compatibilité du schéma avant toute suite.
 
 ---
 
@@ -96,12 +101,15 @@ Les modifications du schéma physique ne sont jamais exécutées à la main en p
 Pas de bascule DNS/load-balancer instantanée (il n'y en a pas) : le rollback consiste à redéployer la dernière image taguée `stable` (§2.2 étape 6) sur les mêmes conteneurs.
 
 ### 4.1. Rollback de la Couche Applicative (NestJS/React)
-*   **Déclenché automatiquement** par le pipeline (§2.2 étape 7) si le healthcheck post-déploiement échoue :
+*   **Déclenché automatiquement** seulement si l'état durable prouve que la bascule applicative a commencé (`SWITCH_STARTED` ou `HEALTHCHECK_STARTED`) sans confirmation `HEALTHY`, et si la preuve `NO_SCHEMA_CHANGE` confirme qu'aucune migration n'était en attente avant le déploiement :
     ```bash
     IMAGE_TAG=stable docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps backend frontend
     ```
 *   **Déclenché manuellement** (bug fonctionnel découvert après coup, healthcheck initial passé mais régression métier constatée) : même commande, exécutée à la main en SSH sur le VPS par l'opérateur Ops.
 *   Durée : le temps d'un redémarrage de conteneur Docker (quelques secondes), pas instantané comme une bascule DNS, mais pas de coupure prolongée non plus.
+*   **Jamais déclenché automatiquement** avant mutation, après un simple pull, pendant/après une migration sans bascule, après `HEALTHY`, ni à cause d'un échec de promotion GHCR.
+
+**Risque résiduel connu** : les alias `stable` backend et frontend sont publiés par deux opérations GHCR successives, sans transaction commune. Une défaillance entre les deux peut laisser temporairement une paire d'alias incohérente. OPS-003B sépare cette promotion du déploiement afin qu'elle ne puisse plus provoquer le rollback d'une application saine, mais ne construit pas encore un registre de releases atomique. Toute utilisation de `stable` pour un rollback reste donc conditionnée à la vérification opérationnelle de la paire publiée.
 
 ### 4.2. Rollback de la Couche Base de Données (cas d'une migration destructive)
 *   **Avertissement** : Prisma ne fournit pas de "down migration" automatique — toute migration destructive (colonne supprimée, type rétréci) doit avoir été anticipée en revue (§3.1 point 1).
