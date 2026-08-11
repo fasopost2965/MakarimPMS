@@ -276,7 +276,15 @@ describe('Stock — inventaire et déstockage automatique (e2e)', () => {
         .patch(`/api/rooms/${roomId}/statut`)
         .send({ statut: 'LIBRE_PROPRE' });
       expect(libre.status).toBe(200);
-      await attendreCondition(mouvementSortieExiste(savonAvant.id, roomId));
+      const mouvementSavonExiste = mouvementSortieExiste(savonAvant.id, roomId);
+      const mouvementShampoingExiste = mouvementSortieExiste(
+        shampoingAvant.id,
+        roomId,
+      );
+      await attendreCondition(
+        async () =>
+          (await mouvementSavonExiste()) && (await mouvementShampoingExiste()),
+      );
 
       const savonApres = await getItem(SOAP_CODE);
       const shampoingApres = await getItem(SHAMPOO_CODE);
