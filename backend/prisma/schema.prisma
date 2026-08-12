@@ -232,11 +232,39 @@ model HousekeepingTask {
   cancelledAt    DateTime?
   createdAt      DateTime                 @default(now())
   updatedAt      DateTime                 @updatedAt
+  stockCycle     Int                      @default(1)
   logs           HousekeepingTaskLog[]
+  stockConsumptions HousekeepingStockConsumption[]
 
   @@index([roomId, createdAt])
   @@index([statut])
   @@index([assignedUserId, statut])
+}
+
+enum HousekeepingStockConsumptionStatus {
+  PENDING
+  DONE
+  FAILED
+}
+
+model HousekeepingStockConsumption {
+  id                   Int                              @id @default(autoincrement())
+  housekeepingTaskId   Int
+  housekeepingTask     HousekeepingTask                 @relation(fields: [housekeepingTaskId], references: [id], onDelete: Restrict)
+  cycle                Int
+  stockItemId          Int
+  stockItem            StockItem                        @relation(fields: [stockItemId], references: [id], onDelete: Restrict)
+  quantite             Int
+  statut               HousekeepingStockConsumptionStatus @default(PENDING)
+  erreur               String?                          @db.VarChar(191)
+  createdAt            DateTime                         @default(now())
+  updatedAt            DateTime                         @updatedAt
+  processedAt          DateTime?
+  movement             StockMovement?
+
+  @@unique([housekeepingTaskId, cycle, stockItemId])
+  @@index([statut, createdAt])
+  @@index([housekeepingTaskId, cycle])
 }
 
 // Journal métier append-only des transitions et affectations. Les noms sont
@@ -1102,6 +1130,7 @@ model StockItem {
   // (linge, fournitures) ne sont mouvementés que manuellement (réassort).
   kitAccueil         Boolean             @default(false)
   movements          StockMovement[]
+  housekeepingStockConsumptions HousekeepingStockConsumption[]
   purchaseOrderLines PurchaseOrderLine[]
   createdAt          DateTime            @default(now())
   deletedAt          DateTime?
@@ -1129,6 +1158,8 @@ model StockMovement {
   roomId               Int?
   room                 Room?              @relation(fields: [roomId], references: [id])
   createdAt            DateTime           @default(now())
+  housekeepingStockConsumptionId Int?    @unique
+  housekeepingStockConsumption HousekeepingStockConsumption? @relation(fields: [housekeepingStockConsumptionId], references: [id], onDelete: Restrict)
 
   @@index([stockItemId])
   @@index([createdAt])

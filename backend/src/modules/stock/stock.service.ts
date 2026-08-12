@@ -90,31 +90,137 @@ export class StockService {
     });
   }
 
-  // BR-STK-001 : décompte automatique du kit d'accueil (1 unité par article
-  // kitAccueil, par occupant théorique de la chambre) déclenché par
-  // NettoyageValideListener. Isolé article par article : l'échec d'un
-  // article (ex. rupture totale, INV-STK-001) n'empêche jamais le décompte
-  // des autres, et ne remonte jamais au flux de ménage appelant
-  // (SPRINT_12.md §5 — voir HousekeepingService.updateStatus, emit() non
-  // attendu).
-  async decompterKitAccueil(roomId: number, capaciteChambre: number) {
-    const kitItems = await this.prisma.stockItem.findMany({
-      where: { kitAccueil: true },
+  // Traite les intentions durables créées par HousekeepingTaskService.validate.
+  // L'événement qui appelle cette méthode n'est qu'un accélérateur : un rejeu
+  // ne traite que les lignes PENDING, et une ligne DONE est toujours un no-op.
+  async processHousekeepingCycle(housekeepingTaskId: number, cycle: number) {
+    const pending = await this.prisma.housekeepingStockConsumption.findMany({
+      where: {
+        housekeepingTaskId,
+        cycle,
+        statut: 'PENDING',
+      },
+      select: { id: true },
+      orderBy: { id: 'asc' },
     });
 
-    for (const item of kitItems) {
-      try {
-        await this.sortir(
-          item.id,
-          capaciteChambre,
-          `Décompte automatique — nettoyage validé, chambre ${roomId} (capacité ${capaciteChambre})`,
-          { roomId },
-        );
-      } catch (error) {
-        this.logger.warn(
-          `Décompte automatique impossible pour l'article "${item.code}" (chambre ${roomId}) : ${(error as Error).message}`,
+    for (const consumption of pending) {
+      await this.processHousekeepingConsumption(consumption.id);
+    }
+  }
+
+  private async processHousekeepingConsumption(consumptionId: number) {
+    // Resolve the room before opening the mutation transaction. Keeping the
+    // task relation out of the locked section avoids a Room-first lifecycle
+    // transition deadlock while preserving the durable consumption lock.
+    const context = await this.prisma.housekeepingStockConsumption.findUnique({
+      where: { id: consumptionId },
+      select: { housekeepingTask: { select: { roomId: true } } },
+    });
+    if (!context) return;
+    const roomId = context.housekeepingTask.roomId;
+    const result = await this.prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<
+        Array<{
+          id: number;
+          housekeepingTaskId: number;
+          cycle: number;
+          stockItemId: number;
+          quantite: number;
+          statut: string;
+        }>
+      >`
+        SELECT id, housekeepingTaskId, cycle, stockItemId, quantite, statut
+        FROM HousekeepingStockConsumption
+        WHERE id = ${consumptionId}
+        FOR UPDATE
+      `;
+      const consumption = rows[0];
+      if (
+        !consumption ||
+        consumption.statut === 'DONE' ||
+        consumption.statut === 'FAILED'
+      ) {
+        return null;
+      }
+
+      const items = await tx.$queryRaw<
+        Array<{
+          id: number;
+          code: string;
+          libelle: string;
+          quantiteDisponible: number;
+          seuilAlerte: number;
+          uniteMesure: string;
+          kitAccueil: boolean;
+          deletedAt: Date | null;
+        }>
+      >`
+        SELECT id, code, libelle, quantiteDisponible, seuilAlerte,
+               uniteMesure, kitAccueil, deletedAt
+        FROM StockItem
+        WHERE id = ${consumption.stockItemId}
+        FOR UPDATE
+      `;
+      const item = items[0];
+      if (!item || item.deletedAt) {
+        throw new NotFoundException(
+          `Article de stock ${consumption.stockItemId} introuvable.`,
         );
       }
+
+      if (item.quantiteDisponible < consumption.quantite) {
+        await tx.housekeepingStockConsumption.update({
+          where: { id: consumption.id },
+          data: {
+            statut: 'FAILED',
+            erreur: `Stock insuffisant pour ${item.code}.`,
+            processedAt: new Date(),
+          },
+        });
+        return null;
+      }
+
+      const updated = await tx.stockItem.update({
+        where: { id: item.id },
+        data: {
+          quantiteDisponible: item.quantiteDisponible - consumption.quantite,
+        },
+      });
+
+      await tx.stockMovement.create({
+        data: {
+          stockItemId: item.id,
+          typeMouvement: 'SORTIE',
+          quantite: consumption.quantite,
+          motif: `Décompte automatique — nettoyage validé, tâche ${consumption.housekeepingTaskId}, cycle ${consumption.cycle}`,
+          roomId,
+          housekeepingStockConsumptionId: consumption.id,
+        },
+      });
+
+      await tx.housekeepingStockConsumption.update({
+        where: { id: consumption.id },
+        data: {
+          statut: 'DONE',
+          erreur: null,
+          processedAt: new Date(),
+        },
+      });
+
+      return updated;
+    });
+
+    if (result && estSousSeuilAlerte(result)) {
+      await this.eventEmitter.emitAsync(
+        'stock.seuil_critique',
+        new StockThresholdAlertEvent(
+          result.id,
+          result.code,
+          result.quantiteDisponible,
+          result.seuilAlerte,
+        ),
+      );
     }
   }
 
@@ -155,10 +261,20 @@ export class StockService {
     opts: { userId?: number; roomId?: number } = {},
   ) {
     const updated = await this.prisma.$transaction(async (tx) => {
-      const item = await tx.stockItem.findUnique({
-        where: { id: stockItemId },
-      });
-      if (!item || item.deletedAt) {
+      const items = await tx.$queryRaw<
+        Array<{
+          id: number;
+          libelle: string;
+          quantiteDisponible: number;
+        }>
+      >`
+        SELECT id, libelle, quantiteDisponible
+        FROM StockItem
+        WHERE id = ${stockItemId} AND deletedAt IS NULL
+        FOR UPDATE
+      `;
+      const item = items[0];
+      if (!item) {
         throw new NotFoundException(
           `Article de stock ${stockItemId} introuvable.`,
         );
