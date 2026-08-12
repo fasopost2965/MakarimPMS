@@ -3,11 +3,8 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { StockService } from '../stock.service';
 import { NettoyageValideEvent } from '../../housekeeping/events/nettoyage-valide.event';
 
-// Concrétise BR-STK-001. try/catch en plus de celui déjà présent dans
-// StockService.decompterKitAccueil (défense en profondeur) : HousekeepingService
-// utilise emit() (non attendu) — une exception non interceptée ici
-// deviendrait une unhandled promise rejection au niveau du process Node,
-// ce qui est strictement pire que l'isolation recherchée par SPRINT_12.md §5.
+// L'événement est un accélérateur uniquement. Les intentions PENDING sont
+// durables et peuvent être reprises sans créer de doublon.
 @Injectable()
 export class NettoyageValideListener {
   private readonly logger = new Logger(NettoyageValideListener.name);
@@ -17,13 +14,13 @@ export class NettoyageValideListener {
   @OnEvent('nettoyage.valide')
   async handle(event: NettoyageValideEvent) {
     try {
-      await this.stockService.decompterKitAccueil(
-        event.roomId,
-        event.capaciteChambre,
+      await this.stockService.processHousekeepingCycle(
+        event.housekeepingTaskId,
+        event.cycle,
       );
     } catch (error) {
       this.logger.warn(
-        `Décompte de stock automatique en échec pour la chambre ${event.roomId} : ${(error as Error).message}`,
+        `Décompte de stock automatique en échec pour la tâche ${event.housekeepingTaskId}, cycle ${event.cycle} : ${(error as Error).message}`,
       );
     }
   }

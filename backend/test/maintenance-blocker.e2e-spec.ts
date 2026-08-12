@@ -141,6 +141,16 @@ describe('B0.2 — panne Maintenance bloquant la vente (MySQL e2e)', () => {
       await prisma.housekeepingTaskLog.deleteMany({
         where: { task: { roomId: { in: roomIds } } },
       });
+      await prisma.stockMovement.deleteMany({
+        where: {
+          housekeepingStockConsumption: {
+            housekeepingTask: { roomId: { in: roomIds } },
+          },
+        },
+      });
+      await prisma.housekeepingStockConsumption.deleteMany({
+        where: { housekeepingTask: { roomId: { in: roomIds } } },
+      });
       await prisma.housekeepingTask.deleteMany({
         where: { roomId: { in: roomIds } },
       });

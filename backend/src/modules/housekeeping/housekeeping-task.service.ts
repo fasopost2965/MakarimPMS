@@ -14,6 +14,7 @@ import {
   AuditAction,
   AuditEntity,
 } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RoomsService } from '../rooms/rooms.service';
 import { AuditService } from '../audit/audit.service';
@@ -21,6 +22,7 @@ import { AuthService } from '../auth/auth.service';
 import { StayService } from '../stay/stay.service';
 import { MaintenanceService } from '../maintenance/maintenance.service';
 import { HousekeepingTaskQueryDto } from './dto/housekeeping-task-query.dto';
+import { NettoyageValideEvent } from './events/nettoyage-valide.event';
 
 // createTask() implémente aussi HousekeepingTaskWriter (voir
 // housekeeping-task-writer.token.ts), consommé par StayService via
@@ -30,6 +32,7 @@ import { HousekeepingTaskQueryDto } from './dto/housekeeping-task-query.dto';
 export class HousekeepingTaskService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
     private readonly roomsService: RoomsService,
     private readonly auditService: AuditService,
     private readonly authService: AuthService,
@@ -215,7 +218,7 @@ export class HousekeepingTaskService {
     tx: Prisma.TransactionClient,
   ): Promise<HousekeepingTask> {
     const tasks = await tx.$queryRaw<HousekeepingTask[]>`
-      SELECT id, roomId, assignedUserId, statut, origine, sourceEventKey, activeRoomKey, assignedAt, startedAt, completedAt, validatedAt, cancelledAt, createdAt, updatedAt
+      SELECT id, roomId, assignedUserId, statut, origine, sourceEventKey, activeRoomKey, stockCycle, assignedAt, startedAt, completedAt, validatedAt, cancelledAt, createdAt, updatedAt
       FROM HousekeepingTask
       WHERE id = ${taskId}
       FOR UPDATE
@@ -736,7 +739,7 @@ export class HousekeepingTaskService {
       );
     }
 
-    return this.runInTx(tx, async (t) => {
+    const updated = await this.runInTx(tx, async (t) => {
       const taskTemp = await t.housekeepingTask.findUnique({
         where: { id: taskId },
       });
@@ -799,6 +802,31 @@ export class HousekeepingTaskService {
         throw new NotFoundException(`Acteur ${actorUserId} introuvable.`);
       }
 
+      const roomType = await t.roomType.findUnique({
+        where: { id: room.roomTypeId },
+        select: { capacite: true },
+      });
+      if (!roomType) {
+        throw new NotFoundException(
+          `Type de chambre ${room.roomTypeId} introuvable.`,
+        );
+      }
+
+      const kitItems = await t.stockItem.findMany({
+        where: { kitAccueil: true, deletedAt: null },
+        select: { id: true },
+      });
+
+      await t.housekeepingStockConsumption.createMany({
+        data: kitItems.map((item) => ({
+          housekeepingTaskId: task.id,
+          cycle: task.stockCycle,
+          stockItemId: item.id,
+          quantite: roomType.capacite,
+        })),
+        skipDuplicates: true,
+      });
+
       // Transition room: EN_NETTOYAGE -> LIBRE_PROPRE
       await this.roomsService.transitionRoom(
         task.roomId,
@@ -844,6 +872,15 @@ export class HousekeepingTaskService {
 
       return updated;
     });
+
+    if (!tx) {
+      this.eventEmitter.emit(
+        'nettoyage.valide',
+        new NettoyageValideEvent(updated.id, updated.stockCycle),
+      );
+    }
+
+    return updated;
   }
 
   async refuse(
@@ -1147,6 +1184,7 @@ export class HousekeepingTaskService {
           statut: StatutTacheHousekeeping.A_FAIRE,
           assignedUserId: null,
           activeRoomKey: task.roomId,
+          stockCycle: { increment: 1 },
         },
       });
 

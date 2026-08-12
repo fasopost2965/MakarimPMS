@@ -1,18 +1,11 @@
 import { ConflictException, Injectable } from '@nestjs/common';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 import { StatutChambre } from '@prisma/client';
 import { getTodayRange } from '../../common/utils/date-range';
 import { RoomsService } from '../rooms/rooms.service';
 import { ReservationsService } from '../reservations/reservations.service';
 import { StayService } from '../stay/stay.service';
-import { NettoyageValideEvent } from './events/nettoyage-valide.event';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MaintenanceService } from '../maintenance/maintenance.service';
-
-const STATUTS_A_NETTOYER: StatutChambre[] = [
-  StatutChambre.A_NETTOYER,
-  StatutChambre.EN_NETTOYAGE,
-];
 
 @Injectable()
 export class HousekeepingService {
@@ -21,7 +14,6 @@ export class HousekeepingService {
     private readonly roomsService: RoomsService,
     private readonly reservationsService: ReservationsService,
     private readonly stayService: StayService,
-    private readonly eventEmitter: EventEmitter2,
     private readonly maintenanceService: MaintenanceService,
   ) {}
 
@@ -56,7 +48,7 @@ export class HousekeepingService {
     userId?: number,
     commentaire?: string,
   ) {
-    const { room, updated } = await this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       const lockedRoom = await this.roomsService.lockRoomForUpdate(id, tx);
 
       if (
@@ -78,23 +70,8 @@ export class HousekeepingService {
         userId,
         tx,
       });
-      return { room: lockedRoom, updated: transitioned };
+      return transitioned;
     });
-
-    // BR-STK-001 : équivalent de la validation "CONTROLEE" côté stock (voir
-    // NettoyageValideEvent). emit() volontairement non attendu (pas
-    // emitAsync) : SPRINT_12.md §5 exige que le décompte de consommables
-    // reste isolé et ne bloque/ralentisse jamais la réponse de l'API de
-    // ménage principale, y compris en cas d'indisponibilité du module stock.
-    if (
-      statut === StatutChambre.LIBRE_PROPRE &&
-      STATUTS_A_NETTOYER.includes(room.statut)
-    ) {
-      this.eventEmitter.emit(
-        'nettoyage.valide',
-        new NettoyageValideEvent(id, updated.roomType.capacite, userId),
-      );
-    }
 
     return updated;
   }

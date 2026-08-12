@@ -138,6 +138,16 @@ describe('HousekeepingTaskService — Domaine, Transactions, Verrous et Concurre
         await prisma.housekeepingTaskLog.deleteMany({
           where: { task: { room: { roomTypeId } } },
         });
+        await prisma.stockMovement.deleteMany({
+          where: {
+            housekeepingStockConsumption: {
+              housekeepingTask: { room: { roomTypeId } },
+            },
+          },
+        });
+        await prisma.housekeepingStockConsumption.deleteMany({
+          where: { housekeepingTask: { room: { roomTypeId } } },
+        });
         await prisma.housekeepingTask.deleteMany({
           where: { room: { roomTypeId } },
         });

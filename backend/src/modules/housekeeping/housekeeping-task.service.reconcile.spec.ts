@@ -29,6 +29,7 @@ describe('HousekeepingTaskService.reconcileDirtyRooms — relecture verrouillée
     };
     const service = new HousekeepingTaskService(
       prisma as never,
+      {} as never,
       roomsService as never,
       {} as never,
       {} as never,
