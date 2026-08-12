@@ -1,85 +1,56 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import {
+  AlertTriangle,
   Banknote,
   BedDouble,
-  CalendarPlus,
   Gauge,
-  KeyRound,
   LogIn,
   LogOut,
   RefreshCw,
   Sparkles,
-  Wrench,
-  type LucideIcon,
 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ErrorState } from '@/components/ui/error-state';
 import { KpiCard, KpiCardSkeleton } from '@/components/ui/kpi-card';
 import { MoneyDisplay } from '@/components/ui/money-display';
-import { SectionHeader } from '@/components/ui/section-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { getDashboardResume } from '../api';
+import { listRooms } from '../../reservations/api';
+import { listTickets } from '../../maintenance/api';
 import type { DashboardResume } from '../types';
-import { RoomsToCleanWidget } from '../components/RoomsToCleanWidget';
-import { OpenMaintenanceWidget } from '../components/OpenMaintenanceWidget';
+import type { Room } from '../../reservations/types';
+import type { MaintenanceTicket } from '../../maintenance/types';
+import { QuickAccessModules } from '../components/QuickAccessModules';
+import { RoomsStateGrid } from '../components/RoomsStateGrid';
+import { ATraiterPanel } from '../components/ATraiterPanel';
+import { TodayPanel } from '../components/TodayPanel';
 
-// Recharts n'est chargé que si l'utilisateur a réellement accès à la
-// prévision (reporting:read) — même logique que le découpage par onglet de
-// App.tsx : un rôle Gouvernante ne télécharge pas la librairie de graphiques.
-const OccupancyForecastCard = lazy(() =>
-  import('../components/OccupancyForecastCard').then((m) => ({
-    default: m.OccupancyForecastCard,
+// DESIGN-005 (intégration Prototype D3 validée, /design-preview/d3) —
+// remplace l'ancienne prévision en aire (OccupancyForecastCard, fichier
+// conservé mais plus monté ici) par la présentation horizontale compacte
+// validée. Recharts n'étant plus utilisé sur ce composant, ce lazy import
+// reste néanmoins nécessaire pour ne charger le calcul/l'appel réseau que
+// si reporting:read est accordée (même logique qu'avant ce lot).
+const OperationalForecastStrip = lazy(() =>
+  import('../components/OperationalForecastStrip').then((m) => ({
+    default: m.OperationalForecastStrip,
   })),
 );
 
 export type DashboardTarget =
-  'reservations' | 'checkin' | 'housekeeping' | 'maintenance';
+  | 'reservations'
+  | 'checkin'
+  | 'housekeeping'
+  | 'maintenance'
+  | 'restaurant'
+  | 'guests';
 
 interface Props {
   onNavigate: (target: DashboardTarget) => void;
   permissions: string[] | null;
 }
-
-interface QuickAction {
-  label: string;
-  icon: LucideIcon;
-  target: DashboardTarget;
-  permission: string;
-}
-
-// Demande client (`/goal` du 2026-07-30) : « boutons d'action rapides pour
-// les tâches les plus fréquentes ». Portée volontairement limitée à une
-// navigation directe vers l'écran concerné (même mécanisme que le clic sur
-// une carte KPI ci-dessous) — ouvrir directement le formulaire de création
-// exigerait de faire passer un état d'ouverture à travers
-// ReservationsCalendarPage/CheckinPage, hors périmètre de ce lot.
-const QUICK_ACTIONS: QuickAction[] = [
-  {
-    label: 'Nouvelle réservation',
-    icon: CalendarPlus,
-    target: 'reservations',
-    permission: 'reservations:write',
-  },
-  {
-    label: 'Check-in walk-in',
-    icon: KeyRound,
-    target: 'checkin',
-    permission: 'checkin:write',
-  },
-  {
-    label: 'Chambres à nettoyer',
-    icon: Sparkles,
-    target: 'housekeeping',
-    permission: 'housekeeping:read',
-  },
-  {
-    label: 'Signaler une panne',
-    icon: Wrench,
-    target: 'maintenance',
-    permission: 'maintenance:write',
-  },
-];
 
 function dateDuJour() {
   return new Date().toLocaleDateString('fr-FR', {
@@ -90,15 +61,22 @@ function dateDuJour() {
   });
 }
 
-// Vue d'ensemble opérationnelle (DESIGN-002 — premier écran migré vers le
-// Makarim Design System 2026, direction B « Modern Operations »). Toutes les
-// valeurs proviennent de GET /dashboard/resume : aucun indicateur calculé,
-// dérivé ou inventé côté client. RevPAR/ADR ne sont volontairement PAS
-// affichés — aucun endpoint ne les expose aujourd'hui.
+// Vue d'ensemble opérationnelle — DESIGN-005 (intégration du Prototype D3
+// validé par le propriétaire produit, ce lot transplante sa composition
+// dans les composants réels : header compact, Accès rapides, KPI, grille
+// opérationnelle Chambres/À traiter/Aujourd'hui, prévision). Toutes les
+// valeurs proviennent des mêmes endpoints REAL déjà utilisés par l'écran
+// précédent (GET /dashboard/resume, GET /rooms, GET /maintenance-tickets,
+// GET /reservations/arrivees-du-jour, GET /stays/departs-du-jour, GET
+// /reporting/yield-forecast) : aucun indicateur inventé, aucune nouvelle
+// route. RevPAR/ADR restent volontairement absents — aucun endpoint ne les
+// expose.
 export function DashboardPage({ onNavigate, permissions }: Props) {
   const [resume, setResume] = useState<DashboardResume | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [rooms, setRooms] = useState<Room[] | null>(null);
+  const [tickets, setTickets] = useState<MaintenanceTicket[] | null>(null);
 
   const refetch = useCallback(async () => {
     setLoading(true);
@@ -118,55 +96,78 @@ export function DashboardPage({ onNavigate, permissions }: Props) {
 
   const can = (permission: string) =>
     permissions?.includes(permission) ?? false;
-  const quickActions = QUICK_ACTIONS.filter(({ permission }) =>
-    can(permission),
-  );
+
+  // Chambres/tickets : sections non critiques (RoomsStateGrid/ATraiterPanel/
+  // badges Accès rapides), échec silencieux comme les anciens widgets
+  // qu'elles remplacent — jamais de bannière d'erreur pour ces deux appels,
+  // seule la section correspondante reste simplement non affichée.
+  useEffect(() => {
+    if (!can('housekeeping:read')) return;
+
+    listRooms()
+      .then(setRooms)
+      .catch(() => setRooms(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permissions]);
+
+  useEffect(() => {
+    if (!can('maintenance:read')) return;
+
+    listTickets({ ouvert: true })
+      .then(setTickets)
+      .catch(() => setTickets(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permissions]);
+
+  const urgentTickets = tickets?.filter((t) => t.priorite === 'URGENTE') ?? [];
 
   return (
     <div className="flex h-full flex-col gap-4 p-4 sm:p-6">
-      {/* Zone supérieure — titre + contexte de la journée + rafraîchissement. */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
+      {/* Header compact — une ligne (mission D3 §1), titre + contexte de
+          la journée + alerte urgente + rafraîchissement. Les notifications
+          réelles et le titre de page vivent déjà dans AppTopbar
+          (NotificationCenter, déjà réel/fonctionnel) : pas de doublon ici. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1">
           <p className="text-muted-foreground text-[11px] font-bold tracking-[0.03em] uppercase">
             Vue opérationnelle
           </p>
           <h1 className="truncate text-xl font-extrabold tracking-[-0.01em]">
             Dashboard
           </h1>
-          <p className="text-muted-foreground mt-0.5 text-xs first-letter:uppercase">
-            {dateDuJour()}
+          <p className="text-muted-foreground text-xs first-letter:uppercase">
+            · {dateDuJour()}
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          className="min-h-11 shrink-0 sm:min-h-8"
-          onClick={() => void refetch()}
-          disabled={loading}
-          aria-label="Actualiser les indicateurs"
-        >
-          <RefreshCw className={cn(loading && 'animate-spin')} />
-          Actualiser
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          {urgentTickets.length > 0 && (
+            <Badge variant="destructive" className="gap-1">
+              <AlertTriangle className="size-3" />
+              {urgentTickets.length} urgent
+              {urgentTickets.length > 1 ? 's' : ''}
+            </Badge>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 shrink-0 sm:min-h-8"
+            onClick={() => void refetch()}
+            disabled={loading}
+            aria-label="Actualiser les indicateurs"
+          >
+            <RefreshCw className={cn(loading && 'animate-spin')} />
+            Actualiser
+          </Button>
+        </div>
       </div>
 
-      {quickActions.length > 0 && (
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-          {quickActions.map(({ label, icon: Icon, target }) => (
-            <Button
-              key={target}
-              id={`quick-action-${target}`}
-              type="button"
-              variant="secondary"
-              className="min-h-11 w-full justify-start sm:w-auto"
-              onClick={() => onNavigate(target)}
-            >
-              <Icon />
-              {label}
-            </Button>
-          ))}
-        </div>
-      )}
+      {/* Accès rapides — mission D3 §2/§3 : élément majeur, immédiatement
+          sous le header, avant les KPI. */}
+      <QuickAccessModules
+        permissions={permissions}
+        resume={resume}
+        onNavigate={onNavigate}
+      />
 
       {loading && (
         <div
@@ -187,223 +188,107 @@ export function DashboardPage({ onNavigate, permissions }: Props) {
       )}
 
       {resume && !loading && (
-        <>
-          {/* §4 — 6 colonnes desktop / 3 tablette / 2 mobile. */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-            <KpiCard
-              label="Taux d'occupation"
-              value={`${resume.tauxOccupation}%`}
-              // Définition explicite : dénominateur = TOUTES les chambres.
-              // Différent du taux net de la prévision plus bas, qui exclut
-              // les chambres en maintenance (docs/modules/reporting.md §12).
-              hint={`Sur les ${resume.totalChambres} chambres, maintenance incluse`}
-              icon={Gauge}
-              tone="primary"
-              progress={resume.tauxOccupation}
-              onClick={
-                can('housekeeping:read')
-                  ? () => onNavigate('housekeeping')
-                  : undefined
-              }
-            />
-            <KpiCard
-              label="Chambres occupées"
-              value={`${resume.chambresOccupees} / ${resume.totalChambres}`}
-              hint="Chambres actuellement occupées"
-              icon={BedDouble}
-              onClick={
-                can('housekeeping:read')
-                  ? () => onNavigate('housekeeping')
-                  : undefined
-              }
-            />
-            <KpiCard
-              label="Arrivées aujourd'hui"
-              value={String(resume.arriveesAujourdhui)}
-              hint="Check-in prévus"
-              icon={LogIn}
-              tone={resume.arriveesAujourdhui > 0 ? 'success' : 'neutral'}
-              onClick={
-                can('checkin:read') ? () => onNavigate('checkin') : undefined
-              }
-            />
-            <KpiCard
-              label="Départs aujourd'hui"
-              value={String(resume.departsAujourdhui)}
-              hint="Check-out prévus"
-              icon={LogOut}
-              tone={resume.departsAujourdhui > 0 ? 'warning' : 'neutral'}
-              onClick={
-                can('checkin:read') ? () => onNavigate('checkin') : undefined
-              }
-            />
-            <KpiCard
-              label="Chambres à nettoyer"
-              value={String(resume.chambresANettoyer)}
-              hint="En attente de nettoyage"
-              icon={Sparkles}
-              tone={resume.chambresANettoyer > 0 ? 'warning' : 'neutral'}
-              onClick={
-                can('housekeeping:read')
-                  ? () => onNavigate('housekeeping')
-                  : undefined
-              }
-            />
-            <KpiCard
-              label="Encaissé aujourd'hui"
-              // §1.4 / §8 — tout montant MAD en font-mono tabular-nums,
-              // jamais animé (§7 : pas de count-up financier).
-              value={
-                // 19px (au lieu des 26px d'une valeur KPI nue) +
-                // whitespace-nowrap : mesuré en navigateur, à 768px la
-                // carte fait 168px de large et « 3100.00 MAD » passait à la
-                // ligne en 22px — un montant coupé en deux se lit mal.
-                <MoneyDisplay
-                  value={resume.encaisseAujourdhui}
-                  className="text-[19px] whitespace-nowrap"
-                />
-              }
-              hint="Paiements du jour"
-              icon={Banknote}
-            />
-          </div>
-
-          {/* Zone « À traiter aujourd'hui » — mêmes chiffres réels, mais
-              orientés action plutôt qu'orientés mesure. Aucune donnée
-              supplémentaire n'est demandée au backend. */}
-          <section aria-labelledby="dashboard-a-traiter" className="contents">
-            <SectionHeader
-              id="dashboard-a-traiter"
-              title="À traiter aujourd'hui"
-              description="Charge opérationnelle du jour, d'après les indicateurs ci-dessus."
-              className="mt-1"
-            />
-            <div className="grid gap-3 sm:grid-cols-3">
-              <TodoTile
-                label="Arrivées à enregistrer"
-                count={resume.arriveesAujourdhui}
-                icon={LogIn}
-                tone="success"
-                emptyLabel="Aucune arrivée attendue"
-                actionLabel="Ouvrir Check-in & séjours"
-                onAction={
-                  can('checkin:read') ? () => onNavigate('checkin') : undefined
-                }
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <KpiCard
+            label="Taux d'occupation"
+            value={`${resume.tauxOccupation}%`}
+            // Définition explicite : dénominateur = TOUTES les chambres.
+            // Différent du taux net de la prévision plus bas, qui exclut
+            // les chambres en maintenance (docs/modules/reporting.md §12).
+            hint={`Sur les ${resume.totalChambres} chambres, maintenance incluse`}
+            icon={Gauge}
+            tone="primary"
+            progress={resume.tauxOccupation}
+            onClick={
+              can('housekeeping:read')
+                ? () => onNavigate('housekeeping')
+                : undefined
+            }
+          />
+          <KpiCard
+            label="Chambres occupées"
+            value={`${resume.chambresOccupees} / ${resume.totalChambres}`}
+            hint="Chambres actuellement occupées"
+            icon={BedDouble}
+            onClick={
+              can('housekeeping:read')
+                ? () => onNavigate('housekeeping')
+                : undefined
+            }
+          />
+          <KpiCard
+            label="Arrivées aujourd'hui"
+            value={String(resume.arriveesAujourdhui)}
+            hint="Check-in prévus"
+            icon={LogIn}
+            tone={resume.arriveesAujourdhui > 0 ? 'success' : 'neutral'}
+            onClick={
+              can('checkin:read') ? () => onNavigate('checkin') : undefined
+            }
+          />
+          <KpiCard
+            label="Départs aujourd'hui"
+            value={String(resume.departsAujourdhui)}
+            hint="Check-out prévus"
+            icon={LogOut}
+            tone={resume.departsAujourdhui > 0 ? 'warning' : 'neutral'}
+            onClick={
+              can('checkin:read') ? () => onNavigate('checkin') : undefined
+            }
+          />
+          <KpiCard
+            label="Chambres à nettoyer"
+            value={String(resume.chambresANettoyer)}
+            hint="En attente de nettoyage"
+            icon={Sparkles}
+            tone={resume.chambresANettoyer > 0 ? 'warning' : 'neutral'}
+            onClick={
+              can('housekeeping:read')
+                ? () => onNavigate('housekeeping')
+                : undefined
+            }
+          />
+          <KpiCard
+            label="Encaissé aujourd'hui"
+            // §1.4 / §8 — tout montant MAD en font-mono tabular-nums,
+            // jamais animé (§7 : pas de count-up financier).
+            value={
+              <MoneyDisplay
+                value={resume.encaisseAujourdhui}
+                className="text-[19px] whitespace-nowrap"
               />
-              <TodoTile
-                label="Départs à traiter"
-                count={resume.departsAujourdhui}
-                icon={LogOut}
-                tone="warning"
-                emptyLabel="Aucun départ prévu"
-                actionLabel="Ouvrir Check-in & séjours"
-                onAction={
-                  can('checkin:read') ? () => onNavigate('checkin') : undefined
-                }
-              />
-              <TodoTile
-                label="Ménage en attente"
-                count={resume.chambresANettoyer}
-                icon={Sparkles}
-                tone="primary"
-                emptyLabel="Toutes les chambres sont traitées"
-                actionLabel="Ouvrir Housekeeping"
-                onAction={
-                  can('housekeeping:read')
-                    ? () => onNavigate('housekeeping')
-                    : undefined
-                }
-              />
-            </div>
-          </section>
-        </>
+            }
+            hint="Paiements du jour"
+            icon={Banknote}
+          />
+        </div>
       )}
+
+      {/* Zone opérationnelle — mission D3 §4 : Chambres (dominant) | À
+          traiter | Aujourd'hui, sur une même bande desktop. */}
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[2fr_1fr_1fr]">
+        {can('housekeeping:read') && (
+          <RoomsStateGrid
+            rooms={rooms}
+            onNavigate={() => onNavigate('housekeeping')}
+          />
+        )}
+        {(can('housekeeping:read') || can('maintenance:read')) && (
+          <ATraiterPanel
+            rooms={can('housekeeping:read') ? rooms : null}
+            tickets={can('maintenance:read') ? tickets : null}
+          />
+        )}
+        <TodayPanel
+          canRead={can('checkin:read')}
+          onNavigate={() => onNavigate('checkin')}
+        />
+      </div>
 
       {can('reporting:read') && (
-        <Suspense fallback={<Skeleton className="h-[280px] w-full" />}>
-          <OccupancyForecastCard />
+        <Suspense fallback={<Skeleton className="h-[130px] w-full" />}>
+          <OperationalForecastStrip />
         </Suspense>
-      )}
-
-      <div className="grid gap-3 lg:grid-cols-2">
-        {can('housekeeping:read') && (
-          <RoomsToCleanWidget onNavigate={() => onNavigate('housekeeping')} />
-        )}
-        {can('maintenance:read') && (
-          <OpenMaintenanceWidget onNavigate={() => onNavigate('maintenance')} />
-        )}
-      </div>
-    </div>
-  );
-}
-
-const TILE_TONE: Record<string, string> = {
-  success: 'border-success/30',
-  warning: 'border-warning/30',
-  primary: 'border-primary/30',
-};
-
-const TILE_ICON_TONE: Record<string, string> = {
-  success: 'bg-success-soft text-success',
-  warning: 'bg-warning-soft text-warning',
-  primary: 'bg-primary-soft text-primary',
-};
-
-// Tuile d'action : le compteur reste la donnée réelle du résumé ; l'état
-// « rien à faire » est explicitement écrit (§8 — jamais un simple 0 gris
-// dont le sens dépendrait de la couleur seule).
-function TodoTile({
-  label,
-  count,
-  icon: Icon,
-  tone,
-  emptyLabel,
-  actionLabel,
-  onAction,
-}: {
-  label: string;
-  count: number;
-  icon: LucideIcon;
-  tone: 'success' | 'warning' | 'primary';
-  emptyLabel: string;
-  actionLabel: string;
-  onAction?: () => void;
-}) {
-  const vide = count === 0;
-  return (
-    <div
-      className={cn(
-        'flex flex-col gap-2 rounded-lg border p-[var(--card-padding)]',
-        'bg-card',
-        vide ? 'border-border' : TILE_TONE[tone],
-      )}
-    >
-      <div className="flex items-center gap-2">
-        <span
-          aria-hidden="true"
-          className={cn(
-            'flex size-7 shrink-0 items-center justify-center rounded-md',
-            vide ? 'bg-surface-2 text-muted-foreground' : TILE_ICON_TONE[tone],
-          )}
-        >
-          <Icon className="size-4" />
-        </span>
-        <p className="text-sm font-semibold">{label}</p>
-      </div>
-      <p className="text-2xl leading-7 font-extrabold tabular-nums">{count}</p>
-      <p className="text-muted-foreground text-xs">
-        {vide ? emptyLabel : `${count} à traiter`}
-      </p>
-      {onAction && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="min-h-11 self-start px-0 hover:bg-transparent hover:underline sm:min-h-8"
-          onClick={onAction}
-        >
-          {actionLabel}
-        </Button>
       )}
     </div>
   );
