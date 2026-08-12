@@ -30,6 +30,7 @@ describe('Housekeeping — machine à états complète (e2e)', () => {
   let prisma: PrismaService;
   let client: ReturnType<typeof authedRequest>;
   let roomTypeId: number;
+  let receptionUserId: number;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -46,6 +47,12 @@ describe('Housekeeping — machine à états complète (e2e)', () => {
     prisma = app.get(PrismaService);
     const token = await loginAs(app.getHttpServer(), 'admin');
     client = authedRequest(app.getHttpServer(), token);
+    receptionUserId = (
+      await prisma.user.findUniqueOrThrow({
+        where: { email: 'reception@makarim.test' },
+        select: { id: true },
+      })
+    ).id;
 
     const roomType = await prisma.roomType.create({
       data: {
@@ -68,6 +75,16 @@ describe('Housekeeping — machine à états complète (e2e)', () => {
     await prisma.roomNight.deleteMany({ where: { room: { roomTypeId } } });
     await prisma.stay.deleteMany({ where: { room: { roomTypeId } } });
     await prisma.reservation.deleteMany({ where: { room: { roomTypeId } } });
+    await prisma.stockMovement.deleteMany({
+      where: {
+        housekeepingStockConsumption: {
+          housekeepingTask: { room: { roomTypeId } },
+        },
+      },
+    });
+    await prisma.housekeepingStockConsumption.deleteMany({
+      where: { housekeepingTask: { room: { roomTypeId } } },
+    });
     await prisma.housekeepingTaskLog.deleteMany({
       where: { task: { room: { roomTypeId } } },
     });
@@ -210,7 +227,13 @@ describe('Housekeeping — machine à états complète (e2e)', () => {
     expect(persisted.origine).toBe('CHECKOUT');
   });
 
-  it('déroule le cycle de nettoyage manuel complet : À nettoyer → En nettoyage → Libre&propre', async () => {
+  // B0.4A (DESIGN-004B, confinement legacy) — le cycle À nettoyer → En
+  // nettoyage → Libre&propre ne passe plus par un PATCH manuel répété :
+  // EN_NETTOYAGE et LIBRE_PROPRE ont été retirés de MANUAL_TARGETS.
+  // A_NETTOYER reste le seul déclencheur manuel légitime (signalement), le
+  // reste du cycle passe exclusivement par HousekeepingTaskService
+  // (start/complete/validate) — seul chemin restant vers LIBRE_PROPRE.
+  it('rejette EN_NETTOYAGE et LIBRE_PROPRE via PATCH manuel ; seul HousekeepingTask mène à Libre&propre', async () => {
     const roomId = await createRoom();
 
     const toDirty = await client
@@ -218,17 +241,60 @@ describe('Housekeeping — machine à états complète (e2e)', () => {
       .send({ statut: 'A_NETTOYER' });
     expect(toDirty.status).toBe(200);
 
-    const toCleaning = await client
+    const toCleaningRejected = await client
       .patch(`/api/rooms/${roomId}/statut`)
       .send({ statut: 'EN_NETTOYAGE' });
-    expect(toCleaning.status).toBe(200);
-    expect((toCleaning.body as RoomResponse).statut).toBe('EN_NETTOYAGE');
+    expect(toCleaningRejected.status).toBe(400);
 
-    const toClean = await client
+    const toCleanRejected = await client
       .patch(`/api/rooms/${roomId}/statut`)
       .send({ statut: 'LIBRE_PROPRE' });
-    expect(toClean.status).toBe(200);
-    expect((toClean.body as RoomResponse).statut).toBe('LIBRE_PROPRE');
+    expect(toCleanRejected.status).toBe(400);
+
+    // La chambre reste A_NETTOYER : les deux tentatives ont bien été
+    // rejetées avant toute écriture.
+    const stillDirty = await prisma.room.findUniqueOrThrow({
+      where: { id: roomId },
+    });
+    expect(stillDirty.statut).toBe('A_NETTOYER');
+
+    // Seul chemin restant vers Libre&propre : HousekeepingTask complet.
+    const task = await client
+      .post('/api/housekeeping/tasks')
+      .send({ roomId, motif: 'Tâche de test B0.4A (état machine)' });
+    expect(task.status).toBe(201);
+    const taskId = (task.body as { id: number }).id;
+
+    // Assignation à Réception avant démarrage : start() exige task.statut
+    // === AFFECTEE, quel que soit l'acteur (même housekeeping:control ne
+    // dispense pas de cette assignation) — puis admin exécute le reste via
+    // control, distinct de l'assigné pour ne pas heurter l'interdiction
+    // d'auto-validation.
+    const assign = await client
+      .patch(`/api/housekeeping/tasks/${taskId}/assignment`)
+      .send({ assignedUserId: receptionUserId });
+    expect(assign.status).toBe(200);
+
+    const start = await client.post(`/api/housekeeping/tasks/${taskId}/start`);
+    expect(start.status).toBe(201);
+    expect(
+      (await prisma.room.findUniqueOrThrow({ where: { id: roomId } })).statut,
+    ).toBe('EN_NETTOYAGE');
+
+    const complete = await client.post(
+      `/api/housekeeping/tasks/${taskId}/complete`,
+    );
+    expect(complete.status).toBe(201);
+
+    const validate = await client
+      .post(`/api/housekeeping/tasks/${taskId}/validate`)
+      .send({ motif: 'Contrôle admin (test B0.4A état machine)' });
+    expect(validate.status).toBe(201);
+
+    const toClean = await prisma.room.findUniqueOrThrow({
+      where: { id: roomId },
+    });
+    expect(toClean.statut).toBe('LIBRE_PROPRE');
   });
 
   it(

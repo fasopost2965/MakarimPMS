@@ -732,7 +732,13 @@ describe('Stock — inventaire et déstockage automatique (e2e)', () => {
       expect(mouvementSavon!.userId).toBeNull();
     });
 
-    it('le changement legacy de statut Room ne déclenche plus Stock', async () => {
+    // B0.4A (DESIGN-004B, confinement legacy) — EN_NETTOYAGE et LIBRE_PROPRE
+    // ont été retirés de MANUAL_TARGETS : les deux PATCH échouent désormais
+    // en 400 avant même d'atteindre la logique de transition. L'invariant
+    // vérifié par ce test (le chemin legacy ne déclenche jamais Stock) reste
+    // vrai, à un niveau encore plus strict qu'avant B0.4A (impossible plutôt
+    // que simplement sans effet).
+    it('le changement legacy de statut Room reste bloqué et ne déclenche jamais Stock', async () => {
       const roomId = await createRoomANettoyer();
       expect(
         (
@@ -740,14 +746,14 @@ describe('Stock — inventaire et déstockage automatique (e2e)', () => {
             .patch(`/api/rooms/${roomId}/statut`)
             .send({ statut: 'EN_NETTOYAGE' })
         ).status,
-      ).toBe(200);
+      ).toBe(400);
       expect(
         (
           await gouvernanteClient
             .patch(`/api/rooms/${roomId}/statut`)
             .send({ statut: 'LIBRE_PROPRE' })
         ).status,
-      ).toBe(200);
+      ).toBe(400);
       expect(
         await prisma.stockMovement.count({
           where: { roomId, typeMouvement: 'SORTIE' },

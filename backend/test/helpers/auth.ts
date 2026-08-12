@@ -57,6 +57,29 @@ export async function loginAs(
   );
 }
 
+// B0.4A — connecte un utilisateur de seed via le login mobile à portée
+// réduite (F9, scope "mobile-housekeeping"). Contrairement à loginAs(),
+// AuthService.loginMobile() renvoie l'accessToken directement dans le corps
+// JSON (pas de cookie httpOnly — voir mobile-api.ts frontend, "sans refresh
+// token").
+export async function loginMobileAs(
+  server: App,
+  role: keyof typeof SEED_USERS,
+): Promise<string> {
+  const res = await request(server)
+    .post('/api/mobile/housekeeping/login')
+    .send({
+      email: SEED_USERS[role],
+      motDePasse: SEED_PASSWORD,
+    });
+  if (res.status !== 201 && res.status !== 200) {
+    throw new Error(
+      `Échec de connexion mobile du compte de seed "${role}" (statut ${res.status}) : ${JSON.stringify(res.body)}`,
+    );
+  }
+  return (res.body as { accessToken: string }).accessToken;
+}
+
 // Wrapper supertest qui attache automatiquement l'en-tête Authorization —
 // évite de répéter .set('Authorization', ...) sur chaque appel dans les
 // suites de tests.
