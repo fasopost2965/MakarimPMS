@@ -47,6 +47,31 @@ export const mockRooms: MockRoom[] = [
   { id: 4, numero: '212', etage: 2, statut: 'EN_MAINTENANCE' },
 ];
 
+// Liste déterministe des `mockResume.totalChambres` (24) chambres —
+// utilisée par le Prototype D pour que la grille "État des chambres" et les
+// KPI dérivés (ex. "Chambres propres libres") restent mutuellement
+// cohérents (mêmes chiffres partout), plutôt que deux approximations
+// indépendantes. Les 4 premières reprennent `mockRooms` ci-dessus tel
+// quel ; le reste complète jusqu'à `chambresOccupees` occupées et le solde
+// en LIBRE_PROPRE — cohérent avec `mockResume` (DERIVED, pas une nouvelle
+// donnée).
+export const mockAllRooms: MockRoom[] = (() => {
+  const rooms = [...mockRooms];
+  const occupiedAlready = rooms.filter((r) => r.statut === 'OCCUPEE').length;
+  let occupiedRemaining = mockResume.chambresOccupees - occupiedAlready;
+  for (let i = rooms.length; i < mockResume.totalChambres; i++) {
+    const numero = String(100 + i + 1);
+    const etage = Math.floor(i / 8) + 1;
+    if (occupiedRemaining > 0) {
+      rooms.push({ id: i + 1, numero, etage, statut: 'OCCUPEE' });
+      occupiedRemaining--;
+    } else {
+      rooms.push({ id: i + 1, numero, etage, statut: 'LIBRE_PROPRE' });
+    }
+  }
+  return rooms;
+})();
+
 // ---------------------------------------------------------------------------
 // Miroir partiel de MaintenanceTicket (GET /maintenance-tickets) — REAL
 // (déjà utilisé par OpenMaintenanceWidget).

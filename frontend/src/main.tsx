@@ -11,6 +11,7 @@ import {
   PrototypeA,
   PrototypeB,
   PrototypeC,
+  PrototypeD,
 } from './design-prototypes/lazy.tsx';
 
 // Handoff design final, lot 4 (HousekeepingMobile.dc.html/MaintenanceMobile.dc.html)
@@ -43,6 +44,12 @@ function renderRoot() {
     return (
       <Suspense fallback={null}>
         <PrototypeC />
+      </Suspense>
+    );
+  if (pathname.startsWith('/design-preview/d'))
+    return (
+      <Suspense fallback={null}>
+        <PrototypeD />
       </Suspense>
     );
   return <App />;
