@@ -18,3 +18,6 @@ export const PrototypeD = lazy(() =>
 export const PrototypeD2 = lazy(() =>
   import('./PrototypeD2.tsx').then((m) => ({ default: m.PrototypeD2 })),
 );
+export const PrototypeD3 = lazy(() =>
+  import('./PrototypeD3.tsx').then((m) => ({ default: m.PrototypeD3 })),
+);
