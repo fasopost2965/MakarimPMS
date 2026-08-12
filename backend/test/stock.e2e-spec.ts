@@ -467,13 +467,15 @@ describe('Stock — inventaire et déstockage automatique (e2e)', () => {
       const seamTarget = stock as unknown as {
         processHousekeepingConsumption: (id: number) => Promise<void>;
       };
-      const original = seamTarget.processHousekeepingConsumption.bind(stock);
+      const originalMethod = seamTarget.processHousekeepingConsumption;
       const seam = jest
         .spyOn(seamTarget, 'processHousekeepingConsumption')
-        .mockImplementationOnce((id) => original(id))
-        .mockImplementationOnce(async () => {
-          throw new Error('TEST_INTERRUPTION_BEFORE_SECOND_ARTICLE');
-        });
+        .mockImplementationOnce(async (id: number): Promise<void> => {
+          await originalMethod.call(seamTarget, id);
+        })
+        .mockImplementationOnce(() =>
+          Promise.reject(new Error('TEST_INTERRUPTION_BEFORE_SECOND_ARTICLE')),
+        );
       await expect(stock.processHousekeepingCycle(task.id, 1)).rejects.toThrow(
         'TEST_INTERRUPTION_BEFORE_SECOND_ARTICLE',
       );
