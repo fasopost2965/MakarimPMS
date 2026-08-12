@@ -42,6 +42,28 @@ export class HousekeepingService {
   // seul appelant à le passer aujourd'hui, mais c'est le même chemin
   // d'écriture unique que le PATCH desktop (HousekeepingController), jamais
   // un second point d'écriture pour Room.statut (CLAUDE.md).
+  //
+  // B0.4A (confinement legacy, DESIGN-004B) : deux DTO distincts appellent
+  // cette même méthode partagée avec des cibles différentes (voir
+  // utils/manual-status-targets.ts) — UpdateRoomStatusDto (desktop) ne
+  // laisse plus passer que A_NETTOYER (@IsIn), tandis que
+  // MobileRoomStatusUpdateDto (F9, app mobile pas encore migrée) conserve
+  // volontairement les 4 valeurs historiques pendant la fenêtre de rollout.
+  // statut peut donc encore valoir LIBRE_PROPRE/EN_MAINTENANCE/EN_NETTOYAGE
+  // ici lorsque l'appelant est mobile.
+  //
+  // Le garde-fou ci-dessous (activeRoomKey) s'applique volontairement aux
+  // DEUX chemins, sans distinction desktop/mobile : ce n'est pas une
+  // restriction de confinement de cibles (qui, elle, reste différenciée par
+  // DTO ci-dessus), mais un invariant de sécurité déjà démontré en
+  // DESIGN-004B (Finding 1) — sans lui, un PATCH manuel (desktop ou mobile)
+  // peut orpheliner une HousekeepingTask déjà active sur la chambre, et le
+  // prochain check-out échoue alors en 409 sur cette tâche fantôme (voir
+  // HousekeepingTaskService.createOrReuseCheckoutTask). Préserver le
+  // comportement historique du mobile porte sur les *valeurs de cible*
+  // acceptées par le DTO, pas sur la réintroduction d'un bug de
+  // corruption de données déjà prouvé — ce garde-fou reste donc actif pour
+  // le mobile legacy pendant toute la fenêtre de rollout B0.4A.
   async updateStatus(
     id: number,
     statut: StatutChambre,
@@ -57,6 +79,16 @@ export class HousekeepingService {
       ) {
         throw new ConflictException(
           'Chambre occupée ou en départ prévu : le statut ne peut être changé que via le check-out (module checkin).',
+        );
+      }
+
+      const activeTask = await tx.housekeepingTask.findUnique({
+        where: { activeRoomKey: id },
+        select: { id: true },
+      });
+      if (activeTask) {
+        throw new ConflictException(
+          `La chambre ${id} a déjà une tâche de ménage active (ID ${activeTask.id}) — utiliser le workflow HousekeepingTask plutôt qu'un changement manuel.`,
         );
       }
 

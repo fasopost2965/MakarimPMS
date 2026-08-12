@@ -541,6 +541,16 @@ async function main() {
   permissions['housekeeping:control'] = await prisma.permission.create({
     data: { module: 'housekeeping', action: 'control' },
   });
+  // B0.4A (DESIGN-004B, Finding 2) — signalement d'un incident terrain
+  // (POST /mobile/housekeeping/incidents) qui délègue à
+  // MaintenanceService.createTicket(). Action dédiée distincte de
+  // maintenance:write : le terrain doit pouvoir créer un vrai
+  // MaintenanceTicket sans obtenir l'ensemble des droits Maintenance
+  // (classification, résolution), même famille que guests:blacklist/
+  // checkin:force-checkout/housekeeping:control.
+  permissions['housekeeping:report-incident'] = await prisma.permission.create(
+    { data: { module: 'housekeeping', action: 'report-incident' } },
+  );
   // GL-002 — changement de chambre pendant un séjour (StayService.changeRoom) :
   // Administrateur + Réception, jamais déduit du nom de rôle (même pattern que
   // guests:blacklist/payments:refund/checkin:force-checkout).
@@ -608,6 +618,11 @@ async function main() {
         'housekeeping:read',
         'housekeeping:write',
         'housekeeping:control',
+        // B0.4A — signaler un incident terrain depuis l'app mobile crée un
+        // vrai MaintenanceTicket (jamais maintenance:write : la Gouvernante
+        // ne classifie/résout toujours pas les tickets, seul le rôle
+        // Maintenance le peut).
+        'housekeeping:report-incident',
         'maintenance:read',
         // stock:read/write (RBAC_MATRIX.md §3, Sprint 12) — seule la
         // Gouvernante gère les consommables ménagers en plus de

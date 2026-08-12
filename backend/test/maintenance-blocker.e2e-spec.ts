@@ -381,10 +381,15 @@ describe('B0.2 — panne Maintenance bloquant la vente (MySQL e2e)', () => {
     expect(byMaintenance.status).toBe(200);
     expect((byMaintenance.body as TicketResponse).bloqueVente).toBe(true);
 
+    // B0.4A (DESIGN-004B, confinement legacy) — LIBRE_PROPRE a été retiré de
+    // MANUAL_TARGETS : la tentative échoue désormais en 400 (rejet DTO,
+    // avant même d'atteindre assertNoActiveSalesBlocker), pas en 409. La
+    // garantie sous-jacente (aucune remise en vente manuelle possible tant
+    // qu'un ticket bloque) reste vérifiée, à un niveau plus strict encore.
     const manualRelease = await gouvernanteClient
       .patch(`/api/rooms/${room.id}/statut`)
       .send({ statut: StatutChambre.LIBRE_PROPRE });
-    expect(manualRelease.status).toBe(409);
+    expect(manualRelease.status).toBe(400);
 
     const byReception = await receptionClient
       .patch(`/api/maintenance-tickets/${ticketId}/classification`)

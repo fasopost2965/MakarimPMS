@@ -1,8 +1,8 @@
 import { IsIn } from 'class-validator';
 import { StatutChambre } from '@prisma/client';
-import { MANUAL_TARGETS } from '../utils/manual-status-targets';
+import { DESKTOP_MANUAL_TARGETS } from '../utils/manual-status-targets';
 
 export class UpdateRoomStatusDto {
-  @IsIn(MANUAL_TARGETS)
+  @IsIn(DESKTOP_MANUAL_TARGETS)
   statut: StatutChambre;
 }
