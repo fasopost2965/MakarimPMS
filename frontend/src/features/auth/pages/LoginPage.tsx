@@ -78,6 +78,14 @@ export function LoginPage({
   raisonSociale,
 }: Props) {
   const [roles, setRoles] = useState<RoleActif[]>([]);
+  // Distinct de `roles.length === 0` : `roles` démarre vide AVANT que
+  // l'appel réseau ait résolu, pas seulement quand il n'y a réellement
+  // aucun rôle. Sans cette distinction, `showForm` ci-dessous bascule
+  // brièvement à `true` (aucun espace connu au tout premier rendu) puis à
+  // `false` dès que les rôles arrivent — un utilisateur assez rapide voit
+  // le formulaire apparaître puis disparaître, remplacé par l'invite. Bug
+  // réel corrigé ici (pas seulement un artefact de test e2e).
+  const [rolesLoaded, setRolesLoaded] = useState(false);
   const [selectedEspace, setSelectedEspace] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [motDePasse, setMotDePasse] = useState('');
@@ -89,6 +97,8 @@ export function LoginPage({
       setRoles(await rolesActifs());
     } catch {
       // Non bloquant : la connexion reste possible même si cet appel échoue.
+    } finally {
+      setRolesLoaded(true);
     }
   }, []);
 
@@ -120,11 +130,15 @@ export function LoginPage({
   );
 
   // Le formulaire n'apparaît qu'après sélection d'un espace — sauf si
-  // aucun espace n'est disponible (rôles pas encore chargés ou aucun ne
-  // correspond) : dans ce cas, aucune sélection n'est possible, le
-  // formulaire reste donc directement accessible plutôt que de bloquer la
-  // connexion derrière une étape impossible à franchir.
-  const showForm = selectedEspace !== null || espacesDisponibles.length === 0;
+  // aucun espace n'est disponible UNE FOIS les rôles chargés (`rolesLoaded`)
+  // : dans ce cas, aucune sélection n'est possible, le formulaire reste
+  // donc directement accessible plutôt que de bloquer la connexion derrière
+  // une étape impossible à franchir. Avant que les rôles n'aient résolu,
+  // `espacesDisponibles` est vide sans qu'on sache encore s'il le restera —
+  // le formulaire ne doit donc pas s'afficher prématurément (voir le
+  // commentaire sur `rolesLoaded` plus haut).
+  const showForm =
+    selectedEspace !== null || (rolesLoaded && espacesDisponibles.length === 0);
   const selected = espacesDisponibles.find(
     (e) => e.roleName === selectedEspace,
   );
