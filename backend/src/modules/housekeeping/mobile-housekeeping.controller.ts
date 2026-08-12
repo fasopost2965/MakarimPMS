@@ -22,6 +22,7 @@ import { HousekeepingTaskService } from './housekeeping-task.service';
 import { MaintenanceService } from '../maintenance/maintenance.service';
 import { MobileRoomStatusUpdateDto } from './dto/mobile-room-status-update.dto';
 import { MobileTaskQueryDto } from './dto/mobile-task-query.dto';
+import { MobileInspectionQueueQueryDto } from './dto/mobile-inspection-queue-query.dto';
 import { HousekeepingTaskActionDto } from './dto/housekeeping-task-action.dto';
 import { ReportIncidentDto } from './dto/report-incident.dto';
 import { toMobileRoomSummary } from './utils/mobile-room.mapper';
@@ -114,6 +115,33 @@ export class MobileHousekeepingController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.taskService.findAll({ ...query, assignedUserId: user.sub });
+  }
+
+  // B0.4B suite (Supervisor Inspection Queue Fix, DESIGN-004B) — GET
+  // tasks/mine force assignedUserId au user connecté (voir plus haut) :
+  // une Gouvernante non assignée à une tâche TERMINEE ne pouvait donc pas la
+  // voir ni la valider/refuser depuis mobile. Cet endpoint comble ce vide
+  // sans dupliquer de logique : délègue à HousekeepingTaskService.findAll()
+  // en forçant systématiquement statut=TERMINEE et active=true côté
+  // serveur — jamais un filtre choisi par le client (aucun champ statut ni
+  // active ni assignedUserId dans MobileInspectionQueueQueryDto,
+  // forbidNonWhitelisted global rejetterait sinon la tentative en 400).
+  // housekeeping:control (Gouvernante uniquement, même permission que
+  // validate/refuse ci-dessous) — un compte sans cette permission reçoit
+  // 403, PermissionsGuard vérifié à chaque appel.
+  @RequirePermission('housekeeping', 'control')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'File des tâches terminées en attente de contrôle, tous agents confondus (Gouvernante)',
+  })
+  @Get('tasks/to-inspect')
+  findTasksToInspect(@Query() query: MobileInspectionQueueQueryDto) {
+    return this.taskService.findAll({
+      ...query,
+      statut: 'TERMINEE' as const,
+      active: true,
+    });
   }
 
   @RequirePermission('housekeeping', 'write')

@@ -377,6 +377,128 @@ describe('Mobile Housekeeping — endpoints additifs B0.4A (e2e)', () => {
     });
   });
 
+  // B0.4B suite (Supervisor Inspection Queue Fix, DESIGN-004B) — ferme le
+  // trou identifié en revue B0.4B : GET tasks/mine étant strictement
+  // personnel (assignedUserId=user.sub forcé), une Gouvernante ne pouvait
+  // voir/valider aucune tâche TERMINEE qui ne lui était pas assignée à
+  // elle-même. GET tasks/to-inspect comble ce vide sans filtre par
+  // utilisateur, réservé à housekeeping:control.
+  describe('GET /mobile/housekeeping/tasks/to-inspect — file de contrôle tous agents (Supervisor Inspection Queue Fix)', () => {
+    async function bringTaskToTerminee(roomId: number): Promise<number> {
+      const taskId = await createAndAssignTask(roomId);
+      const start = await receptionMobile.post(
+        `/api/mobile/housekeeping/tasks/${taskId}/start`,
+      );
+      expect(start.status).toBe(201);
+      const complete = await receptionMobile.post(
+        `/api/mobile/housekeeping/tasks/${taskId}/complete`,
+      );
+      expect(complete.status).toBe(201);
+      return taskId;
+    }
+
+    it('expose à la Gouvernante une tâche TERMINEE assignée à un autre agent (Réception)', async () => {
+      const roomId = await createRoom();
+      try {
+        const taskId = await bringTaskToTerminee(roomId);
+
+        const toInspect = await gouvMobile.get(
+          '/api/mobile/housekeeping/tasks/to-inspect',
+        );
+        expect(toInspect.status).toBe(200);
+        const items = (toInspect.body as PaginatedTasks).data;
+        const found = items.find((t) => t.id === taskId);
+        expect(found).toBeDefined();
+        expect(found?.assignedUserId).toBe(receptionUserId);
+        expect(found?.statut).toBe('TERMINEE');
+
+        // tasks/mine reste strictement personnel : la Gouvernante (non
+        // assignée) ne le voit pas dans SA propre liste "mine".
+        const gouvMine = await gouvMobile.get(
+          '/api/mobile/housekeeping/tasks/mine',
+        );
+        expect(
+          (gouvMine.body as PaginatedTasks).data.some((t) => t.id === taskId),
+        ).toBe(false);
+      } finally {
+        await cleanupRoom(roomId);
+      }
+    });
+
+    it('refuse en 403 un agent standard (Réception) sans housekeeping:control', async () => {
+      const res = await receptionMobile.get(
+        '/api/mobile/housekeeping/tasks/to-inspect',
+      );
+      expect(res.status).toBe(403);
+    });
+
+    it('permet à la Gouvernante de valider depuis mobile une tâche découverte via to-inspect, non assignée à elle', async () => {
+      const roomId = await createRoom();
+      try {
+        const taskId = await bringTaskToTerminee(roomId);
+
+        const toInspect = await gouvMobile.get(
+          '/api/mobile/housekeeping/tasks/to-inspect',
+        );
+        expect(
+          (toInspect.body as PaginatedTasks).data.some((t) => t.id === taskId),
+        ).toBe(true);
+
+        const validate = await gouvMobile
+          .post(`/api/mobile/housekeeping/tasks/${taskId}/validate`)
+          .send({ motif: 'Contrôle depuis la file inspection (test)' });
+        expect(validate.status).toBe(201);
+        expect((validate.body as TaskResponse).statut).toBe('VALIDEE');
+
+        const room = await prisma.room.findUniqueOrThrow({
+          where: { id: roomId },
+        });
+        expect(room.statut).toBe('LIBRE_PROPRE');
+      } finally {
+        await cleanupRoom(roomId);
+      }
+    });
+
+    it('permet à la Gouvernante de refuser depuis mobile une tâche découverte via to-inspect', async () => {
+      const roomId = await createRoom();
+      try {
+        const taskId = await bringTaskToTerminee(roomId);
+
+        const refuse = await gouvMobile
+          .post(`/api/mobile/housekeeping/tasks/${taskId}/refuse`)
+          .send({ motif: 'Salle de bain pas nettoyée (test inspection)' });
+        expect(refuse.status).toBe(201);
+        expect((refuse.body as TaskResponse).statut).toBe('EN_COURS');
+      } finally {
+        await cleanupRoom(roomId);
+      }
+    });
+
+    it('ignore toute tentative de filtre client (assignedUserId/statut/active) — toujours TERMINEE + active côté serveur', async () => {
+      const roomId = await createRoom();
+      try {
+        const taskId = await bringTaskToTerminee(roomId);
+
+        // MobileInspectionQueueQueryDto n'a aucun de ces champs :
+        // ValidationPipe({whitelist:true}) les retire silencieusement de
+        // l'objet transformé (même comportement déjà observé sur
+        // tasks/mine dans ce harness e2e, qui n'active pas
+        // forbidNonWhitelisted comme main.ts) — le contrôleur force de
+        // toute façon statut=TERMINEE et active=true, quelle que soit la
+        // tentative d'injection.
+        const spoofed = await gouvMobile.get(
+          `/api/mobile/housekeeping/tasks/to-inspect?assignedUserId=999&statut=VALIDEE&active=false`,
+        );
+        expect(spoofed.status).toBe(200);
+        const items = (spoofed.body as PaginatedTasks).data;
+        expect(items.some((t) => t.id === taskId)).toBe(true);
+        expect(items.every((t) => t.statut === 'TERMINEE')).toBe(true);
+      } finally {
+        await cleanupRoom(roomId);
+      }
+    });
+  });
+
   describe('JwtAuthGuard — jeton mobile toujours confiné à /api/mobile/housekeeping/* (non-régression F9)', () => {
     it('rejette un jeton mobile-housekeeping sur une route desktop équivalente', async () => {
       const onDesktopTasks = await receptionMobile.get(
