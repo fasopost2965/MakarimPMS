@@ -1,9 +1,17 @@
-import { StrictMode } from 'react';
+import { StrictMode, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App.tsx';
 import { HousekeepingMobileApp } from './features/housekeeping/pages/HousekeepingMobileApp.tsx';
 import { MaintenanceMobileApp } from './features/maintenance/pages/MaintenanceMobileApp.tsx';
+// DESIGN-005 — prototypes d'exploration desktop, strictement isolés (voir
+// design-prototypes/README.md). Aucune donnée réelle, aucun lien vers
+// App.tsx/AppSidebar/LoginPage. À retirer avec le dossier après décision.
+import {
+  PrototypeA,
+  PrototypeB,
+  PrototypeC,
+} from './design-prototypes/lazy.tsx';
 
 // Handoff design final, lot 4 (HousekeepingMobile.dc.html/MaintenanceMobile.dc.html)
 // — points d'entrée autonomes pour les apps terrain (housekeeping : session
@@ -19,6 +27,24 @@ function renderRoot() {
     return <HousekeepingMobileApp />;
   if (pathname.startsWith('/mobile/maintenance'))
     return <MaintenanceMobileApp />;
+  if (pathname.startsWith('/design-preview/a'))
+    return (
+      <Suspense fallback={null}>
+        <PrototypeA />
+      </Suspense>
+    );
+  if (pathname.startsWith('/design-preview/b'))
+    return (
+      <Suspense fallback={null}>
+        <PrototypeB />
+      </Suspense>
+    );
+  if (pathname.startsWith('/design-preview/c'))
+    return (
+      <Suspense fallback={null}>
+        <PrototypeC />
+      </Suspense>
+    );
   return <App />;
 }
 
