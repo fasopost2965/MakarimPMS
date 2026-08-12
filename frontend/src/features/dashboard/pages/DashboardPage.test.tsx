@@ -3,15 +3,20 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 vi.mock('../api', () => ({ getDashboardResume: vi.fn() }));
-vi.mock('../components/RoomsToCleanWidget', () => ({
-  RoomsToCleanWidget: () => <div>Widget chambres</div>,
+vi.mock('../../reservations/api', () => ({
+  listRooms: vi.fn(),
+  arrivalsToday: vi.fn(),
 }));
-vi.mock('../components/OpenMaintenanceWidget', () => ({
-  OpenMaintenanceWidget: () => <div>Widget maintenance</div>,
-}));
+vi.mock('../../maintenance/api', () => ({ listTickets: vi.fn() }));
+vi.mock('../../checkin/api', () => ({ listDepartsDuJour: vi.fn() }));
 
 import { getDashboardResume } from '../api';
+import { listRooms, arrivalsToday } from '../../reservations/api';
+import { listTickets } from '../../maintenance/api';
+import { listDepartsDuJour } from '../../checkin/api';
 import { DashboardPage } from './DashboardPage';
+import type { Room } from '../../reservations/types';
+import type { MaintenanceTicket } from '../../maintenance/types';
 
 const RESUME = {
   tauxOccupation: 75,
@@ -23,12 +28,47 @@ const RESUME = {
   encaisseAujourdhui: '1250.00',
 };
 
-describe('DashboardPage — personnalisation par permissions', () => {
-  beforeEach(() => {
-    vi.mocked(getDashboardResume).mockReset();
-    vi.mocked(getDashboardResume).mockResolvedValue(RESUME);
-  });
+function room(overrides: Partial<Room> = {}): Room {
+  return {
+    id: 1,
+    numero: '101',
+    roomTypeId: 1,
+    etage: 1,
+    statut: 'LIBRE_PROPRE',
+    roomType: {
+      id: 1,
+      nom: 'Single',
+      capacite: 1,
+      prixBase: '0',
+    },
+    ...overrides,
+  };
+}
 
+function ticket(overrides: Partial<MaintenanceTicket> = {}): MaintenanceTicket {
+  return {
+    id: 1,
+    roomId: 1,
+    room: room(),
+    typePanne: 'Climatisation en panne',
+    priorite: 'URGENTE',
+    photoUrl: null,
+    assigneA: null,
+    resoluAt: null,
+    createdAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  vi.mocked(getDashboardResume).mockReset().mockResolvedValue(RESUME);
+  vi.mocked(listRooms).mockReset().mockResolvedValue([]);
+  vi.mocked(arrivalsToday).mockReset().mockResolvedValue([]);
+  vi.mocked(listTickets).mockReset().mockResolvedValue([]);
+  vi.mocked(listDepartsDuJour).mockReset().mockResolvedValue([]);
+});
+
+describe('DashboardPage — personnalisation par permissions', () => {
   it('conserve la sémantique des KPI existants', async () => {
     render(
       <DashboardPage onNavigate={vi.fn()} permissions={['dashboard:read']} />,
@@ -47,51 +87,61 @@ describe('DashboardPage — personnalisation par permissions', () => {
     expect(screen.queryByText(/Statut A_NETTOYER/)).not.toBeInTheDocument();
   });
 
-  it('ne monte ni action ni widget sans la permission correspondante', async () => {
+  it("ne monte aucun module d'Accès rapides sans la permission correspondante", async () => {
     render(
       <DashboardPage onNavigate={vi.fn()} permissions={['dashboard:read']} />,
     );
 
     await screen.findByText("Taux d'occupation");
     expect(
-      screen.queryByRole('button', { name: 'Nouvelle réservation' }),
+      screen.queryByRole('button', { name: /Réservations/ }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: 'Check-in walk-in' }),
+      screen.queryByRole('button', { name: /Séjours \/ Check-in/ }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText('Widget chambres')).not.toBeInTheDocument();
-    expect(screen.queryByText('Widget maintenance')).not.toBeInTheDocument();
+    expect(screen.queryByText('Accès rapides')).not.toBeInTheDocument();
   });
 
-  it('affiche uniquement les actions et widgets couverts par les permissions', async () => {
+  it('affiche uniquement les modules Accès rapides couverts par les permissions', async () => {
     render(
       <DashboardPage
         onNavigate={vi.fn()}
-        permissions={[
-          'dashboard:read',
-          'reservations:write',
-          'housekeeping:read',
-          'maintenance:read',
-        ]}
+        permissions={['dashboard:read', 'reservations:read']}
       />,
     );
 
     expect(
-      screen.getByRole('button', { name: 'Nouvelle réservation' }),
+      await screen.findByRole('button', { name: /Réservations/ }),
     ).toBeVisible();
     expect(
-      screen.queryByRole('button', { name: 'Check-in walk-in' }),
+      screen.queryByRole('button', { name: /Séjours \/ Check-in/ }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText('Signaler une panne')).not.toBeInTheDocument();
-    expect(screen.getByText('Widget chambres')).toBeVisible();
-    expect(screen.getByText('Widget maintenance')).toBeVisible();
-    await screen.findByText("Taux d'occupation");
+    expect(
+      screen.queryByRole('button', { name: /Maintenance/ }),
+    ).not.toBeInTheDocument();
   });
 
-  it('conserve les widgets et permet de relancer si le résumé échoue', async () => {
+  it('navigue vers le bon onglet au clic sur une tuile Accès rapides', async () => {
+    const onNavigate = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <DashboardPage
+        onNavigate={onNavigate}
+        permissions={['dashboard:read', 'reservations:read']}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole('button', { name: /Réservations/ }),
+    );
+    expect(onNavigate).toHaveBeenCalledWith('reservations');
+  });
+
+  it("conserve l'affichage même si le résumé échoue, et permet de relancer", async () => {
     vi.mocked(getDashboardResume)
       .mockRejectedValueOnce(new Error('Service indisponible'))
       .mockResolvedValueOnce(RESUME);
+    vi.mocked(listTickets).mockResolvedValue([ticket()]);
     const user = userEvent.setup();
 
     render(
@@ -101,30 +151,23 @@ describe('DashboardPage — personnalisation par permissions', () => {
       />,
     );
 
-    expect(screen.getByText('Widget maintenance')).toBeVisible();
     expect(
       await screen.findByText('Impossible de charger les indicateurs'),
     ).toBeVisible();
     expect(screen.getByText('Service indisponible')).toBeVisible();
+    // La zone "À traiter" (maintenance) reste indépendante de l'échec du
+    // résumé — même principe que les anciens widgets qu'elle remplace.
+    expect(await screen.findByText(/Climatisation en panne/)).toBeVisible();
 
     await user.click(screen.getByRole('button', { name: 'Réessayer' }));
     await waitFor(() => expect(getDashboardResume).toHaveBeenCalledTimes(2));
     expect(await screen.findByText("Taux d'occupation")).toBeVisible();
-    expect(screen.getByText('Widget maintenance')).toBeVisible();
   });
 });
 
-// DESIGN-002 — Dashboard « Modern Operations ». Ces tests couvrent les
-// ajouts du lot : zone supérieure, zone « À traiter aujourd'hui », état de
-// chargement par squelettes, et le garde-fou de lecture sur les deux
-// définitions distinctes du taux d'occupation (brut côté /dashboard/resume,
-// net côté /reporting/yield-forecast).
-describe('DashboardPage — DESIGN-002', () => {
-  beforeEach(() => {
-    vi.mocked(getDashboardResume).mockReset();
-    vi.mocked(getDashboardResume).mockResolvedValue(RESUME);
-  });
-
+// DESIGN-005 — intégration du Prototype D3 validé : header compact, Accès
+// rapides, grille opérationnelle Chambres / À traiter / Aujourd'hui.
+describe('DashboardPage — DESIGN-005 (intégration D3)', () => {
   it('affiche une zone supérieure titrée « Dashboard / Vue opérationnelle »', async () => {
     render(
       <DashboardPage onNavigate={vi.fn()} permissions={['dashboard:read']} />,
@@ -152,45 +195,9 @@ describe('DashboardPage — DESIGN-002', () => {
     render(
       <DashboardPage onNavigate={vi.fn()} permissions={['dashboard:read']} />,
     );
-    // Garde-fou de lecture : ce KPI n'a PAS la même définition que le taux
-    // net de /reporting/yield-forecast (qui exclut les chambres en
-    // maintenance). Le libellé doit rester distinctif.
     expect(
       await screen.findByText('Sur les 20 chambres, maintenance incluse'),
     ).toBeVisible();
-  });
-
-  it('affiche la charge du jour dans « À traiter aujourd’hui » avec des libellés distincts des KPI', async () => {
-    render(
-      <DashboardPage
-        onNavigate={vi.fn()}
-        permissions={['dashboard:read', 'checkin:read']}
-      />,
-    );
-
-    expect(await screen.findByText("À traiter aujourd'hui")).toBeVisible();
-    expect(screen.getByText('Arrivées à enregistrer')).toBeVisible();
-    expect(screen.getByText('Départs à traiter')).toBeVisible();
-    expect(screen.getByText('Ménage en attente')).toBeVisible();
-    // Libellés volontairement différents des KPI, pour que chaque texte
-    // reste non ambigu à l'écran comme pour un lecteur d'écran.
-    expect(screen.getByText("Arrivées aujourd'hui")).toBeVisible();
-  });
-
-  it('énonce en toutes lettres l’absence de tâche plutôt qu’un simple 0 coloré', async () => {
-    vi.mocked(getDashboardResume).mockResolvedValue({
-      ...RESUME,
-      arriveesAujourdhui: 0,
-      departsAujourdhui: 0,
-      chambresANettoyer: 0,
-    });
-    render(
-      <DashboardPage onNavigate={vi.fn()} permissions={['dashboard:read']} />,
-    );
-
-    expect(await screen.findByText('Aucune arrivée attendue')).toBeVisible();
-    expect(screen.getByText('Aucun départ prévu')).toBeVisible();
-    expect(screen.getByText('Toutes les chambres sont traitées')).toBeVisible();
   });
 
   it('affiche le montant encaissé en font-mono tabular-nums, sans reformatage', async () => {
@@ -208,7 +215,7 @@ describe('DashboardPage — DESIGN-002', () => {
     );
     await screen.findByText("Taux d'occupation");
     expect(
-      screen.queryByText(/Prévision d'occupation/),
+      screen.queryByText(/Occupation — 7 prochains jours/),
     ).not.toBeInTheDocument();
   });
 
@@ -223,5 +230,102 @@ describe('DashboardPage — DESIGN-002', () => {
       screen.getByRole('button', { name: 'Actualiser les indicateurs' }),
     );
     await waitFor(() => expect(getDashboardResume).toHaveBeenCalledTimes(2));
+  });
+
+  it('affiche un badge d’alerte urgente quand un ticket de maintenance urgent existe', async () => {
+    vi.mocked(listTickets).mockResolvedValue([ticket({ priorite: 'URGENTE' })]);
+    render(
+      <DashboardPage
+        onNavigate={vi.fn()}
+        permissions={['dashboard:read', 'maintenance:read']}
+      />,
+    );
+    expect(await screen.findByText('1 urgent')).toBeVisible();
+  });
+
+  it("n'affiche aucun badge d'alerte sans ticket urgent", async () => {
+    vi.mocked(listTickets).mockResolvedValue([]);
+    render(
+      <DashboardPage
+        onNavigate={vi.fn()}
+        permissions={['dashboard:read', 'maintenance:read']}
+      />,
+    );
+    await screen.findByText("Taux d'occupation");
+    expect(screen.queryByText(/urgent/)).not.toBeInTheDocument();
+  });
+
+  it('affiche la grille État des chambres avec les chambres réelles (housekeeping:read)', async () => {
+    vi.mocked(listRooms).mockResolvedValue([
+      room({ id: 1, numero: '204', statut: 'A_NETTOYER' }),
+    ]);
+    render(
+      <DashboardPage
+        onNavigate={vi.fn()}
+        permissions={['dashboard:read', 'housekeeping:read']}
+      />,
+    );
+    expect(await screen.findByText('État des chambres')).toBeVisible();
+    expect(screen.getAllByText('204').length).toBeGreaterThan(0);
+  });
+
+  it("n'affiche pas la grille de chambres sans housekeeping:read", async () => {
+    render(
+      <DashboardPage onNavigate={vi.fn()} permissions={['dashboard:read']} />,
+    );
+    await screen.findByText("Taux d'occupation");
+    expect(screen.queryByText('État des chambres')).not.toBeInTheDocument();
+  });
+
+  it('énonce en toutes lettres l’absence de ménage ou d’intervention plutôt qu’un simple 0', async () => {
+    vi.mocked(listRooms).mockResolvedValue([]);
+    vi.mocked(listTickets).mockResolvedValue([]);
+    render(
+      <DashboardPage
+        onNavigate={vi.fn()}
+        permissions={[
+          'dashboard:read',
+          'housekeeping:read',
+          'maintenance:read',
+        ]}
+      />,
+    );
+    expect(
+      await screen.findByText('Toutes les chambres sont traitées.'),
+    ).toBeVisible();
+    expect(screen.getByText('Aucune intervention ouverte.')).toBeVisible();
+  });
+
+  it('affiche les arrivées/départs nominatifs du jour (checkin:read)', async () => {
+    vi.mocked(arrivalsToday).mockResolvedValue([
+      {
+        id: 1,
+        canal: 'DIRECT',
+        guestId: 1,
+        guest: { id: 1, nom: 'Amrani', prenom: 'Karim' },
+        roomId: 1,
+        room: room({ numero: '208' }),
+        dateArrivee: new Date().toISOString(),
+        dateDepart: new Date().toISOString(),
+        statut: 'CONFIRMEE',
+        sourceBrute: null,
+        prixTotalCalcule: '0',
+        prixTotalFinal: '0',
+        ajustementManuel: false,
+        motifAjustement: null,
+        nombreOccupants: 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ] as never);
+    render(
+      <DashboardPage
+        onNavigate={vi.fn()}
+        permissions={['dashboard:read', 'checkin:read']}
+      />,
+    );
+    expect(await screen.findByText("Aujourd'hui")).toBeVisible();
+    expect(screen.getByText('Karim Amrani')).toBeVisible();
+    expect(screen.getByText('Ch. 208')).toBeVisible();
   });
 });
