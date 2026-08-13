@@ -145,6 +145,11 @@ export async function makeRoomNeedsCleaning(
   await page.getByRole('button', { name: 'Fermer' }).click();
 }
 
+// DESIGN-008 — mis à jour pour le nouvel écran Housekeeping (switch
+// Chambres/Tâches, clic chambre → RoomContextModal réel plutôt qu'un
+// bouton « Voir l'historique » par ligne). Le cycle métier lui-même
+// (Créer la tâche → Affecter → Démarrer → Terminer → Valider) est
+// inchangé, seul l'emplacement des actions déplace vers la vue Tâches.
 export async function completeHousekeepingTaskForRoom(
   page: Page,
   roomNumber: string,
@@ -153,12 +158,13 @@ export async function completeHousekeepingTaskForRoom(
   await gotoTab(page, 'housekeeping');
   await page.getByLabel('Numéro de chambre').fill(roomNumber);
   await expect(
-    page.getByRole('button', {
-      name: `Voir l’historique de la chambre ${roomNumber}`,
-    }),
+    page.getByText(roomNumber, { exact: true }).first(),
   ).toBeVisible();
 
-  const createButton = page.getByRole('button', { name: 'Créer une tâche' });
+  const createButton = page.getByRole('button', {
+    name: 'Créer une tâche',
+    exact: true,
+  });
   if (await createButton.isVisible()) {
     await createButton.click();
     await page
@@ -166,6 +172,8 @@ export async function completeHousekeepingTaskForRoom(
       .fill(`Création E2E chambre ${roomNumber}`);
     await page.getByRole('button', { name: 'Créer la tâche' }).click();
   }
+
+  await page.getByRole('tab', { name: 'Tâches' }).click();
 
   await page.getByRole('button', { name: 'Affecter' }).click();
   await page.getByLabel('Assignataire').click();
@@ -180,5 +188,6 @@ export async function completeHousekeepingTaskForRoom(
     .fill(`Validation E2E chambre ${roomNumber}`);
   await page.getByRole('button', { name: 'Valider' }).click();
 
+  await page.getByRole('tab', { name: 'Chambres' }).click();
   await expect(page.getByText('Libre & propre').first()).toBeVisible();
 }

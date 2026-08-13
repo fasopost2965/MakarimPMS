@@ -1,17 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Badge } from '@/components/ui/badge';
+import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorState } from '@/components/ui/error-state';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   listRooms,
   listHousekeepingTasks,
@@ -23,78 +13,30 @@ import {
   cancelHousekeepingTask,
   reopenHousekeepingTask,
   createHousekeepingTask,
+  reportIncident,
 } from '../api';
-import { RoomHistoryDialog } from '../components/RoomHistoryDialog';
-import { HousekeepingTaskRow } from '../components/HousekeepingTaskRow';
+import { listTickets } from '../../maintenance/api';
+import { RoomContextModal } from '../../dashboard/components/RoomContextModal';
+import { HousekeepingKpiStrip } from '../components/HousekeepingKpiStrip';
+import { HousekeepingControlQueue } from '../components/HousekeepingControlQueue';
+import {
+  HousekeepingToolbar,
+  ALL_FILTER,
+  NO_FLOOR_FILTER,
+  type HousekeepingViewMode,
+} from '../components/HousekeepingToolbar';
+import { HousekeepingRoomsView } from '../components/HousekeepingRoomsView';
+import { HousekeepingTasksView } from '../components/HousekeepingTasksView';
 import { HousekeepingAssignmentDialog } from '../components/HousekeepingAssignmentDialog';
 import { HousekeepingReasonDialog } from '../components/HousekeepingReasonDialog';
 import { HousekeepingTaskCreateDialog } from '../components/HousekeepingTaskCreateDialog';
 import { HousekeepingTaskHistoryDialog } from '../components/HousekeepingTaskHistoryDialog';
-import type { Room, StatutChambre } from '../../reservations/types';
+import { HousekeepingIncidentDialog } from '../components/HousekeepingIncidentDialog';
+import type { Room } from '../../reservations/types';
+import type { MaintenanceTicket } from '../../maintenance/types';
 import type { HousekeepingTask } from '../types';
 
-const NON_MODIFIABLE_MANUELLEMENT: Partial<Record<StatutChambre, string>> = {
-  RESERVEE: 'Occupée au check-in',
-  OCCUPEE: 'Libérée au check-out',
-  DEPART_PREVU: 'Libérée au check-out',
-};
-
-const STATUT_LABEL: Record<StatutChambre, string> = {
-  LIBRE_PROPRE: 'Libre & propre',
-  RESERVEE: 'Réservée',
-  OCCUPEE: 'Occupée',
-  DEPART_PREVU: 'Départ prévu',
-  A_NETTOYER: 'À nettoyer',
-  EN_NETTOYAGE: 'En nettoyage',
-  EN_MAINTENANCE: 'En maintenance',
-};
-
-const STATUT_BADGE_VARIANT: Record<
-  StatutChambre,
-  'success' | 'info' | 'destructive' | 'warning' | 'violet'
-> = {
-  LIBRE_PROPRE: 'success',
-  RESERVEE: 'info',
-  OCCUPEE: 'destructive',
-  DEPART_PREVU: 'info',
-  A_NETTOYER: 'warning',
-  EN_NETTOYAGE: 'violet',
-  EN_MAINTENANCE: 'destructive',
-};
-
-const STATUT_DOT_CLASS: Record<StatutChambre, string> = {
-  LIBRE_PROPRE: 'bg-success',
-  RESERVEE: 'bg-info',
-  OCCUPEE: 'bg-destructive',
-  DEPART_PREVU: 'bg-info',
-  A_NETTOYER: 'bg-warning',
-  EN_NETTOYAGE: 'bg-violet',
-  EN_MAINTENANCE: 'bg-destructive',
-};
-
-const CHIP_STATUTS = [
-  'A_NETTOYER',
-  'EN_NETTOYAGE',
-  'LIBRE_PROPRE',
-  'EN_MAINTENANCE',
-] as const satisfies readonly StatutChambre[];
-
-const CHIP_LABEL: Record<(typeof CHIP_STATUTS)[number], string> = {
-  A_NETTOYER: 'Total à nettoyer',
-  EN_NETTOYAGE: 'En nettoyage',
-  LIBRE_PROPRE: 'Propres',
-  EN_MAINTENANCE: 'En maintenance',
-};
-
-const ALL_STATUSES = 'ALL';
-const ALL_FLOORS = 'ALL';
-const NO_FLOOR = 'NO_FLOOR';
-
 type LoadMode = 'initial' | 'refresh' | 'status-update';
-
-function floorLabel(etage: number | null) {
-  return etage === null ? 'Sans étage renseigné' : `Étage ${etage}`;
-}
 
 export function HousekeepingPage({
   permissions,
@@ -103,12 +45,12 @@ export function HousekeepingPage({
 }) {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [tasks, setTasks] = useState<HousekeepingTask[]>([]);
+  const [maintenanceTickets, setMaintenanceTickets] = useState<
+    MaintenanceTicket[]
+  >([]);
 
   const [roomsLoading, setRoomsLoading] = useState(true);
-  const [tasksLoading, setTasksLoading] = useState(true);
-
   const [roomsLoadError, setRoomsLoadError] = useState<string | null>(null);
-  const [tasksLoadError, setTasksLoadError] = useState<string | null>(null);
 
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
@@ -117,20 +59,16 @@ export function HousekeepingPage({
   const [actionError, setActionError] = useState<string | null>(null);
   const [updatingTaskId, setUpdatingTaskId] = useState<number | null>(null);
 
-  const [historyRoom, setHistoryRoom] = useState<Room | null>(null);
+  const [view, setView] = useState<HousekeepingViewMode>('chambres');
+  const [search, setSearch] = useState('');
+  const [floorFilter, setFloorFilter] = useState(ALL_FILTER);
+  const [agentFilter, setAgentFilter] = useState(ALL_FILTER);
+  const [statutFilter, setStatutFilter] = useState(ALL_FILTER);
 
-  const [statutFilter, setStatutFilter] = useState<
-    StatutChambre | typeof ALL_STATUSES
-  >(ALL_STATUSES);
-  const [floorFilter, setFloorFilter] = useState(ALL_FLOORS);
-  const [roomSearch, setRoomSearch] = useState('');
-
-  const initialRoomsRequestId = useRef<number | null>(null);
-  const initialTasksRequestId = useRef<number | null>(null);
-  const refreshRequestId = useRef<number | null>(null);
   const requestSequence = useRef(0);
 
-  // Modal states
+  // Modales
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [createRoom, setCreateRoom] = useState<Room | null>(null);
   const [assignTask, setAssignTask] = useState<HousekeepingTask | null>(null);
   const [reasonTask, setReasonTask] = useState<{
@@ -138,34 +76,31 @@ export function HousekeepingPage({
     action: 'validate' | 'refuse' | 'cancel' | 'reopen';
   } | null>(null);
   const [historyTask, setHistoryTask] = useState<HousekeepingTask | null>(null);
+  const [incidentDialogOpen, setIncidentDialogOpen] = useState(false);
+  const [incidentSubmitting, setIncidentSubmitting] = useState(false);
+  const [incidentError, setIncidentError] = useState<string | null>(null);
 
   const hasRead = permissions?.includes('housekeeping:read');
-  const hasWrite = permissions?.includes('housekeeping:write');
+  const hasWrite = permissions?.includes('housekeeping:write') ?? false;
+  const hasReportIncident =
+    permissions?.includes('housekeeping:report-incident') ?? false;
+  const hasMaintenanceRead = permissions?.includes('maintenance:read');
 
   const loadData = useCallback(
     async (mode: LoadMode) => {
       const requestId = ++requestSequence.current;
 
       if (mode === 'initial') {
-        initialRoomsRequestId.current = requestId;
-        initialTasksRequestId.current = requestId;
         setRoomsLoading(true);
-        if (hasRead) setTasksLoading(true);
         setRoomsLoadError(null);
-        setTasksLoadError(null);
-      } else if (mode === 'refresh' || mode === 'status-update') {
-        refreshRequestId.current = requestId;
-        if (mode === 'refresh') {
-          setRefreshing(true);
-          setRefreshError(null);
-        }
+      } else if (mode === 'refresh') {
+        setRefreshing(true);
+        setRefreshError(null);
       }
 
       const roomsPromise = listRooms()
         .then((res) => {
-          if (requestId === requestSequence.current) {
-            setRooms(res);
-          }
+          if (requestId === requestSequence.current) setRooms(res);
         })
         .catch((err) => {
           if (requestId === requestSequence.current) {
@@ -174,49 +109,42 @@ export function HousekeepingPage({
                 ? err.message
                 : 'Erreur de chargement des chambres';
             if (mode === 'initial') setRoomsLoadError(msg);
-            else if (mode === 'refresh') throw new Error(`Chambres: ${msg}`);
-          }
-        })
-        .finally(() => {
-          if (requestId === requestSequence.current && mode === 'initial') {
-            setRoomsLoading(false);
-            initialRoomsRequestId.current = null;
+            else throw new Error(`Chambres: ${msg}`);
           }
         });
 
-      let tasksPromise = Promise.resolve();
-      if (hasRead) {
-        tasksPromise = listHousekeepingTasks({ active: true, limit: 100 })
-          .then((res) => {
-            if (requestId === requestSequence.current) {
-              setTasks(res.data);
-            }
-          })
-          .catch((err) => {
-            if (requestId === requestSequence.current) {
-              const msg =
-                err instanceof Error
-                  ? err.message
-                  : 'Erreur de chargement des tâches';
-              if (mode === 'initial') setTasksLoadError(msg);
-              else if (mode === 'refresh') throw new Error(`Tâches: ${msg}`);
-            }
-          })
-          .finally(() => {
-            if (requestId === requestSequence.current && mode === 'initial') {
-              setTasksLoading(false);
-              initialTasksRequestId.current = null;
-            }
-          });
-      } else {
-        if (mode === 'initial') setTasksLoading(false);
-      }
+      const tasksPromise = hasRead
+        ? listHousekeepingTasks({ active: true, limit: 100 })
+            .then((res) => {
+              if (requestId === requestSequence.current) setTasks(res.data);
+            })
+            .catch((err) => {
+              if (requestId === requestSequence.current) {
+                const msg =
+                  err instanceof Error
+                    ? err.message
+                    : 'Erreur de chargement des tâches';
+                if (mode !== 'initial') throw new Error(`Tâches: ${msg}`);
+              }
+            })
+        : Promise.resolve();
+
+      const maintenancePromise = hasMaintenanceRead
+        ? listTickets({ ouvert: true })
+            .then((res) => {
+              if (requestId === requestSequence.current)
+                setMaintenanceTickets(res);
+            })
+            .catch(() => {
+              // Consultatif uniquement (mission : jamais d'erreur bloquante
+              // si maintenance:read est absente ou en échec) — le badge
+              // « Bloquant » disparaît simplement.
+            })
+        : Promise.resolve();
 
       try {
-        await Promise.all([roomsPromise, tasksPromise]);
-        if (requestId === requestSequence.current) {
-          setLastUpdatedAt(new Date());
-        }
+        await Promise.all([roomsPromise, tasksPromise, maintenancePromise]);
+        if (requestId === requestSequence.current) setLastUpdatedAt(new Date());
       } catch (err) {
         if (requestId === requestSequence.current && mode === 'refresh') {
           setRefreshError(
@@ -226,13 +154,13 @@ export function HousekeepingPage({
           );
         }
       } finally {
-        if (requestId === requestSequence.current && mode === 'refresh') {
-          setRefreshing(false);
-          refreshRequestId.current = null;
+        if (requestId === requestSequence.current) {
+          if (mode === 'initial') setRoomsLoading(false);
+          if (mode === 'refresh') setRefreshing(false);
         }
       }
     },
-    [hasRead],
+    [hasRead, hasMaintenanceRead],
   );
 
   useEffect(() => {
@@ -243,47 +171,73 @@ export function HousekeepingPage({
       requestSequence.current += 1;
       clearTimeout(timer);
     };
-  }, [loadData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const taskByRoomId = useMemo(() => {
     const map = new Map<number, HousekeepingTask>();
-    for (const t of tasks) map.set(t.roomId, t);
+    for (const t of tasks) {
+      if (t.activeRoomKey !== null) map.set(t.roomId, t);
+    }
     return map;
   }, [tasks]);
 
-  const chipCounts = useMemo(() => {
-    const counts = new Map<StatutChambre, number>();
-    for (const room of rooms) {
-      counts.set(room.statut, (counts.get(room.statut) ?? 0) + 1);
+  const maintenanceByRoomId = useMemo(() => {
+    const map = new Map<number, MaintenanceTicket>();
+    for (const ticket of maintenanceTickets) {
+      if (ticket.roomId !== null && ticket.bloqueVente) {
+        map.set(ticket.roomId, ticket);
+      }
     }
-    return counts;
-  }, [rooms]);
+    return map;
+  }, [maintenanceTickets]);
 
-  const availableFloors = useMemo(
+  const floors = useMemo(
     () =>
-      [...new Set(rooms.map((room) => room.etage ?? null))].sort(
+      [...new Set(rooms.map((r) => r.etage ?? null))].sort(
         (a, b) => (a ?? Infinity) - (b ?? Infinity),
       ),
     [rooms],
   );
 
-  const filteredRooms = useMemo(() => {
-    const normalizedSearch = roomSearch.trim().toLocaleLowerCase('fr-FR');
-    return rooms.filter((room) => {
-      const matchesStatus =
-        statutFilter === ALL_STATUSES || room.statut === statutFilter;
-      const matchesFloor =
-        floorFilter === ALL_FLOORS ||
-        (floorFilter === NO_FLOOR
-          ? room.etage === null || room.etage === undefined
-          : room.etage === Number(floorFilter));
-      const matchesSearch =
-        normalizedSearch.length === 0 ||
-        room.numero.toLocaleLowerCase('fr-FR').includes(normalizedSearch);
+  const agents = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const t of tasks) {
+      if (t.assignedUser) map.set(t.assignedUser.id, t.assignedUser.nom);
+    }
+    return [...map.entries()];
+  }, [tasks]);
 
-      return matchesStatus && matchesFloor && matchesSearch;
+  const matchesFloor = useCallback(
+    (etage: number | null | undefined) => {
+      if (floorFilter === ALL_FILTER) return true;
+      if (floorFilter === NO_FLOOR_FILTER) {
+        return etage === null || etage === undefined;
+      }
+      return String(etage ?? '') === floorFilter;
+    },
+    [floorFilter],
+  );
+
+  const filteredRooms = useMemo(() => {
+    const q = search.trim().toLocaleLowerCase('fr-FR');
+    return rooms.filter((room) => {
+      const matchesSearch =
+        q.length === 0 || room.numero.toLocaleLowerCase('fr-FR').includes(q);
+      const task = taskByRoomId.get(room.id);
+      const matchesAgent =
+        agentFilter === ALL_FILTER ||
+        (task?.assignedUser && String(task.assignedUser.id) === agentFilter);
+      const matchesStatut =
+        statutFilter === ALL_FILTER || room.statut === statutFilter;
+      return (
+        matchesSearch &&
+        matchesFloor(room.etage) &&
+        matchesAgent &&
+        matchesStatut
+      );
     });
-  }, [floorFilter, roomSearch, rooms, statutFilter]);
+  }, [search, agentFilter, statutFilter, rooms, taskByRoomId, matchesFloor]);
 
   const groupedByFloor = useMemo(() => {
     const map = new Map<number | null, Room[]>();
@@ -305,16 +259,32 @@ export function HousekeepingPage({
       }));
   }, [filteredRooms]);
 
-  const filtersActive =
-    statutFilter !== ALL_STATUSES ||
-    floorFilter !== ALL_FLOORS ||
-    roomSearch.trim().length > 0;
+  const filteredTasks = useMemo(() => {
+    const q = search.trim().toLocaleLowerCase('fr-FR');
+    return tasks
+      .filter((t) => {
+        const matchesSearch =
+          q.length === 0 ||
+          t.room.numero.toLocaleLowerCase('fr-FR').includes(q);
+        const matchesAgent =
+          agentFilter === ALL_FILTER ||
+          (t.assignedUser && String(t.assignedUser.id) === agentFilter);
+        const matchesStatut =
+          statutFilter === ALL_FILTER || t.room.statut === statutFilter;
+        return (
+          matchesSearch &&
+          matchesFloor(t.room.etage) &&
+          matchesAgent &&
+          matchesStatut
+        );
+      })
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }, [search, agentFilter, statutFilter, tasks, matchesFloor]);
 
-  function resetFilters() {
-    setStatutFilter(ALL_STATUSES);
-    setFloorFilter(ALL_FLOORS);
-    setRoomSearch('');
-  }
+  const controlQueue = useMemo(
+    () => tasks.filter((t) => t.statut === 'TERMINEE'),
+    [tasks],
+  );
 
   // Actions
   async function performAction(
@@ -335,10 +305,10 @@ export function HousekeepingPage({
     }
   }
 
-  const handleStart = (taskId: number) =>
-    performAction(taskId, () => startHousekeepingTask(taskId));
-  const handleComplete = (taskId: number) =>
-    performAction(taskId, () => completeHousekeepingTask(taskId));
+  const handleStart = (task: HousekeepingTask) =>
+    performAction(task.id, () => startHousekeepingTask(task.id));
+  const handleComplete = (task: HousekeepingTask) =>
+    performAction(task.id, () => completeHousekeepingTask(task.id));
 
   const handleCreateConfirm = (roomId: number, motif: string) => {
     performAction(
@@ -363,7 +333,7 @@ export function HousekeepingPage({
   const handleReasonConfirm = (motif: string) => {
     if (!reasonTask) return;
     const { task, action } = reasonTask;
-    let actionPromise;
+    let actionPromise: Promise<unknown>;
     switch (action) {
       case 'validate':
         actionPromise = validateHousekeepingTask(task.id, { motif });
@@ -385,22 +355,102 @@ export function HousekeepingPage({
     );
   };
 
-  const isLoading = roomsLoading || tasksLoading;
+  async function handleIncidentConfirm(input: {
+    roomId: number;
+    typePanne: string;
+    priorite?: MaintenanceTicket['priorite'];
+  }) {
+    setIncidentError(null);
+    setIncidentSubmitting(true);
+    try {
+      await reportIncident(input);
+      setIncidentDialogOpen(false);
+      await loadData('status-update');
+    } catch (err) {
+      setIncidentError(
+        err instanceof Error ? err.message : 'Erreur inattendue',
+      );
+    } finally {
+      setIncidentSubmitting(false);
+    }
+  }
 
   return (
-    <div className="flex h-full flex-col gap-4 p-6">
+    <div className="mx-auto flex w-full max-w-[1700px] flex-col gap-4 p-4 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1">
+          <p className="text-muted-foreground text-[11px] font-bold tracking-[0.03em] uppercase">
+            Exploitation hôtel
+          </p>
+          <h1 className="truncate text-xl font-extrabold tracking-[-0.01em]">
+            Housekeeping
+          </h1>
+          <p className="text-muted-foreground text-xs first-letter:uppercase">
+            ·{' '}
+            {new Date().toLocaleDateString('fr-FR', {
+              weekday: 'long',
+              day: 'numeric',
+              month: 'long',
+            })}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {lastUpdatedAt && (
+            <p className="text-muted-foreground text-xs" aria-live="polite">
+              Dernière mise à jour réussie :{' '}
+              {lastUpdatedAt.toLocaleString('fr-FR', {
+                dateStyle: 'short',
+                timeStyle: 'medium',
+              })}
+            </p>
+          )}
+          {hasReportIncident && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIncidentDialogOpen(true)}
+            >
+              Signaler un incident
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2"
+            onClick={() => void loadData('refresh')}
+            disabled={refreshing}
+          >
+            <RefreshCw className="size-4" />
+            {refreshing ? 'Actualisation…' : 'Actualiser'}
+          </Button>
+        </div>
+      </div>
+
       {actionError && (
         <p className="text-destructive text-sm" role="alert">
           {actionError}
         </p>
       )}
-      {tasksLoadError && (
-        <p className="text-destructive text-sm">
-          Erreur de chargement des tâches : {tasksLoadError}
-        </p>
+      {refreshError && (
+        <div
+          className="border-destructive/40 bg-destructive/5 flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"
+          role="alert"
+        >
+          <p className="text-destructive text-sm">
+            Échec de l’actualisation : {refreshError}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void loadData('refresh')}
+            disabled={refreshing}
+          >
+            Réessayer l’actualisation
+          </Button>
+        </div>
       )}
 
-      {isLoading ? (
+      {roomsLoading ? (
         <p className="text-muted-foreground text-sm" role="status">
           Chargement des données…
         </p>
@@ -412,277 +462,70 @@ export function HousekeepingPage({
         />
       ) : (
         <>
-          <div
-            className="grid grid-cols-2 gap-2 lg:grid-cols-4"
-            aria-label="Indicateurs housekeeping"
-          >
-            {CHIP_STATUTS.map((statut) => {
-              return (
-                <div
-                  key={statut}
-                  className="bg-card flex items-center gap-2 rounded-lg border px-3.5 py-2 text-xs"
-                  aria-label={`${CHIP_LABEL[statut]} : ${chipCounts.get(statut) ?? 0}`}
-                >
-                  <span
-                    className={`size-2 rounded-full ${STATUT_DOT_CLASS[statut]}`}
-                    aria-hidden="true"
-                  />
-                  <span className="text-sm font-bold">
-                    {chipCounts.get(statut) ?? 0}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {CHIP_LABEL[statut]}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          <HousekeepingKpiStrip rooms={rooms} tasks={tasks} />
 
-          <div className="bg-card grid gap-3 rounded-lg border p-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1.5fr_auto] lg:items-end">
-            <div className="grid gap-1.5">
-              <Label htmlFor="housekeeping-status-filter">Statut</Label>
-              <Select
-                value={statutFilter}
-                onValueChange={(value) =>
-                  value &&
-                  setStatutFilter(value as StatutChambre | typeof ALL_STATUSES)
-                }
-                items={[
-                  { value: ALL_STATUSES, label: 'Tous les statuts' },
-                  ...Object.entries(STATUT_LABEL).map(([value, label]) => ({
-                    value,
-                    label,
-                  })),
-                ]}
-              >
-                <SelectTrigger id="housekeeping-status-filter">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_STATUSES}>Tous les statuts</SelectItem>
-                  {Object.entries(STATUT_LABEL).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label htmlFor="housekeeping-floor-filter">Étage</Label>
-              <Select
-                value={floorFilter}
-                onValueChange={(value) => value && setFloorFilter(value)}
-                items={[
-                  { value: ALL_FLOORS, label: 'Tous les étages' },
-                  ...availableFloors.map((floor) => ({
-                    value: floor === null ? NO_FLOOR : String(floor),
-                    label: floorLabel(floor),
-                  })),
-                ]}
-              >
-                <SelectTrigger id="housekeeping-floor-filter">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_FLOORS}>Tous les étages</SelectItem>
-                  {availableFloors.map((floor) => (
-                    <SelectItem
-                      key={floor ?? NO_FLOOR}
-                      value={floor === null ? NO_FLOOR : String(floor)}
-                    >
-                      {floorLabel(floor)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label htmlFor="housekeeping-room-search">
-                Numéro de chambre
-              </Label>
-              <Input
-                id="housekeeping-room-search"
-                type="search"
-                value={roomSearch}
-                onChange={(event) => setRoomSearch(event.target.value)}
-                placeholder="Rechercher une chambre"
-              />
-            </div>
-
-            <Button
-              type="button"
-              variant="outline"
-              onClick={resetFilters}
-              disabled={!filtersActive}
-            >
-              Réinitialiser
-            </Button>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-muted-foreground text-sm" aria-live="polite">
-              {filteredRooms.length}{' '}
-              {filteredRooms.length > 1 ? 'chambres' : 'chambre'} sur{' '}
-              {rooms.length}
-            </p>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <p className="text-muted-foreground text-xs" aria-live="polite">
-                {lastUpdatedAt
-                  ? `Dernière mise à jour réussie : ${lastUpdatedAt.toLocaleString(
-                      'fr-FR',
-                      {
-                        dateStyle: 'short',
-                        timeStyle: 'medium',
-                      },
-                    )}`
-                  : 'Aucune mise à jour réussie'}
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void loadData('refresh')}
-                disabled={refreshing}
-              >
-                {refreshing ? 'Actualisation…' : 'Actualiser'}
-              </Button>
-            </div>
-          </div>
-
-          {refreshError && (
-            <div
-              className="border-destructive/40 bg-destructive/5 flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"
-              role="alert"
-            >
-              <p className="text-destructive text-sm">
-                Échec de l’actualisation : {refreshError}
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void loadData('refresh')}
-                disabled={refreshing}
-              >
-                Réessayer l’actualisation
-              </Button>
-            </div>
+          {hasRead && (
+            <HousekeepingControlQueue
+              tasks={controlQueue}
+              permissions={permissions}
+              updatingTaskId={updatingTaskId}
+              onValidate={(task) => setReasonTask({ task, action: 'validate' })}
+              onRefuse={(task) => setReasonTask({ task, action: 'refuse' })}
+              onTaskHistory={(task) => setHistoryTask(task)}
+            />
           )}
 
-          {rooms.length === 0 ? (
-            <EmptyState
-              title="Aucune chambre disponible"
-              description="Aucune chambre n’est actuellement disponible dans la liste housekeeping."
-            />
-          ) : groupedByFloor.length === 0 ? (
-            <EmptyState
-              title="Aucune chambre ne correspond aux filtres"
-              description="Modifiez vos critères ou réinitialisez les filtres pour afficher les chambres."
-              action={{
-                label: 'Réinitialiser les filtres',
-                onClick: resetFilters,
-              }}
+          <HousekeepingToolbar
+            view={view}
+            onViewChange={setView}
+            search={search}
+            onSearchChange={setSearch}
+            floors={floors}
+            floorFilter={floorFilter}
+            onFloorFilterChange={setFloorFilter}
+            agents={agents}
+            agentFilter={agentFilter}
+            onAgentFilterChange={setAgentFilter}
+            statutFilter={statutFilter}
+            onStatutFilterChange={setStatutFilter}
+          />
+
+          {view === 'chambres' ? (
+            <HousekeepingRoomsView
+              groupedByFloor={groupedByFloor}
+              taskByRoomId={taskByRoomId}
+              maintenanceByRoomId={maintenanceByRoomId}
+              hasWrite={hasWrite}
+              disabled={updatingTaskId !== null}
+              onRoomClick={(room) => setSelectedRoom(room)}
+              onCreateTask={(room) => setCreateRoom(room)}
             />
           ) : (
-            <div className="bg-card overflow-hidden rounded-lg border">
-              <div className="bg-muted/60 text-muted-foreground hidden grid-cols-[80px_1fr_170px_150px] gap-2 border-b px-4 py-2 text-[11px] font-bold tracking-wide uppercase md:grid">
-                <span>Chambre</span>
-                <span>Type</span>
-                <span>Statut</span>
-                <span className="text-right">Action</span>
-              </div>
-
-              {groupedByFloor.map(({ etage, rooms: floorRooms }) => (
-                <div key={etage ?? 'sans-etage'}>
-                  <div className="bg-muted/30 text-primary border-b px-4 py-1.5 text-[11px] font-bold tracking-wide uppercase">
-                    {floorLabel(etage)}
-                  </div>
-                  {floorRooms.map((room) => {
-                    const task = taskByRoomId.get(room.id);
-
-                    if (task) {
-                      return (
-                        <HousekeepingTaskRow
-                          key={room.id}
-                          room={room}
-                          task={task}
-                          permissions={permissions}
-                          disabled={
-                            updatingTaskId === task.id || updatingTaskId === -1
-                          }
-                          onShowHistory={() => setHistoryRoom(room)}
-                          onAssign={() => setAssignTask(task)}
-                          onStart={() => handleStart(task.id)}
-                          onComplete={() => handleComplete(task.id)}
-                          onValidate={() =>
-                            setReasonTask({ task, action: 'validate' })
-                          }
-                          onRefuse={() =>
-                            setReasonTask({ task, action: 'refuse' })
-                          }
-                          onCancel={() =>
-                            setReasonTask({ task, action: 'cancel' })
-                          }
-                          onReopen={() =>
-                            setReasonTask({ task, action: 'reopen' })
-                          }
-                          onTaskHistory={() => setHistoryTask(task)}
-                        />
-                      );
-                    }
-
-                    return (
-                      <div
-                        key={room.id}
-                        className="hover:bg-muted/40 grid grid-cols-[minmax(0,1fr)_minmax(130px,auto)] items-center gap-2 border-b px-4 py-3 text-sm last:border-b-0 md:grid-cols-[80px_1fr_170px_150px] md:py-2.5"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => setHistoryRoom(room)}
-                          className="focus-visible:ring-ring rounded text-left font-bold outline-none hover:underline focus-visible:ring-2"
-                          aria-label={`Voir l’historique de la chambre ${room.numero}`}
-                        >
-                          {room.numero}
-                        </button>
-                        <span className="text-muted-foreground col-start-1 row-start-2 text-xs md:col-start-2 md:row-start-1">
-                          {room.roomType.nom}
-                        </span>
-                        <span className="col-start-1 row-start-3 md:col-start-3 md:row-start-1">
-                          <Badge variant={STATUT_BADGE_VARIANT[room.statut]}>
-                            {STATUT_LABEL[room.statut]}
-                          </Badge>
-                        </span>
-                        <span className="col-start-2 row-span-3 row-start-1 flex justify-end md:col-start-4 md:row-span-1">
-                          {room.statut === 'A_NETTOYER' && hasWrite ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setCreateRoom(room)}
-                              disabled={updatingTaskId !== null}
-                            >
-                              Créer une tâche
-                            </Button>
-                          ) : (
-                            <span className="text-muted-foreground text-right text-xs">
-                              {NON_MODIFIABLE_MANUELLEMENT[room.statut] || '—'}
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
+            <HousekeepingTasksView
+              tasks={filteredTasks}
+              maintenanceByRoomId={maintenanceByRoomId}
+              permissions={permissions}
+              updatingTaskId={updatingTaskId}
+              onAssign={(task) => setAssignTask(task)}
+              onStart={handleStart}
+              onComplete={handleComplete}
+              onValidate={(task) => setReasonTask({ task, action: 'validate' })}
+              onRefuse={(task) => setReasonTask({ task, action: 'refuse' })}
+              onCancel={(task) => setReasonTask({ task, action: 'cancel' })}
+              onReopen={(task) => setReasonTask({ task, action: 'reopen' })}
+              onTaskHistory={(task) => setHistoryTask(task)}
+            />
           )}
         </>
       )}
 
-      <RoomHistoryDialog
-        roomId={historyRoom?.id ?? null}
-        roomNumero={historyRoom?.numero ?? null}
-        onClose={() => setHistoryRoom(null)}
+      <RoomContextModal
+        room={selectedRoom}
+        rooms={rooms}
+        permissions={permissions ?? null}
+        onClose={() => setSelectedRoom(null)}
+        onNavigate={() => setSelectedRoom(null)}
+        onRoomsChanged={() => void loadData('status-update')}
       />
 
       <HousekeepingTaskCreateDialog
@@ -727,13 +570,25 @@ export function HousekeepingPage({
 
       <HousekeepingTaskHistoryDialog
         taskId={historyTask?.id ?? null}
-        roomNumero={
-          historyTask
-            ? (rooms.find((r) => r.id === historyTask.roomId)?.numero ?? '')
-            : null
-        }
+        roomNumero={historyTask?.room.numero ?? null}
         onClose={() => setHistoryTask(null)}
       />
+
+      <HousekeepingIncidentDialog
+        open={incidentDialogOpen}
+        rooms={rooms}
+        onClose={() => {
+          setIncidentDialogOpen(false);
+          setIncidentError(null);
+        }}
+        onConfirm={handleIncidentConfirm}
+        submitting={incidentSubmitting}
+      />
+      {incidentError && (
+        <p className="text-destructive text-sm" role="alert">
+          {incidentError}
+        </p>
+      )}
     </div>
   );
 }

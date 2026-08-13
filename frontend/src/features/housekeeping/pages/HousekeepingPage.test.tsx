@@ -1,11 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  act,
-  render,
-  screen,
-  fireEvent,
-  waitFor,
-} from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Room } from '../../reservations/types';
 import type { HousekeepingTask, PaginatedResponse } from '../types';
@@ -13,18 +7,52 @@ import type { HousekeepingTask, PaginatedResponse } from '../types';
 vi.mock('../api', () => ({
   listRooms: vi.fn(),
   listHousekeepingTasks: vi.fn(),
-  getRoomStatusHistory: vi.fn(),
+  assignHousekeepingTask: vi.fn(),
+  startHousekeepingTask: vi.fn(),
+  completeHousekeepingTask: vi.fn(),
+  validateHousekeepingTask: vi.fn(),
+  refuseHousekeepingTask: vi.fn(),
+  cancelHousekeepingTask: vi.fn(),
+  reopenHousekeepingTask: vi.fn(),
+  createHousekeepingTask: vi.fn(),
+  reportIncident: vi.fn(),
+  listAssignableUsers: vi.fn(),
+  getHousekeepingTaskHistory: vi.fn(),
+}));
+
+vi.mock('../../maintenance/api', () => ({
+  listTickets: vi.fn(),
+}));
+
+vi.mock('../../dashboard/components/RoomContextModal', () => ({
+  RoomContextModal: ({
+    room,
+    onClose,
+  }: {
+    room: Room | null;
+    onClose: () => void;
+  }) =>
+    room ? (
+      <div data-testid="room-context-modal">
+        <p>Chambre {room.numero}</p>
+        <button type="button" onClick={onClose}>
+          Fermer la modale
+        </button>
+      </div>
+    ) : null,
 }));
 
 import { HousekeepingPage } from './HousekeepingPage';
-import { getRoomStatusHistory, listRooms, listHousekeepingTasks } from '../api';
-
-function formattedTimestamp(date: Date) {
-  return date.toLocaleString('fr-FR', {
-    dateStyle: 'short',
-    timeStyle: 'medium',
-  });
-}
+import {
+  listRooms,
+  listHousekeepingTasks,
+  validateHousekeepingTask,
+  refuseHousekeepingTask,
+  startHousekeepingTask,
+  completeHousekeepingTask,
+  getHousekeepingTaskHistory,
+} from '../api';
+import { listTickets } from '../../maintenance/api';
 
 function room(overrides: Partial<Room>): Room {
   return {
@@ -38,173 +66,397 @@ function room(overrides: Partial<Room>): Room {
   };
 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
+function task(overrides: Partial<HousekeepingTask>): HousekeepingTask {
+  return {
+    id: 1,
+    roomId: 1,
+    assignedUserId: null,
+    statut: 'A_FAIRE',
+    origine: 'MANUELLE',
+    sourceEventKey: null,
+    activeRoomKey: `room-1`,
+    assignedAt: null,
+    startedAt: null,
+    completedAt: null,
+    validatedAt: null,
+    cancelledAt: null,
+    createdAt: '2026-08-13T08:00:00.000Z',
+    updatedAt: '2026-08-13T08:00:00.000Z',
+    room: {
+      id: 1,
+      numero: '101',
+      etage: 1,
+      statut: 'A_NETTOYER',
+      roomTypeId: 1,
+    },
+    assignedUser: null,
+    ...overrides,
+  };
 }
 
-async function chooseFilter(
-  user: ReturnType<typeof userEvent.setup>,
-  label: string,
-  option: string,
-) {
-  await user.click(screen.getByLabelText(label));
-  await user.click(await screen.findByRole('option', { name: option }));
+function paginated(
+  data: HousekeepingTask[],
+): PaginatedResponse<HousekeepingTask> {
+  return {
+    data,
+    meta: { page: 1, limit: 100, total: data.length, totalPages: 1 },
+  };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(getRoomStatusHistory).mockResolvedValue([]);
-  vi.mocked(listHousekeepingTasks).mockResolvedValue({
-    data: [],
-    meta: {
-      total: 0,
-      page: 1,
-      limit: 50,
-      totalPages: 0,
-    },
+  vi.mocked(listTickets).mockResolvedValue([]);
+});
+
+describe('HousekeepingPage — vues et indicateurs', () => {
+  it('affiche la vue Chambres par défaut', async () => {
+    vi.mocked(listRooms).mockResolvedValue([room({ numero: '101' })]);
+    vi.mocked(listHousekeepingTasks).mockResolvedValue(paginated([]));
+
+    render(<HousekeepingPage permissions={['housekeeping:read']} />);
+
+    expect(await screen.findByText('101')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Chambres/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+
+  it('bascule vers la vue Tâches', async () => {
+    const user = userEvent.setup();
+    vi.mocked(listRooms).mockResolvedValue([
+      room({ id: 1, numero: '101', statut: 'A_NETTOYER' }),
+    ]);
+    vi.mocked(listHousekeepingTasks).mockResolvedValue(
+      paginated([task({ id: 10, roomId: 1, statut: 'A_FAIRE' })]),
+    );
+
+    render(<HousekeepingPage permissions={['housekeeping:read']} />);
+    await screen.findByText('101');
+
+    await user.click(screen.getByRole('tab', { name: /Tâches/ }));
+
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Tâches/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  });
+
+  it('calcule les quatre indicateurs à partir des chambres/tâches chargées', async () => {
+    vi.mocked(listRooms).mockResolvedValue([
+      room({ id: 1, numero: '101', statut: 'A_NETTOYER' }),
+      room({ id: 2, numero: '102', statut: 'A_NETTOYER' }),
+      room({ id: 3, numero: '103', statut: 'EN_MAINTENANCE' }),
+      room({ id: 4, numero: '104', statut: 'LIBRE_PROPRE' }),
+    ]);
+    vi.mocked(listHousekeepingTasks).mockResolvedValue(
+      paginated([
+        task({ id: 10, roomId: 1, statut: 'EN_COURS' }),
+        task({ id: 11, roomId: 2, statut: 'TERMINEE' }),
+      ]),
+    );
+
+    render(<HousekeepingPage permissions={['housekeeping:read']} />);
+    await screen.findByText('101');
+
+    const strip = screen.getByLabelText('Indicateurs housekeeping');
+    expect(strip).toHaveTextContent('À nettoyer');
+    expect(strip).toHaveTextContent('2'); // à nettoyer (A_NETTOYER)
+    expect(strip).toHaveTextContent('1'); // en cours (EN_COURS)
+    expect(strip).toHaveTextContent('1'); // à contrôler (TERMINEE)
+    // Chambres bloquées (EN_MAINTENANCE) = 1
   });
 });
 
-describe('HousekeepingPage — filtres et indicateurs', () => {
-  it('distingue le chargement initial avant la première réponse', async () => {
-    const initialLoadRooms = deferred<Room[]>();
-    const initialLoadTasks = deferred<PaginatedResponse<HousekeepingTask>>();
-    vi.mocked(listRooms).mockReturnValue(initialLoadRooms.promise);
-    vi.mocked(listHousekeepingTasks).mockReturnValue(initialLoadTasks.promise);
-
-    render(<HousekeepingPage permissions={['housekeeping:read']} />);
-
-    expect(screen.getByText('Chargement des données…')).toHaveAttribute(
-      'role',
-      'status',
+describe('HousekeepingPage — actions RBAC sur les tâches', () => {
+  it('affiche un bouton Démarrer actif pour une tâche AFFECTEE avec housekeeping:write', async () => {
+    const user = userEvent.setup();
+    vi.mocked(listRooms).mockResolvedValue([
+      room({ id: 1, numero: '101', statut: 'A_NETTOYER' }),
+    ]);
+    vi.mocked(listHousekeepingTasks).mockResolvedValue(
+      paginated([
+        task({
+          id: 10,
+          roomId: 1,
+          statut: 'AFFECTEE',
+          assignedUser: { id: 1, nom: 'Fatima', actif: true },
+        }),
+      ]),
     );
-    expect(
-      screen.queryByRole('button', { name: 'Actualiser' }),
-    ).not.toBeInTheDocument();
 
-    await act(async () => {
-      initialLoadRooms.resolve([room({ numero: '101' })]);
-      initialLoadTasks.resolve({
-        data: [],
-        meta: { total: 0, page: 1, limit: 50, totalPages: 0 },
-      });
-    });
+    render(
+      <HousekeepingPage
+        permissions={['housekeeping:read', 'housekeeping:write']}
+      />,
+    );
+    await screen.findByText('101');
+    await user.click(screen.getByRole('tab', { name: /Tâches/ }));
 
-    expect(
-      await screen.findByRole('button', { name: 'Actualiser' }),
-    ).toBeEnabled();
+    const startButton = screen.getByRole('button', { name: 'Démarrer' });
+    expect(startButton).toBeEnabled();
+
+    await user.click(startButton);
+    await waitFor(() => expect(startHousekeepingTask).toHaveBeenCalledWith(10));
   });
 
-  it('combine le statut, l’étage et la recherche par numéro', async () => {
+  it('affiche un bouton Terminer pour une tâche EN_COURS', async () => {
+    const user = userEvent.setup();
+    vi.mocked(listRooms).mockResolvedValue([room({ id: 1, numero: '101' })]);
+    vi.mocked(listHousekeepingTasks).mockResolvedValue(
+      paginated([task({ id: 10, roomId: 1, statut: 'EN_COURS' })]),
+    );
+
+    render(
+      <HousekeepingPage
+        permissions={['housekeeping:read', 'housekeeping:write']}
+      />,
+    );
+    await screen.findByText('101');
+    await user.click(screen.getByRole('tab', { name: /Tâches/ }));
+
+    const completeButton = screen.getByRole('button', { name: 'Terminer' });
+    await user.click(completeButton);
+    await waitFor(() =>
+      expect(completeHousekeepingTask).toHaveBeenCalledWith(10),
+    );
+  });
+
+  it('affiche la tâche TERMINEE dans le bandeau Contrôle gouvernante', async () => {
+    vi.mocked(listRooms).mockResolvedValue([room({ id: 1, numero: '101' })]);
+    vi.mocked(listHousekeepingTasks).mockResolvedValue(
+      paginated([
+        task({
+          id: 10,
+          roomId: 1,
+          statut: 'TERMINEE',
+          completedAt: '2026-08-13T09:00:00.000Z',
+        }),
+      ]),
+    );
+
+    render(
+      <HousekeepingPage
+        permissions={['housekeeping:read', 'housekeeping:control']}
+      />,
+    );
+
+    expect(
+      await screen.findByText(/Contrôle gouvernante — 1 chambre en attente/),
+    ).toBeInTheDocument();
+  });
+
+  it('gate le bouton Valider derrière housekeeping:control (absent sans cette permission)', async () => {
+    vi.mocked(listRooms).mockResolvedValue([room({ id: 1, numero: '101' })]);
+    vi.mocked(listHousekeepingTasks).mockResolvedValue(
+      paginated([task({ id: 10, roomId: 1, statut: 'TERMINEE' })]),
+    );
+
+    render(<HousekeepingPage permissions={['housekeeping:read']} />);
+    await screen.findByText(/Contrôle gouvernante/);
+
+    expect(
+      screen.queryByRole('button', { name: 'Valider' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('gate le bouton Refuser derrière housekeeping:control (absent sans cette permission)', async () => {
+    vi.mocked(listRooms).mockResolvedValue([room({ id: 1, numero: '101' })]);
+    vi.mocked(listHousekeepingTasks).mockResolvedValue(
+      paginated([task({ id: 10, roomId: 1, statut: 'TERMINEE' })]),
+    );
+
+    render(<HousekeepingPage permissions={['housekeeping:read']} />);
+    await screen.findByText(/Contrôle gouvernante/);
+
+    expect(
+      screen.queryByRole('button', { name: 'Refuser' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('un agent avec seulement housekeeping:write ne voit pas les actions de contrôle', async () => {
+    const user = userEvent.setup();
+    vi.mocked(listRooms).mockResolvedValue([room({ id: 1, numero: '101' })]);
+    vi.mocked(listHousekeepingTasks).mockResolvedValue(
+      paginated([task({ id: 10, roomId: 1, statut: 'TERMINEE' })]),
+    );
+
+    render(
+      <HousekeepingPage
+        permissions={['housekeeping:read', 'housekeeping:write']}
+      />,
+    );
+    await screen.findByText('101');
+    await user.click(screen.getByRole('tab', { name: /Tâches/ }));
+
+    expect(
+      screen.queryByRole('button', { name: 'Valider' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Refuser' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('appelle validateHousekeepingTask puis rafraîchit après confirmation du motif', async () => {
+    const user = userEvent.setup();
+    vi.mocked(listRooms).mockResolvedValue([room({ id: 1, numero: '101' })]);
+    vi.mocked(listHousekeepingTasks).mockResolvedValue(
+      paginated([task({ id: 10, roomId: 1, statut: 'TERMINEE' })]),
+    );
+    vi.mocked(validateHousekeepingTask).mockResolvedValue(
+      task({ id: 10, roomId: 1, statut: 'VALIDEE' }),
+    );
+
+    render(
+      <HousekeepingPage
+        permissions={['housekeeping:read', 'housekeeping:control']}
+      />,
+    );
+    await screen.findByText(/Contrôle gouvernante/);
+
+    await user.click(screen.getByRole('button', { name: 'Valider' }));
+    await user.type(
+      screen.getByLabelText('Motif (minimum 10 caractères)'),
+      'Chambre conforme au contrôle',
+    );
+    await user.click(screen.getByRole('button', { name: 'Valider' }));
+
+    await waitFor(() =>
+      expect(validateHousekeepingTask).toHaveBeenCalledWith(10, {
+        motif: 'Chambre conforme au contrôle',
+      }),
+    );
+    await waitFor(() => expect(listHousekeepingTasks).toHaveBeenCalledTimes(2));
+  });
+
+  it('appelle refuseHousekeepingTask après confirmation du motif', async () => {
+    const user = userEvent.setup();
+    vi.mocked(listRooms).mockResolvedValue([room({ id: 1, numero: '101' })]);
+    vi.mocked(listHousekeepingTasks).mockResolvedValue(
+      paginated([task({ id: 10, roomId: 1, statut: 'TERMINEE' })]),
+    );
+    vi.mocked(refuseHousekeepingTask).mockResolvedValue(
+      task({ id: 10, roomId: 1, statut: 'A_FAIRE' }),
+    );
+
+    render(
+      <HousekeepingPage
+        permissions={['housekeeping:read', 'housekeeping:control']}
+      />,
+    );
+    await screen.findByText(/Contrôle gouvernante/);
+
+    await user.click(screen.getByRole('button', { name: 'Refuser' }));
+    await user.type(
+      screen.getByLabelText('Motif (minimum 10 caractères)'),
+      'Poussière restante sous le lit',
+    );
+    await user.click(screen.getByRole('button', { name: 'Refuser' }));
+
+    await waitFor(() =>
+      expect(refuseHousekeepingTask).toHaveBeenCalledWith(10, {
+        motif: 'Poussière restante sous le lit',
+      }),
+    );
+  });
+});
+
+describe('HousekeepingPage — RoomContextModal et historique', () => {
+  it('ouvre le RoomContextModal au clic sur une chambre', async () => {
+    const user = userEvent.setup();
+    vi.mocked(listRooms).mockResolvedValue([room({ id: 1, numero: '101' })]);
+    vi.mocked(listHousekeepingTasks).mockResolvedValue(paginated([]));
+
+    render(<HousekeepingPage permissions={['housekeeping:read']} />);
+    const card = await screen.findByRole('button', { name: /101/ });
+
+    expect(screen.queryByTestId('room-context-modal')).not.toBeInTheDocument();
+    await user.click(card);
+
+    expect(await screen.findByTestId('room-context-modal')).toBeInTheDocument();
+  });
+
+  it('ouvre l’historique d’une tâche', async () => {
+    const user = userEvent.setup();
+    vi.mocked(listRooms).mockResolvedValue([room({ id: 1, numero: '101' })]);
+    vi.mocked(listHousekeepingTasks).mockResolvedValue(
+      paginated([task({ id: 10, roomId: 1, statut: 'A_FAIRE' })]),
+    );
+    vi.mocked(getHousekeepingTaskHistory).mockResolvedValue({
+      data: [],
+      meta: { page: 1, limit: 25, total: 0, totalPages: 1 },
+    });
+
+    render(
+      <HousekeepingPage
+        permissions={['housekeeping:read', 'housekeeping:write']}
+      />,
+    );
+    await screen.findByText('101');
+    await user.click(screen.getByRole('tab', { name: /Tâches/ }));
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Historique de la tâche — chambre 101',
+      }),
+    );
+
+    expect(
+      await screen.findByText('Historique de la tâche — chambre 101'),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('HousekeepingPage — filtres', () => {
+  it('filtre par agent, étage et statut', async () => {
     const user = userEvent.setup();
     vi.mocked(listRooms).mockResolvedValue([
       room({ id: 1, numero: '101', etage: 1, statut: 'A_NETTOYER' }),
-      room({ id: 2, numero: '102', etage: 2, statut: 'A_NETTOYER' }),
-      room({ id: 3, numero: '201', etage: 2, statut: 'EN_NETTOYAGE' }),
-      room({ id: 4, numero: '202', etage: 2, statut: 'A_NETTOYER' }),
+      room({ id: 2, numero: '201', etage: 2, statut: 'LIBRE_PROPRE' }),
     ]);
-
-    render(<HousekeepingPage permissions={['housekeeping:read']} />);
-
-    await screen.findByRole('button', {
-      name: 'Voir l’historique de la chambre 101',
-    });
-    await chooseFilter(user, 'Statut', 'À nettoyer');
-    await chooseFilter(user, 'Étage', 'Étage 2');
-    await user.type(screen.getByLabelText('Numéro de chambre'), '202');
-
-    expect(
-      screen.getByRole('button', {
-        name: 'Voir l’historique de la chambre 202',
-      }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', {
-        name: 'Voir l’historique de la chambre 101',
-      }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', {
-        name: 'Voir l’historique de la chambre 102',
-      }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', {
-        name: 'Voir l’historique de la chambre 201',
-      }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByText('1 chambre sur 4')).toBeInTheDocument();
-  }, 10_000);
-
-  it('calcule les quatre compteurs sur la liste complète', async () => {
-    vi.mocked(listRooms).mockResolvedValue([
-      room({ id: 1, statut: 'A_NETTOYER' }),
-      room({ id: 2, numero: '102', statut: 'A_NETTOYER' }),
-      room({ id: 3, numero: '103', statut: 'EN_NETTOYAGE' }),
-      room({ id: 4, numero: '104', statut: 'LIBRE_PROPRE' }),
-      room({ id: 5, numero: '105', statut: 'EN_MAINTENANCE' }),
-      room({ id: 6, numero: '106', statut: 'OCCUPEE' }),
-    ]);
-
-    render(<HousekeepingPage permissions={['housekeeping:read']} />);
-
-    await screen.findByText('6 chambres sur 6');
-    expect(screen.getByLabelText('Total à nettoyer : 2')).toBeInTheDocument();
-    expect(screen.getByLabelText('En nettoyage : 1')).toBeInTheDocument();
-    expect(screen.getByLabelText('Propres : 1')).toBeInTheDocument();
-    expect(screen.getByLabelText('En maintenance : 1')).toBeInTheDocument();
-  });
-
-  it('conserve les compteurs globaux quand la liste est filtrée', async () => {
-    const user = userEvent.setup();
-    vi.mocked(listRooms).mockResolvedValue([
-      room({ id: 1, statut: 'A_NETTOYER' }),
-      room({ id: 2, numero: '102', statut: 'LIBRE_PROPRE' }),
-    ]);
-
-    render(<HousekeepingPage permissions={['housekeeping:read']} />);
-    await screen.findByText('2 chambres sur 2');
-    await user.type(screen.getByLabelText('Numéro de chambre'), '101');
-
-    expect(screen.getByText('1 chambre sur 2')).toBeInTheDocument();
-    expect(screen.getByLabelText('Total à nettoyer : 1')).toBeInTheDocument();
-    expect(screen.getByLabelText('Propres : 1')).toBeInTheDocument();
-  });
-
-  it('affiche un état vide contextualisé et réinitialise les filtres', async () => {
-    const user = userEvent.setup();
-    vi.mocked(listRooms).mockResolvedValue([room({ numero: '101' })]);
-
-    render(<HousekeepingPage permissions={['housekeeping:read']} />);
-    await screen.findByText('1 chambre sur 1');
-    await user.type(screen.getByLabelText('Numéro de chambre'), '999');
-
-    expect(
-      screen.getByText('Aucune chambre ne correspond aux filtres'),
-    ).toBeInTheDocument();
-    await user.click(
-      screen.getByRole('button', { name: 'Réinitialiser les filtres' }),
+    vi.mocked(listHousekeepingTasks).mockResolvedValue(
+      paginated([
+        task({
+          id: 10,
+          roomId: 1,
+          statut: 'AFFECTEE',
+          assignedUser: { id: 5, nom: 'Fatima Zahra', actif: true },
+        }),
+      ]),
     );
 
-    expect(
-      screen.getByRole('button', {
-        name: 'Voir l’historique de la chambre 101',
-      }),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText('Numéro de chambre')).toHaveValue('');
-  });
+    render(
+      <HousekeepingPage
+        permissions={['housekeeping:read', 'housekeeping:write']}
+      />,
+    );
+    await screen.findByText('101');
+    expect(screen.getByText('201')).toBeInTheDocument();
 
-  it('affiche une erreur de liste puis permet une nouvelle tentative', async () => {
-    const user = userEvent.setup();
-    vi.mocked(listRooms)
-      .mockRejectedValueOnce(new Error('Réseau indisponible'))
-      .mockResolvedValueOnce([room({ numero: '101' })]);
+    await user.click(screen.getByLabelText('Étage'));
+    await user.click(await screen.findByRole('option', { name: 'Étage 1' }));
+
+    expect(screen.getByText('101')).toBeInTheDocument();
+    expect(screen.queryByText('201')).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Statut'));
+    await user.click(await screen.findByRole('option', { name: 'À nettoyer' }));
+    expect(screen.getByText('101')).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Agent'));
+    await user.click(
+      await screen.findByRole('option', { name: 'Fatima Zahra' }),
+    );
+    expect(screen.getByText('101')).toBeInTheDocument();
+  });
+});
+
+describe('HousekeepingPage — erreurs et rafraîchissement', () => {
+  it('affiche un état d’erreur propre si le chargement échoue', async () => {
+    vi.mocked(listRooms).mockRejectedValue(new Error('Réseau indisponible'));
+    vi.mocked(listHousekeepingTasks).mockResolvedValue(paginated([]));
 
     render(<HousekeepingPage permissions={['housekeeping:read']} />);
 
@@ -212,287 +464,29 @@ describe('HousekeepingPage — filtres et indicateurs', () => {
       await screen.findByText('Impossible de charger les chambres'),
     ).toBeInTheDocument();
     expect(screen.getByText('Réseau indisponible')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Réessayer' }));
-
-    expect(
-      await screen.findByRole('button', {
-        name: 'Voir l’historique de la chambre 101',
-      }),
-    ).toBeInTheDocument();
   });
 
-  it('filtre explicitement les chambres sans étage renseigné', async () => {
+  it('rafraîchit les données après une action de tâche', async () => {
     const user = userEvent.setup();
-    vi.mocked(listRooms).mockResolvedValue([
-      room({ id: 1, numero: '001', etage: null }),
-      room({ id: 2, numero: '101', etage: 1 }),
-    ]);
-
-    render(<HousekeepingPage permissions={['housekeeping:read']} />);
-    await screen.findByText('2 chambres sur 2');
-    await chooseFilter(user, 'Étage', 'Sans étage renseigné');
-
-    expect(
-      screen.getByRole('button', {
-        name: 'Voir l’historique de la chambre 001',
-      }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', {
-        name: 'Voir l’historique de la chambre 101',
-      }),
-    ).not.toBeInTheDocument();
-  });
-
-  it('conserve la liste utilisable quand le chargement de l’historique échoue', async () => {
-    const user = userEvent.setup();
-    vi.mocked(listRooms).mockResolvedValue([room({ numero: '101' })]);
-    vi.mocked(getRoomStatusHistory).mockRejectedValue(
-      new Error('Historique indisponible'),
+    vi.mocked(listRooms).mockResolvedValue([room({ id: 1, numero: '101' })]);
+    vi.mocked(listHousekeepingTasks).mockResolvedValue(
+      paginated([task({ id: 10, roomId: 1, statut: 'EN_COURS' })]),
     );
-
-    render(<HousekeepingPage permissions={['housekeeping:read']} />);
-    const historyButton = await screen.findByRole('button', {
-      name: 'Voir l’historique de la chambre 101',
-    });
-    await user.click(historyButton);
-
-    expect(
-      await screen.findByText('Historique indisponible'),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText('Numéro de chambre')).toBeEnabled();
-    expect(screen.getByText('1 chambre sur 1')).toBeInTheDocument();
-  });
-
-  it('utilise une structure responsive et un bouton natif pour l’historique', async () => {
-    vi.mocked(listRooms).mockResolvedValue([room({ numero: '101' })]);
-
-    render(<HousekeepingPage permissions={['housekeeping:read']} />);
-
-    const historyButton = await screen.findByRole('button', {
-      name: 'Voir l’historique de la chambre 101',
-    });
-    const row = historyButton.parentElement;
-    const header = screen.getByText('Chambre').parentElement;
-
-    expect(row).toHaveClass('grid-cols-[minmax(0,1fr)_minmax(130px,auto)]');
-    expect(row).toHaveClass('md:grid-cols-[80px_1fr_170px_150px]');
-    expect(header).toHaveClass('hidden');
-    expect(header).toHaveClass('md:grid');
-  });
-
-  it('ouvre l’historique au clavier', async () => {
-    const user = userEvent.setup();
-    vi.mocked(listRooms).mockResolvedValue([room({ numero: '101' })]);
-
-    render(<HousekeepingPage permissions={['housekeeping:read']} />);
-    const historyButton = await screen.findByRole('button', {
-      name: 'Voir l’historique de la chambre 101',
-    });
-    historyButton.focus();
-    await user.keyboard('{Enter}');
-
-    expect(getRoomStatusHistory).toHaveBeenCalledWith(1);
-    expect(
-      await screen.findByText('Aucun historique pour la chambre 101'),
-    ).toBeInTheDocument();
-  });
-
-  it('affiche la date de la dernière mise à jour après le chargement initial', async () => {
-    vi.mocked(listRooms).mockResolvedValue([room({ numero: '101' })]);
-
-    render(<HousekeepingPage permissions={['housekeeping:read']} />);
-
-    await screen.findByText('1 chambre sur 1');
-    expect(
-      screen.getByText(/Dernière mise à jour réussie :/),
-    ).toBeInTheDocument();
-    expect(listRooms).toHaveBeenCalledTimes(1);
-  });
-
-  it('conserve la liste et les filtres pendant une actualisation manuelle', async () => {
-    const user = userEvent.setup();
-    const refresh = deferred<Room[]>();
-    vi.mocked(listRooms)
-      .mockResolvedValueOnce([
-        room({ id: 1, numero: '101' }),
-        room({ id: 2, numero: '202' }),
-      ])
-      .mockReturnValueOnce(refresh.promise);
-
-    render(<HousekeepingPage permissions={['housekeeping:read']} />);
-    await screen.findByText('2 chambres sur 2');
-    await user.type(screen.getByLabelText('Numéro de chambre'), '101');
-    await user.click(screen.getByRole('button', { name: 'Actualiser' }));
-
-    expect(
-      screen.getByRole('button', {
-        name: 'Voir l’historique de la chambre 101',
-      }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText('Chargement des chambres…'),
-    ).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Numéro de chambre')).toHaveValue('101');
-    expect(
-      screen.getByRole('button', { name: 'Actualisation…' }),
-    ).toBeDisabled();
-
-    await act(async () => {
-      refresh.resolve([
-        room({ id: 1, numero: '101' }),
-        room({ id: 2, numero: '202' }),
-      ]);
-    });
-
-    expect(screen.getByRole('button', { name: 'Actualiser' })).toBeEnabled();
-    expect(screen.getByLabelText('Numéro de chambre')).toHaveValue('101');
-    expect(screen.getByText('1 chambre sur 2')).toBeInTheDocument();
-  });
-
-  it('conserve les données et la date après une erreur locale puis permet de réessayer', async () => {
-    const user = userEvent.setup();
-    vi.mocked(listRooms)
-      .mockResolvedValueOnce([room({ numero: '101' })])
-      .mockRejectedValueOnce(new Error('Réseau indisponible'))
-      .mockResolvedValueOnce([room({ numero: '101' })]);
-
-    render(<HousekeepingPage permissions={['housekeeping:read']} />);
-    await screen.findByText('1 chambre sur 1');
-    const initialTimestamp = screen.getByText(
-      /Dernière mise à jour réussie :/,
-    ).textContent;
-
-    await user.click(screen.getByRole('button', { name: 'Actualiser' }));
-
-    expect(
-      await screen.findByText(
-        'Échec de l’actualisation : Chambres: Réseau indisponible',
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', {
-        name: 'Voir l’historique de la chambre 101',
-      }),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/Dernière mise à jour réussie :/).textContent).toBe(
-      initialTimestamp,
+    vi.mocked(completeHousekeepingTask).mockResolvedValue(
+      task({ id: 10, roomId: 1, statut: 'TERMINEE' }),
     );
-
-    await user.click(
-      screen.getByRole('button', { name: 'Réessayer l’actualisation' }),
-    );
-
-    expect(
-      await screen.findByRole('button', { name: 'Actualiser' }),
-    ).toBeEnabled();
-    await waitFor(() => expect(listRooms).toHaveBeenCalledTimes(3));
-    expect(
-      screen.queryByText(/Échec de l’actualisation/),
-    ).not.toBeInTheDocument();
-  });
-
-  it('met à jour la date uniquement après une actualisation réussie', async () => {
-    const initialDate = new Date('2026-08-01T10:00:00.000Z');
-    const refreshedDate = new Date('2026-08-01T11:30:00.000Z');
-    vi.useFakeTimers();
-
-    try {
-      vi.setSystemTime(initialDate);
-      vi.mocked(listRooms).mockResolvedValue([room({ numero: '101' })]);
-      render(<HousekeepingPage permissions={['housekeeping:read']} />);
-      await act(async () => {
-        vi.runOnlyPendingTimers();
-        await Promise.resolve();
-      });
-      expect(
-        screen.getByText(
-          `Dernière mise à jour réussie : ${formattedTimestamp(initialDate)}`,
-        ),
-      ).toBeInTheDocument();
-
-      vi.setSystemTime(refreshedDate);
-      fireEvent.click(screen.getByRole('button', { name: 'Actualiser' }));
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      expect(
-        screen.getByText(
-          `Dernière mise à jour réussie : ${formattedTimestamp(refreshedDate)}`,
-        ),
-      ).toBeInTheDocument();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('ne déclenche aucune actualisation automatique', async () => {
-    vi.useFakeTimers();
-    vi.mocked(listRooms).mockResolvedValue([room({ numero: '101' })]);
-
-    try {
-      render(<HousekeepingPage permissions={['housekeeping:read']} />);
-      await act(async () => {
-        vi.runOnlyPendingTimers();
-        await Promise.resolve();
-      });
-      expect(listRooms).toHaveBeenCalledTimes(1);
-
-      await act(async () => {
-        vi.advanceTimersByTime(60_000);
-      });
-
-      expect(listRooms).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-});
-
-// CH-037 (docs/execution/PLAN_MISE_EN_PRODUCTION_BETA.md, Phase A) — ADR-003 :
-// RESERVEE/OCCUPEE/DEPART_PREVU restent exclusivement pilotés par le système.
-describe('HousekeepingPage — statuts système et statuts manuels', () => {
-  it('affiche un tiret pour une chambre libre et propre', async () => {
-    vi.mocked(listRooms).mockResolvedValue([
-      room({ id: 1, numero: '101', statut: 'LIBRE_PROPRE' }),
-    ]);
 
     render(
       <HousekeepingPage
         permissions={['housekeeping:read', 'housekeeping:write']}
       />,
     );
+    await screen.findByText('101');
+    await user.click(screen.getByRole('tab', { name: /Tâches/ }));
 
-    expect(await screen.findByText('—')).toBeInTheDocument();
-    expect(screen.queryByText(/check-in|check-out/i)).not.toBeInTheDocument();
-  });
+    expect(listHousekeepingTasks).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('button', { name: 'Terminer' }));
 
-  it('remplace le sélecteur par un texte explicatif pour OCCUPEE', async () => {
-    vi.mocked(listRooms).mockResolvedValue([
-      room({ id: 2, numero: '202', statut: 'OCCUPEE' }),
-    ]);
-
-    render(<HousekeepingPage permissions={['housekeeping:read']} />);
-
-    await screen.findByRole('button', {
-      name: 'Voir l’historique de la chambre 202',
-    });
-    expect(screen.queryByText('Créer une tâche')).not.toBeInTheDocument();
-    expect(screen.getByText('Libérée au check-out')).toBeInTheDocument();
-  });
-
-  it('remplace le sélecteur par un texte explicatif pour RESERVEE', async () => {
-    vi.mocked(listRooms).mockResolvedValue([
-      room({ id: 3, numero: '303', statut: 'RESERVEE' }),
-    ]);
-
-    render(<HousekeepingPage permissions={['housekeeping:read']} />);
-
-    await screen.findByRole('button', {
-      name: 'Voir l’historique de la chambre 303',
-    });
-    expect(screen.queryByText('Créer une tâche')).not.toBeInTheDocument();
-    expect(screen.getByText('Occupée au check-in')).toBeInTheDocument();
+    await waitFor(() => expect(listHousekeepingTasks).toHaveBeenCalledTimes(2));
   });
 });

@@ -1,5 +1,6 @@
 import { apiRequest } from '@/lib/api-client';
 import type { Room, StatutChambre } from '../reservations/types';
+import type { PrioriteTicket } from '../maintenance/types';
 import type {
   RoomStatusLogEntry,
   HousekeepingTask,
@@ -132,6 +133,27 @@ export function cancelHousekeepingTask(id: number, payload: { motif: string }) {
 
 export function reopenHousekeepingTask(id: number, payload: { motif: string }) {
   return apiRequest<HousekeepingTask>(`/housekeeping/tasks/${id}/reopen`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+// DESIGN-008 — « Signaler un incident » (Gouvernante, housekeeping:report-
+// incident). Réutilise POST /mobile/housekeeping/incidents
+// (MobileHousekeepingController, backend/src/modules/housekeeping/) : cette
+// route n'exige que la permission housekeeping:report-incident, aucune
+// restriction de scope de jeton ne bloque un jeton desktop normal (seul un
+// jeton *mobile*-scopé est restreint aux routes /mobile/*, jamais
+// l'inverse — voir JwtAuthGuard). Aucun nouvel endpoint backend créé.
+export interface ReportIncidentInput {
+  roomId: number;
+  typePanne: string;
+  priorite?: PrioriteTicket;
+  photoUrl?: string;
+}
+
+export function reportIncident(payload: ReportIncidentInput) {
+  return apiRequest<unknown>('/mobile/housekeeping/incidents', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
