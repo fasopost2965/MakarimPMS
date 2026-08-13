@@ -68,6 +68,17 @@ export function cancelReservation(id: number, motif: string) {
   });
 }
 
+// DESIGN-007 — POST /reservations/:id/no-show existait côté backend
+// (reservations:delete, motif obligatoire ≥ 10 caractères, calcule
+// BR-RES-006) mais n'avait jusqu'ici aucun client frontend : aucune route
+// nouvelle, seul ce wrapper manquait.
+export function markNoShow(id: number, motif: string) {
+  return apiRequest<Reservation>(`/reservations/${id}/no-show`, {
+    method: 'POST',
+    body: JSON.stringify({ motif }),
+  });
+}
+
 // CH-007 (F6, self-checkin) — génère (ou régénère) le lien pré-arrivée,
 // envoyé par email au client (self-checkin.service.ts, réutilise le canal
 // F7). L'URL n'est pas persistée nulle part côté lecture : ce retour est la

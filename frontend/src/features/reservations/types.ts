@@ -66,6 +66,13 @@ export interface Reservation {
   dateDepart: string;
   statut: StatutReservation;
   sourceBrute: string | null;
+  // DESIGN-007 — champ scalaire réellement présent en base (défaut
+  // BED_AND_BREAKFAST, jamais NULL) et déjà renvoyé par RESERVATION_INCLUDE
+  // (aucun `select` restrictif côté backend) : contrat confirmé, seul le
+  // type frontend ne le déclarait pas encore. Déjà exploité ponctuellement
+  // via une extension de type locale dans ReservationCheckinDialog.tsx
+  // avant cet élargissement.
+  formule: FormuleHebergement;
   // Tarification saisonnière (cahier des charges §5.1/§5.4). Décimaux
   // Prisma sérialisés en string par l'API.
   prixTotalCalcule: string;

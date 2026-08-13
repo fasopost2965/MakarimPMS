@@ -9,6 +9,17 @@ export function toISODate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+// DESIGN-007 — l'API renvoie Reservation.dateArrivee/dateDepart en ISO
+// complet ("2026-08-13T00:00:00.000Z"), jamais en simple "YYYY-MM-DD" —
+// une comparaison de chaîne directe avec une valeur produite par
+// toISODate() échoue systématiquement pour "aujourd'hui" (préfixe commun,
+// la chaîne la plus courte est toujours lexicographiquement inférieure).
+// Toute comparaison de date métier sur ces deux champs doit passer par
+// cette normalisation, jamais par la chaîne brute.
+export function toDateOnly(value: string): string {
+  return value.slice(0, 10);
+}
+
 export function addDays(date: Date, days: number): Date {
   const copy = new Date(date);
   copy.setUTCDate(copy.getUTCDate() + days);
