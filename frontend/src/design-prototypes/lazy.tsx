@@ -21,3 +21,11 @@ export const PrototypeD2 = lazy(() =>
 export const PrototypeD3 = lazy(() =>
   import('./PrototypeD3.tsx').then((m) => ({ default: m.PrototypeD3 })),
 );
+
+// DESIGN-007 — Prototype C (module Réservations, convergence table
+// opérationnelle + planning), isolé de la même façon, jamais lié à
+// App.tsx/AppSidebar. Export par défaut (contrairement aux prototypes
+// DESIGN-005 ci-dessus) — aucun `.then(...)` nécessaire.
+export const PrototypeReservationsC = lazy(
+  () => import('./PrototypeReservationsC.tsx'),
+);
