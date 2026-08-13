@@ -75,6 +75,7 @@ function reservation(overrides: Partial<Reservation> = {}): Reservation {
     prixTotalCalcule: '500.00',
     prixTotalFinal: '500.00',
     ajustementManuel: false,
+    formule: 'BED_AND_BREAKFAST',
     motifAjustement: null,
     nombreOccupants: 1,
     createdAt: new Date().toISOString(),

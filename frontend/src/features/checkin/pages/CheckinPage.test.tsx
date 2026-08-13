@@ -143,6 +143,7 @@ const RESERVATION = {
   prixTotalCalcule: '1800',
   prixTotalFinal: '1800',
   ajustementManuel: false,
+  formule: 'BED_AND_BREAKFAST',
   motifAjustement: null,
   // FIN-102 — préremplie (réservation "récente" avec occupation déjà
   // connue), aucun test dédié à ce fichier n'exerce le cas legacy.
