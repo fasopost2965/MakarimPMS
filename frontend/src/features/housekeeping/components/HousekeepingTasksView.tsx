@@ -115,6 +115,7 @@ export function HousekeepingTasksView({
                     onCancel={() => onCancel(task)}
                     onReopen={() => onReopen(task)}
                     onTaskHistory={() => onTaskHistory(task)}
+                    hideControlActions
                   />
                 </td>
               </tr>

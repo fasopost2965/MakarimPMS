@@ -28,6 +28,16 @@ interface HousekeepingTaskActionsProps {
    * contexte. */
   historyLabel?: string;
   align?: 'start' | 'end';
+  /** Vue Tâches uniquement : une tâche TERMINEE est déjà actionnable au
+   * premier niveau dans HousekeepingControlQueue (mission §7 — toujours
+   * visible, jamais caché derrière un clic) ; dupliquer Valider/Refuser
+   * dans la ligne du tableau créerait deux commandes identiques pour la
+   * même tâche à l'écran (constaté en e2e live : deux boutons "Valider"
+   * simultanés, ambiguïté réelle pour un utilisateur comme pour les
+   * lecteurs d'écran). Le contrôle reste possible, mais exclusivement
+   * depuis le bandeau — la ligne garde ses autres actions (Historique) et
+   * un renvoi textuel neutre. */
+  hideControlActions?: boolean;
 }
 
 export function HousekeepingTaskActions({
@@ -44,6 +54,7 @@ export function HousekeepingTaskActions({
   onTaskHistory,
   historyLabel,
   align = 'end',
+  hideControlActions = false,
 }: HousekeepingTaskActionsProps) {
   const hasWrite = permissions?.includes('housekeeping:write');
   const hasControl = permissions?.includes('housekeeping:control');
@@ -108,7 +119,7 @@ export function HousekeepingTaskActions({
           Terminer
         </Button>
       )}
-      {task.statut === 'TERMINEE' && hasControl && (
+      {task.statut === 'TERMINEE' && hasControl && !hideControlActions && (
         <>
           <Button
             size="sm"
@@ -122,6 +133,11 @@ export function HousekeepingTaskActions({
             Valider
           </Button>
         </>
+      )}
+      {task.statut === 'TERMINEE' && hasControl && hideControlActions && (
+        <span className="text-muted-foreground text-xs italic">
+          Contrôle ci-dessus
+        </span>
       )}
       {task.statut === 'VALIDEE' && hasControl && (
         <Button
