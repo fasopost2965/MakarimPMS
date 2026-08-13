@@ -1,23 +1,11 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type RefObject,
-} from 'react';
-import { AlertTriangle, BedDouble, LogIn, LogOut, Search } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useCallback, useEffect, useState } from 'react';
+import { ErrorState } from '@/components/ui/error-state';
 import { toastManager } from '@/components/ui/toast';
-import { arrivalsToday, listRooms } from '../../reservations/api';
+import { RoomContextModal } from '../../dashboard/components/RoomContextModal';
+import { arrivalsToday, listRooms, markNoShow } from '../../reservations/api';
 import { toISODate } from '../../reservations/date-utils';
-import type {
-  CanalReservation,
-  Reservation,
-  Room,
-} from '../../reservations/types';
+import { NoShowDialog } from '../../reservations/components/NoShowDialog';
+import type { Reservation, Room } from '../../reservations/types';
 import {
   changeRoom,
   checkinFromReservation,
@@ -30,53 +18,24 @@ import {
 } from '../api';
 import type { Stay, WalkinCheckinInput } from '../types';
 import { WalkinCheckinDialog } from '../components/WalkinCheckinDialog';
-import { StayDetailsDialog } from '../components/StayDetailsDialog';
 import { ReservationCheckinDialog } from '../components/ReservationCheckinDialog';
 import { ExtendStayDialog } from '../components/ExtendStayDialog';
 import { ChangeRoomDialog } from '../components/ChangeRoomDialog';
+import { ArrivalContextPanel } from '../components/ArrivalContextPanel';
+import { StayContextPanel } from '../components/StayContextPanel';
+import { DepartureContextPanel } from '../components/DepartureContextPanel';
+import { FrontDeskKpiStrip } from '../components/FrontDeskKpiStrip';
+import {
+  FrontDeskToolbar,
+  type FrontDeskView,
+} from '../components/FrontDeskToolbar';
+import { ArrivalsView } from '../components/ArrivalsView';
+import { ActiveStaysView } from '../components/ActiveStaysView';
+import { DeparturesView } from '../components/DeparturesView';
 
-// CH-063 (docs/design/design_handoff_exploitation_hotel) — un séjour créé
-// via le check-in walk-in (StayService.checkinWalkIn) n'a jamais de
-// Reservation associée (reservationId reste null) : seul ce chemin produit
-// un séjour sans réservation, donc `reservation === null` désigne fidèlement
-// un walk-in, pas une valeur par défaut inventée.
-const CANAL_LABEL: Record<CanalReservation, string> = {
-  DIRECT: 'Direct',
-  WALK_IN: 'Walk-in',
-  BOOKING_COM: 'Booking.com',
-  EXPEDIA: 'Expedia',
-  AIRBNB: 'Airbnb',
-};
-const CANAL_TEXT_CLASS: Record<CanalReservation, string> = {
-  DIRECT: 'text-primary',
-  WALK_IN: 'text-warning',
-  BOOKING_COM: 'text-info',
-  EXPEDIA: 'text-warning',
-  AIRBNB: 'text-violet',
-};
-const CANAL_AVATAR_CLASS: Record<CanalReservation, string> = {
-  DIRECT: 'bg-primary/15 text-primary',
-  WALK_IN: 'bg-warning/20 text-warning',
-  BOOKING_COM: 'bg-info/15 text-info',
-  EXPEDIA: 'bg-warning/20 text-warning',
-  AIRBNB: 'bg-violet/15 text-violet',
-};
-
-function resolveCanal(reservation: Reservation | null): CanalReservation {
-  return reservation?.canal ?? 'WALK_IN';
-}
-
-function initials(nom: string, prenom: string) {
-  return `${nom.charAt(0)}${prenom.charAt(0)}`.toUpperCase();
-}
-
-// Handoff design final, lot 3 (MicroInteractionCheckin.dc.html) — le mockup
-// anime un toggle de démo (chambre Réservée ↔ Occupée) sans action serveur
-// réelle. Ici le check-in est une vraie mutation, jamais réversible en un
-// clic (INV-SEJ-*), donc la micro-interaction se traduit par une
-// confirmation immédiate et honnête (même convention que le toast de
-// réassort stock, CH-032 : « une confirmation dit ce qui s'est passé »)
-// plutôt qu'un état togglable fictif.
+// DESIGN-009 — un séjour créé via le check-in walk-in (StayService.
+// checkinWalkIn) n'a jamais de Reservation associée (reservationId reste
+// null) : seul ce chemin produit un séjour sans réservation.
 function notifyCheckinDone(
   guest: { nom: string; prenom: string },
   room: { numero: string },
@@ -102,83 +61,76 @@ function matchesSearch(
   );
 }
 
+// DESIGN-009 — reconstruction de l'écran Front Desk sur l'UX validée par
+// PrototypeFrontDeskA (design/design-005-desktop-prototypes) : bande KPI +
+// switch Arrivées/Séjours/Départs + panneaux contextuels de consultation
+// avant action, plutôt que 3 listes empilées (ancien CheckinPage.tsx).
+// Aucun nouvel endpoint, aucune règle métier modifiée — uniquement une
+// réorganisation de l'existant, cf. rapport de mission DESIGN-009.
 export function CheckinPage({ permissions }: { permissions: string[] | null }) {
+  const [view, setView] = useState<FrontDeskView>('arrivees');
+  const [search, setSearch] = useState('');
+
   const [arrivals, setArrivals] = useState<Reservation[]>([]);
   const [staysEnCours, setStaysEnCours] = useState<Stay[]>([]);
   const [departs, setDeparts] = useState<Stay[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Panneau contextuel — Arrivée.
+  const [selectedArrival, setSelectedArrival] = useState<Reservation | null>(
+    null,
+  );
+
+  // Check-in réel (dialogue de confirmation existant, ReservationCheckinDialog).
   const [checkingInReservationId, setCheckingInReservationId] = useState<
     number | null
   >(null);
   const [checkingInReservation, setCheckingInReservation] =
     useState<Reservation | null>(null);
 
+  // No-show (DESIGN-007, réutilisé tel quel — NoShowDialog + markNoShow).
+  const [noShowReservation, setNoShowReservation] =
+    useState<Reservation | null>(null);
+  const [noShowMotif, setNoShowMotif] = useState('');
+  const [noShowSubmitting, setNoShowSubmitting] = useState(false);
+  const [noShowError, setNoShowError] = useState<string | null>(null);
+
   const [walkinOpen, setWalkinOpen] = useState(false);
   const [walkinSubmitting, setWalkinSubmitting] = useState(false);
   const [walkinError, setWalkinError] = useState<string | null>(null);
 
+  // Panneau contextuel — Séjour en cours / Départ du jour. `viewingKind`
+  // détermine uniquement quel wrapper (StayContextPanel vs
+  // DepartureContextPanel) est monté — les deux réutilisent la même
+  // StayDetailsDialog sous-jacente (voir composants dédiés).
   const [viewingStay, setViewingStay] = useState<Stay | null>(null);
+  const [viewingKind, setViewingKind] = useState<'sejour' | 'depart' | null>(
+    null,
+  );
   const [checkingOut, setCheckingOut] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [soldeDu, setSoldeDu] = useState<string | null>(null);
+  const [forcingCheckout, setForcingCheckout] = useState(false);
 
-  // GL-003 (MX-002A) — le séjour prolongé est toujours celui déjà ouvert
-  // dans StayDetailsDialog (viewingStay) ; ce booléen contrôle uniquement
-  // l'ouverture du second dialogue, jamais une copie séparée du Stay.
   const [extendDialogOpen, setExtendDialogOpen] = useState(false);
   const [extending, setExtending] = useState(false);
   const [extendError, setExtendError] = useState<unknown>(null);
 
-  // GL-002 (MX-002C) — même convention que l'extension de séjour ci-dessus :
-  // le séjour dont on change la chambre est toujours celui déjà ouvert dans
-  // StayDetailsDialog (viewingStay).
   const [changeRoomDialogOpen, setChangeRoomDialogOpen] = useState(false);
   const [changingRoom, setChangingRoom] = useState(false);
   const [changeRoomError, setChangeRoomError] = useState<unknown>(null);
 
-  const [search, setSearch] = useState('');
-  // UX-003B — pur affichage, aucune donnée nouvelle : distingue un départ
-  // aujourd'hui (urgent) d'un départ dans plusieurs jours au sein de la même
-  // liste "Séjours en cours" (qui, contrairement à departsRef, n'est pas
-  // filtrée sur la seule journée en cours).
+  // RoomContextModal (DESIGN-006, protégé — jamais modifié). Toujours
+  // ouvert après fermeture du panneau parent (jamais de modales imbriquées).
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
+
   const todayISO = toISODate(new Date());
-  const arrivalsRef = useRef<HTMLElement>(null);
-  const departsRef = useRef<HTMLElement>(null);
-  const staysRef = useRef<HTMLElement>(null);
-
-  const filteredArrivals = useMemo(
-    () => arrivals.filter((r) => matchesSearch(search, r.guest, r.room.numero)),
-    [arrivals, search],
-  );
-  const filteredDeparts = useMemo(
-    () => departs.filter((s) => matchesSearch(search, s.guest, s.room.numero)),
-    [departs, search],
-  );
-  const filteredStaysEnCours = useMemo(
-    () =>
-      staysEnCours.filter((s) => matchesSearch(search, s.guest, s.room.numero)),
-    [staysEnCours, search],
-  );
-
-  const departsSansFiche = departs.filter((s) => !s.policeRecord);
-  const staysSansFiche = staysEnCours.filter((s) => !s.policeRecord);
-  const alerteFichePoliceCount =
-    departsSansFiche.length + staysSansFiche.length;
-
-  function scrollToSection(ref: RefObject<HTMLElement | null>) {
-    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  function scrollToFichePoliceAlerte() {
-    if (departsSansFiche.length > 0) scrollToSection(departsRef);
-    else if (staysSansFiche.length > 0) scrollToSection(staysRef);
-  }
 
   const refetch = useCallback(async () => {
-    setLoading(true);
     setLoadError(null);
     try {
       const [arrivalsData, staysData, departsData, roomsData] =
@@ -192,11 +144,10 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
       setStaysEnCours(staysData);
       setDeparts(departsData);
       setRooms(roomsData);
-      // Garde le séjour actuellement ouvert dans le dialogue à jour (ex.
-      // badge "fiche police manquante" après enregistrement) sans
-      // dépendre de viewingStay ici — sinon l'identité de refetch changerait
-      // à chaque ouverture/fermeture du dialogue et redéclencherait l'effet
-      // de chargement initial.
+      // Garde le séjour actuellement ouvert dans le panneau à jour (ex.
+      // badge "fiche police manquante" après enregistrement) sans dépendre
+      // de viewingStay ici — sinon l'identité de refetch changerait à
+      // chaque ouverture/fermeture du panneau.
       setViewingStay((current) =>
         current
           ? ([...staysData, ...departsData].find((s) => s.id === current.id) ??
@@ -207,6 +158,7 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
       setLoadError(err instanceof Error ? err.message : 'Erreur de chargement');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -215,12 +167,25 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
     void Promise.resolve().then(() => refetch());
   }, [refetch]);
 
-  function openStay(stay: Stay) {
+  function handleRefresh() {
+    setRefreshing(true);
+    void refetch();
+  }
+
+  function openStayPanel(stay: Stay, kind: 'sejour' | 'depart') {
     setSoldeDu(null);
     setCheckoutError(null);
     setExtendError(null);
     setChangeRoomError(null);
+    setViewingKind(kind);
     setViewingStay(stay);
+  }
+
+  function closeStayPanel() {
+    setViewingStay(null);
+    setViewingKind(null);
+    setCheckoutError(null);
+    setSoldeDu(null);
   }
 
   async function handleCheckin(reservationId: number, nombreOccupants: number) {
@@ -230,11 +195,35 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
       const stay = await checkinFromReservation(reservationId, nombreOccupants);
       notifyCheckinDone(stay.guest, stay.room);
       setCheckingInReservation(null);
+      setView('sejours');
       await refetch();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Erreur de check-in');
     } finally {
       setCheckingInReservationId(null);
+    }
+  }
+
+  async function handleNoShowConfirm() {
+    if (!noShowReservation) return;
+    setNoShowSubmitting(true);
+    setNoShowError(null);
+    try {
+      await markNoShow(noShowReservation.id, noShowMotif);
+      toastManager.add({
+        title: 'Non-présentation enregistrée',
+        description: `${noShowReservation.guest.prenom} ${noShowReservation.guest.nom}`,
+        type: 'success',
+      });
+      setNoShowReservation(null);
+      setNoShowMotif('');
+      await refetch();
+    } catch (err) {
+      setNoShowError(
+        err instanceof Error ? err.message : 'Erreur lors du no-show',
+      );
+    } finally {
+      setNoShowSubmitting(false);
     }
   }
 
@@ -245,6 +234,7 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
       const stay = await checkinWalkIn(input);
       notifyCheckinDone(stay.guest, stay.room);
       setWalkinOpen(false);
+      setView('sejours');
       await refetch();
     } catch (err) {
       setWalkinError(err instanceof Error ? err.message : 'Erreur de check-in');
@@ -271,14 +261,40 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
     }
   }
 
-  // MX-002A — GL-003. `POST /stays/:id/extend` renvoie déjà le Stay à jour
-  // (STAY_INCLUDE), mais on ne s'appuie volontairement pas sur cette seule
-  // hypothèse : une fois le POST confirmé réussi, on relit l'état réel via
-  // getStay(). Un échec de cette relecture ne doit jamais être présenté
-  // comme un échec de la prolongation elle-même (le POST a déjà réussi) —
-  // le refetch() général des listes sert alors de filet de secours, il
-  // resynchronise déjà viewingStay depuis les données fraîches (voir
-  // refetch ci-dessus).
+  // DESIGN-009 — check-out forcé (CH-005), réservé à checkin:force-checkout,
+  // uniquement proposé après l'échec d'un check-out normal (voir
+  // StayDetailsDialog : `showForceCheckout`). Même API (`POST
+  // /checkout/:stayId`), seul le corps change (`force`/`motif`).
+  async function handleForceCheckout(motif: string) {
+    if (!viewingStay) return;
+    setForcingCheckout(true);
+    setCheckoutError(null);
+    try {
+      const result = await checkoutStay(viewingStay.id, {
+        force: true,
+        motif,
+      });
+      setSoldeDu(result.soldeDu);
+      setViewingStay(result);
+      toastManager.add({
+        title: 'Check-out forcé effectué',
+        description: `${result.guest.prenom} ${result.guest.nom} — Chambre ${result.room.numero}`,
+        type: 'success',
+      });
+      await refetch();
+    } catch (err) {
+      setCheckoutError(
+        err instanceof Error ? err.message : 'Erreur de check-out forcé',
+      );
+    } finally {
+      setForcingCheckout(false);
+    }
+  }
+
+  // MX-002A — GL-003. `POST /stays/:id/extend` renvoie déjà le Stay à jour,
+  // mais on relit systématiquement via getStay() (voir commentaire détaillé
+  // dans l'historique du module) : un échec de cette relecture n'est jamais
+  // présenté comme un échec de la prolongation elle-même.
   async function handleExtendStay(
     nouvelleDateCheckoutPrevue: string,
     motif: string,
@@ -314,11 +330,7 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
     }
   }
 
-  // MX-002C — GL-002. Même garantie que handleExtendStay ci-dessus : relit
-  // l'état réel via getStay() après un POST confirmé réussi plutôt que de
-  // se fier uniquement à sa réponse ; un échec de cette relecture n'est
-  // jamais présenté comme un échec du changement de chambre lui-même
-  // (refetch() sert de filet de secours, il resynchronise déjà viewingStay).
+  // MX-002C — GL-002. Même garantie que handleExtendStay ci-dessus.
   async function handleChangeRoom(newRoomId: number, motif: string) {
     if (!viewingStay) return;
     const stayId = viewingStay.id;
@@ -351,273 +363,86 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
     }
   }
 
+  const filteredArrivals = arrivals.filter((r) =>
+    matchesSearch(search, r.guest, r.room.numero),
+  );
+  const filteredStaysEnCours = staysEnCours.filter((s) =>
+    matchesSearch(search, s.guest, s.room.numero),
+  );
+  const filteredDeparts = departs.filter((s) =>
+    matchesSearch(search, s.guest, s.room.numero),
+  );
+
+  const fichesPoliceACompleter =
+    staysEnCours.filter((s) => !s.policeRecord).length +
+    departs.filter((s) => !s.policeRecord).length;
+
+  const canWalkin = permissions?.includes('checkin:write') ?? false;
+  const canForceCheckout =
+    permissions?.includes('checkin:force-checkout') ?? false;
+
+  const ContextPanel =
+    viewingKind === 'depart' ? DepartureContextPanel : StayContextPanel;
+
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => scrollToSection(arrivalsRef)}
-            className="border-info/30 bg-info/10 text-info flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-info/20"
-          >
-            <LogIn className="size-3.5" />
-            <span className="text-sm font-bold">{arrivals.length}</span>
-            arrivée{arrivals.length > 1 ? 's' : ''} aujourd'hui
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollToSection(departsRef)}
-            className="border-warning/30 bg-warning/10 text-warning flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-warning/20"
-          >
-            <LogOut className="size-3.5" />
-            <span className="text-sm font-bold">{departs.length}</span>
-            départ{departs.length > 1 ? 's' : ''} aujourd'hui
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollToSection(staysRef)}
-            className="border-success/30 bg-success/10 text-success flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-success/20"
-          >
-            <BedDouble className="size-3.5" />
-            <span className="text-sm font-bold">{staysEnCours.length}</span>
-            séjour{staysEnCours.length > 1 ? 's' : ''} en cours
-          </button>
-          <button
-            type="button"
-            onClick={scrollToFichePoliceAlerte}
-            disabled={alerteFichePoliceCount === 0}
-            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-              alerteFichePoliceCount > 0
-                ? 'border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20'
-                : 'border-border text-muted-foreground'
-            }`}
-          >
-            <AlertTriangle className="size-3.5" />
-            <span className="text-sm font-bold">{alerteFichePoliceCount}</span>
-            fiche{alerteFichePoliceCount > 1 ? 's' : ''} police manquante
-            {alerteFichePoliceCount > 1 ? 's' : ''}
-          </button>
-        </div>
+    <div className="flex h-full flex-col gap-4 p-4 sm:p-6">
+      <FrontDeskKpiStrip
+        arriveesAujourdhui={arrivals.length}
+        fichesPoliceACompleter={fichesPoliceACompleter}
+        sejoursEnCours={staysEnCours.length}
+        departsAujourdhui={departs.length}
+      />
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="relative w-full sm:w-64">
-            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher un client ou une chambre…"
-              className="w-full pl-8"
-            />
-          </div>
-          <Button
-            onClick={() => setWalkinOpen(true)}
-            className="w-full sm:w-auto"
-          >
-            + Check-in walk-in
-          </Button>
-        </div>
-      </div>
+      <FrontDeskToolbar
+        view={view}
+        onViewChange={setView}
+        search={search}
+        onSearchChange={setSearch}
+        onRefresh={handleRefresh}
+        refreshing={refreshing}
+        onWalkinClick={() => setWalkinOpen(true)}
+        canWalkin={canWalkin}
+      />
 
-      {loadError && <p className="text-destructive text-sm">{loadError}</p>}
+      {loadError && (
+        <ErrorState
+          title="Erreur de chargement du Front Desk"
+          description={loadError}
+          onRetry={handleRefresh}
+        />
+      )}
       {actionError && <p className="text-destructive text-sm">{actionError}</p>}
 
       {loading ? (
         <p className="text-muted-foreground text-sm">Chargement…</p>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          <section
-            ref={arrivalsRef}
-            className="bg-card flex flex-col gap-2 rounded-lg border p-4"
-          >
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <LogIn className="text-muted-foreground size-4" />
-              Arrivées du jour
-            </h2>
-            {filteredArrivals.length === 0 && (
-              <p className="text-muted-foreground text-sm">
-                {arrivals.length === 0
-                  ? "Aucune arrivée prévue aujourd'hui."
-                  : 'Aucun résultat pour cette recherche.'}
-              </p>
-            )}
-            <ul className="flex flex-col gap-2">
-              {filteredArrivals.map((reservation) => (
-                <li
-                  key={reservation.id}
-                  className="bg-background flex items-center justify-between gap-2 rounded-md border p-2 text-sm"
-                >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span
-                      className={`flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${CANAL_AVATAR_CLASS[resolveCanal(reservation)]}`}
-                    >
-                      {initials(
-                        reservation.guest.nom,
-                        reservation.guest.prenom,
-                      )}
-                    </span>
-                    <span className="flex min-w-0 flex-col">
-                      <span className="truncate font-semibold">
-                        {reservation.guest.nom} {reservation.guest.prenom}
-                      </span>
-                      <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
-                        <Badge variant="outline" className="h-4 px-1.5">
-                          Ch. {reservation.room.numero}
-                        </Badge>
-                        <span className={CANAL_TEXT_CLASS[reservation.canal]}>
-                          {CANAL_LABEL[reservation.canal]}
-                        </span>
-                      </span>
-                    </span>
-                  </span>
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setActionError(null);
-                      setCheckingInReservation(reservation);
-                    }}
-                    disabled={checkingInReservationId === reservation.id}
-                  >
-                    {checkingInReservationId === reservation.id
-                      ? 'Check-in…'
-                      : 'Check-in'}
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section
-            ref={departsRef}
-            className="bg-card flex flex-col gap-2 rounded-lg border p-4"
-          >
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <LogOut className="text-muted-foreground size-4" />
-              Départs du jour
-            </h2>
-            {filteredDeparts.length === 0 && (
-              <p className="text-muted-foreground text-sm">
-                {departs.length === 0
-                  ? "Aucun départ prévu aujourd'hui."
-                  : 'Aucun résultat pour cette recherche.'}
-              </p>
-            )}
-            <ul className="flex flex-col gap-2">
-              {filteredDeparts.map((stay) => (
-                <li key={stay.id}>
-                  <button
-                    type="button"
-                    className="bg-background hover:border-primary/40 flex w-full cursor-pointer items-center justify-between gap-2 rounded-md border p-2 text-left text-sm transition-[box-shadow,border-color] hover:shadow-[var(--shadow-card)]"
-                    onClick={() => openStay(stay)}
-                  >
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span
-                        className={`flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${CANAL_AVATAR_CLASS[resolveCanal(stay.reservation)]}`}
-                      >
-                        {initials(stay.guest.nom, stay.guest.prenom)}
-                      </span>
-                      <span className="flex min-w-0 flex-col gap-0.5">
-                        <span className="truncate font-semibold">
-                          {stay.guest.nom} {stay.guest.prenom}
-                        </span>
-                        <span className="flex flex-wrap items-center gap-1.5">
-                          <Badge variant="outline" className="h-4 px-1.5">
-                            Ch. {stay.room.numero}
-                          </Badge>
-                          <span
-                            className={`text-xs ${CANAL_TEXT_CLASS[resolveCanal(stay.reservation)]}`}
-                          >
-                            {CANAL_LABEL[resolveCanal(stay.reservation)]}
-                          </span>
-                          {!stay.policeRecord && (
-                            <Badge
-                              variant="warning"
-                              title="Fiche de police (registre légal DGSN) non renseignée"
-                            >
-                              <AlertTriangle className="size-3" />
-                              Fiche police manquante
-                            </Badge>
-                          )}
-                        </span>
-                      </span>
-                    </span>
-                    <span className="text-muted-foreground shrink-0 text-xs">
-                      Voir / check-out
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section
-            ref={staysRef}
-            className="bg-card flex flex-col gap-2 rounded-lg border p-4 md:col-span-2"
-          >
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <BedDouble className="text-muted-foreground size-4" />
-              Séjours en cours
-            </h2>
-            {filteredStaysEnCours.length === 0 && (
-              <p className="text-muted-foreground text-sm">
-                {staysEnCours.length === 0
-                  ? 'Aucun séjour en cours.'
-                  : 'Aucun résultat pour cette recherche.'}
-              </p>
-            )}
-            <ul className="grid gap-2 md:grid-cols-2">
-              {filteredStaysEnCours.map((stay) => (
-                <li key={stay.id}>
-                  <button
-                    type="button"
-                    className="bg-background hover:border-primary/40 flex w-full cursor-pointer items-center justify-between gap-2 rounded-md border p-2 text-left text-sm transition-[box-shadow,border-color] hover:shadow-[var(--shadow-card)]"
-                    onClick={() => openStay(stay)}
-                  >
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span
-                        className={`flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${CANAL_AVATAR_CLASS[resolveCanal(stay.reservation)]}`}
-                      >
-                        {initials(stay.guest.nom, stay.guest.prenom)}
-                      </span>
-                      <span className="flex min-w-0 flex-col gap-0.5">
-                        <span className="truncate font-semibold">
-                          {stay.guest.nom} {stay.guest.prenom}
-                        </span>
-                        <span className="flex flex-wrap items-center gap-1.5">
-                          <Badge variant="outline" className="h-4 px-1.5">
-                            Ch. {stay.room.numero}
-                          </Badge>
-                          <span
-                            className={`text-xs ${CANAL_TEXT_CLASS[resolveCanal(stay.reservation)]}`}
-                          >
-                            {CANAL_LABEL[resolveCanal(stay.reservation)]}
-                          </span>
-                          {!stay.policeRecord && (
-                            <Badge
-                              variant="warning"
-                              title="Fiche de police (registre légal DGSN) non renseignée"
-                            >
-                              <AlertTriangle className="size-3" />
-                              Fiche police manquante
-                            </Badge>
-                          )}
-                        </span>
-                      </span>
-                    </span>
-                    <span
-                      className={`shrink-0 text-xs ${
-                        stay.dateCheckoutPrevue.slice(0, 10) === todayISO
-                          ? 'text-warning font-semibold'
-                          : 'text-muted-foreground'
-                      }`}
-                    >
-                      Départ prévu {stay.dateCheckoutPrevue.slice(0, 10)}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        </div>
+        <>
+          {view === 'arrivees' && (
+            <ArrivalsView
+              arrivals={filteredArrivals}
+              hasAnyArrival={arrivals.length > 0}
+              onSelect={(reservation) => {
+                setActionError(null);
+                setSelectedArrival(reservation);
+              }}
+            />
+          )}
+          {view === 'sejours' && (
+            <ActiveStaysView
+              stays={filteredStaysEnCours}
+              hasAnyStay={staysEnCours.length > 0}
+              onSelect={(stay) => openStayPanel(stay, 'sejour')}
+            />
+          )}
+          {view === 'departs' && (
+            <DeparturesView
+              stays={filteredDeparts}
+              hasAnyStay={departs.length > 0}
+              todayISO={todayISO}
+              onSelect={(stay) => openStayPanel(stay, 'depart')}
+            />
+          )}
+        </>
       )}
 
       <WalkinCheckinDialog
@@ -630,6 +455,27 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
         onConfirm={handleWalkinConfirm}
         submitting={walkinSubmitting}
         error={walkinError}
+      />
+
+      <ArrivalContextPanel
+        reservation={selectedArrival}
+        permissions={permissions}
+        onClose={() => setSelectedArrival(null)}
+        onViewRoom={(reservation) => {
+          setSelectedArrival(null);
+          setSelectedRoom(reservation.room);
+        }}
+        onCheckinClick={(reservation) => {
+          setSelectedArrival(null);
+          setActionError(null);
+          setCheckingInReservation(reservation);
+        }}
+        onNoShowClick={(reservation) => {
+          setSelectedArrival(null);
+          setNoShowMotif('');
+          setNoShowError(null);
+          setNoShowReservation(reservation);
+        }}
       />
 
       <ReservationCheckinDialog
@@ -653,13 +499,23 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
         error={actionError}
       />
 
-      <StayDetailsDialog
-        stay={viewingStay}
+      <NoShowDialog
+        reservation={noShowReservation}
+        motif={noShowMotif}
+        setMotif={setNoShowMotif}
+        submitting={noShowSubmitting}
+        error={noShowError}
         onClose={() => {
-          setViewingStay(null);
-          setCheckoutError(null);
-          setSoldeDu(null);
+          if (noShowSubmitting) return;
+          setNoShowReservation(null);
+          setNoShowError(null);
         }}
+        onConfirm={handleNoShowConfirm}
+      />
+
+      <ContextPanel
+        stay={viewingStay}
+        onClose={closeStayPanel}
         onCheckout={handleCheckout}
         checkingOut={checkingOut}
         error={checkoutError}
@@ -673,6 +529,13 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
         onChangeRoomClick={() => {
           setChangeRoomError(null);
           setChangeRoomDialogOpen(true);
+        }}
+        canForceCheckout={canForceCheckout}
+        onForceCheckout={handleForceCheckout}
+        forcingCheckout={forcingCheckout}
+        onViewRoom={(stay) => {
+          closeStayPanel();
+          setSelectedRoom(stay.room);
         }}
       />
 
@@ -699,6 +562,14 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
         onConfirm={handleChangeRoom}
         submitting={changingRoom}
         error={changeRoomError}
+      />
+
+      <RoomContextModal
+        room={selectedRoom}
+        rooms={rooms}
+        permissions={permissions}
+        onClose={() => setSelectedRoom(null)}
+        onNavigate={() => setSelectedRoom(null)}
       />
     </div>
   );

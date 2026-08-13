@@ -2,9 +2,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+// DESIGN-009 — reconstruction de CheckinPage (Front Desk). Convention de
+// mock identique à l'ancien fichier : les dialogues/grilles lourds sont
+// mockés (interactions minimales pour piloter l'orchestrateur), mais
+// ArrivalContextPanel reste le VRAI composant (pas mocké) — c'est le seul
+// endroit qui porte une logique RBAC nouvelle (Check-in/No-show gated),
+// même convention que ReservationContextPanel testé "en vrai" via
+// ReservationsCalendarPage.test.tsx (aucun fichier de test dédié).
+
 vi.mock('../../reservations/api', () => ({
   arrivalsToday: vi.fn(),
   listRooms: vi.fn(),
+  markNoShow: vi.fn(),
 }));
 vi.mock('../api', () => ({
   changeRoom: vi.fn(),
@@ -16,31 +25,203 @@ vi.mock('../api', () => ({
   listDepartsDuJour: vi.fn(),
   listStaysEnCours: vi.fn(),
 }));
+
 vi.mock('../components/WalkinCheckinDialog', () => ({
   WalkinCheckinDialog: () => null,
 }));
-vi.mock('../components/StayDetailsDialog', () => ({
-  StayDetailsDialog: ({
+
+vi.mock('../components/FrontDeskKpiStrip', () => ({
+  FrontDeskKpiStrip: ({
+    arriveesAujourdhui,
+    fichesPoliceACompleter,
+    sejoursEnCours,
+    departsAujourdhui,
+  }: {
+    arriveesAujourdhui: number;
+    fichesPoliceACompleter: number;
+    sejoursEnCours: number;
+    departsAujourdhui: number;
+  }) => (
+    <div>
+      KPI arrivées:{arriveesAujourdhui} fiches:{fichesPoliceACompleter} séjours:
+      {sejoursEnCours} départs:{departsAujourdhui}
+    </div>
+  ),
+}));
+
+vi.mock('../components/FrontDeskToolbar', () => ({
+  FrontDeskToolbar: ({
+    view,
+    onViewChange,
+    onRefresh,
+    canWalkin,
+    onWalkinClick,
+  }: {
+    view: string;
+    onViewChange: (v: 'arrivees' | 'sejours' | 'departs') => void;
+    onRefresh: () => void;
+    canWalkin: boolean;
+    onWalkinClick: () => void;
+  }) => (
+    <div>
+      <p>Vue active : {view}</p>
+      <button type="button" onClick={() => onViewChange('arrivees')}>
+        Arrivées
+      </button>
+      <button type="button" onClick={() => onViewChange('sejours')}>
+        Séjours
+      </button>
+      <button type="button" onClick={() => onViewChange('departs')}>
+        Départs
+      </button>
+      <button type="button" onClick={onRefresh}>
+        Actualiser
+      </button>
+      {canWalkin && (
+        <button type="button" onClick={onWalkinClick}>
+          + Check-in walk-in
+        </button>
+      )}
+    </div>
+  ),
+}));
+
+vi.mock('../components/ArrivalsView', () => ({
+  ArrivalsView: ({
+    arrivals,
+    onSelect,
+  }: {
+    arrivals: { id: number; guest: { nom: string; prenom: string } }[];
+    onSelect: (r: unknown) => void;
+  }) => (
+    <ul>
+      {arrivals.map((r) => (
+        <li key={r.id}>
+          <button type="button" onClick={() => onSelect(r)}>
+            Arrivée {r.guest.nom} {r.guest.prenom}
+          </button>
+        </li>
+      ))}
+    </ul>
+  ),
+}));
+
+vi.mock('../components/ActiveStaysView', () => ({
+  ActiveStaysView: ({
+    stays,
+    onSelect,
+  }: {
+    stays: { id: number; guest: { nom: string } }[];
+    onSelect: (s: unknown) => void;
+  }) => (
+    <ul>
+      {stays.map((s) => (
+        <li key={s.id}>
+          <button type="button" onClick={() => onSelect(s)}>
+            Séjour {s.guest.nom}
+          </button>
+        </li>
+      ))}
+    </ul>
+  ),
+}));
+
+vi.mock('../components/DeparturesView', () => ({
+  DeparturesView: ({
+    stays,
+    onSelect,
+  }: {
+    stays: { id: number; guest: { nom: string } }[];
+    onSelect: (s: unknown) => void;
+  }) => (
+    <ul>
+      {stays.map((s) => (
+        <li key={s.id}>
+          <button type="button" onClick={() => onSelect(s)}>
+            Départ {s.guest.nom}
+          </button>
+        </li>
+      ))}
+    </ul>
+  ),
+}));
+
+vi.mock('../components/StayContextPanel', () => ({
+  StayContextPanel: ({
     stay,
+    onCheckout,
     onExtendClick,
     onChangeRoomClick,
+    onForceCheckout,
+    canForceCheckout,
+    error,
   }: {
     stay: { id: number } | null;
+    onCheckout: () => void;
     onExtendClick?: () => void;
     onChangeRoomClick?: () => void;
+    onForceCheckout?: (motif: string) => void;
+    canForceCheckout?: boolean;
+    error: string | null;
   }) =>
     stay ? (
       <div>
-        Détails séjour {stay.id}
+        Panneau séjour {stay.id}
+        <button type="button" onClick={onCheckout}>
+          Check-out
+        </button>
         <button type="button" onClick={onExtendClick}>
           Ouvrir prolongation
         </button>
         <button type="button" onClick={onChangeRoomClick}>
           Ouvrir changement de chambre
         </button>
+        {error && <span>Erreur : {error}</span>}
+        {canForceCheckout && (
+          <button
+            type="button"
+            onClick={() => onForceCheckout?.('motif de test recette')}
+          >
+            Forcer le check-out (séjour)
+          </button>
+        )}
       </div>
     ) : null,
 }));
+
+vi.mock('../components/DepartureContextPanel', () => ({
+  DepartureContextPanel: ({
+    stay,
+    onCheckout,
+    onForceCheckout,
+    canForceCheckout,
+    error,
+  }: {
+    stay: { id: number } | null;
+    onCheckout: () => void;
+    onForceCheckout?: (motif: string) => void;
+    canForceCheckout?: boolean;
+    error: string | null;
+  }) =>
+    stay ? (
+      <div>
+        Panneau départ {stay.id}
+        <button type="button" onClick={onCheckout}>
+          Check-out (départ)
+        </button>
+        {error && <span>Erreur départ : {error}</span>}
+        {canForceCheckout && (
+          <button
+            type="button"
+            onClick={() => onForceCheckout?.('motif de test recette')}
+          >
+            Forcer le check-out (départ)
+          </button>
+        )}
+      </div>
+    ) : null,
+}));
+
 vi.mock('../components/ChangeRoomDialog', () => ({
   ChangeRoomDialog: ({
     stay,
@@ -105,16 +286,43 @@ vi.mock('../components/ReservationCheckinDialog', () => ({
     ) : null,
 }));
 
-import { arrivalsToday, listRooms } from '../../reservations/api';
+vi.mock('../../dashboard/components/RoomContextModal', () => ({
+  RoomContextModal: ({
+    room,
+    onClose,
+  }: {
+    room: { numero: string } | null;
+    onClose: () => void;
+  }) =>
+    room ? (
+      <div>
+        RoomContextModal — chambre {room.numero}
+        <button type="button" onClick={onClose}>
+          Fermer la chambre
+        </button>
+      </div>
+    ) : null,
+}));
+
+import { arrivalsToday, listRooms, markNoShow } from '../../reservations/api';
 import {
   changeRoom,
   checkinFromReservation,
+  checkoutStay,
   extendStay,
   getStay,
   listDepartsDuJour,
   listStaysEnCours,
 } from '../api';
 import { CheckinPage } from './CheckinPage';
+
+const ROOM_104 = {
+  id: 104,
+  numero: '104',
+  roomTypeId: 1,
+  statut: 'RESERVEE',
+  roomType: { id: 1, nom: 'Double', prixBase: '600', capacite: 2 },
+} as const;
 
 const RESERVATION = {
   id: 10,
@@ -128,28 +336,20 @@ const RESERVATION = {
     telephone: null,
     email: null,
   },
-  roomId: 2,
-  room: {
-    id: 2,
-    numero: '202',
-    roomTypeId: 1,
-    statut: 'RESERVEE',
-    roomType: { id: 1, nom: 'Double', prixBase: '600', capacite: 2 },
-  },
-  dateArrivee: '2026-08-01',
-  dateDepart: '2026-08-04',
+  roomId: 104,
+  room: ROOM_104,
+  dateArrivee: '2026-08-13',
+  dateDepart: '2026-08-15',
   statut: 'CONFIRMEE',
   sourceBrute: null,
-  prixTotalCalcule: '1800',
-  prixTotalFinal: '1800',
+  prixTotalCalcule: '1800.00',
+  prixTotalFinal: '1800.00',
   ajustementManuel: false,
   formule: 'BED_AND_BREAKFAST',
   motifAjustement: null,
-  // FIN-102 — préremplie (réservation "récente" avec occupation déjà
-  // connue), aucun test dédié à ce fichier n'exerce le cas legacy.
   nombreOccupants: 2,
-  createdAt: '2026-07-01T00:00:00.000Z',
-  updatedAt: '2026-07-01T00:00:00.000Z',
+  createdAt: '2026-08-13T00:00:00.000Z',
+  updatedAt: '2026-08-13T00:00:00.000Z',
 } as const;
 
 const STAY = {
@@ -167,36 +367,258 @@ const STAY = {
   guestId: 8,
   guest: { id: 8, nom: 'Bennani', prenom: 'Yasmine' },
   dateCheckin: '2026-08-06T12:00:00.000Z',
-  dateCheckoutPrevue: '2026-08-07',
+  dateCheckoutPrevue: '2026-08-20',
   dateCheckoutReelle: null,
   statut: 'EN_COURS',
+  formule: 'BED_AND_BREAKFAST',
+  nombreOccupants: 2,
   folios: [],
   policeRecord: null,
   createdAt: '2026-08-06T12:00:00.000Z',
   updatedAt: '2026-08-06T12:00:00.000Z',
 } as const;
 
-describe('CheckinPage — GL-003, prolongation de séjour (MX-002A)', () => {
+const DEPARTURE = {
+  ...STAY,
+  id: 7,
+  guest: { id: 9, nom: 'Fassi', prenom: 'Amina' },
+  dateCheckoutPrevue: '2026-08-13',
+} as const;
+
+function setupDefaultMocks() {
+  vi.mocked(arrivalsToday).mockReset().mockResolvedValue([]);
+  vi.mocked(listRooms).mockReset().mockResolvedValue([]);
+  vi.mocked(markNoShow).mockReset();
+  vi.mocked(listStaysEnCours).mockReset().mockResolvedValue([]);
+  vi.mocked(listDepartsDuJour).mockReset().mockResolvedValue([]);
+  vi.mocked(changeRoom).mockReset();
+  vi.mocked(checkinFromReservation).mockReset();
+  vi.mocked(checkoutStay).mockReset();
+  vi.mocked(extendStay).mockReset();
+  vi.mocked(getStay).mockReset();
+}
+
+describe('CheckinPage — navigation et KPI', () => {
   beforeEach(() => {
-    vi.mocked(arrivalsToday).mockReset().mockResolvedValue([]);
-    vi.mocked(listRooms).mockReset().mockResolvedValue([]);
-    vi.mocked(listStaysEnCours)
-      .mockReset()
-      .mockResolvedValue([STAY as never]);
-    vi.mocked(listDepartsDuJour).mockReset().mockResolvedValue([]);
-    vi.mocked(extendStay).mockReset();
-    vi.mocked(getStay).mockReset();
+    setupDefaultMocks();
+    vi.mocked(arrivalsToday).mockResolvedValue([RESERVATION as never]);
+    vi.mocked(listRooms).mockResolvedValue([ROOM_104 as never]);
+    vi.mocked(listStaysEnCours).mockResolvedValue([STAY as never]);
+    vi.mocked(listDepartsDuJour).mockResolvedValue([DEPARTURE as never]);
   });
 
-  it('après succès du POST et de getStay : viewingStay est mis à jour, les listes sont rafraîchies, le dialogue se ferme', async () => {
+  it('affiche la vue Arrivées par défaut', async () => {
+    render(<CheckinPage permissions={[]} />);
+    expect(
+      await screen.findByRole('button', { name: /Arrivée Diallo/ }),
+    ).toBeVisible();
+    expect(screen.getByText('Vue active : arrivees')).toBeVisible();
+    expect(
+      screen.queryByRole('button', { name: /Séjour Bennani/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('bascule vers la vue Séjours au clic', async () => {
+    const user = userEvent.setup();
+    render(<CheckinPage permissions={[]} />);
+    await screen.findByRole('button', { name: /Arrivée Diallo/ });
+
+    await user.click(screen.getByRole('button', { name: 'Séjours' }));
+
+    expect(screen.getByText('Vue active : sejours')).toBeVisible();
+    expect(
+      await screen.findByRole('button', { name: /Séjour Bennani/ }),
+    ).toBeVisible();
+  });
+
+  it('bascule vers la vue Départs au clic', async () => {
+    const user = userEvent.setup();
+    render(<CheckinPage permissions={[]} />);
+    await screen.findByRole('button', { name: /Arrivée Diallo/ });
+
+    await user.click(screen.getByRole('button', { name: 'Départs' }));
+
+    expect(screen.getByText('Vue active : departs')).toBeVisible();
+    expect(
+      await screen.findByRole('button', { name: /Départ Fassi/ }),
+    ).toBeVisible();
+  });
+
+  it('les KPI reflètent les données réellement chargées (aucune valeur inventée)', async () => {
+    render(<CheckinPage permissions={[]} />);
+    // 1 arrivée, 0 fiche police manquante (policeRecord: null sur STAY et
+    // DEPARTURE — attention : null signifie "manquante", donc 2 attendues).
+    expect(
+      await screen.findByText('KPI arrivées:1 fiches:2 séjours:1 départs:1'),
+    ).toBeVisible();
+  });
+});
+
+describe('CheckinPage — Arrivées : panneau, check-in, no-show', () => {
+  beforeEach(() => {
+    setupDefaultMocks();
+    vi.mocked(arrivalsToday).mockResolvedValue([RESERVATION as never]);
+    vi.mocked(listRooms).mockResolvedValue([ROOM_104 as never]);
+    vi.mocked(checkinFromReservation).mockResolvedValue({
+      ...RESERVATION,
+      id: 6,
+      reservationId: 10,
+      reservation: RESERVATION,
+      guest: RESERVATION.guest,
+      dateCheckin: '2026-08-13T12:00:00.000Z',
+      dateCheckoutPrevue: RESERVATION.dateDepart,
+      dateCheckoutReelle: null,
+      statut: 'EN_COURS',
+      formule: 'BED_AND_BREAKFAST',
+      nombreOccupants: 2,
+      folios: [],
+      policeRecord: null,
+    } as never);
+  });
+
+  it('clic sur une arrivée ouvre le panneau contextuel (consultation avant action)', async () => {
+    const user = userEvent.setup();
+    render(<CheckinPage permissions={[]} />);
+    await user.click(
+      await screen.findByRole('button', { name: /Arrivée Diallo/ }),
+    );
+
+    expect(
+      screen.getByRole('heading', { name: 'Diallo Aminata' }),
+    ).toBeVisible();
+    expect(screen.getByText(/Chambre 104/)).toBeVisible();
+  });
+
+  it('utilisateur sans permission : les boutons Check-in/No-show sont absents (pas grisés)', async () => {
+    const user = userEvent.setup();
+    render(<CheckinPage permissions={[]} />);
+    await user.click(
+      await screen.findByRole('button', { name: /Arrivée Diallo/ }),
+    );
+
+    expect(
+      screen.queryByRole('button', { name: 'Check-in' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Marquer no-show/ }),
+    ).not.toBeInTheDocument();
+    // "Voir la chambre" reste disponible (aucune permission requise).
+    expect(
+      screen.getByRole('button', { name: 'Voir la chambre' }),
+    ).toBeVisible();
+  });
+
+  it('Check-in gated par permission : ouvre le dialogue réel, puis rafraîchit après succès', async () => {
+    const user = userEvent.setup();
+    render(<CheckinPage permissions={['checkin:write']} />);
+    await user.click(
+      await screen.findByRole('button', { name: /Arrivée Diallo/ }),
+    );
+
+    const checkinButton = screen.getByRole('button', { name: 'Check-in' });
+    expect(checkinButton).toBeVisible();
+    await user.click(checkinButton);
+
+    expect(screen.getByText('Dialogue réservation 10')).toBeVisible();
+    expect(checkinFromReservation).not.toHaveBeenCalled();
+
+    const callsBefore = vi.mocked(arrivalsToday).mock.calls.length;
+    await user.click(
+      screen.getByRole('button', { name: 'Confirmer depuis le dialogue' }),
+    );
+
+    await waitFor(() =>
+      expect(checkinFromReservation).toHaveBeenCalledWith(10, 2),
+    );
+    await waitFor(() =>
+      expect(vi.mocked(arrivalsToday).mock.calls.length).toBeGreaterThan(
+        callsBefore,
+      ),
+    );
+  });
+
+  it('No-show réutilise le dialogue existant (DESIGN-007) : gated par reservations:delete', async () => {
+    const user = userEvent.setup();
+    vi.mocked(markNoShow).mockResolvedValue({
+      ...RESERVATION,
+      statut: 'NO_SHOW',
+    } as never);
+
+    render(<CheckinPage permissions={['reservations:delete']} />);
+    await user.click(
+      await screen.findByRole('button', { name: /Arrivée Diallo/ }),
+    );
+
+    const noShowButton = screen.getByRole('button', {
+      name: /Marquer no-show/,
+    });
+    await user.click(noShowButton);
+
+    expect(
+      screen.getByRole('heading', {
+        name: 'Marquer non-présentation (no-show)',
+      }),
+    ).toBeVisible();
+
+    await user.type(
+      screen.getByLabelText('Motif'),
+      'Client injoignable ce jour',
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'Confirmer le no-show' }),
+    );
+
+    await waitFor(() =>
+      expect(markNoShow).toHaveBeenCalledWith(10, 'Client injoignable ce jour'),
+    );
+  });
+
+  it('"Voir la chambre" ferme le panneau arrivée et ouvre RoomContextModal', async () => {
+    const user = userEvent.setup();
+    render(<CheckinPage permissions={[]} />);
+    await user.click(
+      await screen.findByRole('button', { name: /Arrivée Diallo/ }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Voir la chambre' }));
+
+    expect(screen.getByText('RoomContextModal — chambre 104')).toBeVisible();
+    expect(
+      screen.queryByRole('heading', { name: 'Diallo Aminata' }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe('CheckinPage — Séjours en cours : panneau, prolongation, changement de chambre', () => {
+  beforeEach(() => {
+    setupDefaultMocks();
+    vi.mocked(listStaysEnCours).mockResolvedValue([STAY as never]);
+  });
+
+  it('clic sur un séjour ouvre le panneau (StayContextPanel), jamais DepartureContextPanel', async () => {
+    const user = userEvent.setup();
+    render(<CheckinPage permissions={[]} />);
+    await user.click(screen.getByRole('button', { name: 'Séjours' }));
+    await user.click(
+      await screen.findByRole('button', { name: /Séjour Bennani/ }),
+    );
+
+    expect(screen.getByText('Panneau séjour 6')).toBeVisible();
+    expect(screen.queryByText('Panneau départ 6')).not.toBeInTheDocument();
+  });
+
+  it('Prolonger gated : ouvre ExtendStayDialog et rafraîchit après succès', async () => {
     const user = userEvent.setup();
     vi.mocked(extendStay).mockResolvedValue(STAY as never);
-    const refreshedStay = { ...STAY, dateCheckoutPrevue: '2026-08-10' };
-    vi.mocked(getStay).mockResolvedValue(refreshedStay as never);
+    vi.mocked(getStay).mockResolvedValue({
+      ...STAY,
+      dateCheckoutPrevue: '2026-08-25',
+    } as never);
 
     render(<CheckinPage permissions={['stay:extend']} />);
-
-    await user.click(await screen.findByRole('button', { name: /Bennani/ }));
+    await user.click(screen.getByRole('button', { name: 'Séjours' }));
+    await user.click(
+      await screen.findByRole('button', { name: /Séjour Bennani/ }),
+    );
     await user.click(
       screen.getByRole('button', { name: 'Ouvrir prolongation' }),
     );
@@ -213,99 +635,22 @@ describe('CheckinPage — GL-003, prolongation de séjour (MX-002A)', () => {
         'motif de test recette',
       ),
     );
-    await waitFor(() => expect(getStay).toHaveBeenCalledWith(6));
-    // Le dialogue de prolongation se ferme dès le POST confirmé réussi.
-    await waitFor(() =>
-      expect(screen.queryByText('Dialogue prolongation 6')).toBeNull(),
-    );
-    // refetch() des listes déclenché après succès (au moins un second appel
-    // au-delà du chargement initial).
-    await waitFor(() =>
-      expect(vi.mocked(listStaysEnCours).mock.calls.length).toBeGreaterThan(1),
-    );
   });
 
-  it("si getStay échoue après un POST réussi : la prolongation n'est jamais annoncée comme un échec, le dialogue se ferme, le refetch des listes est déclenché", async () => {
-    const user = userEvent.setup();
-    vi.mocked(extendStay).mockResolvedValue(STAY as never);
-    vi.mocked(getStay).mockRejectedValue(new Error('Erreur réseau'));
-
-    render(<CheckinPage permissions={['stay:extend']} />);
-
-    await user.click(await screen.findByRole('button', { name: /Bennani/ }));
-    await user.click(
-      screen.getByRole('button', { name: 'Ouvrir prolongation' }),
-    );
-    await user.click(
-      screen.getByRole('button', { name: 'Confirmer la prolongation' }),
-    );
-
-    await waitFor(() => expect(getStay).toHaveBeenCalledWith(6));
-    // Le dialogue se ferme malgré l'échec de getStay — jamais présenté
-    // comme un échec de la prolongation elle-même (le POST a réussi).
-    await waitFor(() =>
-      expect(screen.queryByText('Dialogue prolongation 6')).toBeNull(),
-    );
-    expect(screen.queryByText('Erreur prolongation présente')).toBeNull();
-    await waitFor(() =>
-      expect(vi.mocked(listStaysEnCours).mock.calls.length).toBeGreaterThan(1),
-    );
-  });
-
-  it('si le POST échoue : le dialogue reste ouvert avec une erreur, aucun refetch ni fermeture', async () => {
-    const user = userEvent.setup();
-    vi.mocked(extendStay).mockRejectedValue(
-      new Error('Ce séjour est déjà clôturé.'),
-    );
-
-    render(<CheckinPage permissions={['stay:extend']} />);
-
-    await user.click(await screen.findByRole('button', { name: /Bennani/ }));
-    await user.click(
-      screen.getByRole('button', { name: 'Ouvrir prolongation' }),
-    );
-    const callsBeforeSubmit = vi.mocked(listStaysEnCours).mock.calls.length;
-    await user.click(
-      screen.getByRole('button', { name: 'Confirmer la prolongation' }),
-    );
-
-    await waitFor(() => expect(extendStay).toHaveBeenCalled());
-    expect(getStay).not.toHaveBeenCalled();
-    await waitFor(() =>
-      expect(screen.getByText('Dialogue prolongation 6')).toBeVisible(),
-    );
-    expect(screen.getByText('Erreur prolongation présente')).toBeVisible();
-    expect(vi.mocked(listStaysEnCours).mock.calls.length).toBe(
-      callsBeforeSubmit,
-    );
-  });
-});
-
-describe('CheckinPage — GL-002, changement de chambre (MX-002C)', () => {
-  beforeEach(() => {
-    vi.mocked(arrivalsToday).mockReset().mockResolvedValue([]);
-    vi.mocked(listRooms).mockReset().mockResolvedValue([]);
-    vi.mocked(listStaysEnCours)
-      .mockReset()
-      .mockResolvedValue([STAY as never]);
-    vi.mocked(listDepartsDuJour).mockReset().mockResolvedValue([]);
-    vi.mocked(changeRoom).mockReset();
-    vi.mocked(getStay).mockReset();
-  });
-
-  it('après succès du POST et de getStay : viewingStay est mis à jour, les listes sont rafraîchies, le dialogue se ferme', async () => {
+  it('Changer de chambre gated : ouvre ChangeRoomDialog et rafraîchit après succès', async () => {
     const user = userEvent.setup();
     vi.mocked(changeRoom).mockResolvedValue(STAY as never);
-    const refreshedStay = {
+    vi.mocked(getStay).mockResolvedValue({
       ...STAY,
       roomId: 4,
       room: { ...STAY.room, id: 4, numero: '312' },
-    };
-    vi.mocked(getStay).mockResolvedValue(refreshedStay as never);
+    } as never);
 
     render(<CheckinPage permissions={['stay:change-room']} />);
-
-    await user.click(await screen.findByRole('button', { name: /Bennani/ }));
+    await user.click(screen.getByRole('button', { name: 'Séjours' }));
+    await user.click(
+      await screen.findByRole('button', { name: /Séjour Bennani/ }),
+    );
     await user.click(
       screen.getByRole('button', { name: 'Ouvrir changement de chambre' }),
     );
@@ -320,117 +665,140 @@ describe('CheckinPage — GL-002, changement de chambre (MX-002C)', () => {
     await waitFor(() =>
       expect(changeRoom).toHaveBeenCalledWith(6, 4, 'motif de test recette'),
     );
-    await waitFor(() => expect(getStay).toHaveBeenCalledWith(6));
-    await waitFor(() =>
-      expect(screen.queryByText('Dialogue changement de chambre 6')).toBeNull(),
-    );
-    await waitFor(() =>
-      expect(vi.mocked(listStaysEnCours).mock.calls.length).toBeGreaterThan(1),
-    );
+  });
+});
+
+describe('CheckinPage — Départs : panneau, check-out, check-out forcé', () => {
+  beforeEach(() => {
+    setupDefaultMocks();
+    vi.mocked(listDepartsDuJour).mockResolvedValue([DEPARTURE as never]);
   });
 
-  it("si getStay échoue après un POST réussi : le changement n'est jamais annoncé comme un échec, le dialogue se ferme, le refetch des listes est déclenché", async () => {
+  it('clic sur un départ ouvre DepartureContextPanel, jamais StayContextPanel', async () => {
     const user = userEvent.setup();
-    vi.mocked(changeRoom).mockResolvedValue(STAY as never);
-    vi.mocked(getStay).mockRejectedValue(new Error('Erreur réseau'));
-
-    render(<CheckinPage permissions={['stay:change-room']} />);
-
-    await user.click(await screen.findByRole('button', { name: /Bennani/ }));
+    render(<CheckinPage permissions={[]} />);
+    await user.click(screen.getByRole('button', { name: 'Départs' }));
     await user.click(
-      screen.getByRole('button', { name: 'Ouvrir changement de chambre' }),
-    );
-    await user.click(
-      screen.getByRole('button', {
-        name: 'Confirmer le changement de chambre',
-      }),
+      await screen.findByRole('button', { name: /Départ Fassi/ }),
     );
 
-    await waitFor(() => expect(getStay).toHaveBeenCalledWith(6));
-    await waitFor(() =>
-      expect(screen.queryByText('Dialogue changement de chambre 6')).toBeNull(),
+    expect(screen.getByText('Panneau départ 7')).toBeVisible();
+    expect(screen.queryByText('Panneau séjour 7')).not.toBeInTheDocument();
+  });
+
+  it('check-out normal appelle POST /checkout sans force', async () => {
+    const user = userEvent.setup();
+    vi.mocked(checkoutStay).mockResolvedValue({
+      ...DEPARTURE,
+      statut: 'CHECKOUT',
+      soldeDu: '0.00',
+    } as never);
+
+    render(<CheckinPage permissions={[]} />);
+    await user.click(screen.getByRole('button', { name: 'Départs' }));
+    await user.click(
+      await screen.findByRole('button', { name: /Départ Fassi/ }),
     );
+    await user.click(
+      screen.getByRole('button', { name: 'Check-out (départ)' }),
+    );
+
+    await waitFor(() => expect(checkoutStay).toHaveBeenCalledWith(7));
+  });
+
+  it('check-out forcé gated par checkin:force-checkout : absent sans la permission', async () => {
+    const user = userEvent.setup();
+    vi.mocked(checkoutStay).mockRejectedValue(
+      new Error('Solde impayé (150.00 MAD)'),
+    );
+
+    render(<CheckinPage permissions={[]} />);
+    await user.click(screen.getByRole('button', { name: 'Départs' }));
+    await user.click(
+      await screen.findByRole('button', { name: /Départ Fassi/ }),
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'Check-out (départ)' }),
+    );
+
+    await waitFor(() => expect(checkoutStay).toHaveBeenCalled());
     expect(
-      screen.queryByText('Erreur changement de chambre présente'),
-    ).toBeNull();
-    await waitFor(() =>
-      expect(vi.mocked(listStaysEnCours).mock.calls.length).toBeGreaterThan(1),
-    );
+      screen.queryByRole('button', {
+        name: 'Forcer le check-out (départ)',
+      }),
+    ).not.toBeInTheDocument();
   });
 
-  it('si le POST échoue : le dialogue reste ouvert avec une erreur, aucun refetch ni fermeture', async () => {
+  it('check-out forcé gated : présent et fonctionnel avec checkin:force-checkout, après un échec normal', async () => {
     const user = userEvent.setup();
-    vi.mocked(changeRoom).mockRejectedValue(
-      new Error('La chambre cible est réservée pendant la période du séjour.'),
+    vi.mocked(checkoutStay)
+      .mockRejectedValueOnce(new Error('Solde impayé (150.00 MAD)'))
+      .mockResolvedValueOnce({
+        ...DEPARTURE,
+        statut: 'CHECKOUT',
+        soldeDu: '150.00',
+      } as never);
+
+    render(
+      <CheckinPage permissions={['checkin:write', 'checkin:force-checkout']} />,
     );
-
-    render(<CheckinPage permissions={['stay:change-room']} />);
-
-    await user.click(await screen.findByRole('button', { name: /Bennani/ }));
+    await user.click(screen.getByRole('button', { name: 'Départs' }));
     await user.click(
-      screen.getByRole('button', { name: 'Ouvrir changement de chambre' }),
+      await screen.findByRole('button', { name: /Départ Fassi/ }),
     );
-    const callsBeforeSubmit = vi.mocked(listStaysEnCours).mock.calls.length;
     await user.click(
-      screen.getByRole('button', {
-        name: 'Confirmer le changement de chambre',
-      }),
+      screen.getByRole('button', { name: 'Check-out (départ)' }),
     );
-
-    await waitFor(() => expect(changeRoom).toHaveBeenCalled());
-    expect(getStay).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(
-        screen.getByText('Dialogue changement de chambre 6'),
+        screen.getByRole('button', { name: 'Forcer le check-out (départ)' }),
       ).toBeVisible(),
     );
-    expect(
-      screen.getByText('Erreur changement de chambre présente'),
-    ).toBeVisible();
-    expect(vi.mocked(listStaysEnCours).mock.calls.length).toBe(
-      callsBeforeSubmit,
+
+    await user.click(
+      screen.getByRole('button', { name: 'Forcer le check-out (départ)' }),
+    );
+
+    await waitFor(() =>
+      expect(checkoutStay).toHaveBeenNthCalledWith(2, 7, {
+        force: true,
+        motif: 'motif de test recette',
+      }),
     );
   });
 });
 
-describe('CheckinPage — confirmation guidée', () => {
-  beforeEach(() => {
-    vi.mocked(arrivalsToday).mockReset();
-    vi.mocked(listRooms).mockReset();
-    vi.mocked(listStaysEnCours).mockReset();
-    vi.mocked(listDepartsDuJour).mockReset();
-    vi.mocked(checkinFromReservation).mockReset();
-    vi.mocked(arrivalsToday).mockResolvedValue([RESERVATION]);
-    vi.mocked(listRooms).mockResolvedValue([RESERVATION.room]);
-    vi.mocked(listStaysEnCours).mockResolvedValue([]);
-    vi.mocked(listDepartsDuJour).mockResolvedValue([]);
-    vi.mocked(checkinFromReservation).mockResolvedValue({
-      ...RESERVATION,
-      reservationId: 10,
-      reservation: RESERVATION,
-      guest: RESERVATION.guest,
-      dateCheckin: '2026-08-01T12:00:00.000Z',
-      dateCheckoutPrevue: RESERVATION.dateDepart,
-      dateCheckoutReelle: null,
-      folios: [],
-      policeRecord: null,
-    } as never);
+describe('CheckinPage — chargement, erreurs, rafraîchissement', () => {
+  it('affiche un état d’erreur propre si le chargement échoue', async () => {
+    setupDefaultMocks();
+    vi.mocked(arrivalsToday).mockRejectedValue(new Error('Erreur réseau'));
+
+    render(<CheckinPage permissions={[]} />);
+
+    expect(
+      await screen.findByText('Erreur de chargement du Front Desk'),
+    ).toBeVisible();
+    expect(screen.getByText('Erreur réseau')).toBeVisible();
   });
 
-  it("n'appelle le POST qu'après la confirmation finale du dialogue", async () => {
+  it('le bouton Actualiser redéclenche le chargement des 4 listes', async () => {
+    setupDefaultMocks();
+    vi.mocked(arrivalsToday).mockResolvedValue([]);
+    vi.mocked(listRooms).mockResolvedValue([]);
+    vi.mocked(listStaysEnCours).mockResolvedValue([]);
+    vi.mocked(listDepartsDuJour).mockResolvedValue([]);
     const user = userEvent.setup();
-    render(<CheckinPage permissions={['payments:read']} />);
 
-    await user.click(await screen.findByRole('button', { name: 'Check-in' }));
-    expect(screen.getByText('Dialogue réservation 10')).toBeVisible();
-    expect(checkinFromReservation).not.toHaveBeenCalled();
+    render(<CheckinPage permissions={[]} />);
+    await screen.findByText('Vue active : arrivees');
+    const callsBefore = vi.mocked(arrivalsToday).mock.calls.length;
 
-    await user.click(
-      screen.getByRole('button', { name: 'Confirmer depuis le dialogue' }),
-    );
+    await user.click(screen.getByRole('button', { name: 'Actualiser' }));
+
     await waitFor(() =>
-      expect(checkinFromReservation).toHaveBeenCalledWith(10, 2),
+      expect(vi.mocked(arrivalsToday).mock.calls.length).toBeGreaterThan(
+        callsBefore,
+      ),
     );
-    expect(checkinFromReservation).toHaveBeenCalledTimes(1);
-  }, 10_000);
+  });
 });
