@@ -37,3 +37,11 @@ export const PrototypeReservationsC = lazy(
 export const PrototypeHousekeepingA = lazy(
   () => import('./PrototypeHousekeepingA.tsx'),
 );
+
+// DESIGN-009 — Front Desk / Séjours / Check-in desktop, prototype de
+// convergence unique (audit UX + prototype), isolé de la même façon,
+// jamais lié à App.tsx/AppSidebar en dur. Export par défaut, même
+// convention que PrototypeReservationsC/PrototypeHousekeepingA.
+export const PrototypeFrontDeskA = lazy(
+  () => import('./PrototypeFrontDeskA.tsx'),
+);
