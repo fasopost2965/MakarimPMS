@@ -16,11 +16,26 @@ export const GOUVERNANTE = {
   password: 'Password123!',
 };
 
+// DESIGN-005 (FINAL UI CLOSURE) — le formulaire de connexion est désormais
+// masqué tant qu'aucun espace métier n'a été sélectionné (LoginPage.tsx).
+// La sélection d'un espace est purement visuelle (aucun impact sur
+// l'authentification/RBAC réels, voir commentaire dans LoginPage.tsx) : ici
+// on clique simplement la première tuile disponible pour révéler le
+// formulaire. Si aucune tuile n'existe (rôles pas exposés), le formulaire
+// est déjà affiché directement — ce cas reste géré sans action supplémentaire.
+export async function openLoginForm(page: Page) {
+  await page.goto('/');
+  const emailField = page.locator('#email');
+  if (await emailField.isVisible().catch(() => false)) return;
+  await page.getByRole('button', { name: 'Réception' }).click();
+  await expect(emailField).toBeVisible();
+}
+
 export async function login(
   page: Page,
   creds: { email: string; password: string } = ADMIN,
 ) {
-  await page.goto('/');
+  await openLoginForm(page);
   await page.locator('#email').fill(creds.email);
   await page.locator('#motDePasse').fill(creds.password);
   await page.getByRole('button', { name: 'Se connecter' }).click();

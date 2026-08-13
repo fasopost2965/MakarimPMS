@@ -34,6 +34,7 @@ const BASE_STAY: Stay = {
   dateCheckoutPrevue: '2026-08-07',
   dateCheckoutReelle: null,
   statut: 'EN_COURS',
+  formule: 'BED_AND_BREAKFAST',
   nombreOccupants: 2,
   folios: [],
   policeRecord: null,

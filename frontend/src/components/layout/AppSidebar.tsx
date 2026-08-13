@@ -43,11 +43,22 @@ interface Props {
 // pilotées exclusivement via les tokens --sidebar-* (index.css), donc ce
 // composant ne code aucune couleur en dur.
 //
-// DESIGN-002 (Makarim Design System 2026 §1.1bis) — chrome CLAIR : les
-// tokens --sidebar-* pointent désormais sur --chrome-bg (#FFFFFF) et
-// l'item actif sur --primary-soft/--primary, au lieu du marine sombre
-// historique. Aucune logique de repli, de tiroir mobile ni de filtrage RBAC
-// n'est modifiée par ce lot — uniquement la présentation.
+// DESIGN-002 (Makarim Design System 2026 §1.1bis) — chrome CLAIR historique :
+// les tokens --sidebar-* pointaient sur --chrome-bg (#FFFFFF) et l'item actif
+// sur --primary-soft/--primary. Aucune logique de repli, de tiroir mobile ni
+// de filtrage RBAC n'est modifiée par ce lot — uniquement la présentation.
+//
+// DESIGN-005 (intégration Prototype D3 validée) — chrome SOMBRE : plutôt que
+// de coder de nouvelles couleurs en dur (interdit par le commentaire
+// ci-dessus), l'`<aside>` porte la classe `dark` déjà définie dans
+// index.css (`.dark { ... }`, palette de réserve jusqu'ici jamais activée
+// nulle part dans l'app). Comme `--sidebar-*`/`--foreground`/
+// `--muted-foreground`/`--primary-soft`/`--surface-2` sont tous des
+// variables CSS, les activer localement sur ce sous-arbre suffit à
+// rehabiller tout le composant (logo, catégories, items actifs/inactifs,
+// bouton replier) sans toucher une seule classe utilitaire ci-dessous —
+// c'est exactement le mécanisme que ces tokens existaient déjà pour
+// permettre.
 //
 // CH-011 — gating RBAC minimal (granularité onglet entier, RD-009) : un
 // onglet n'est rendu que si `permissions` contient la permission déclarée
@@ -123,7 +134,7 @@ export function AppSidebar({
       )}
       <aside
         className={cn(
-          'bg-sidebar text-sidebar-foreground border-sidebar-border fixed inset-y-0 left-0 z-50 flex h-full w-[min(84vw,264px)] flex-col border-r shadow-[var(--shadow-elevated)] transition-transform duration-[var(--duration-base)] ease-[var(--ease-out-brand)]',
+          'dark bg-sidebar text-sidebar-foreground border-sidebar-border fixed inset-y-0 left-0 z-50 flex h-full w-[min(84vw,264px)] flex-col border-r shadow-[var(--shadow-elevated)] transition-transform duration-[var(--duration-base)] ease-[var(--ease-out-brand)]',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
           'md:static md:z-auto md:translate-x-0 md:shadow-[var(--shadow-card)] md:transition-[width] md:duration-[var(--duration-base)]',
           // §1.3 — 192px déplié / 64px replié (icônes seules).
