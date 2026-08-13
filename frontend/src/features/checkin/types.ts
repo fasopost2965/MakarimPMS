@@ -41,6 +41,10 @@ export interface Stay {
   dateCheckoutPrevue: string;
   dateCheckoutReelle: string | null;
   statut: StatutSejour;
+  // DESIGN-006 — champ scalaire de Stay, toujours renvoyé par STAY_INCLUDE
+  // (backend/src/modules/stay/stay.service.ts) mais jusqu'ici absent de ce
+  // type frontend.
+  formule: FormuleHebergement;
   // FIN-102 — occupation réelle du séjour, jamais déduite de
   // RoomType.capacite (backend/src/common/utils/occupancy.ts). Nullable
   // uniquement pour un séjour créé avant ce déploiement (legacy).

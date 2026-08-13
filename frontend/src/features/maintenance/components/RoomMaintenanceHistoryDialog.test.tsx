@@ -22,6 +22,7 @@ function mockTicket(
     priorite: 'MOYENNE',
     photoUrl: null,
     assigneA: null,
+    bloqueVente: true,
     resoluAt: null,
     createdAt,
     ...overrides,

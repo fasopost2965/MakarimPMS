@@ -26,6 +26,7 @@ function ticket(overrides: Partial<MaintenanceTicket>): MaintenanceTicket {
     priorite: 'URGENTE',
     photoUrl: null,
     assigneA: null,
+    bloqueVente: true,
     resoluAt: null,
     createdAt: ISO,
     ...overrides,
