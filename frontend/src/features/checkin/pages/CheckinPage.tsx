@@ -195,6 +195,7 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
       const stay = await checkinFromReservation(reservationId, nombreOccupants);
       notifyCheckinDone(stay.guest, stay.room);
       setCheckingInReservation(null);
+      setView('sejours');
       await refetch();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Erreur de check-in');
@@ -233,6 +234,7 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
       const stay = await checkinWalkIn(input);
       notifyCheckinDone(stay.guest, stay.room);
       setWalkinOpen(false);
+      setView('sejours');
       await refetch();
     } catch (err) {
       setWalkinError(err instanceof Error ? err.message : 'Erreur de check-in');
