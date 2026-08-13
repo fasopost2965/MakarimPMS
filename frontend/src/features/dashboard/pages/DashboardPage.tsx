@@ -26,6 +26,7 @@ import { QuickAccessModules } from '../components/QuickAccessModules';
 import { RoomsStateGrid } from '../components/RoomsStateGrid';
 import { ATraiterPanel } from '../components/ATraiterPanel';
 import { TodayPanel } from '../components/TodayPanel';
+import { RoomContextModal } from '../components/RoomContextModal';
 
 // DESIGN-005 (intégration Prototype D3 validée, /design-preview/d3) —
 // remplace l'ancienne prévision en aire (OccupancyForecastCard, fichier
@@ -77,6 +78,7 @@ export function DashboardPage({ onNavigate, permissions }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [rooms, setRooms] = useState<Room[] | null>(null);
   const [tickets, setTickets] = useState<MaintenanceTicket[] | null>(null);
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
 
   const refetch = useCallback(async () => {
     setLoading(true);
@@ -101,14 +103,17 @@ export function DashboardPage({ onNavigate, permissions }: Props) {
   // badges Accès rapides), échec silencieux comme les anciens widgets
   // qu'elles remplacent — jamais de bannière d'erreur pour ces deux appels,
   // seule la section correspondante reste simplement non affichée.
-  useEffect(() => {
+  const refreshRooms = useCallback(() => {
     if (!can('housekeeping:read')) return;
-
     listRooms()
       .then(setRooms)
       .catch(() => setRooms(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [permissions]);
+
+  useEffect(() => {
+    refreshRooms();
+  }, [refreshRooms]);
 
   useEffect(() => {
     if (!can('maintenance:read')) return;
@@ -271,6 +276,7 @@ export function DashboardPage({ onNavigate, permissions }: Props) {
           <RoomsStateGrid
             rooms={rooms}
             onNavigate={() => onNavigate('housekeeping')}
+            onRoomClick={setSelectedRoom}
           />
         )}
         {(can('housekeeping:read') || can('maintenance:read')) && (
@@ -290,6 +296,15 @@ export function DashboardPage({ onNavigate, permissions }: Props) {
           <OperationalForecastStrip />
         </Suspense>
       )}
+
+      <RoomContextModal
+        room={selectedRoom}
+        rooms={rooms ?? []}
+        permissions={permissions}
+        onClose={() => setSelectedRoom(null)}
+        onNavigate={onNavigate}
+        onRoomsChanged={refreshRooms}
+      />
     </div>
   );
 }

@@ -45,9 +45,15 @@ const LEGEND_ORDER: StatutChambre[] = [
 export function RoomsStateGrid({
   rooms,
   onNavigate,
+  onRoomClick,
 }: {
   rooms: Room[] | null;
   onNavigate: () => void;
+  // DESIGN-006 — ouvre RoomContextModal pour la chambre cliquée. Optionnel :
+  // les usages qui n'ont pas encore besoin du modal (aucun aujourd'hui,
+  // conservé pour ne pas casser un futur appelant minimal) continuent de
+  // fonctionner sans cellule cliquable.
+  onRoomClick?: (room: Room) => void;
 }) {
   if (rooms === null) return null;
 
@@ -65,20 +71,26 @@ export function RoomsStateGrid({
       </CardHeader>
       <CardContent className="flex-1 pt-2">
         <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-8">
-          {rooms.map((room) => (
-            <div
-              key={room.id}
-              title={`Ch. ${room.numero}${room.etage != null ? ` (étage ${room.etage})` : ''} — ${STATUT_LABEL[room.statut]}`}
-              className="bg-surface-2 hover:ring-ring/40 group flex aspect-square min-w-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-md transition-[box-shadow] hover:ring-2"
-            >
-              <span
-                className={`size-2 shrink-0 rounded-full ${STATUT_DOT[room.statut]}`}
-              />
-              <span className="text-muted-foreground group-hover:text-foreground w-full truncate px-0.5 text-center text-[9px] tabular-nums">
-                {room.numero}
-              </span>
-            </div>
-          ))}
+          {rooms.map((room) => {
+            const label = `Chambre ${room.numero} — ${STATUT_LABEL[room.statut]}`;
+            return (
+              <button
+                key={room.id}
+                type="button"
+                title={label}
+                aria-label={label}
+                onClick={() => onRoomClick?.(room)}
+                className="bg-surface-2 hover:ring-ring/40 focus-visible:ring-ring/50 group flex aspect-square min-w-0 cursor-pointer flex-col items-center justify-center gap-0.5 overflow-hidden rounded-md transition-[box-shadow] hover:ring-2 focus-visible:ring-2 focus-visible:outline-none"
+              >
+                <span
+                  className={`size-2 shrink-0 rounded-full ${STATUT_DOT[room.statut]}`}
+                />
+                <span className="text-muted-foreground group-hover:text-foreground w-full truncate px-0.5 text-center text-[9px] tabular-nums">
+                  {room.numero}
+                </span>
+              </button>
+            );
+          })}
         </div>
         <div className="mt-3.5 flex flex-wrap gap-3 text-[11px]">
           {LEGEND_ORDER.map((statut) => (
