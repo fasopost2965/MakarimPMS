@@ -95,9 +95,18 @@ describe('Mobile Housekeeping — endpoints additifs B0.4A (e2e)', () => {
     gouvernanteUserId = gouvernante.id;
   });
 
+  // CI-HANG-001 — un échec de nettoyage (contrainte FK, voir cleanupRoom
+  // ci-dessous) ne doit jamais empêcher app.close() : sans lui, l'instance
+  // Nest (connexions Prisma/BullMQ/Redis) de cette suite reste ouverte,
+  // Jest termine bien son propre run mais le process Node ne quitte jamais
+  // (aucun --forceExit dans jest-e2e.json), bloquant la CI jusqu'au timeout
+  // dur de 6h de GitHub Actions plutôt que d'échouer en ~1 minute.
   afterAll(async () => {
-    await prisma.roomType.deleteMany({ where: { id: roomTypeId } });
-    await app.close();
+    try {
+      await prisma.roomType.deleteMany({ where: { id: roomTypeId } });
+    } finally {
+      await app.close();
+    }
   });
 
   // roomId toujours connu et nettoyable dès sa création, même si l'étape
@@ -133,7 +142,37 @@ describe('Mobile Housekeeping — endpoints additifs B0.4A (e2e)', () => {
     return taskId;
   }
 
+  // CI-HANG-001 — la validation d'une tâche (POST .../validate) émet
+  // `nettoyage.valide` via `emit` (pas `emitAsync`, voir
+  // HousekeepingTaskService.validate) : le listener qui déclenche
+  // StockService.processHousekeepingCycle (création du StockMovement de
+  // déstockage kit d'accueil, cf. HousekeepingStockConsumption) n'est donc
+  // pas garanti terminé quand la réponse HTTP revient. Sans cette attente,
+  // cleanupRoom() peut s'exécuter entre le stockMovement.deleteMany() (rien
+  // à supprimer, le mouvement n'existe pas encore) et le
+  // housekeepingStockConsumption.deleteMany() suivant, pile au moment où le
+  // listener crée ce StockMovement — violation de la contrainte FK
+  // StockMovement.housekeepingStockConsumptionId (onDelete: Restrict,
+  // schema.prisma). Sondage borné (2s max, 100ms de pas) plutôt qu'un délai
+  // fixe : le cas normal (déjà DONE) sort dès la première itération.
+  async function waitForStockConsumptionSettled(roomId: number) {
+    const deadline = Date.now() + 2000;
+    for (;;) {
+      const pending = await prisma.housekeepingStockConsumption.count({
+        where: { housekeepingTask: { roomId }, statut: 'PENDING' },
+      });
+      if (pending === 0 || Date.now() >= deadline) return;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
+  // Ordre imposé par les contraintes FK réelles (schema.prisma) :
+  // StockMovement.housekeepingStockConsumptionId → HousekeepingStockConsumption
+  // (Restrict) ; HousekeepingStockConsumption.housekeepingTaskId et
+  // HousekeepingTaskLog.taskId → HousekeepingTask (Restrict) — chaque entité
+  // référente doit être supprimée avant l'entité référencée.
   async function cleanupRoom(roomId: number) {
+    await waitForStockConsumptionSettled(roomId);
     await prisma.stockMovement.deleteMany({
       where: { housekeepingStockConsumption: { housekeepingTask: { roomId } } },
     });

@@ -90,7 +90,14 @@ jobs:
       - name: Tests unitaires
         run: npm test
 
+      # CI-HANG-001 — filet de sécurité : si un futur test laisse une
+      # connexion/handle ouvert (Prisma/BullMQ/Redis) et empêche le process
+      # Jest de sortir malgré la fin du run, ce step échoue en ~10 min au
+      # lieu d'attendre la limite dure de 6h de GitHub Actions (constaté sur
+      # PR #109 : job "backend" bloqué de 02:39 à 08:39, tests pourtant
+      # terminés en ~53s). N'affecte que ce step, aucun autre job/timeout.
       - name: Tests e2e (vraie base MySQL)
+        timeout-minutes: 10
         run: npm run test:e2e
 
   frontend:
