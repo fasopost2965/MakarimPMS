@@ -38,6 +38,7 @@ const overdueArrival: Reservation = {
   dateDepart: iso(2),
   statut: 'CONFIRMEE',
   sourceBrute: null,
+  formule: 'BED_AND_BREAKFAST',
   prixTotalCalcule: '1200.00',
   prixTotalFinal: '1200.00',
   ajustementManuel: false,

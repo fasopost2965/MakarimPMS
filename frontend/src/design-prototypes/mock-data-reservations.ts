@@ -111,6 +111,7 @@ function reservation(
     dateDepart: iso(1),
     statut: 'CONFIRMEE',
     sourceBrute: null,
+    formule: 'BED_AND_BREAKFAST',
     prixTotalCalcule: '400.00',
     prixTotalFinal: '400.00',
     ajustementManuel: false,
