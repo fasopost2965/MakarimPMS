@@ -71,8 +71,20 @@ export function getCheckinGuest(guestId: number) {
   return apiRequest<CheckinGuestSummary>(`/guests/${guestId}`);
 }
 
-export function checkoutStay(stayId: number) {
-  return apiRequest<StayWithSolde>(`/checkout/${stayId}`, { method: 'POST' });
+// DESIGN-009 — `options` reste optionnel (check-out normal, comportement
+// inchangé) : `force`/`motif` ne sont transmis que pour le check-out forcé
+// (ForceCheckoutDto, backend/src/modules/stay/dto/force-checkout.dto.ts),
+// réservé à la permission dédiée checkin:force-checkout, vérifiée
+// dynamiquement côté serveur (StayService.checkout) — jamais un second
+// endpoint, seul le corps de la requête change.
+export function checkoutStay(
+  stayId: number,
+  options?: { force?: boolean; motif?: string },
+) {
+  return apiRequest<StayWithSolde>(`/checkout/${stayId}`, {
+    method: 'POST',
+    body: options ? JSON.stringify(options) : undefined,
+  });
 }
 
 // GL-003 (MX-002A) — la réponse de succès contient déjà le Stay à jour

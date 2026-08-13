@@ -309,3 +309,149 @@ describe('StayDetailsDialog — bouton Changer de chambre (GL-002, MX-002C)', ()
     ).toBeVisible();
   });
 });
+
+describe('StayDetailsDialog — check-out forcé (DESIGN-009, CH-005)', () => {
+  it("n'apparaît jamais avant l'échec d'un check-out normal (aucune erreur)", () => {
+    render(
+      <StayDetailsDialog
+        stay={BASE_STAY}
+        onClose={noop}
+        onCheckout={noop}
+        checkingOut={false}
+        error={null}
+        soldeDu={null}
+        permissions={null}
+        canForceCheckout
+        onForceCheckout={vi.fn()}
+      />,
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Forcer le check-out' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('absent sans la permission checkin:force-checkout, même après un échec du check-out normal', () => {
+    render(
+      <StayDetailsDialog
+        stay={BASE_STAY}
+        onClose={noop}
+        onCheckout={noop}
+        checkingOut={false}
+        error="Solde impayé (150.00 MAD)"
+        soldeDu={null}
+        permissions={null}
+        canForceCheckout={false}
+        onForceCheckout={vi.fn()}
+      />,
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Forcer le check-out' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('présent après un échec du check-out normal avec checkin:force-checkout, désactivé tant que le motif < 10 caractères', async () => {
+    const user = userEvent.setup();
+    const onForceCheckout = vi.fn();
+    render(
+      <StayDetailsDialog
+        stay={BASE_STAY}
+        onClose={noop}
+        onCheckout={noop}
+        checkingOut={false}
+        error="Solde impayé (150.00 MAD)"
+        soldeDu={null}
+        permissions={null}
+        canForceCheckout
+        onForceCheckout={onForceCheckout}
+      />,
+    );
+
+    const button = screen.getByRole('button', { name: 'Forcer le check-out' });
+    expect(button).toBeDisabled();
+
+    await user.type(
+      screen.getByPlaceholderText('Motif du check-out forcé'),
+      'Solde régularisé en espèces hors système',
+    );
+    expect(button).toBeEnabled();
+    await user.click(button);
+    expect(onForceCheckout).toHaveBeenCalledWith(
+      'Solde régularisé en espèces hors système',
+    );
+  });
+
+  it('disparaît dès que le séjour affiché change (motif jamais pré-rempli pour un autre client)', () => {
+    const { rerender } = render(
+      <StayDetailsDialog
+        stay={BASE_STAY}
+        onClose={noop}
+        onCheckout={noop}
+        checkingOut={false}
+        error="Solde impayé (150.00 MAD)"
+        soldeDu={null}
+        permissions={null}
+        canForceCheckout
+        onForceCheckout={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByRole('button', { name: 'Forcer le check-out' }),
+    ).toBeVisible();
+
+    // Nouveau séjour, aucune erreur : le panneau de check-out forcé se
+    // referme (sabotage/restore — sans le reset ci-dessus, le motif d'un
+    // client resterait visible/pré-rempli pour le suivant).
+    rerender(
+      <StayDetailsDialog
+        stay={{ ...BASE_STAY, id: 99 }}
+        onClose={noop}
+        onCheckout={noop}
+        checkingOut={false}
+        error={null}
+        soldeDu={null}
+        permissions={null}
+        canForceCheckout
+        onForceCheckout={vi.fn()}
+      />,
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Forcer le check-out' }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe('StayDetailsDialog — solde estimé (DESIGN-009, vue Départs)', () => {
+  it("affiche le solde estimé tant qu'aucun check-out réel n'a été effectué", () => {
+    render(
+      <StayDetailsDialog
+        stay={BASE_STAY}
+        onClose={noop}
+        onCheckout={noop}
+        checkingOut={false}
+        error={null}
+        soldeDu={null}
+        estimatedSoldeDu={845}
+        permissions={null}
+      />,
+    );
+    expect(screen.getByText(/Solde estimé/)).toBeVisible();
+    expect(screen.getByText('845.00 MAD')).toBeVisible();
+  });
+
+  it('le solde réel (soldeDu, renvoyé par le serveur) prime toujours sur l’estimation', () => {
+    render(
+      <StayDetailsDialog
+        stay={BASE_STAY}
+        onClose={noop}
+        onCheckout={noop}
+        checkingOut={false}
+        error={null}
+        soldeDu="0.00"
+        estimatedSoldeDu={845}
+        permissions={null}
+      />,
+    );
+    expect(screen.queryByText(/Solde estimé/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Solde dû au check-out/)).toBeVisible();
+  });
+});

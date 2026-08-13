@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsPanel, TabsTrigger } from '@/components/ui/tabs';
 import { BillingTabContent } from '@/features/billing/components/BillingTabContent';
 import { PoliceRecordForm } from '@/features/police/components/PoliceRecordForm';
@@ -21,6 +22,15 @@ interface Props {
   checkingOut: boolean;
   error: string | null;
   soldeDu: string | null;
+  // DESIGN-009 — solde estimé avant tout appel réel à checkout() (vue
+  // Départs), calculé côté client par computeSoldeDuClient (réplique
+  // documentée de computeSoldeDu serveur, voir
+  // features/checkin/utils/solde.ts) à partir des lignes de folio déjà
+  // chargées. N'est jamais affiché une fois `soldeDu` connu (réponse réelle
+  // du serveur, toujours prioritaire) — purement indicatif entre-temps,
+  // jamais utilisé pour décider quoi que ce soit côté client (le blocage
+  // réel reste vérifié par StayService.checkout).
+  estimatedSoldeDu?: number | null;
   onPoliceRecordSaved?: () => void;
   // GL-003 (MX-002A) — même granularité de masquage que le reste de l'app
   // (bouton entier absent, pas grisé) : voir CLAUDE.md, `stay:extend`
@@ -32,6 +42,23 @@ interface Props {
   // `permissions` déjà branchée depuis MX-002A, `stay:change-room` réservé
   // Administrateur + Réception (CLAUDE.md).
   onChangeRoomClick?: () => void;
+  // DESIGN-009 — check-out forcé (CH-005, BR-SEJ-004/INV-SEJ-002) :
+  // StayService.checkout bloque un solde impayé/note restaurant non
+  // acquittée sauf `force:true` + motif ≥ 10 caractères, réservé à la
+  // permission dédiée checkin:force-checkout (vérification dynamique
+  // serveur, jamais exprimable par @RequirePermission — même pattern que
+  // guests:blacklist). N'apparaît qu'après l'échec d'un check-out normal
+  // (`error` déjà présent) : jamais affiché en avance, un check-out normal
+  // reste toujours tenté en premier.
+  canForceCheckout?: boolean;
+  onForceCheckout?: (motif: string) => void;
+  forcingCheckout?: boolean;
+  // DESIGN-009 QA — « Voir la chambre » manquait pour les vues Séjours/
+  // Départs (seule ArrivalContextPanel l'avait), alors que le RoomContextModal
+  // réel (DESIGN-006) doit être accessible depuis n'importe quel panneau
+  // contextuel touchant une chambre (mission §7/§13). Optionnel pour ne
+  // jamais casser un appelant qui ne le fournirait pas.
+  onViewRoom?: (stay: Stay) => void;
 }
 
 const STATUT_LABEL: Record<Stay['statut'], string> = {
@@ -46,14 +73,35 @@ export function StayDetailsDialog({
   checkingOut,
   error,
   soldeDu,
+  estimatedSoldeDu = null,
   onPoliceRecordSaved,
   permissions,
   onExtendClick,
   onChangeRoomClick,
+  canForceCheckout = false,
+  onForceCheckout,
+  forcingCheckout = false,
+  onViewRoom,
 }: Props) {
   const [activeTab, setActiveTab] = useState('details');
+  const [forceMotif, setForceMotif] = useState('');
+  // Le motif de check-out forcé ne doit jamais survivre à la fermeture du
+  // dialogue ni à l'ouverture d'un autre séjour (sinon un motif saisi pour
+  // un client resterait pré-rempli pour le suivant). « Ajustement de state
+  // pendant le rendu » (React : https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes)
+  // plutôt qu'un `useEffect` — évite un rendu en cascade inutile.
+  const [prevStayId, setPrevStayId] = useState<number | null>(stay?.id ?? null);
+  if ((stay?.id ?? null) !== prevStayId) {
+    setPrevStayId(stay?.id ?? null);
+    setForceMotif('');
+  }
   const canExtend = permissions?.includes('stay:extend') ?? false;
   const canChangeRoom = permissions?.includes('stay:change-room') ?? false;
+  const showForceCheckout =
+    stay?.statut === 'EN_COURS' &&
+    error !== null &&
+    canForceCheckout &&
+    onForceCheckout !== undefined;
 
   return (
     <Dialog open={stay !== null} onOpenChange={(next) => !next && onClose()}>
@@ -137,6 +185,15 @@ export function StayDetailsDialog({
                     <span className="font-mono">{soldeDu} MAD</span>
                   </p>
                 )}
+                {soldeDu === null && estimatedSoldeDu !== null && (
+                  <p className="text-muted-foreground text-sm font-medium">
+                    Solde estimé (avant check-out, lignes de folio actuellement
+                    chargées) :{' '}
+                    <span className="font-mono">
+                      {estimatedSoldeDu.toFixed(2)} MAD
+                    </span>
+                  </p>
+                )}
               </TabsPanel>
 
               <TabsPanel value="facturation" className="pt-3">
@@ -158,10 +215,42 @@ export function StayDetailsDialog({
 
             {error && <p className="text-destructive text-sm">{error}</p>}
 
+            {showForceCheckout && (
+              <div className="border-destructive/30 bg-destructive/8 flex flex-col gap-2 rounded-md border p-3">
+                <p className="text-destructive text-sm font-medium">
+                  Check-out forcé malgré le blocage ci-dessus (motif ≥ 10
+                  caractères, action journalisée).
+                </p>
+                <Input
+                  value={forceMotif}
+                  onChange={(e) => setForceMotif(e.target.value)}
+                  placeholder="Motif du check-out forcé"
+                  disabled={forcingCheckout}
+                />
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={forceMotif.trim().length < 10 || forcingCheckout}
+                  onClick={() => onForceCheckout?.(forceMotif)}
+                >
+                  {forcingCheckout ? 'Check-out forcé…' : 'Forcer le check-out'}
+                </Button>
+              </div>
+            )}
+
             <DialogFooter>
               <Button type="button" variant="outline" onClick={onClose}>
                 Fermer
               </Button>
+              {onViewRoom && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onViewRoom(stay)}
+                >
+                  Voir la chambre
+                </Button>
+              )}
               {stay.statut === 'EN_COURS' &&
                 canChangeRoom &&
                 onChangeRoomClick && (
