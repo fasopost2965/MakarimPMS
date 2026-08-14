@@ -151,7 +151,7 @@ export function DashboardPage({ onNavigate, permissions }: Props) {
       </div>
 
       {quickActions.length > 0 && (
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {quickActions.map(({ label, icon: Icon, target }) => (
             <Button
               key={target}
@@ -209,7 +209,7 @@ export function DashboardPage({ onNavigate, permissions }: Props) {
             <KpiCard
               label="Chambres occupées"
               value={`${resume.chambresOccupees} / ${resume.totalChambres}`}
-              hint="Statut OCCUPEE en ce moment"
+              hint="Chambres actuellement occupées"
               icon={BedDouble}
               onClick={
                 can('housekeeping:read')
@@ -240,7 +240,7 @@ export function DashboardPage({ onNavigate, permissions }: Props) {
             <KpiCard
               label="Chambres à nettoyer"
               value={String(resume.chambresANettoyer)}
-              hint="Statut A_NETTOYER"
+              hint="En attente de nettoyage"
               icon={Sparkles}
               tone={resume.chambresANettoyer > 0 ? 'warning' : 'neutral'}
               onClick={
@@ -338,9 +338,9 @@ export function DashboardPage({ onNavigate, permissions }: Props) {
 }
 
 const TILE_TONE: Record<string, string> = {
-  success: 'bg-success-soft border-success/25',
-  warning: 'bg-warning-soft border-warning/25',
-  primary: 'bg-primary-soft border-primary/25',
+  success: 'bg-success-soft border border-success/40 shadow-[0_2px_4px_rgba(11,138,85,0.08)]',
+  warning: 'bg-warning-soft border border-warning/40 shadow-[0_2px_4px_rgba(181,71,8,0.08)]',
+  primary: 'bg-primary-soft border border-primary/40 shadow-[0_2px_4px_rgba(23,92,211,0.08)]',
 };
 
 const TILE_ICON_TONE: Record<string, string> = {

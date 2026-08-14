@@ -94,7 +94,7 @@ export function KpiCard({
       <div className="flex items-start justify-between gap-2">
         <p
           className={cn(
-            'text-[11px] leading-4 font-bold tracking-[0.03em] uppercase',
+            'text-[11px] leading-4 font-bold tracking-[0.03em]',
             TONE_ACCENT[tone],
           )}
         >
