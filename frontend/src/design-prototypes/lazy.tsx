@@ -45,3 +45,9 @@ export const PrototypeHousekeepingA = lazy(
 export const PrototypeFrontDeskA = lazy(
   () => import('./PrototypeFrontDeskA.tsx'),
 );
+
+// DESIGN-010 — Billing Center / Facturation desktop, prototype de
+// convergence unique (audit + prototype), isolé de la même façon, jamais
+// lié à App.tsx/AppSidebar en dur. Export par défaut, même convention que
+// PrototypeReservationsC/PrototypeHousekeepingA/PrototypeFrontDeskA.
+export const PrototypeBillingA = lazy(() => import('./PrototypeBillingA.tsx'));

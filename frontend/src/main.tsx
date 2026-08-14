@@ -17,6 +17,7 @@ import {
   PrototypeReservationsC,
   PrototypeHousekeepingA,
   PrototypeFrontDeskA,
+  PrototypeBillingA,
 } from './design-prototypes/lazy.tsx';
 
 // Handoff design final, lot 4 (HousekeepingMobile.dc.html/MaintenanceMobile.dc.html)
@@ -33,6 +34,14 @@ function renderRoot() {
     return <HousekeepingMobileApp />;
   if (pathname.startsWith('/mobile/maintenance'))
     return <MaintenanceMobileApp />;
+  // DESIGN-010 — vérifié AVANT '/design-preview/b' : 'billing-a' commence
+  // par 'b' et serait sinon intercepté par le préfixe court de PrototypeB.
+  if (pathname.startsWith('/design-preview/billing-a'))
+    return (
+      <Suspense fallback={null}>
+        <PrototypeBillingA />
+      </Suspense>
+    );
   if (pathname.startsWith('/design-preview/a'))
     return (
       <Suspense fallback={null}>
