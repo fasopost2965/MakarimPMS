@@ -15,6 +15,7 @@ import { WalkinDto } from './dto/walkin.dto';
 import { CheckinFromReservationDto } from './dto/checkin-from-reservation.dto';
 import { ForceCheckoutDto } from './dto/force-checkout.dto';
 import { ChangeRoomDto } from './dto/change-room.dto';
+import { PreviewChangeRoomDto } from './dto/preview-change-room.dto';
 import { ExtendStayDto } from './dto/extend-stay.dto';
 import { ExtensionDepositDto } from './dto/extension-deposit.dto';
 
@@ -101,6 +102,24 @@ export class StayController {
   // dynamique ; même précédent que housekeeping:control. StayService
   // revérifie la même permission en interne (défense en profondeur), mais
   // ce décorateur reste la barrière principale.
+  // DESIGN-009B — aperçu tarifaire (lecture seule, aucune écriture) avant
+  // confirmation du changement de chambre. Même permission que le commit
+  // ci-dessous (stay:change-room) : le contenu de la requête ne conditionne
+  // jamais cette permission, pas besoin du pattern de vérification
+  // dynamique.
+  @RequirePermission('stay', 'change-room')
+  @ApiOperation({
+    summary:
+      "Aperçu de l'impact tarifaire d'un changement de chambre (DESIGN-009B) — lecture seule, réservé à stay:change-room",
+  })
+  @Post('stays/:id/change-room/preview')
+  previewChangeRoom(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: PreviewChangeRoomDto,
+  ) {
+    return this.stayService.previewChangeRoom(id, dto.newRoomId);
+  }
+
   @RequirePermission('stay', 'change-room')
   @ApiOperation({
     summary:
@@ -116,6 +135,7 @@ export class StayController {
       id,
       dto.newRoomId,
       dto.motif,
+      dto.pricingFingerprint,
       user.sub,
       user.roleId,
     );

@@ -729,11 +729,18 @@ describe('B0.2 — panne Maintenance bloquant la vente (MySQL e2e)', () => {
       receptionUserId,
     );
 
+    // DESIGN-009B — pricingFingerprint désormais obligatoire, obtenu via un
+    // aperçu préalable (hors course) : la course testée ici porte
+    // uniquement sur le blocage maintenance ↔ changement de chambre, jamais
+    // sur la fraîcheur du pricing.
+    const preview = await stayService.previewChangeRoom(stay.id, targetRoom.id);
+
     const [changeResult, blockerResult] = await Promise.allSettled([
       stayService.changeRoom(
         stay.id,
         targetRoom.id,
         'Changement concurrent B0.2 vers chambre cible',
+        preview.pricingFingerprint,
         adminUserId,
         adminRoleId,
       ),

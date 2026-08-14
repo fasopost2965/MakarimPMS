@@ -605,6 +605,16 @@ enum TypeLigneFolio {
   // d'EXTRA pour permettre le badge visuel dédié côté frontend et le
   // blocage de check-out spécifique (BR-SEJ-004 étendu, RD-F11-03).
   RESTAURANT
+  // DESIGN-009B — impact tarifaire d'un changement de chambre en cours de
+  // séjour (StayService.changeRoom) : le tarif contracté au check-in peut
+  // différer du tarif catalogue de la chambre cible sur les nuits restantes.
+  // AJUSTEMENT_HAUSSE suit le comportement par défaut de computeSoldeDu
+  // (addition) ; AJUSTEMENT_BAISSE est traité comme PAIEMENT (soustrait) —
+  // voir stay/utils/solde.ts. Montant toujours positif en base (contrainte
+  // CHECK CH-025 inchangée) : le sens est porté par le type, jamais par le
+  // signe stocké, même convention que PAIEMENT.
+  AJUSTEMENT_HAUSSE
+  AJUSTEMENT_BAISSE
 }
 
 // Règles 2 et 3 (CLAUDE.md) : un séjour peut avoir plusieurs folios ; ce

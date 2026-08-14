@@ -102,4 +102,37 @@ describe('computeSoldeDuClient', () => {
 
     expect(computeSoldeDuClient(stay)).toBe(0);
   });
+
+  // DESIGN-009B — AJUSTEMENT_HAUSSE suit le comportement par défaut
+  // (addition), même précédent que HEBERGEMENT/EXTRA/TAXE_SEJOUR.
+  it('additionne AJUSTEMENT_HAUSSE comme une charge', () => {
+    const stay: Pick<Stay, 'folios'> = {
+      folios: [
+        folio([
+          ligne({ id: 1, type: 'HEBERGEMENT', montant: '500.00' }),
+          ligne({ id: 2, type: 'AJUSTEMENT_HAUSSE', montant: '300.00' }),
+        ]),
+      ],
+    };
+
+    expect(computeSoldeDuClient(stay)).toBeCloseTo(800, 2);
+  });
+
+  // Preuve de rigueur sabotage/restore (CLAUDE.md, « Tests » §) : sans la
+  // clause `|| ligne.type === 'AJUSTEMENT_BAISSE'` dans computeSoldeDuClient,
+  // ce test échouerait (200 attendu deviendrait 800) — vérifié manuellement
+  // en retirant temporairement cette clause pendant le développement, puis
+  // restauré.
+  it('soustrait AJUSTEMENT_BAISSE exactement comme un paiement', () => {
+    const stay: Pick<Stay, 'folios'> = {
+      folios: [
+        folio([
+          ligne({ id: 1, type: 'HEBERGEMENT', montant: '500.00' }),
+          ligne({ id: 2, type: 'AJUSTEMENT_BAISSE', montant: '300.00' }),
+        ]),
+      ],
+    };
+
+    expect(computeSoldeDuClient(stay)).toBeCloseTo(200, 2);
+  });
 });

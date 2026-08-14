@@ -24,6 +24,37 @@ interface StayResponse {
   statut: string;
 }
 
+interface ChangeRoomPreviewResponse {
+  oldRoom: { id: number; numero: string; roomTypeNom: string };
+  newRoom: { id: number; numero: string; roomTypeNom: string };
+  nuitsImpactees: string[];
+  ancienMontantRestant: string;
+  nouveauMontantRestant: string;
+  difference: string;
+  pricingFingerprint: string;
+  warnings: string[];
+}
+
+// DESIGN-009B — pricingFingerprint désormais obligatoire sur
+// POST /stays/:id/change-room : obtenu via un aperçu préalable, jamais
+// inventé côté test. Retombe sur une valeur invalide si le preview
+// lui-même échoue (cible indisponible, même chambre, séjour clôturé...) —
+// dans ces cas, le commit échoue de toute façon pour la même raison, avant
+// même d'atteindre la comparaison de fingerprint.
+async function previewFingerprint(
+  client: ReturnType<typeof authedRequest>,
+  stayId: number,
+  newRoomId: number,
+): Promise<string> {
+  const res = await client
+    .post(`/api/stays/${stayId}/change-room/preview`)
+    .send({ newRoomId });
+  return (
+    (res.body as Partial<ChangeRoomPreviewResponse>).pricingFingerprint ??
+    'preview-indisponible-fingerprint-invalide'
+  );
+}
+
 // GL-002 — Changement de chambre pendant un séjour
 describe('Stay - Change Room (GL-002)', () => {
   let app: INestApplication<App>;
@@ -204,11 +235,17 @@ describe('Stay - Change Room (GL-002)', () => {
     });
 
     it('Changement nominal vers une chambre disponible', async () => {
+      const pricingFingerprint = await previewFingerprint(
+        receptionClient,
+        stay.id,
+        room2.id,
+      );
       const res = await receptionClient
         .post(`/api/stays/${stay.id}/change-room`)
         .send({
           newRoomId: room2.id,
           motif: 'Demande du client pour proximité étage supérieur',
+          pricingFingerprint,
         });
 
       expect(res.status).toBe(201);
@@ -249,6 +286,14 @@ describe('Stay - Change Room (GL-002)', () => {
     });
 
     it('Séjour déjà clôturé doit être rejeté (409)', async () => {
+      // Fingerprint obtenu AVANT le check-out (séjour encore EN_COURS) — le
+      // commit doit échouer sur le statut du séjour, avant même la
+      // comparaison de fingerprint.
+      const pricingFingerprint = await previewFingerprint(
+        receptionClient,
+        stay.id,
+        room2.id,
+      );
       const checkoutRes = await adminClient
         .post(`/api/checkout/${stay.id}`)
         .send({ force: true, motif: 'Check-out forcé pour préparer le test' });
@@ -259,6 +304,7 @@ describe('Stay - Change Room (GL-002)', () => {
         .send({
           newRoomId: room2.id,
           motif: 'Motif valide minimum 10 chars',
+          pricingFingerprint,
         });
 
       expect(res.status).toBe(409);
@@ -270,17 +316,24 @@ describe('Stay - Change Room (GL-002)', () => {
         .send({
           newRoomId: room2.id,
           motif: 'Motif minimum 10 chars ok!',
+          pricingFingerprint: 'gouvernante-sans-permission',
         });
 
       expect(res.status).toBe(403);
     });
 
     it('Motif trop court doit être rejeté', async () => {
+      const pricingFingerprint = await previewFingerprint(
+        receptionClient,
+        stay.id,
+        room2.id,
+      );
       const res = await receptionClient
         .post(`/api/stays/${stay.id}/change-room`)
         .send({
           newRoomId: room2.id,
           motif: 'Court',
+          pricingFingerprint,
         });
 
       expect(res.status).toBe(400);
@@ -292,6 +345,7 @@ describe('Stay - Change Room (GL-002)', () => {
         .send({
           newRoomId: room2.id,
           motif: 'Motif valide minimum 10 chars',
+          pricingFingerprint: 'sejour-inexistant',
         });
 
       expect(res.status).toBe(404);
@@ -303,6 +357,7 @@ describe('Stay - Change Room (GL-002)', () => {
         .send({
           newRoomId: stay.roomId,
           motif: 'Motif valide minimum 10 chars',
+          pricingFingerprint: 'meme-chambre',
         });
 
       expect(res.status).toBe(409);
@@ -320,6 +375,7 @@ describe('Stay - Change Room (GL-002)', () => {
         .send({
           newRoomId: room2.id,
           motif: 'Motif valide minimum 10 chars',
+          pricingFingerprint: 'cible-non-libre-propre',
         });
 
       expect(res.status).toBe(409);
@@ -343,6 +399,7 @@ describe('Stay - Change Room (GL-002)', () => {
         .send({
           newRoomId: room2.id,
           motif: 'Motif valide minimum 10 chars',
+          pricingFingerprint: 'cible-reservee',
         });
 
       expect(res.status).toBe(409);
@@ -371,6 +428,7 @@ describe('Stay - Change Room (GL-002)', () => {
         .send({
           newRoomId: room2.id,
           motif: 'Motif valide minimum 10 chars',
+          pricingFingerprint: 'cible-occupee-walkin',
         });
 
       expect(res.status).toBe(409);
@@ -378,10 +436,16 @@ describe('Stay - Change Room (GL-002)', () => {
 
     it('Ancienne chambre doit passer à A_NETTOYER', async () => {
       const oldRoomId = stay.roomId;
+      const pricingFingerprint = await previewFingerprint(
+        receptionClient,
+        stay.id,
+        room2.id,
+      );
 
       await receptionClient.post(`/api/stays/${stay.id}/change-room`).send({
         newRoomId: room2.id,
         motif: 'Demande client pour confort amélioré',
+        pricingFingerprint,
       });
 
       const oldRoom = await prisma.room.findUniqueOrThrow({
@@ -392,10 +456,16 @@ describe('Stay - Change Room (GL-002)', () => {
 
     it('Tâche housekeeping doit être créée sans doublon', async () => {
       const oldRoomId = stay.roomId;
+      const pricingFingerprint = await previewFingerprint(
+        receptionClient,
+        stay.id,
+        room2.id,
+      );
 
       await receptionClient.post(`/api/stays/${stay.id}/change-room`).send({
         newRoomId: room2.id,
         motif: 'Demande client pour confort amélioré',
+        pricingFingerprint,
       });
 
       // Attendre un peu pour que l'événement soit traité
@@ -413,22 +483,40 @@ describe('Stay - Change Room (GL-002)', () => {
       expect(lastTask.origine).toBe('CHANGE_ROOM');
     });
 
-    it('Folios inchangés après changement de chambre', async () => {
+    // DESIGN-009B — les chambres 1/2/3 partagent le même RoomType
+    // (roomTypeId, prixBase=100, aucune SeasonRate), donc le catalogue
+    // "nouveau" (calculateNightlyTotal sur le tarif de base) est identique
+    // pour room1/room2/room3. Malgré cela, une différence non nulle est
+    // attendue ici : la TAXE_SEJOUR active (seed, 3 MAD/nuit/occupant) est
+    // carvée hors de la ligne HEBERGEMENT à la matérialisation FIN-102
+    // (ADR-008), donc tarifNuitMoyenContracte (ancien, net de taxe) est
+    // structurellement < prixBase catalogue (nouveau, brut) — c'est
+    // exactement la formule spécifiée (DESIGN-009B §3), pas un bug. Le vrai
+    // invariant à préserver ici : les lignes PRÉEXISTANTES (HEBERGEMENT,
+    // EXTRA, TAXE_SEJOUR) restent bit-à-bit identiques ; seule une NOUVELLE
+    // ligne AJUSTEMENT_HAUSSE/AJUSTEMENT_BAISSE peut apparaître.
+    it('Lignes de folio préexistantes intactes après changement de chambre (seul un ajustement peut s’ajouter)', async () => {
       const foliosBefore = await prisma.folio.findMany({
         where: { stayId: stay.id },
         include: { lignes: true },
       });
 
       const folioCountBefore = foliosBefore.length;
-      const folioLinesCountBefore = foliosBefore.reduce(
-        (sum, f) => sum + f.lignes.length,
-        0,
-      );
+      const lignesBefore = foliosBefore.flatMap((f) => f.lignes);
 
-      await receptionClient.post(`/api/stays/${stay.id}/change-room`).send({
-        newRoomId: room2.id,
-        motif: 'Changement de préférence client,',
-      });
+      const pricingFingerprint = await previewFingerprint(
+        receptionClient,
+        stay.id,
+        room2.id,
+      );
+      const changeRes = await receptionClient
+        .post(`/api/stays/${stay.id}/change-room`)
+        .send({
+          newRoomId: room2.id,
+          motif: 'Changement de préférence client,',
+          pricingFingerprint,
+        });
+      expect(changeRes.status).toBe(201);
 
       const foliosAfter = await prisma.folio.findMany({
         where: { stayId: stay.id },
@@ -436,13 +524,33 @@ describe('Stay - Change Room (GL-002)', () => {
       });
 
       const folioCountAfter = foliosAfter.length;
-      const folioLinesCountAfter = foliosAfter.reduce(
-        (sum, f) => sum + f.lignes.length,
-        0,
-      );
+      const lignesAfter = foliosAfter.flatMap((f) => f.lignes);
 
       expect(folioCountAfter).toBe(folioCountBefore);
-      expect(folioLinesCountAfter).toBe(folioLinesCountBefore);
+
+      // Toute ligne préexistante (par id) doit rester rigoureusement
+      // identique (montant, type, annulee) — jamais mutée.
+      for (const ligneAvant of lignesBefore) {
+        const ligneApres = lignesAfter.find((l) => l.id === ligneAvant.id);
+        expect(ligneApres).toBeDefined();
+        expect(ligneApres!.montant.toFixed(2)).toBe(
+          ligneAvant.montant.toFixed(2),
+        );
+        expect(ligneApres!.type).toBe(ligneAvant.type);
+        expect(ligneApres!.annulee).toBe(ligneAvant.annulee);
+      }
+
+      // Toute ligne NOUVELLE ne peut être qu'un ajustement tarifaire
+      // DESIGN-009B.
+      const nouvellesLignes = lignesAfter.filter(
+        (l) => !lignesBefore.some((avant) => avant.id === l.id),
+      );
+      for (const ligne of nouvellesLignes) {
+        expect(['AJUSTEMENT_HAUSSE', 'AJUSTEMENT_BAISSE']).toContain(
+          ligne.type,
+        );
+      }
+      expect(nouvellesLignes.length).toBeLessThanOrEqual(1);
     });
 
     it('Nuits passées doivent rester sur ancienne chambre', async () => {
@@ -469,11 +577,17 @@ describe('Stay - Change Room (GL-002)', () => {
       expect(oldRoomId).toBe(room3.id);
 
       // Changer de chambre vers room2 (la seule encore LIBRE_PROPRE)
+      const pricingFingerprint = await previewFingerprint(
+        receptionClient,
+        stay2.id,
+        room2.id,
+      );
       const changeRes = await receptionClient
         .post(`/api/stays/${stay2.id}/change-room`)
         .send({
           newRoomId: room2.id,
           motif: 'Changement après nuit déjà écoulée',
+          pricingFingerprint,
         });
       expect(changeRes.status).toBe(201);
 
@@ -512,14 +626,24 @@ describe('Stay - Change Room (GL-002)', () => {
     it('Deux changements de chambre concurrents vers la même cible : un seul succès', async () => {
       const stay2 = await checkinWalkInStay(room3.id);
 
+      // Fingerprints obtenus séquentiellement AVANT la course — la course
+      // testée ici porte sur la disponibilité de room2, jamais sur la
+      // fraîcheur du pricing.
+      const [fingerprint1, fingerprint2] = await Promise.all([
+        previewFingerprint(receptionClient, stay.id, room2.id),
+        previewFingerprint(receptionClient, stay2.id, room2.id),
+      ]);
+
       const [res1, res2] = await Promise.all([
         receptionClient.post(`/api/stays/${stay.id}/change-room`).send({
           newRoomId: room2.id,
           motif: 'Course concurrente — séjour 1',
+          pricingFingerprint: fingerprint1,
         }),
         receptionClient.post(`/api/stays/${stay2.id}/change-room`).send({
           newRoomId: room2.id,
           motif: 'Course concurrente — séjour 2',
+          pricingFingerprint: fingerprint2,
         }),
       ]);
 
@@ -548,10 +672,16 @@ describe('Stay - Change Room (GL-002)', () => {
     });
 
     it('Concurrence avec un check-out du même séjour : état final cohérent', async () => {
+      const pricingFingerprint = await previewFingerprint(
+        receptionClient,
+        stay.id,
+        room2.id,
+      );
       const [changeRes, checkoutRes] = await Promise.all([
         receptionClient.post(`/api/stays/${stay.id}/change-room`).send({
           newRoomId: room2.id,
           motif: 'Course concurrente avec check-out',
+          pricingFingerprint,
         }),
         adminClient.post(`/api/checkout/${stay.id}`).send({
           force: true,
@@ -624,11 +754,17 @@ describe('Stay - Change Room (GL-002)', () => {
         ) as ReturnType<RoomsService['transitionRoom']>;
       });
 
+      const pricingFingerprint = await previewFingerprint(
+        receptionClient,
+        stay.id,
+        room2.id,
+      );
       const res = await receptionClient
         .post(`/api/stays/${stay.id}/change-room`)
         .send({
           newRoomId: room2.id,
           motif: 'Motif valide minimum 10 chars',
+          pricingFingerprint,
         });
       expect(res.status).toBe(500);
 
@@ -654,11 +790,17 @@ describe('Stay - Change Room (GL-002)', () => {
       expect(auditAfter).toBeNull();
 
       jest.restoreAllMocks();
+      const retryFingerprint = await previewFingerprint(
+        receptionClient,
+        stay.id,
+        room2.id,
+      );
       const retry = await receptionClient
         .post(`/api/stays/${stay.id}/change-room`)
         .send({
           newRoomId: room2.id,
           motif: 'Motif valide minimum 10 chars, retenté après restauration',
+          pricingFingerprint: retryFingerprint,
         });
       expect(retry.status).toBe(201);
     });
@@ -668,11 +810,17 @@ describe('Stay - Change Room (GL-002)', () => {
         .spyOn(housekeepingTaskService, 'createTask')
         .mockRejectedValueOnce(new Error('Sabotage : createTask en échec'));
 
+      const pricingFingerprint = await previewFingerprint(
+        receptionClient,
+        stay.id,
+        room2.id,
+      );
       const res = await receptionClient
         .post(`/api/stays/${stay.id}/change-room`)
         .send({
           newRoomId: room2.id,
           motif: 'Motif valide minimum 10 chars',
+          pricingFingerprint,
         });
       expect(res.status).toBe(500);
 
@@ -696,11 +844,17 @@ describe('Stay - Change Room (GL-002)', () => {
       expect(taskAfter).toBeNull();
 
       jest.restoreAllMocks();
+      const retryFingerprint = await previewFingerprint(
+        receptionClient,
+        stay.id,
+        room2.id,
+      );
       const retry = await receptionClient
         .post(`/api/stays/${stay.id}/change-room`)
         .send({
           newRoomId: room2.id,
           motif: 'Motif valide minimum 10 chars, retenté après restauration',
+          pricingFingerprint: retryFingerprint,
         });
       expect(retry.status).toBe(201);
     });
@@ -710,11 +864,17 @@ describe('Stay - Change Room (GL-002)', () => {
         .spyOn(auditService, 'writeLog')
         .mockRejectedValueOnce(new Error('Sabotage : writeLog en échec'));
 
+      const pricingFingerprint = await previewFingerprint(
+        receptionClient,
+        stay.id,
+        room2.id,
+      );
       const res = await receptionClient
         .post(`/api/stays/${stay.id}/change-room`)
         .send({
           newRoomId: room2.id,
           motif: 'Motif valide minimum 10 chars',
+          pricingFingerprint,
         });
       expect(res.status).toBe(500);
 
@@ -732,11 +892,17 @@ describe('Stay - Change Room (GL-002)', () => {
       expect(taskAfter).toBeNull();
 
       jest.restoreAllMocks();
+      const retryFingerprint = await previewFingerprint(
+        receptionClient,
+        stay.id,
+        room2.id,
+      );
       const retry = await receptionClient
         .post(`/api/stays/${stay.id}/change-room`)
         .send({
           newRoomId: room2.id,
           motif: 'Motif valide minimum 10 chars, retenté après restauration',
+          pricingFingerprint: retryFingerprint,
         });
       expect(retry.status).toBe(201);
     });
@@ -754,14 +920,21 @@ describe('Stay - Change Room (GL-002)', () => {
       });
       const stay2 = await checkinWalkInStay(room3.id);
 
+      const [fingerprint1, fingerprint2] = await Promise.all([
+        previewFingerprint(receptionClient, stay.id, room2.id),
+        previewFingerprint(receptionClient, stay2.id, room4.id),
+      ]);
+
       const [res1, res2] = await Promise.all([
         receptionClient.post(`/api/stays/${stay.id}/change-room`).send({
           newRoomId: room2.id,
           motif: 'Première opération distincte',
+          pricingFingerprint: fingerprint1,
         }),
         receptionClient.post(`/api/stays/${stay2.id}/change-room`).send({
           newRoomId: room4.id,
           motif: 'Deuxième opération distincte',
+          pricingFingerprint: fingerprint2,
         }),
       ]);
       expect(res1.status).toBe(201);
@@ -803,11 +976,17 @@ describe('Stay - Change Room (GL-002)', () => {
     });
 
     it('Idempotence : rejouer la même clé ne crée jamais de tâche en double', async () => {
+      const pricingFingerprint = await previewFingerprint(
+        receptionClient,
+        stay.id,
+        room2.id,
+      );
       const changeRes = await receptionClient
         .post(`/api/stays/${stay.id}/change-room`)
         .send({
           newRoomId: room2.id,
           motif: 'Opération de référence pour le rejeu',
+          pricingFingerprint,
         });
       expect(changeRes.status).toBe(201);
 
@@ -831,6 +1010,471 @@ describe('Stay - Change Room (GL-002)', () => {
         where: { roomId: room1.id, origine: 'CHANGE_ROOM' },
       });
       expect(count).toBe(1);
+    });
+  });
+
+  // DESIGN-009B — matrice de tests explicitement demandée par le
+  // propriétaire produit (mission GO BUILD, section « Tests obligatoires »),
+  // au-delà des tests GL-002 déjà adaptés ci-dessus (qui ne pinnent jamais
+  // de montant exact, tous les rooms y partageant le même roomTypeId/prix).
+  // Chaque test ci-dessous crée ses propres RoomType à prix distincts pour
+  // pouvoir vérifier une vraie différence tarifaire de bout en bout.
+  describe('DESIGN-009B — impact tarifaire', () => {
+    let typeBasique: { id: number };
+    let typeDeluxe: { id: number };
+    let taxeSejour: { taux: Prisma.Decimal };
+
+    beforeAll(async () => {
+      const suffix = `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+      typeBasique = await prisma.roomType.create({
+        data: {
+          nom: `TEST-009B-BASIQUE-${suffix}`,
+          prixBase: 400,
+          capacite: 2,
+        },
+      });
+      typeDeluxe = await prisma.roomType.create({
+        data: { nom: `TEST-009B-DELUXE-${suffix}`, prixBase: 500, capacite: 2 },
+      });
+      // Même config TAXE_SEJOUR que le seed (MONTANT_FIXE, taux=3 — voir
+      // prisma/seed.ts) : lue en direct plutôt que codée en dur, pour que
+      // le test reste correct même si le taux venait à changer.
+      taxeSejour = await prisma.taxRateConfig.findFirstOrThrow({
+        where: { type: 'TAXE_SEJOUR', actif: true },
+        select: { taux: true },
+      });
+    });
+
+    afterAll(async () => {
+      const typeIds = [typeBasique.id, typeDeluxe.id];
+      await prisma.roomNight.deleteMany({
+        where: { room: { roomTypeId: { in: typeIds } } },
+      });
+      await prisma.folioLine.deleteMany({
+        where: { folio: { stay: { room: { roomTypeId: { in: typeIds } } } } },
+      });
+      await prisma.folio.deleteMany({
+        where: { stay: { room: { roomTypeId: { in: typeIds } } } },
+      });
+      await prisma.auditLog.deleteMany({
+        where: {
+          targetEntity: 'Stay',
+          targetId: {
+            in: await prisma.stay
+              .findMany({
+                where: { room: { roomTypeId: { in: typeIds } } },
+                select: { id: true },
+              })
+              .then((rows) => rows.map((r) => r.id)),
+          },
+        },
+      });
+      await prisma.housekeepingTaskLog.deleteMany({
+        where: { task: { room: { roomTypeId: { in: typeIds } } } },
+      });
+      await prisma.housekeepingTask.deleteMany({
+        where: { room: { roomTypeId: { in: typeIds } } },
+      });
+      await prisma.roomStatusLog.deleteMany({
+        where: { room: { roomTypeId: { in: typeIds } } },
+      });
+      await prisma.stay.deleteMany({
+        where: { room: { roomTypeId: { in: typeIds } } },
+      });
+      await prisma.reservation.deleteMany({
+        where: { room: { roomTypeId: { in: typeIds } } },
+      });
+      await prisma.room.deleteMany({ where: { roomTypeId: { in: typeIds } } });
+      await prisma.roomType.deleteMany({ where: { id: { in: typeIds } } });
+    });
+
+    // Crée un séjour EN_COURS de 3 nuits (aujourd'hui incluses), formule
+    // ROOM_ONLY (aucun supplément formule, isole la seule composante
+    // HEBERGEMENT), 1 occupant, sur une chambre du roomType donné.
+    async function createStay3Nuits(
+      roomTypeId: number,
+      destinationRoomTypeId: number,
+    ) {
+      const suffix = `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+      const roomA = await prisma.room.create({
+        data: {
+          numero: `009B-A-${suffix}`,
+          roomTypeId,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+      const roomB = await prisma.room.create({
+        data: {
+          numero: `009B-B-${suffix}`,
+          roomTypeId: destinationRoomTypeId,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+      const guest = await prisma.guest.create({
+        data: {
+          nom: 'Test009B',
+          prenom: 'E2E',
+          email: `e2e009b-${suffix}@example.com`,
+          telephone: '+212600000002',
+          nationalite: 'MA',
+          pieceIdentite: `T009B-${suffix}`,
+          categorie: 'STANDARD',
+        },
+      });
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const dateDepart = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000);
+      const reservationRes = await receptionClient
+        .post('/api/reservations')
+        .send({
+          roomId: roomA.id,
+          guestId: guest.id,
+          dateArrivee: today.toISOString().slice(0, 10),
+          dateDepart: dateDepart.toISOString().slice(0, 10),
+          formule: 'ROOM_ONLY',
+        });
+      const reservation = reservationRes.body as ReservationResponse;
+      const checkinRes = await adminClient
+        .post(`/api/checkin/${reservation.id}`)
+        .send({ nombreOccupants: 1 });
+      const createdStay = checkinRes.body as StayResponse;
+      return {
+        stay: createdStay,
+        roomA,
+        roomB,
+        guest,
+        reservationId: reservation.id,
+      };
+    }
+
+    it('Hausse tarifaire explicite : 400 MAD/nuit → 500 MAD/nuit sur 3 nuits restantes', async () => {
+      const { stay: s, roomB } = await createStay3Nuits(
+        typeBasique.id,
+        typeDeluxe.id,
+      );
+      // Attendu : hebergement contracté = 400×3 - taxeSéjour(3 nuits×1 occ.)
+      // = 1200 - 9 = 1191 ; nouveau = 500×3 = 1500 (catalogue, jamais net de
+      // taxe — voir §3 du rapport de conception, asymétrie documentée et
+      // volontaire) ; différence = 1500 - 1191 = 309.00, pas un « 300.00 »
+      // brut — l'écart de 9 MAD est exactement la taxe de séjour carvée hors
+      // de la ligne HEBERGEMENT à la matérialisation FIN-102.
+      const taxe = taxeSejour.taux.mul(3).mul(1);
+      const ancienAttendu = new Prisma.Decimal(400).mul(3).sub(taxe);
+      const nouveauAttendu = new Prisma.Decimal(500).mul(3);
+      const differenceAttendue = nouveauAttendu.sub(ancienAttendu);
+
+      const previewRes = await receptionClient
+        .post(`/api/stays/${s.id}/change-room/preview`)
+        .send({ newRoomId: roomB.id });
+      expect(previewRes.status).toBe(201);
+      const preview = previewRes.body as ChangeRoomPreviewResponse;
+      expect(preview.ancienMontantRestant).toBe(ancienAttendu.toFixed(2));
+      expect(preview.nouveauMontantRestant).toBe(nouveauAttendu.toFixed(2));
+      expect(preview.difference).toBe(`+${differenceAttendue.toFixed(2)}`);
+
+      const changeRes = await receptionClient
+        .post(`/api/stays/${s.id}/change-room`)
+        .send({
+          newRoomId: roomB.id,
+          motif: 'Test explicite hausse 400->500',
+          pricingFingerprint: preview.pricingFingerprint,
+        });
+      expect(changeRes.status).toBe(201);
+
+      const ligne = await prisma.folioLine.findFirstOrThrow({
+        where: { folio: { stayId: s.id }, type: 'AJUSTEMENT_HAUSSE' },
+      });
+      expect(ligne.montant.toFixed(2)).toBe(differenceAttendue.toFixed(2));
+    });
+
+    it('Baisse tarifaire explicite : 500 MAD/nuit → 400 MAD/nuit sur 3 nuits restantes', async () => {
+      const { stay: s, roomB } = await createStay3Nuits(
+        typeDeluxe.id,
+        typeBasique.id,
+      );
+      const taxe = taxeSejour.taux.mul(3).mul(1);
+      const ancienAttendu = new Prisma.Decimal(500).mul(3).sub(taxe);
+      const nouveauAttendu = new Prisma.Decimal(400).mul(3);
+      const differenceAttendue = ancienAttendu.sub(nouveauAttendu);
+
+      const previewRes = await receptionClient
+        .post(`/api/stays/${s.id}/change-room/preview`)
+        .send({ newRoomId: roomB.id });
+      expect(previewRes.status).toBe(201);
+      const preview = previewRes.body as ChangeRoomPreviewResponse;
+      expect(preview.ancienMontantRestant).toBe(ancienAttendu.toFixed(2));
+      expect(preview.nouveauMontantRestant).toBe(nouveauAttendu.toFixed(2));
+      expect(preview.difference).toBe(`-${differenceAttendue.toFixed(2)}`);
+
+      const changeRes = await receptionClient
+        .post(`/api/stays/${s.id}/change-room`)
+        .send({
+          newRoomId: roomB.id,
+          motif: 'Test explicite baisse 500->400',
+          pricingFingerprint: preview.pricingFingerprint,
+        });
+      expect(changeRes.status).toBe(201);
+
+      const ligne = await prisma.folioLine.findFirstOrThrow({
+        where: { folio: { stayId: s.id }, type: 'AJUSTEMENT_BAISSE' },
+      });
+      expect(ligne.montant.toFixed(2)).toBe(differenceAttendue.toFixed(2));
+    });
+
+    it('Catalogue tarifaire modifié après la réservation : ancien montant reste basé sur le folio, pas le nouveau catalogue', async () => {
+      const { stay: s, roomB } = await createStay3Nuits(
+        typeBasique.id,
+        typeDeluxe.id,
+      );
+      const taxe = taxeSejour.taux.mul(3).mul(1);
+      const ancienAttenduAvantModifCatalogue = new Prisma.Decimal(400)
+        .mul(3)
+        .sub(taxe);
+
+      // Un Administrateur modifie le catalogue APRÈS le check-in (même
+      // convention que parameters:write — hors périmètre de ce test, écrit
+      // directement via Prisma pour isoler la seule variable testée).
+      await prisma.roomType.update({
+        where: { id: typeBasique.id },
+        data: { prixBase: 999 },
+      });
+
+      const previewRes = await receptionClient
+        .post(`/api/stays/${s.id}/change-room/preview`)
+        .send({ newRoomId: roomB.id });
+      expect(previewRes.status).toBe(201);
+      const preview = previewRes.body as ChangeRoomPreviewResponse;
+      // L'ancien montant restant NE bouge PAS malgré le catalogue modifié —
+      // c'est exactement le point testé (préservation du prix contracté).
+      expect(preview.ancienMontantRestant).toBe(
+        ancienAttenduAvantModifCatalogue.toFixed(2),
+      );
+
+      // Restaure le catalogue pour ne pas polluer les tests suivants du
+      // même fichier (afterAll ne le fait pas, seul le prixBase a été muté).
+      await prisma.roomType.update({
+        where: { id: typeBasique.id },
+        data: { prixBase: 400 },
+      });
+    });
+
+    it('ajustementManuel sur la réservation d’origine : ancien montant respecte le prix contracté, pas le catalogue', async () => {
+      const suffix = `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+      const roomA = await prisma.room.create({
+        data: {
+          numero: `009B-AJUST-A-${suffix}`,
+          roomTypeId: typeBasique.id,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+      const roomB = await prisma.room.create({
+        data: {
+          numero: `009B-AJUST-B-${suffix}`,
+          roomTypeId: typeDeluxe.id,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+      const guest = await prisma.guest.create({
+        data: {
+          nom: 'TestAjust',
+          prenom: 'E2E',
+          email: `e2e009b-ajust-${suffix}@example.com`,
+          telephone: '+212600000003',
+          nationalite: 'MA',
+          pieceIdentite: `T009B-AJ-${suffix}`,
+          categorie: 'STANDARD',
+        },
+      });
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const dateDepart = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000);
+      const reservationRes = await receptionClient
+        .post('/api/reservations')
+        .send({
+          roomId: roomA.id,
+          guestId: guest.id,
+          dateArrivee: today.toISOString().slice(0, 10),
+          dateDepart: dateDepart.toISOString().slice(0, 10),
+          formule: 'ROOM_ONLY',
+        });
+      const reservation = reservationRes.body as ReservationResponse;
+
+      // Tarif négocié manuellement à 900 MAD (au lieu de 1200 = 400×3
+      // catalogue) — ajustementManuel passe à true côté service dès qu'un
+      // prixTotalFinal est fourni (UpdateReservationDto).
+      const patchRes = await adminClient
+        .patch(`/api/reservations/${reservation.id}`)
+        .send({
+          prixTotalFinal: 900,
+          motifAjustement: 'Tarif négocié client fidèle',
+        });
+      expect(patchRes.status).toBe(200);
+
+      const checkinRes = await adminClient
+        .post(`/api/checkin/${reservation.id}`)
+        .send({ nombreOccupants: 1 });
+      const s = checkinRes.body as StayResponse;
+
+      const taxe = taxeSejour.taux.mul(3).mul(1);
+      const ancienAttendu = new Prisma.Decimal(900).sub(taxe); // 900 - 9 = 891, jamais 400×3 - 9
+
+      const previewRes = await receptionClient
+        .post(`/api/stays/${s.id}/change-room/preview`)
+        .send({ newRoomId: roomB.id });
+      expect(previewRes.status).toBe(201);
+      const preview = previewRes.body as ChangeRoomPreviewResponse;
+      expect(preview.ancienMontantRestant).toBe(ancienAttendu.toFixed(2));
+    });
+
+    it('Capacité insuffisante détectée au commit (bypass du preview)', async () => {
+      const { stay: s } = await createStay3Nuits(typeBasique.id, typeDeluxe.id);
+      const typeMini = await prisma.roomType.create({
+        data: {
+          nom: `TEST-009B-MINI-${Date.now()}`,
+          prixBase: 300,
+          capacite: 0,
+        },
+      });
+      const roomMini = await prisma.room.create({
+        data: {
+          numero: `009B-MINI-${Date.now()}`,
+          roomTypeId: typeMini.id,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+
+      // Preview rejette déjà (409, capacité 0 < 1 occupant).
+      const previewRes = await receptionClient
+        .post(`/api/stays/${s.id}/change-room/preview`)
+        .send({ newRoomId: roomMini.id });
+      expect(previewRes.status).toBe(409);
+      expect((previewRes.body as { code?: string }).code).toBe(
+        'CHANGE_ROOM_CAPACITY_EXCEEDED',
+      );
+      expect(previewRes.body).not.toHaveProperty('pricingFingerprint');
+
+      // Commit directement (sans passer par un preview réussi) : même 409,
+      // revalidé sous verrou dans la transaction.
+      const changeRes = await receptionClient
+        .post(`/api/stays/${s.id}/change-room`)
+        .send({
+          newRoomId: roomMini.id,
+          motif: 'Tentative bypass capacité insuffisante',
+          pricingFingerprint: 'fingerprint-arbitraire-jamais-atteint',
+        });
+      expect(changeRes.status).toBe(409);
+      expect((changeRes.body as { code?: string }).code).toBe(
+        'CHANGE_ROOM_CAPACITY_EXCEEDED',
+      );
+
+      await prisma.room.deleteMany({ where: { id: roomMini.id } });
+      await prisma.roomType.deleteMany({ where: { id: typeMini.id } });
+    });
+
+    it('Aperçu périmé (PREVIEW_STALE) : rollback complet, zéro mutation DB, puis reconfirmation réussie', async () => {
+      const { stay: s, roomB } = await createStay3Nuits(
+        typeBasique.id,
+        typeDeluxe.id,
+      );
+
+      const previewRes = await receptionClient
+        .post(`/api/stays/${s.id}/change-room/preview`)
+        .send({ newRoomId: roomB.id });
+      expect(previewRes.status).toBe(201);
+      const staleFingerprint = (previewRes.body as ChangeRoomPreviewResponse)
+        .pricingFingerprint;
+
+      // État complet avant la tentative périmée — pour prouver l'absence de
+      // TOUTE mutation (Room, RoomNight, Folio/FolioLine, AuditLog,
+      // HousekeepingTask), pas seulement l'absence d'écriture financière.
+      const [
+        roomBefore,
+        roomNightsBefore,
+        folioLinesBefore,
+        auditBefore,
+        taskBefore,
+      ] = await Promise.all([
+        prisma.room.findUniqueOrThrow({ where: { id: roomB.id } }),
+        prisma.roomNight.findMany({ where: { stayId: s.id } }),
+        prisma.folioLine.findMany({ where: { folio: { stayId: s.id } } }),
+        prisma.auditLog.count({
+          where: { targetEntity: 'Stay', targetId: s.id },
+        }),
+        prisma.housekeepingTask.count({ where: { origine: 'CHANGE_ROOM' } }),
+      ]);
+
+      // Le catalogue de la NOUVELLE chambre change entre le preview et la
+      // confirmation (dérive simulée) — nouveauMontantRestant est calculé
+      // depuis le catalogue courant (contrairement à ancienMontantRestant,
+      // basé sur le folio déjà contracté, insensible à un changement de
+      // typeBasique — voir le test « Catalogue tarifaire modifié... »
+      // ci-dessus) : muter typeDeluxe (celui de roomB, la cible) est donc le
+      // seul levier qui fait effectivement dériver le fingerprint recalculé
+      // sous verrou par rapport à celui reçu.
+      await prisma.roomType.update({
+        where: { id: typeDeluxe.id },
+        data: { prixBase: 777 },
+      });
+
+      const staleAttempt = await receptionClient
+        .post(`/api/stays/${s.id}/change-room`)
+        .send({
+          newRoomId: roomB.id,
+          motif: 'Confirmation avec un aperçu désormais périmé',
+          pricingFingerprint: staleFingerprint,
+        });
+      expect(staleAttempt.status).toBe(409);
+      expect((staleAttempt.body as { code?: string }).code).toBe(
+        'CHANGE_ROOM_PREVIEW_STALE',
+      );
+      expect(
+        (staleAttempt.body as { preview?: ChangeRoomPreviewResponse }).preview
+          ?.pricingFingerprint,
+      ).not.toBe(staleFingerprint);
+
+      const [
+        roomAfter,
+        roomNightsAfter,
+        folioLinesAfter,
+        auditAfter,
+        taskAfter,
+      ] = await Promise.all([
+        prisma.room.findUniqueOrThrow({ where: { id: roomB.id } }),
+        prisma.roomNight.findMany({ where: { stayId: s.id } }),
+        prisma.folioLine.findMany({ where: { folio: { stayId: s.id } } }),
+        prisma.auditLog.count({
+          where: { targetEntity: 'Stay', targetId: s.id },
+        }),
+        prisma.housekeepingTask.count({ where: { origine: 'CHANGE_ROOM' } }),
+      ]);
+      expect(roomAfter.statut).toBe(roomBefore.statut);
+      expect(roomNightsAfter.map((n) => n.roomId).sort()).toEqual(
+        roomNightsBefore.map((n) => n.roomId).sort(),
+      );
+      expect(folioLinesAfter.length).toBe(folioLinesBefore.length);
+      expect(auditAfter).toBe(auditBefore);
+      expect(taskAfter).toBe(taskBefore);
+
+      // Reconfirmation : un nouvel aperçu (reflétant le catalogue à 777)
+      // puis un commit avec ce nouveau fingerprint doit réussir.
+      const freshPreview = await receptionClient
+        .post(`/api/stays/${s.id}/change-room/preview`)
+        .send({ newRoomId: roomB.id });
+      expect(freshPreview.status).toBe(201);
+      const retryRes = await receptionClient
+        .post(`/api/stays/${s.id}/change-room`)
+        .send({
+          newRoomId: roomB.id,
+          motif: 'Reconfirmation après aperçu périmé',
+          pricingFingerprint: (freshPreview.body as ChangeRoomPreviewResponse)
+            .pricingFingerprint,
+        });
+      expect(retryRes.status).toBe(201);
+
+      await prisma.roomType.update({
+        where: { id: typeDeluxe.id },
+        data: { prixBase: 500 },
+      });
     });
   });
 });

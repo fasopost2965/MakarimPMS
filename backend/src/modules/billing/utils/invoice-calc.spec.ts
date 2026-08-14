@@ -62,4 +62,47 @@ describe('calculateInvoiceTotal (ADR-008 — montants déjà TTC)', () => {
     const total = calculateInvoiceTotal(lignes);
     expect(total.toNumber()).toBe(500);
   });
+
+  // DESIGN-009B.1 — AJUSTEMENT_HAUSSE/AJUSTEMENT_BAISSE (changement de
+  // chambre, GL-002) étaient auparavant totalement ignorés ici (aucune
+  // branche ne les reconnaissait — catégorie B, « ignorés »), alors que
+  // computeSoldeDu (stay/utils/solde.ts) les traitait déjà correctement.
+  it('AJUSTEMENT_HAUSSE 300 augmente le total facturable de 300', () => {
+    const lignes = [
+      ligne(TypeLigneFolio.HEBERGEMENT, 1191),
+      ligne(TypeLigneFolio.AJUSTEMENT_HAUSSE, 300),
+    ];
+    const total = calculateInvoiceTotal(lignes);
+    expect(total.toNumber()).toBe(1491);
+  });
+
+  it('AJUSTEMENT_BAISSE 300 diminue le total facturable de 300 (crédit, jamais un montant négatif stocké)', () => {
+    const lignes = [
+      ligne(TypeLigneFolio.HEBERGEMENT, 1491),
+      ligne(TypeLigneFolio.AJUSTEMENT_BAISSE, 300),
+    ];
+    const total = calculateInvoiceTotal(lignes);
+    expect(total.toNumber()).toBe(1191);
+  });
+
+  it('AJUSTEMENT_HAUSSE annulée est exclue du total, mêmes règles que tout autre type annulé', () => {
+    const lignes = [
+      ligne(TypeLigneFolio.HEBERGEMENT, 1191),
+      ligne(TypeLigneFolio.AJUSTEMENT_HAUSSE, 300, true),
+    ];
+    const total = calculateInvoiceTotal(lignes);
+    expect(total.toNumber()).toBe(1191);
+  });
+
+  it('PAIEMENT reste exclu (jamais soustrait) même en présence d’un AJUSTEMENT_BAISSE — les deux crédits ne se confondent pas', () => {
+    const lignes = [
+      ligne(TypeLigneFolio.HEBERGEMENT, 1491),
+      ligne(TypeLigneFolio.PAIEMENT, 500),
+      ligne(TypeLigneFolio.AJUSTEMENT_BAISSE, 300),
+    ];
+    const total = calculateInvoiceTotal(lignes);
+    // PAIEMENT ignoré (500 n'apparaît nulle part) ; seul AJUSTEMENT_BAISSE
+    // (crédit sur la charge elle-même) est soustrait : 1491 - 300 = 1191.
+    expect(total.toNumber()).toBe(1191);
+  });
 });

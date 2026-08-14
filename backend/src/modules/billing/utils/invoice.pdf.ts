@@ -168,8 +168,16 @@ export function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
       // FIN-102 — correction de libellé uniquement (bug de présentation
       // confirmé) : chaque ligne est déjà TTC (ADR-008/FIN-101B, jamais de
       // TVA ajoutée à part), afficher "(HT)" était donc trompeur.
+      // DESIGN-009B.1 — AJUSTEMENT_BAISSE est un crédit (voir invoice-calc.ts
+      // ::calculateInvoiceTotal, soustrait de montantTotal) : l'afficher avec
+      // le même signe implicite que les charges reproduirait exactement
+      // l'incident UX-001E documenté ci-dessus pour PAIEMENT (somme
+      // manuscrite du client ne correspondant plus au Total TTC imprimé) —
+      // préfixé d'un signe "-" explicite, seule ligne de ce tableau à en
+      // porter un.
+      const signe = ligne.type === 'AJUSTEMENT_BAISSE' ? '-' : '';
       doc.text(
-        `${ligne.libelle} .......................... ${Number(ligne.montant).toFixed(2)} MAD (TTC)`,
+        `${ligne.libelle} .......................... ${signe}${Number(ligne.montant).toFixed(2)} MAD (TTC)`,
       );
     }
 

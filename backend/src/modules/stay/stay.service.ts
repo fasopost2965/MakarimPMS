@@ -67,6 +67,10 @@ import { CheckoutEffectueEvent } from './events/checkout-effectue.event';
 // createExtensionDeposit, jamais consommé par extendStay lui-même.
 import { PaymentsService } from '../payments/payments.service';
 import { MaintenanceService } from '../maintenance/maintenance.service';
+// DESIGN-009B — hash déterministe du pricing preview (pricingFingerprint),
+// jamais utilisé comme secret d'autorisation (voir computeChangeRoomPricing
+// ci-dessous), simple détection de dérive entre preview et commit.
+import { createHash } from 'crypto';
 
 const STAY_INCLUDE = {
   reservation: true,
@@ -879,6 +883,313 @@ export class StayService {
     });
   }
 
+  // DESIGN-009B — moteur de pricing partagé entre le preview
+  // (POST /stays/:id/change-room/preview) et le commit (changeRoom
+  // ci-dessous) : LA seule et même fonction pour les deux, jamais une
+  // seconde implémentation. `tx` optionnel — préview l'appelle en lecture
+  // simple (this.prisma), commit l'appelle depuis l'intérieur de sa
+  // transaction, APRÈS avoir verrouillé Folio/FolioLine (même précédent que
+  // computeExtensionPricing) : les valeurs lues ici sont donc cohérentes
+  // avec l'état verrouillé au moment de l'appel côté commit.
+  //
+  // Formule ancien côté (préserve le prix RÉELLEMENT CONTRACTÉ, jamais un
+  // recalcul catalogue rétroactif) : tarifNuitMoyenContracte = Σ FolioLine
+  // HEBERGEMENT actives / total des nuits du séjour (passées incluses),
+  // multiplié par le nombre de nuits impactées. La composante formule
+  // (repas) de l'ancien côté n'est PAS reconstruite depuis le folio (les
+  // lignes EXTRA mélangent formule-incluse et extras manuels sans lien) :
+  // calculée symétriquement au catalogue courant, comme le nouveau côté.
+  //
+  // Formule nouveau côté : aucun prix contractuel n'existe pour une chambre
+  // où le client n'a jamais séjourné — catalogue courant intégral
+  // (calculateNightlyTotal + calculateFormuleSupplement), jamais de lecture
+  // directe de SeasonRate (ParametersService.getSeasonRatesForRoomType en
+  // façade).
+  //
+  // Taxe de séjour jamais recalculée ici (MONTANT_FIXE, indépendante du prix
+  // de la chambre) — aucune FolioLine TAXE_SEJOUR n'est jamais touchée par
+  // ce moteur.
+  private async computeChangeRoomPricing(
+    stayId: number,
+    newRoomId: number,
+    tx?: Prisma.TransactionClient,
+  ): Promise<{
+    stay: {
+      id: number;
+      roomId: number;
+      dateCheckoutPrevue: Date;
+      formule: FormuleHebergement;
+      nombreOccupants: number | null;
+    };
+    oldRoom: {
+      id: number;
+      numero: string;
+      roomType: { nom: string; capacite: number };
+    };
+    newRoom: {
+      id: number;
+      numero: string;
+      roomTypeId: number;
+      roomType: {
+        nom: string;
+        capacite: number;
+        prixBase: Prisma.Decimal;
+        prixPetitDejeuner: Prisma.Decimal;
+        prixDemiPension: Prisma.Decimal;
+        prixPensionComplete: Prisma.Decimal;
+      };
+    };
+    nuitsImpactees: Date[];
+    ancienMontantRestant: Prisma.Decimal;
+    nouveauMontantRestant: Prisma.Decimal;
+    difference: Prisma.Decimal;
+    pricingFingerprint: string;
+    capaciteInsuffisante: boolean;
+    folios: { id: number }[];
+  }> {
+    const client = tx ?? this.prisma;
+
+    const stay = await client.stay.findUnique({ where: { id: stayId } });
+    if (!stay) {
+      throw new NotFoundException(`Séjour ${stayId} introuvable.`);
+    }
+    if (stay.statut !== StatutSejour.EN_COURS) {
+      throw new ConflictException(
+        `Ce séjour est déjà clôturé (statut actuel : ${stay.statut}).`,
+      );
+    }
+    if (newRoomId === stay.roomId) {
+      throw new ConflictException(
+        `La chambre cible est identique à la chambre actuelle.`,
+      );
+    }
+
+    const [oldRoom, newRoom, allStayNights, folios] = await Promise.all([
+      client.room.findUnique({
+        where: { id: stay.roomId },
+        include: { roomType: true },
+      }),
+      client.room.findUnique({
+        where: { id: newRoomId },
+        include: { roomType: true },
+      }),
+      client.roomNight.findMany({
+        where: { stayId },
+        select: { date: true },
+        orderBy: { date: 'asc' },
+      }),
+      client.folio.findMany({
+        where: { stayId },
+        select: {
+          id: true,
+          lignes: { select: { type: true, montant: true, annulee: true } },
+        },
+      }),
+    ]);
+    if (!oldRoom) {
+      throw new NotFoundException(`Chambre ${stay.roomId} introuvable.`);
+    }
+    if (!newRoom) {
+      throw new NotFoundException(`Chambre ${newRoomId} introuvable.`);
+    }
+
+    const { today: todayStart } = getTodayRange();
+    const nuitsImpactees = allStayNights
+      .map((n) => n.date)
+      .filter((date) => date >= todayStart);
+    const totalNuitsSejour = allStayNights.length;
+
+    // Occupation réelle du séjour, jamais déduite de roomType.capacite
+    // (interdiction absolue, common/utils/occupancy.ts). Un séjour légacy
+    // pré-FIN-102 (nombreOccupants IS NULL, cas résiduel — tout séjour créé
+    // depuis FIN-102 est obligatoirement renseigné) est traité comme 0
+    // occupant plutôt que déduit de la capacité : la vérification de
+    // capacité et le supplément de formule deviennent alors des no-op
+    // dégénérés (jamais bloquants), sans jamais inventer une occupation.
+    const occupants = stay.nombreOccupants ?? 0;
+    const capaciteInsuffisante = newRoom.roomType.capacite < occupants;
+
+    let ancienMontantRestant = new Prisma.Decimal(0);
+    let nouveauMontantRestant = new Prisma.Decimal(0);
+
+    if (nuitsImpactees.length > 0) {
+      const totalHebergementContracte = folios.reduce(
+        (acc, folio) =>
+          folio.lignes.reduce((sousTotal, ligne) => {
+            if (ligne.annulee || ligne.type !== TypeLigneFolio.HEBERGEMENT) {
+              return sousTotal;
+            }
+            return sousTotal.add(ligne.montant);
+          }, acc),
+        new Prisma.Decimal(0),
+      );
+      const tarifNuitMoyenContracte =
+        totalNuitsSejour > 0
+          ? totalHebergementContracte.div(totalNuitsSejour)
+          : new Prisma.Decimal(0);
+      const ancienMontantRestantHebergement = tarifNuitMoyenContracte.mul(
+        nuitsImpactees.length,
+      );
+      const ancienMontantRestantFormule = calculateFormuleSupplement(
+        stay.formule,
+        oldRoom.roomType,
+        nuitsImpactees.length,
+        occupants,
+      );
+      ancienMontantRestant = ancienMontantRestantHebergement.add(
+        ancienMontantRestantFormule,
+      );
+
+      const seasonRatesNouvelleChambre =
+        await this.parametersService.getSeasonRatesForRoomType(
+          newRoom.roomTypeId,
+          tx,
+        );
+      const nouveauMontantRestantHebergement = calculateNightlyTotal(
+        nuitsImpactees,
+        newRoom.roomType.prixBase,
+        seasonRatesNouvelleChambre,
+      );
+      const nouveauMontantRestantFormule = calculateFormuleSupplement(
+        stay.formule,
+        newRoom.roomType,
+        nuitsImpactees.length,
+        occupants,
+      );
+      nouveauMontantRestant = nouveauMontantRestantHebergement.add(
+        nouveauMontantRestantFormule,
+      );
+    }
+
+    const difference = nouveauMontantRestant.sub(ancienMontantRestant);
+
+    // pricingFingerprint — détection de dérive uniquement, jamais un
+    // mécanisme d'autorisation de montant (le serveur recalcule toujours
+    // authoritativement au commit). Le motif n'entre jamais dans le hash.
+    const pricingFingerprint = createHash('sha256')
+      .update(
+        [
+          stayId,
+          newRoomId,
+          nuitsImpactees.map((d) => d.toISOString().slice(0, 10)).join(','),
+          ancienMontantRestant.toFixed(2),
+          nouveauMontantRestant.toFixed(2),
+        ].join(':'),
+      )
+      .digest('hex');
+
+    return {
+      stay,
+      oldRoom,
+      newRoom,
+      nuitsImpactees,
+      ancienMontantRestant,
+      nouveauMontantRestant,
+      difference,
+      pricingFingerprint,
+      capaciteInsuffisante,
+      folios,
+    };
+  }
+
+  // DESIGN-009B — mêmes contrôles de disponibilité que changeRoom
+  // (chambre LIBRE_PROPRE, pas de conflit RoomNight sur la cible), en
+  // lecture seule (jamais de FOR UPDATE ici — preview n'écrit rien, la
+  // garantie finale reste le commit sous verrou).
+  private async assertChangeRoomTargetAvailable(
+    newRoomId: number,
+    dateCheckoutPrevue: Date,
+  ): Promise<void> {
+    const hasBlockingTicket =
+      await this.maintenanceService.hasActiveSalesBlocker(newRoomId);
+    if (hasBlockingTicket) {
+      throw new ConflictException(
+        `La chambre ${newRoomId} est indisponible : une panne bloquant la vente est ouverte.`,
+      );
+    }
+    const newRoom = await this.prisma.room.findUnique({
+      where: { id: newRoomId },
+    });
+    if (!newRoom) {
+      throw new NotFoundException(`Chambre ${newRoomId} introuvable.`);
+    }
+    if (newRoom.statut !== StatutChambre.LIBRE_PROPRE) {
+      throw new ConflictException(
+        `La chambre cible (${newRoomId}) n'est pas disponible (statut actuel : ${newRoom.statut}).`,
+      );
+    }
+    const { today: todayStart } = getTodayRange();
+    const conflict = await this.prisma.roomNight.findFirst({
+      where: {
+        roomId: newRoomId,
+        date: { gte: todayStart, lte: dateCheckoutPrevue },
+      },
+    });
+    if (conflict) {
+      throw new ConflictException(
+        `La chambre cible est réservée pendant la période du séjour.`,
+      );
+    }
+  }
+
+  private buildChangeRoomPreviewResponse(pricing: {
+    oldRoom: { id: number; numero: string; roomType: { nom: string } };
+    newRoom: { id: number; numero: string; roomType: { nom: string } };
+    nuitsImpactees: Date[];
+    ancienMontantRestant: Prisma.Decimal;
+    nouveauMontantRestant: Prisma.Decimal;
+    difference: Prisma.Decimal;
+    pricingFingerprint: string;
+  }) {
+    const differenceStr = pricing.difference.isZero()
+      ? '0.00'
+      : pricing.difference.gt(0)
+        ? `+${pricing.difference.toFixed(2)}`
+        : pricing.difference.toFixed(2);
+
+    return {
+      oldRoom: {
+        id: pricing.oldRoom.id,
+        numero: pricing.oldRoom.numero,
+        roomTypeNom: pricing.oldRoom.roomType.nom,
+      },
+      newRoom: {
+        id: pricing.newRoom.id,
+        numero: pricing.newRoom.numero,
+        roomTypeNom: pricing.newRoom.roomType.nom,
+      },
+      nuitsImpactees: pricing.nuitsImpactees.map((d) =>
+        d.toISOString().slice(0, 10),
+      ),
+      ancienMontantRestant: pricing.ancienMontantRestant.toFixed(2),
+      nouveauMontantRestant: pricing.nouveauMontantRestant.toFixed(2),
+      difference: differenceStr,
+      pricingFingerprint: pricing.pricingFingerprint,
+      warnings: [] as string[],
+    };
+  }
+
+  // DESIGN-009B — POST /stays/:id/change-room/preview : lecture seule,
+  // aucune écriture. Capacité insuffisante (BLOQUANT, jamais un simple
+  // warning) : aucune preview tarifaire retournée, 409 structuré.
+  async previewChangeRoom(stayId: number, newRoomId: number) {
+    const pricing = await this.computeChangeRoomPricing(stayId, newRoomId);
+    await this.assertChangeRoomTargetAvailable(
+      newRoomId,
+      pricing.stay.dateCheckoutPrevue,
+    );
+
+    if (pricing.capaciteInsuffisante) {
+      throw new ConflictException({
+        statusCode: 409,
+        code: 'CHANGE_ROOM_CAPACITY_EXCEEDED',
+        message: `La chambre cible (${newRoomId}) a une capacité insuffisante (${pricing.newRoom.roomType.capacite}) pour ${pricing.stay.nombreOccupants ?? 0} occupant(s).`,
+      });
+    }
+
+    return this.buildChangeRoomPreviewResponse(pricing);
+  }
+
   // GL-002 — changement de chambre pendant un séjour (transfert vers une
   // chambre disponible). Règles métier (docs/modules/stay.md §5) :
   // - Le séjour conserve son identité, folios/paiements/factures inchangés
@@ -915,6 +1226,7 @@ export class StayService {
     id: number,
     newRoomId: number,
     motif: string,
+    pricingFingerprint: string,
     userId?: number,
     roleId?: number,
   ) {
@@ -1042,6 +1354,120 @@ export class StayService {
         );
       }
 
+      // 4.5. DESIGN-009B — verrouiller Folio + FolioLine, AVANT toute
+      // écriture de room/statut — protège aussi le recalcul de pricing
+      // ci-dessous contre un paiement/une charge concurrente sur ce folio.
+      // Même garantie que le précédent de computeExtensionPricing (Folio
+      // FOR UPDATE bloque déjà toute NOUVELLE FolioLine via la vérification
+      // FK au INSERT ; verrouiller aussi les FolioLine existantes ferme la
+      // fenêtre côté annulation/remboursement d'un paiement déjà existant,
+      // UPDATE FolioLine.annulee, qui ne déclenche pas de vérification FK),
+      // mais verrouillage EN DEUX TEMPS (lecture des ID non verrouillée,
+      // puis FOR UPDATE par égalité sur la clé primaire de FolioLine)
+      // plutôt qu'un seul `WHERE folioId IN (...) FOR UPDATE` sur l'index
+      // secondaire non-unique `folioId` : constaté en le testant (suite
+      // "Idempotence : deux opérations distinctes" ci-dessous, deux séjours
+      // strictement indépendants) — l'égalité sur un index secondaire non
+      // unique sous REPEATABLE READ pose un verrou next-key (ligne + gap),
+      // qui a produit un deadlock InnoDB réel et déterministe entre deux
+      // transactions changeRoom concurrentes sur DEUX folios sans aucun
+      // rapport entre eux, dès lors que leurs lignes étaient adjacentes
+      // dans cet index. Verrouiller par égalité sur la clé primaire évite
+      // ce verrou de gap tout en préservant la même garantie effective :
+      // aucune NOUVELLE FolioLine ne peut apparaître entre la lecture des
+      // ID et ce verrouillage (le FOR UPDATE sur Folio, acquis juste avant,
+      // bloque déjà tout INSERT concurrent sur ce folio via la FK), et
+      // toute ligne EXISTANTE reste verrouillée par ID exactement comme
+      // avant. Écart documenté par rapport au précédent littéral de
+      // computeExtensionPricing (non modifié ici, hors périmètre de ce
+      // lot) — même risque latent non testé là-bas (ses seuls tests de
+      // concurrence portent sur UN SEUL séjour à la fois, jamais deux
+      // séjours indépendants), signalé dans le rapport final.
+      const lockedFolioIds = await tx.$queryRaw<Array<{ id: number }>>`
+        SELECT id FROM Folio WHERE stayId = ${id} FOR UPDATE
+      `;
+      if (lockedFolioIds.length > 0) {
+        const folioLineIds = await tx.$queryRaw<Array<{ id: number }>>`
+          SELECT id FROM FolioLine
+          WHERE folioId IN (${Prisma.join(lockedFolioIds.map((f) => f.id))})
+        `;
+        if (folioLineIds.length > 0) {
+          await tx.$queryRaw`
+            SELECT id FROM FolioLine
+            WHERE id IN (${Prisma.join(folioLineIds.map((l) => l.id))})
+            FOR UPDATE
+          `;
+        }
+      }
+
+      // 4.6. Recalcul du pricing sous verrou, via le même moteur exact que
+      // le preview — jamais une seconde implémentation.
+      const pricing = await this.computeChangeRoomPricing(id, newRoomId, tx);
+
+      // 4.7. Revalidation de la capacité SOUS VERROU (BLOQUANTE, jamais un
+      // simple warning) : peut avoir changé entre le preview et ce commit
+      // (nombreOccupants modifié entretemps) — rollback complet si
+      // insuffisante.
+      if (pricing.capaciteInsuffisante) {
+        throw new ConflictException({
+          statusCode: 409,
+          code: 'CHANGE_ROOM_CAPACITY_EXCEEDED',
+          message: `La chambre cible (${newRoomId}) a une capacité insuffisante (${pricing.newRoom.roomType.capacite}) pour ${pricing.stay.nombreOccupants ?? 0} occupant(s).`,
+        });
+      }
+
+      // 4.8. Détection de dérive du preview : le fingerprint recalculé sous
+      // verrou doit correspondre exactement à celui reçu du client — sinon
+      // les conditions tarifaires ont changé depuis la confirmation
+      // affichée, rollback complet, préview fraîche renvoyée pour
+      // reconfirmation (jamais de renvoi automatique).
+      if (pricing.pricingFingerprint !== pricingFingerprint) {
+        throw new ConflictException({
+          statusCode: 409,
+          code: 'CHANGE_ROOM_PREVIEW_STALE',
+          message:
+            'Les conditions tarifaires ont changé depuis votre confirmation — relancez un aperçu (preview) puis confirmez de nouveau.',
+          preview: this.buildChangeRoomPreviewResponse(pricing),
+        });
+      }
+
+      // 4.9. Ligne d'ajustement tarifaire — une seule FolioLine si la
+      // différence est non nulle, jamais si elle est nulle (même tarif ou
+      // départ aujourd'hui, 0 nuit impactée). AJUSTEMENT_HAUSSE/BAISSE
+      // stocke toujours la valeur absolue (contrainte CHECK DB, montant
+      // jamais négatif) — le sens est porté par le type.
+      let pricingAdjustment: {
+        montant: string;
+        sens: 'HAUSSE' | 'BAISSE';
+        folioLineId: number;
+      } | null = null;
+      if (!pricing.difference.isZero()) {
+        const folioPrincipal = pricing.folios[0];
+        if (!folioPrincipal) {
+          throw new NotFoundException(
+            `Aucun folio trouvé pour le séjour ${id}.`,
+          );
+        }
+        const isHausse = pricing.difference.gt(0);
+        const montantAjustement = pricing.difference.abs();
+        const ligneAjustement = await this.billingService.addFolioLine(
+          folioPrincipal.id,
+          {
+            type: isHausse
+              ? TypeLigneFolio.AJUSTEMENT_HAUSSE
+              : TypeLigneFolio.AJUSTEMENT_BAISSE,
+            libelle: `Ajustement tarifaire — changement de chambre ${resolvedOldRoom.numero} → ${resolvedNewRoom.numero} (${pricing.nuitsImpactees.length} nuit${pricing.nuitsImpactees.length > 1 ? 's' : ''})`,
+            montant: montantAjustement.toFixed(2),
+          },
+          tx,
+        );
+        pricingAdjustment = {
+          montant: montantAjustement.toFixed(2),
+          sens: isHausse ? 'HAUSSE' : 'BAISSE',
+          folioLineId: ligneAjustement.id,
+        };
+      }
+
       // 5. Transférer uniquement les nuits futures (>= aujourd'hui) —
       // les nuits passées restent, intégralement, sur l'ancienne chambre.
       const futureNights = stayNights.filter((n) => n.date >= todayStart);
@@ -1083,14 +1509,26 @@ export class StayService {
       });
 
       // 8. Audit — écrit avant la tâche housekeeping pour disposer de son
-      // ID (clé d'idempotence durable, voir étape 9).
+      // ID (clé d'idempotence durable, voir étape 9). DESIGN-009B : payload
+      // enrichi de l'impact tarifaire (tarif restant ancien/nouveau,
+      // différence, nombre de nuits impactées, id de la FolioLine
+      // d'ajustement le cas échéant).
       const auditEntry = await this.auditService.writeLog(tx, {
         userId,
         action: AuditAction.CHANGE_ROOM,
         targetEntity: AuditEntity.Stay,
         targetId: id,
-        oldValue: { roomId: oldRoomId },
-        newValue: { roomId: newRoomId },
+        oldValue: {
+          roomId: oldRoomId,
+          tarifRestantAncien: pricing.ancienMontantRestant.toFixed(2),
+        },
+        newValue: {
+          roomId: newRoomId,
+          tarifRestantNouveau: pricing.nouveauMontantRestant.toFixed(2),
+          difference: pricing.difference.toFixed(2),
+          nuitsImpactees: pricing.nuitsImpactees.length,
+          folioLineId: pricingAdjustment?.folioLineId ?? null,
+        },
         motif,
       });
 
@@ -1116,7 +1554,12 @@ export class StayService {
         tx,
       );
 
-      return updatedStay;
+      // DESIGN-009B — réponse enrichie de façon additive (jamais de
+      // pricingAdjustment si la différence est nulle, contrat existant
+      // inchangé pour tout appelant qui l'ignore).
+      return pricingAdjustment
+        ? { ...updatedStay, pricingAdjustment }
+        : updatedStay;
     });
 
     return result;
