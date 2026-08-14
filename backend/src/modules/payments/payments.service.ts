@@ -8,6 +8,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
 import { computeSoldeDu } from '../stay/utils/solde';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
 
 @Injectable()
 export class PaymentsService {
@@ -208,5 +209,63 @@ export class PaymentsService {
       throw new NotFoundException(`Paiement ${id} introuvable.`);
     }
     return payment;
+  }
+
+  // DESIGN-010 (Billing Center) — GET /payments, registre global paginé.
+  // Date filtrée sur Payment.createdAt (date d'encaissement). Jamais de
+  // champ "encaissé par" (Payment n'a pas de userId fiable, mission §4) —
+  // sélection volontairement étroite, alignée sur ce que l'écran affiche
+  // réellement (client/séjour/chambre/moyen/montant/facture liée).
+  async findPaginated(query: ListPaymentsQueryDto) {
+    const { page, limit, from, to, moyen, folioId, invoiceId, guestId } = query;
+    const take = Math.min(limit, 100);
+    const skip = (page - 1) * take;
+
+    const where: Prisma.PaymentWhereInput = { deletedAt: null };
+    if (from || to) {
+      where.createdAt = {
+        ...(from ? { gte: new Date(from) } : {}),
+        ...(to ? { lte: new Date(to) } : {}),
+      };
+    }
+    if (moyen) where.moyen = moyen;
+    if (folioId) where.folioId = folioId;
+    if (invoiceId) where.invoiceId = invoiceId;
+    if (guestId) where.folio = { stay: { guestId } };
+
+    const [data, total] = await Promise.all([
+      this.prisma.payment.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          moyen: true,
+          montant: true,
+          createdAt: true,
+          folioId: true,
+          invoiceId: true,
+          invoice: { select: { id: true, numero: true } },
+          folio: {
+            select: {
+              stay: {
+                select: {
+                  id: true,
+                  guest: { select: { id: true, nom: true, prenom: true } },
+                  room: { select: { id: true, numero: true } },
+                },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.payment.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: { page, limit: take, total, totalPages: Math.ceil(total / take) },
+    };
   }
 }

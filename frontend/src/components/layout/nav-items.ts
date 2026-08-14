@@ -7,6 +7,7 @@ import {
   KeyRound,
   LayoutDashboard,
   Package,
+  Receipt,
   ScanLine,
   Settings,
   ShoppingCart,
@@ -20,9 +21,11 @@ import {
 import type { Tab } from '@/App';
 
 // Catégorisation de la navigation (inspirée de la structure validée dans
-// makarimpms_v2, adaptée aux 14 onglets réels de ce dépôt — `billing` et
-// `police` n'ont pas d'onglet dédié ici, restés embarqués dans
-// checkin/folio, CLAUDE.md). Répond à la demande explicite du client
+// makarimpms_v2, adaptée aux onglets réels de ce dépôt — `police` n'a pas
+// d'onglet dédié ici, resté embarqué dans checkin, CLAUDE.md ; `billing`
+// devient un module top-level dédié depuis DESIGN-010, RBAC
+// billing:read/billing:write, sans dépendre de checkin:read). Répond à la
+// demande explicite du client
 // (`/goal` du 2026-07-30) de « réorganiser les menus des modules » et de
 // sortir Audit de la fin d'une liste plate — il rejoint désormais
 // Administration aux côtés de Paramètres/Notifications, même regroupement
@@ -121,6 +124,19 @@ export const NAV_ITEMS: NavItem[] = [
     // restaurant:read distinct à gater dessus.
     category: 'exploitation',
     permission: 'restaurant:write',
+  },
+  {
+    tab: 'billing',
+    label: 'Facturation',
+    icon: Receipt,
+    // DESIGN-010 — décision produit gelée : billing:read, jamais
+    // checkin:read (dépendance historique retirée). Réception (qui n'a
+    // aujourd'hui que checkin:read/payments:read, pas billing:read/write)
+    // perd donc l'accès qu'elle avait via l'onglet Facturation embarqué
+    // dans checkin — signalé au propriétaire produit (RBAC gelé par la
+    // mission, non corrigé ici, voir seed.ts).
+    category: 'exploitation',
+    permission: 'billing:read',
   },
   {
     tab: 'guests',

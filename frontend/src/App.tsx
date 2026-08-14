@@ -95,6 +95,15 @@ const DocumentOcrPage = lazy(() =>
     default: m.DocumentOcrPage,
   })),
 );
+// DESIGN-010 — Billing Center, module top-level (route cible `/billing`,
+// CLAUDE.md pas de router — navigue par ce même useState<Tab>). Remplace
+// l'onglet "Facturation" embarqué jusqu'ici dans checkin/folio par un vrai
+// registre transversal.
+const BillingPage = lazy(() =>
+  import('@/features/billing/pages/BillingPage').then((m) => ({
+    default: m.BillingPage,
+  })),
+);
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { AppTopbar } from '@/components/layout/AppTopbar';
 import { NAV_ITEMS } from '@/components/layout/nav-items';
@@ -121,7 +130,8 @@ export type Tab =
   | 'reporting'
   | 'notifications'
   | 'audit'
-  | 'document-ocr';
+  | 'document-ocr'
+  | 'billing';
 type AuthScreen = 'login' | 'forgot-password';
 
 // Coquille applicative : sidebar repliable (navigation principale) + topbar
@@ -350,6 +360,7 @@ function App() {
               {tab === 'notifications' && <NotificationsPage />}
               {tab === 'audit' && <AuditPage />}
               {tab === 'document-ocr' && <DocumentOcrPage />}
+              {tab === 'billing' && <BillingPage permissions={permissions} />}
             </Suspense>
           </ErrorBoundary>
         </div>

@@ -654,6 +654,14 @@ describe('Stay - Extend (GL-003)', () => {
       expect(roomAfter.statut).toBe(StatutChambre.OCCUPEE);
     });
 
+    // DESIGN-010 (mission §23.D) — cette garde est désormais portée à DEUX
+    // endroits dans runExtendStayTransaction (StayService) : la vérification
+    // explicite ajoutée en tête de l'étape 11 (protège aussi la ligne
+    // TAXE_SEJOUR du delta, écrite directement via tx.folioLine.create —
+    // seul chemin qui échappait à la garde d'addFolioLine avant ce
+    // correctif) ET le addFolioLine(HEBERGEMENT) qui suit. Ce test — déjà
+    // présent avant DESIGN-010 — continue de prouver le comportement
+    // observable (409), désormais rendu par le nouveau garde-fou explicite.
     it('Facture déjà EMISE sur le folio → conflit hérité d’addFolioLine (409)', async () => {
       const folioId = stay.folios[0].id;
       const invoiceRes = await adminClient.post(

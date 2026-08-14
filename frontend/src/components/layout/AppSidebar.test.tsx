@@ -59,6 +59,18 @@ describe('AppSidebar — gating RBAC (CH-011)', () => {
     expect(screen.getByText('Audit')).toBeInTheDocument();
     expect(screen.getByText("Scan pièce d'identité")).toBeInTheDocument();
   });
+
+  // DESIGN-010 — "Facturation" est désormais un onglet top-level gated par
+  // billing:read (jamais checkin:read, dépendance historique retirée).
+  it('affiche "Facturation" avec billing:read, la masque avec checkin:read seul', () => {
+    const { rerender } = render(
+      <AppSidebar {...baseProps} permissions={['billing:read']} />,
+    );
+    expect(screen.getByText('Facturation')).toBeInTheDocument();
+
+    rerender(<AppSidebar {...baseProps} permissions={['checkin:read']} />);
+    expect(screen.queryByText('Facturation')).not.toBeInTheDocument();
+  });
 });
 
 // CH-034 — tiroir mobile (docs/audits/PHASE_11_FRONTEND_QUALITE.md §4.7) :

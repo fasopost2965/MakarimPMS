@@ -46,7 +46,10 @@ export type DashboardTarget =
   | 'housekeeping'
   | 'maintenance'
   | 'restaurant'
-  | 'guests';
+  | 'guests'
+  // DESIGN-010 — la tuile "Facturation" ouvre désormais le vrai module
+  // Billing Center (`/billing`, billing:read) au lieu de `checkin`.
+  | 'billing';
 
 interface Props {
   onNavigate: (target: DashboardTarget) => void;

@@ -22,6 +22,8 @@ import { AddFolioLineDto } from './dto/add-folio-line.dto';
 import { ExcludeFolioTaxesDto } from './dto/exclude-folio-taxes.dto';
 import { CreateCreditNoteDto } from './dto/create-credit-note.dto';
 import { CancelFolioLineDto } from './dto/cancel-folio-line.dto';
+import { ListInvoicesQueryDto } from './dto/list-invoices-query.dto';
+import { ListStaysFacturablesQueryDto } from './dto/list-stays-facturables-query.dto';
 
 @ApiTags('billing')
 @ApiBearerAuth()
@@ -74,6 +76,40 @@ export class BillingController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.billingService.excludeTaxes(folioId, dto, user.sub);
+  }
+
+  // DESIGN-010 (Billing Center) — registre global des factures, paginé.
+  @RequirePermission('billing', 'read')
+  @ApiOperation({ summary: 'Registre paginé des factures' })
+  @Get('invoices')
+  findInvoices(@Query() query: ListInvoicesQueryDto) {
+    return this.billingService.findInvoicesPaginated(query);
+  }
+
+  // DESIGN-010 — bande de KPI du Billing Center (factures du jour, CA
+  // facturé, à facturer, à encaisser). Chemin déclaré avant `invoices/:id`
+  // ci-dessous pour éviter toute ambiguïté de routage sur un segment
+  // littéral (même précédent que stays/en-cours avant stays/:id dans
+  // StayController).
+  @RequirePermission('billing', 'read')
+  @ApiOperation({ summary: 'KPI de la bande de synthèse du Billing Center' })
+  @Get('billing/kpis')
+  getKpis(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.billingService.getKpis(from, to);
+  }
+
+  // DESIGN-010 — séjours facturables (Stay.statut = CHECKOUT, aucune
+  // Invoice EMISE active — voir BillingService.findStaysFacturables pour la
+  // définition complète). Déclarée dans BillingController malgré le
+  // préfixe `/stays` (permission billing:read, pas de logique métier
+  // dupliquée — même convention que generateInvoice qui lit déjà Stay via
+  // la relation Folio sans jamais importer StayModule, docs/modules/
+  // billing.md).
+  @RequirePermission('billing', 'read')
+  @ApiOperation({ summary: 'Séjours facturables (à facturer)' })
+  @Get('stays/facturables')
+  findStaysFacturables(@Query() query: ListStaysFacturablesQueryDto) {
+    return this.billingService.findStaysFacturables(query);
   }
 
   @RequirePermission('billing', 'read')
@@ -139,7 +175,12 @@ export class BillingController {
   // même logique que tout le reste du module notifications — voir
   // NotificationsService.notify()). 202 : traitement asynchrone (file
   // BullMQ), le résultat réel se consulte dans le journal de notifications.
-  @RequirePermission('billing', 'write')
+  // DESIGN-010 (correction RBAC finale suite) — billing:send, pas
+  // billing:write : n'écrit jamais dans FolioLine/Invoice, seulement une
+  // notification asynchrone (voir seed.ts, rôle Réception). Permission
+  // dédiée hors grille read/write/delete/export, même famille que
+  // guests:blacklist/payments:refund/checkin:force-checkout.
+  @RequirePermission('billing', 'send')
   @ApiOperation({
     summary: 'Demande l’envoi de la facture au client (email/WhatsApp)',
   })
