@@ -1,10 +1,21 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ApiError } from '@/lib/api-client';
 import { ChangeRoomDialog } from './ChangeRoomDialog';
 import type { Room } from '../../reservations/types';
-import type { Stay } from '../types';
+import type { ChangeRoomPreview, Stay } from '../types';
+
+// DESIGN-009B — mock du seul point d'entrée réseau utilisé directement par
+// ce composant (previewChangeRoom, appelé dès que la cible est choisie et
+// "Continuer" cliqué) — même convention que ExtendStayDialog.test.tsx pour
+// createExtensionDeposit.
+const { previewChangeRoomMock } = vi.hoisted(() => ({
+  previewChangeRoomMock: vi.fn(),
+}));
+vi.mock('../api', () => ({
+  previewChangeRoom: previewChangeRoomMock,
+}));
 
 const STAY: Stay = {
   id: 6,
@@ -43,7 +54,27 @@ function room(overrides: Partial<Room>): Room {
   };
 }
 
+function preview(overrides: Partial<ChangeRoomPreview>): ChangeRoomPreview {
+  return {
+    oldRoom: { id: 3, numero: '204', roomTypeNom: 'Double' },
+    newRoom: { id: 4, numero: '312', roomTypeNom: 'Suite Junior' },
+    nuitsImpactees: ['2026-08-07', '2026-08-08', '2026-08-09'],
+    ancienMontantRestant: '1200.00',
+    nouveauMontantRestant: '1200.00',
+    difference: '0.00',
+    pricingFingerprint: 'fingerprint-abc',
+    warnings: [],
+    ...overrides,
+  };
+}
+
 const noop = () => {};
+
+// Réinitialisation entre chaque test — évite qu'un mockResolvedValueOnce/
+// mockRejectedValueOnce d'un test précédent fuite sur le suivant.
+beforeEach(() => {
+  previewChangeRoomMock.mockReset();
+});
 
 describe('ChangeRoomDialog — sélection et tri', () => {
   it('affiche une fiche métier par chambre (numéro, type, capacité), jamais un numéro seul', () => {
@@ -179,15 +210,16 @@ describe('ChangeRoomDialog — pas de présélection', () => {
   });
 });
 
-describe('ChangeRoomDialog — étape de confirmation avant appel API', () => {
-  function renderWithSelection() {
-    const rooms = [
+describe('ChangeRoomDialog — étape de confirmation avant appel API (DESIGN-009B : aperçu tarifaire)', () => {
+  function renderWithSelection(
+    rooms = [
       room({
         id: 4,
         numero: '312',
         roomType: { id: 2, nom: 'Suite Junior', prixBase: '900', capacite: 2 },
       }),
-    ];
+    ],
+  ) {
     const onConfirm = vi.fn();
     render(
       <ChangeRoomDialog
@@ -215,7 +247,8 @@ describe('ChangeRoomDialog — étape de confirmation avant appel API', () => {
     expect(continueButton).toBeDisabled();
   });
 
-  it("n'appelle jamais onConfirm directement depuis l'étape de sélection — passe d'abord par Continuer puis un résumé", async () => {
+  it("n'appelle jamais onConfirm directement depuis l'étape de sélection — passe d'abord par un aperçu tarifaire (Continuer) puis un résumé", async () => {
+    previewChangeRoomMock.mockResolvedValueOnce(preview({}));
     const user = userEvent.setup();
     const { onConfirm } = renderWithSelection();
 
@@ -225,9 +258,14 @@ describe('ChangeRoomDialog — étape de confirmation avant appel API', () => {
 
     await user.click(screen.getByRole('button', { name: 'Continuer' }));
 
+    await waitFor(() =>
+      expect(previewChangeRoomMock).toHaveBeenCalledWith(6, 4),
+    );
     expect(onConfirm).not.toHaveBeenCalled();
     // Résumé affiché : client, chambre actuelle -> nouvelle chambre, motif.
-    expect(screen.getAllByText('Mamadou Diallo')).not.toHaveLength(0);
+    await waitFor(() =>
+      expect(screen.getAllByText('Mamadou Diallo')).not.toHaveLength(0),
+    );
     expect(screen.getByText('204')).toBeVisible();
     expect(screen.getByText(/312 — Suite Junior/)).toBeVisible();
     expect(screen.getByText('Demande du client')).toBeVisible();
@@ -237,27 +275,38 @@ describe('ChangeRoomDialog — étape de confirmation avant appel API', () => {
     expect(screen.getByRole('button', { name: 'Confirmer' })).toBeVisible();
   });
 
-  it('Confirmer déclenche onConfirm avec la chambre et le motif trimé', async () => {
+  it('Confirmer déclenche onConfirm avec la chambre, le motif trimé et le pricingFingerprint de l’aperçu', async () => {
+    previewChangeRoomMock.mockResolvedValueOnce(
+      preview({ pricingFingerprint: 'fingerprint-xyz' }),
+    );
     const user = userEvent.setup();
     const { onConfirm } = renderWithSelection();
 
     await user.click(screen.getByRole('button', { name: /312/ }));
     await user.type(screen.getByLabelText(/Motif/), '  Demande du client  ');
     await user.click(screen.getByRole('button', { name: 'Continuer' }));
+    await screen.findByRole('button', { name: 'Confirmer' });
     await user.click(screen.getByRole('button', { name: 'Confirmer' }));
 
     expect(onConfirm).toHaveBeenCalledTimes(1);
-    expect(onConfirm).toHaveBeenCalledWith(4, 'Demande du client');
+    expect(onConfirm).toHaveBeenCalledWith(
+      4,
+      'Demande du client',
+      'fingerprint-xyz',
+    );
   });
 
   it('aucune double soumission même en cas de double clic rapide sur Confirmer', async () => {
+    previewChangeRoomMock.mockResolvedValueOnce(preview({}));
     const user = userEvent.setup();
     const { onConfirm } = renderWithSelection();
 
     await user.click(screen.getByRole('button', { name: /312/ }));
     await user.type(screen.getByLabelText(/Motif/), 'Demande du client');
     await user.click(screen.getByRole('button', { name: 'Continuer' }));
-    const confirmButton = screen.getByRole('button', { name: 'Confirmer' });
+    const confirmButton = await screen.findByRole('button', {
+      name: 'Confirmer',
+    });
     await user.click(confirmButton);
     await user.click(confirmButton);
 
@@ -265,12 +314,14 @@ describe('ChangeRoomDialog — étape de confirmation avant appel API', () => {
   });
 
   it('« Modifier » revient à l’étape de sélection sans perdre la sélection', async () => {
+    previewChangeRoomMock.mockResolvedValueOnce(preview({}));
     const user = userEvent.setup();
     renderWithSelection();
 
     await user.click(screen.getByRole('button', { name: /312/ }));
     await user.type(screen.getByLabelText(/Motif/), 'Demande du client');
     await user.click(screen.getByRole('button', { name: 'Continuer' }));
+    await screen.findByRole('button', { name: 'Modifier' });
     await user.click(screen.getByRole('button', { name: 'Modifier' }));
 
     expect(screen.getByRole('button', { name: /312/ })).toHaveAttribute(
@@ -280,7 +331,8 @@ describe('ChangeRoomDialog — étape de confirmation avant appel API', () => {
     expect(screen.getByLabelText(/Motif/)).toHaveValue('Demande du client');
   });
 
-  it('affiche le message backend tel quel en cas d’erreur à la confirmation (aucune donnée structurée à traduire côté GL-002)', async () => {
+  it('affiche le message backend tel quel en cas d’erreur de commit non structurée (aucun code exploitable)', async () => {
+    previewChangeRoomMock.mockResolvedValueOnce(preview({}));
     const user = userEvent.setup();
     const rooms = [room({ id: 4, numero: '312' })];
     const error = new ApiError(
@@ -301,10 +353,227 @@ describe('ChangeRoomDialog — étape de confirmation avant appel API', () => {
     await user.type(screen.getByLabelText(/Motif/), 'Demande du client');
     await user.click(screen.getByRole('button', { name: 'Continuer' }));
 
-    expect(
-      screen.getByText(
-        'La chambre cible est réservée pendant la période du séjour.',
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          'La chambre cible est réservée pendant la période du séjour.',
+        ),
+      ).toBeVisible(),
+    );
+  });
+});
+
+describe('ChangeRoomDialog — impact tarifaire (DESIGN-009B)', () => {
+  function renderAndReachConfirmation(previewResult: ChangeRoomPreview) {
+    previewChangeRoomMock.mockResolvedValueOnce(previewResult);
+    const rooms = [room({ id: 4, numero: '312' })];
+    const onConfirm = vi.fn();
+    render(
+      <ChangeRoomDialog
+        stay={STAY}
+        rooms={rooms}
+        onClose={noop}
+        onConfirm={onConfirm}
+        submitting={false}
+        error={null}
+      />,
+    );
+    return { onConfirm };
+  }
+
+  it('affiche la hausse tarifaire renvoyée par le serveur (jamais recalculée côté client)', async () => {
+    renderAndReachConfirmation(
+      preview({
+        ancienMontantRestant: '1200.00',
+        nouveauMontantRestant: '1500.00',
+        difference: '+300.00',
+        nuitsImpactees: ['2026-08-07', '2026-08-08', '2026-08-09'],
+      }),
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /312/ }));
+    await user.type(screen.getByLabelText(/Motif/), 'Demande du client');
+    await user.click(screen.getByRole('button', { name: 'Continuer' }));
+
+    await waitFor(() => expect(screen.getByText('1200.00 MAD')).toBeVisible());
+    expect(screen.getByText('1500.00 MAD')).toBeVisible();
+    expect(screen.getByText('+300.00 MAD')).toBeVisible();
+    expect(screen.getByText('3 nuits')).toBeVisible();
+  });
+
+  it('affiche la baisse tarifaire renvoyée par le serveur', async () => {
+    renderAndReachConfirmation(
+      preview({
+        ancienMontantRestant: '1500.00',
+        nouveauMontantRestant: '1200.00',
+        difference: '-300.00',
+      }),
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /312/ }));
+    await user.type(screen.getByLabelText(/Motif/), 'Demande du client');
+    await user.click(screen.getByRole('button', { name: 'Continuer' }));
+
+    await waitFor(() => expect(screen.getByText('-300.00 MAD')).toBeVisible());
+  });
+
+  it('affiche "Aucun impact tarifaire" quand la différence est nulle', async () => {
+    renderAndReachConfirmation(
+      preview({
+        ancienMontantRestant: '1200.00',
+        nouveauMontantRestant: '1200.00',
+        difference: '0.00',
+        nuitsImpactees: ['2026-08-07'],
+      }),
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /312/ }));
+    await user.type(screen.getByLabelText(/Motif/), 'Demande du client');
+    await user.click(screen.getByRole('button', { name: 'Continuer' }));
+
+    await waitFor(() =>
+      expect(screen.getByText('Aucun impact tarifaire.')).toBeVisible(),
+    );
+  });
+
+  it('affiche "Aucune nuit restante — aucun impact tarifaire" pour un départ aujourd’hui (0 nuit)', async () => {
+    renderAndReachConfirmation(
+      preview({
+        ancienMontantRestant: '0.00',
+        nouveauMontantRestant: '0.00',
+        difference: '0.00',
+        nuitsImpactees: [],
+      }),
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /312/ }));
+    await user.type(screen.getByLabelText(/Motif/), 'Demande du client');
+    await user.click(screen.getByRole('button', { name: 'Continuer' }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('Aucune nuit restante — aucun impact tarifaire.'),
+      ).toBeVisible(),
+    );
+  });
+});
+
+describe('ChangeRoomDialog — capacité insuffisante (CHANGE_ROOM_CAPACITY_EXCEEDED)', () => {
+  it('affiche un message lisible et reste sur la sélection sans passer à la confirmation', async () => {
+    previewChangeRoomMock.mockRejectedValueOnce(
+      new ApiError(
+        409,
+        'La chambre cible (4) a une capacité insuffisante (1) pour 2 occupant(s).',
+        'CHANGE_ROOM_CAPACITY_EXCEEDED',
       ),
-    ).toBeVisible();
+    );
+    const rooms = [room({ id: 4, numero: '312' })];
+    render(
+      <ChangeRoomDialog
+        stay={STAY}
+        rooms={rooms}
+        onClose={noop}
+        onConfirm={noop}
+        submitting={false}
+        error={null}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /312/ }));
+    await user.type(screen.getByLabelText(/Motif/), 'Demande du client');
+    await user.click(screen.getByRole('button', { name: 'Continuer' }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          'La chambre cible (4) a une capacité insuffisante (1) pour 2 occupant(s).',
+        ),
+      ).toBeVisible(),
+    );
+    // Toujours sur l'étape de sélection — jamais de résumé affiché avec des
+    // montants "quand même".
+    expect(screen.getByRole('button', { name: 'Continuer' })).toBeVisible();
+    expect(
+      screen.queryByRole('button', { name: 'Confirmer' }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe('ChangeRoomDialog — aperçu périmé (CHANGE_ROOM_PREVIEW_STALE)', () => {
+  it('réaffiche les nouveaux montants/fingerprint et un message dédié, sans renvoi automatique', async () => {
+    previewChangeRoomMock.mockResolvedValueOnce(
+      preview({
+        ancienMontantRestant: '1200.00',
+        nouveauMontantRestant: '1200.00',
+        difference: '0.00',
+        pricingFingerprint: 'fingerprint-perime',
+      }),
+    );
+    const rooms = [room({ id: 4, numero: '312' })];
+    const onConfirm = vi.fn();
+    const staleError = new ApiError(
+      409,
+      'Les conditions tarifaires ont changé.',
+      'CHANGE_ROOM_PREVIEW_STALE',
+      {
+        code: 'CHANGE_ROOM_PREVIEW_STALE',
+        message: 'Les conditions tarifaires ont changé.',
+        preview: preview({
+          ancienMontantRestant: '1200.00',
+          nouveauMontantRestant: '1600.00',
+          difference: '+400.00',
+          pricingFingerprint: 'fingerprint-frais',
+        }),
+      },
+    );
+    const { rerender } = render(
+      <ChangeRoomDialog
+        stay={STAY}
+        rooms={rooms}
+        onClose={noop}
+        onConfirm={onConfirm}
+        submitting={false}
+        error={null}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /312/ }));
+    await user.type(screen.getByLabelText(/Motif/), 'Demande du client');
+    await user.click(screen.getByRole('button', { name: 'Continuer' }));
+    await screen.findByRole('button', { name: 'Confirmer' });
+
+    // Simule l'échec du commit avec le fingerprint périmé : le parent
+    // renvoie l'erreur structurée via la prop `error`.
+    rerender(
+      <ChangeRoomDialog
+        stay={STAY}
+        rooms={rooms}
+        onClose={noop}
+        onConfirm={onConfirm}
+        submitting={false}
+        error={staleError}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          'Les conditions tarifaires ont changé depuis votre confirmation.',
+        ),
+      ).toBeVisible(),
+    );
+    // Montants frais réaffichés (venant de details.preview, jamais recalculés).
+    expect(screen.getByText('+400.00 MAD')).toBeVisible();
+    // Jamais de renvoi automatique — le bouton reste cliquable, il faut
+    // reconfirmer explicitement.
+    const confirmButton = screen.getByRole('button', { name: 'Confirmer' });
+    expect(confirmButton).not.toBeDisabled();
+    await user.click(confirmButton);
+
+    expect(onConfirm).toHaveBeenCalledWith(
+      4,
+      'Demande du client',
+      'fingerprint-frais',
+    );
   });
 });

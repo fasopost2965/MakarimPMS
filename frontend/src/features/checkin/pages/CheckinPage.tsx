@@ -331,13 +331,19 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
   }
 
   // MX-002C — GL-002. Même garantie que handleExtendStay ci-dessus.
-  async function handleChangeRoom(newRoomId: number, motif: string) {
+  // DESIGN-009B — pricingFingerprint transmis tel quel (obtenu par
+  // ChangeRoomDialog via previewChangeRoom, jamais recalculé ici).
+  async function handleChangeRoom(
+    newRoomId: number,
+    motif: string,
+    pricingFingerprint: string,
+  ) {
     if (!viewingStay) return;
     const stayId = viewingStay.id;
     setChangingRoom(true);
     setChangeRoomError(null);
     try {
-      await changeRoom(stayId, newRoomId, motif);
+      await changeRoom(stayId, newRoomId, motif, pricingFingerprint);
       setChangeRoomDialogOpen(false);
       try {
         const refreshed = await getStay(stayId);

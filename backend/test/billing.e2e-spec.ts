@@ -1327,4 +1327,774 @@ describe('Billing Module (5.13)', () => {
       await prisma.guest.deleteMany({ where: { id: guest.id } });
     });
   });
+
+  // DESIGN-009B.1 — cohérence Folio ↔ Solde ↔ Facture pour les lignes
+  // AJUSTEMENT_HAUSSE/AJUSTEMENT_BAISSE (changement de chambre, GL-002).
+  // Cause exacte du gap corrigé : calculateInvoiceTotal (invoice-calc.ts)
+  // ne reconnaissait aucune branche pour ces deux types — ils traversaient
+  // la boucle sans jamais être ni ajoutés ni soustraits (catégorie B,
+  // « ignorés »), alors que computeSoldeDu (stay/utils/solde.ts) les
+  // traitait déjà correctement depuis DESIGN-009B.
+  describe('DESIGN-009B.1 — Facturation des ajustements de changement de chambre', () => {
+    let receptionClient: ReturnType<typeof authedRequest>;
+    let adminClient: ReturnType<typeof authedRequest>;
+
+    beforeAll(async () => {
+      const receptionToken = await loginAs(app.getHttpServer(), 'reception');
+      receptionClient = authedRequest(app.getHttpServer(), receptionToken);
+      const adminToken = await loginAs(app.getHttpServer(), 'admin');
+      adminClient = authedRequest(app.getHttpServer(), adminToken);
+    });
+
+    // Folio manuel (sans check-in réel) pour les scénarios isolés (1, 8, 9,
+    // 10, 11) — même précédent exact que createStayWithFolio ci-dessus
+    // (« Moteur de calcul financier TTC »), nights=0 (dateCheckin ===
+    // dateCheckoutPrevue) pour ne jamais matérialiser TAXE_SEJOUR (legacy
+    // sans occupation) et polluer les montants attendus.
+    async function createManualFolio(labelSuffix: string) {
+      const ts = Date.now();
+      const roomType = await prisma.roomType.create({
+        data: {
+          nom: `TEST-009B1-TYPE-${labelSuffix}-${ts}`,
+          prixBase: new Prisma.Decimal(400),
+          capacite: 2,
+        },
+      });
+      const room = await prisma.room.create({
+        data: {
+          numero: `TEST-009B1-${labelSuffix}-${ts}`,
+          roomTypeId: roomType.id,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+      const guest = await prisma.guest.create({
+        data: { nom: 'Berrada', prenom: 'Younes' },
+      });
+      const now = new Date();
+      const stay = await prisma.stay.create({
+        data: {
+          roomId: room.id,
+          guestId: guest.id,
+          dateCheckin: now,
+          dateCheckoutPrevue: now,
+        },
+      });
+      const folio = await prisma.folio.create({
+        data: { stayId: stay.id, libelle: 'Folio principal' },
+      });
+      return { roomType, room, guest, stay, folio };
+    }
+
+    async function cleanupManualFolio(ctx: {
+      roomType: { id: number };
+      room: { id: number };
+      guest: { id: number };
+      stay: { id: number };
+      folio: { id: number };
+    }) {
+      await prisma.payment.deleteMany({ where: { folioId: ctx.folio.id } });
+      await prisma.invoice.deleteMany({ where: { folioId: ctx.folio.id } });
+      await prisma.folioLine.deleteMany({ where: { folioId: ctx.folio.id } });
+      await prisma.folio.deleteMany({ where: { stayId: ctx.stay.id } });
+      await prisma.roomNight.deleteMany({ where: { stayId: ctx.stay.id } });
+      await prisma.stay.deleteMany({ where: { id: ctx.stay.id } });
+      await prisma.room.deleteMany({ where: { id: ctx.room.id } });
+      await prisma.roomType.deleteMany({ where: { id: ctx.roomType.id } });
+      await prisma.guest.deleteMany({ where: { id: ctx.guest.id } });
+    }
+
+    // Séjour réel (check-in walk-in ROOM_ONLY, dates fixées à aujourd'hui →
+    // aujourd'hui+3j, formule ROOM_ONLY pour isoler la seule composante
+    // HEBERGEMENT) sur lequel un vrai changement de chambre HTTP est
+    // exercé — pour les scénarios end-to-end (2, 3, 4, 5, 6, 7, 12, 13).
+    // Aucune taxe de séjour matérialisée : nombreOccupants renseigné
+    // (checkin non-legacy) mais aucun TaxRateConfig actif requis par ces
+    // tests — laissé tel quel (comportement seed réel), les montants
+    // attendus sont calculés depuis les vraies FolioLine relues en base,
+    // jamais recalculés à la main ici (contrairement aux tests dédiés de
+    // stay-change-room.e2e-spec.ts qui, eux, pinnent les montants).
+    async function createRealStay(labelSuffix: string, prixBase: number) {
+      const ts = Date.now();
+      const roomType = await prisma.roomType.create({
+        data: {
+          nom: `TEST-009B1-REAL-${labelSuffix}-${ts}`,
+          prixBase: new Prisma.Decimal(prixBase),
+          capacite: 2,
+        },
+      });
+      const room = await prisma.room.create({
+        data: {
+          numero: `TEST-009B1-REAL-${labelSuffix}-${ts}`,
+          roomTypeId: roomType.id,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+      const guest = await prisma.guest.create({
+        data: { nom: 'Chraibi', prenom: 'Salma' },
+      });
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const dateDepart = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000);
+      const reservationRes = await receptionClient
+        .post('/api/reservations')
+        .send({
+          roomId: room.id,
+          guestId: guest.id,
+          dateArrivee: today.toISOString().slice(0, 10),
+          dateDepart: dateDepart.toISOString().slice(0, 10),
+          formule: 'ROOM_ONLY',
+        });
+      const checkinRes = await adminClient
+        .post(`/api/checkin/${(reservationRes.body as { id: number }).id}`)
+        .send({ nombreOccupants: 1 });
+      const stay = checkinRes.body as { id: number; roomId: number };
+      return { roomType, room, guest, stay };
+    }
+
+    async function previewFingerprint(stayId: number, newRoomId: number) {
+      const res = await receptionClient
+        .post(`/api/stays/${stayId}/change-room/preview`)
+        .send({ newRoomId });
+      return (res.body as { pricingFingerprint: string }).pricingFingerprint;
+    }
+
+    async function cleanupRealStay(ctx: {
+      roomType: { id: number };
+      room: { id: number };
+      guest: { id: number };
+      stay: { id: number };
+    }) {
+      await prisma.payment.deleteMany({
+        where: { folio: { stayId: ctx.stay.id } },
+      });
+      await prisma.invoice.deleteMany({
+        where: { folio: { stayId: ctx.stay.id } },
+      });
+      await prisma.folioLine.deleteMany({
+        where: { folio: { stayId: ctx.stay.id } },
+      });
+      await prisma.folio.deleteMany({ where: { stayId: ctx.stay.id } });
+      await prisma.housekeepingTaskLog.deleteMany({
+        where: { task: { room: { roomTypeId: ctx.roomType.id } } },
+      });
+      await prisma.housekeepingTask.deleteMany({
+        where: { room: { roomTypeId: ctx.roomType.id } },
+      });
+      await prisma.roomStatusLog.deleteMany({
+        where: { room: { roomTypeId: ctx.roomType.id } },
+      });
+      await prisma.auditLog.deleteMany({
+        where: { targetEntity: 'Stay', targetId: ctx.stay.id },
+      });
+      await prisma.roomNight.deleteMany({
+        where: { room: { roomTypeId: ctx.roomType.id } },
+      });
+      await prisma.stay.deleteMany({ where: { id: ctx.stay.id } });
+      await prisma.reservation.deleteMany({
+        where: { room: { roomTypeId: ctx.roomType.id } },
+      });
+      await prisma.room.deleteMany({ where: { roomTypeId: ctx.roomType.id } });
+      await prisma.roomType.deleteMany({ where: { id: ctx.roomType.id } });
+      await prisma.guest.deleteMany({ where: { id: ctx.guest.id } });
+    }
+
+    it('1. Facture sans changement de chambre : comportement inchangé', async () => {
+      const ctx = await createManualFolio('SANS-CHANGEMENT');
+      await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: 'Hébergement — 1 nuit',
+          montant: new Prisma.Decimal(400),
+        },
+      });
+      const invoiceRes = await client
+        .post(`/api/invoices/generer?folioId=${ctx.folio.id}`)
+        .send({});
+      expect(invoiceRes.status).toBe(201);
+      expect(Number(invoiceRes.body.montantTotal)).toBe(400);
+      await cleanupManualFolio(ctx);
+    });
+
+    it('2/4. Hausse (400→500, 3 nuits) puis génération de facture : le montant augmente exactement de la différence, aucun double comptage', async () => {
+      const ctxA = await createRealStay('HAUSSE-A', 400);
+      const roomB = await prisma.room.create({
+        data: {
+          numero: `TEST-009B1-HAUSSE-B-${Date.now()}`,
+          roomTypeId: (
+            await prisma.roomType.create({
+              data: {
+                nom: `TEST-009B1-HAUSSE-TYPEB-${Date.now()}`,
+                prixBase: new Prisma.Decimal(500),
+                capacite: 2,
+              },
+            })
+          ).id,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+
+      const foliosAvant = await prisma.folio.findMany({
+        where: { stayId: ctxA.stay.id },
+        include: { lignes: true },
+      });
+      // Somme de TOUTES les lignes déjà présentes (HEBERGEMENT + éventuelle
+      // TAXE_SEJOUR déjà matérialisée au check-in — nombreOccupants est
+      // renseigné, non-legacy) : jamais juste HEBERGEMENT seul, sinon la
+      // taxe de séjour active du seed fausserait la comparaison.
+      const hebergementAvant = foliosAvant[0].lignes.reduce(
+        (acc, l) => acc.add(l.montant),
+        new Prisma.Decimal(0),
+      );
+
+      const fingerprint = await previewFingerprint(ctxA.stay.id, roomB.id);
+      const changeRes = await receptionClient
+        .post(`/api/stays/${ctxA.stay.id}/change-room`)
+        .send({
+          newRoomId: roomB.id,
+          motif: 'Test facturation hausse 400->500',
+          pricingFingerprint: fingerprint,
+        });
+      expect(changeRes.status).toBe(201);
+
+      const ligneAjustement = await prisma.folioLine.findFirstOrThrow({
+        where: { folio: { stayId: ctxA.stay.id }, type: 'AJUSTEMENT_HAUSSE' },
+      });
+
+      const folio = await prisma.folio.findFirstOrThrow({
+        where: { stayId: ctxA.stay.id },
+      });
+      const invoiceRes = await client
+        .post(`/api/invoices/generer?folioId=${folio.id}`)
+        .send({});
+      expect(invoiceRes.status).toBe(201);
+      const montantAttendu =
+        Number(hebergementAvant) + Number(ligneAjustement.montant);
+      expect(Number(invoiceRes.body.montantTotal)).toBe(montantAttendu);
+
+      // Aucun double comptage : une seule ligne AJUSTEMENT_HAUSSE existe,
+      // et elle n'apparaît qu'une fois dans la somme (vérifié en relisant
+      // le folio et en recalculant manuellement avec calculateInvoiceTotal
+      // via le solde, qui doit converger avec la facture).
+      const lignesApresFacture = await prisma.folioLine.findMany({
+        where: { folio: { stayId: ctxA.stay.id } },
+      });
+      const nbAjustements = lignesApresFacture.filter(
+        (l) => l.type === 'AJUSTEMENT_HAUSSE',
+      ).length;
+      expect(nbAjustements).toBe(1);
+
+      // 13. Cohérence Folio/Solde/Facture sur le même scénario.
+      const foliosApres = await prisma.folio.findMany({
+        where: { stayId: ctxA.stay.id },
+        include: { lignes: true },
+      });
+      const soldeCalcule = computeSoldeDu(foliosApres);
+      expect(soldeCalcule.toNumber()).toBe(montantAttendu);
+
+      await cleanupRealStay(ctxA);
+      await prisma.housekeepingTaskLog.deleteMany({
+        where: { task: { roomId: roomB.id } },
+      });
+      await prisma.housekeepingTask.deleteMany({
+        where: { roomId: roomB.id },
+      });
+      await prisma.roomStatusLog.deleteMany({ where: { roomId: roomB.id } });
+      await prisma.room.deleteMany({ where: { id: roomB.id } });
+      await prisma.roomType.deleteMany({ where: { id: roomB.roomTypeId } });
+    });
+
+    it('3/5. Baisse (500→400, 3 nuits) puis génération de facture : le montant diminue exactement de la différence, aucun double comptage', async () => {
+      const ctxA = await createRealStay('BAISSE-A', 500);
+      const typeBasique = await prisma.roomType.create({
+        data: {
+          nom: `TEST-009B1-BAISSE-TYPEB-${Date.now()}`,
+          prixBase: new Prisma.Decimal(400),
+          capacite: 2,
+        },
+      });
+      const roomB = await prisma.room.create({
+        data: {
+          numero: `TEST-009B1-BAISSE-B-${Date.now()}`,
+          roomTypeId: typeBasique.id,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+
+      const foliosAvant = await prisma.folio.findMany({
+        where: { stayId: ctxA.stay.id },
+        include: { lignes: true },
+      });
+      // Somme de TOUTES les lignes déjà présentes (HEBERGEMENT + éventuelle
+      // TAXE_SEJOUR déjà matérialisée au check-in — nombreOccupants est
+      // renseigné, non-legacy) : jamais juste HEBERGEMENT seul, sinon la
+      // taxe de séjour active du seed fausserait la comparaison.
+      const hebergementAvant = foliosAvant[0].lignes.reduce(
+        (acc, l) => acc.add(l.montant),
+        new Prisma.Decimal(0),
+      );
+
+      const fingerprint = await previewFingerprint(ctxA.stay.id, roomB.id);
+      const changeRes = await receptionClient
+        .post(`/api/stays/${ctxA.stay.id}/change-room`)
+        .send({
+          newRoomId: roomB.id,
+          motif: 'Test facturation baisse 500->400',
+          pricingFingerprint: fingerprint,
+        });
+      expect(changeRes.status).toBe(201);
+
+      const ligneAjustement = await prisma.folioLine.findFirstOrThrow({
+        where: { folio: { stayId: ctxA.stay.id }, type: 'AJUSTEMENT_BAISSE' },
+      });
+
+      const folio = await prisma.folio.findFirstOrThrow({
+        where: { stayId: ctxA.stay.id },
+      });
+      const invoiceRes = await client
+        .post(`/api/invoices/generer?folioId=${folio.id}`)
+        .send({});
+      expect(invoiceRes.status).toBe(201);
+      const montantAttendu =
+        Number(hebergementAvant) - Number(ligneAjustement.montant);
+      expect(Number(invoiceRes.body.montantTotal)).toBe(montantAttendu);
+
+      const lignesApresFacture = await prisma.folioLine.findMany({
+        where: { folio: { stayId: ctxA.stay.id } },
+      });
+      expect(
+        lignesApresFacture.filter((l) => l.type === 'AJUSTEMENT_BAISSE').length,
+      ).toBe(1);
+
+      const foliosApres = await prisma.folio.findMany({
+        where: { stayId: ctxA.stay.id },
+        include: { lignes: true },
+      });
+      const soldeCalcule = computeSoldeDu(foliosApres);
+      expect(soldeCalcule.toNumber()).toBe(montantAttendu);
+
+      await cleanupRealStay(ctxA);
+      await prisma.housekeepingTaskLog.deleteMany({
+        where: { task: { roomId: roomB.id } },
+      });
+      await prisma.housekeepingTask.deleteMany({
+        where: { roomId: roomB.id },
+      });
+      await prisma.roomStatusLog.deleteMany({ where: { roomId: roomB.id } });
+      await prisma.room.deleteMany({ where: { id: roomB.id } });
+      await prisma.roomType.deleteMany({ where: { id: typeBasique.id } });
+    });
+
+    it('6. Changement sans différence tarifaire : aucune ligne artificielle, facture inchangée', async () => {
+      // Désactive temporairement TAXE_SEJOUR (restaurée en fin de test) :
+      // un « même tarif » authentiquement neutre exige qu'aucune autre
+      // composante (le carve-out fiscal FIN-102, voir la formule §3 du
+      // rapport de conception DESIGN-009B) ne crée un écart artificiel
+      // entre ancienMontantRestant (net de taxe, folio) et
+      // nouveauMontantRestant (brut catalogue) — comportement déjà
+      // documenté et volontaire, non modifié ici, seulement neutralisé le
+      // temps de ce scénario isolé pour tester la « vraie » neutralité
+      // tarifaire. Aucune règle fiscale n'est changée (juste actif=false).
+      const taxRate = await prisma.taxRateConfig.findFirstOrThrow({
+        where: { type: 'TAXE_SEJOUR', actif: true },
+      });
+      await prisma.taxRateConfig.update({
+        where: { id: taxRate.id },
+        data: { actif: false },
+      });
+
+      const ctxA = await createRealStay('NEUTRE-A', 400);
+      const typeIdentique = await prisma.roomType.create({
+        data: {
+          nom: `TEST-009B1-NEUTRE-TYPEB-${Date.now()}`,
+          prixBase: new Prisma.Decimal(400),
+          capacite: 2,
+        },
+      });
+      const roomB = await prisma.room.create({
+        data: {
+          numero: `TEST-009B1-NEUTRE-B-${Date.now()}`,
+          roomTypeId: typeIdentique.id,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+
+      const foliosAvant = await prisma.folio.findMany({
+        where: { stayId: ctxA.stay.id },
+        include: { lignes: true },
+      });
+      const montantAvant = Number(
+        foliosAvant[0].lignes.find((l) => l.type === 'HEBERGEMENT')!.montant,
+      );
+
+      const fingerprint = await previewFingerprint(ctxA.stay.id, roomB.id);
+      const changeRes = await receptionClient
+        .post(`/api/stays/${ctxA.stay.id}/change-room`)
+        .send({
+          newRoomId: roomB.id,
+          motif: 'Test facturation même tarif',
+          pricingFingerprint: fingerprint,
+        });
+      expect(changeRes.status).toBe(201);
+
+      const lignesApres = await prisma.folioLine.findMany({
+        where: { folio: { stayId: ctxA.stay.id } },
+      });
+      expect(
+        lignesApres.some(
+          (l) =>
+            l.type === 'AJUSTEMENT_HAUSSE' || l.type === 'AJUSTEMENT_BAISSE',
+        ),
+      ).toBe(false);
+
+      const folio = await prisma.folio.findFirstOrThrow({
+        where: { stayId: ctxA.stay.id },
+      });
+      const invoiceRes = await client
+        .post(`/api/invoices/generer?folioId=${folio.id}`)
+        .send({});
+      expect(invoiceRes.status).toBe(201);
+      expect(Number(invoiceRes.body.montantTotal)).toBe(montantAvant);
+
+      await cleanupRealStay(ctxA);
+      await prisma.housekeepingTaskLog.deleteMany({
+        where: { task: { roomId: roomB.id } },
+      });
+      await prisma.housekeepingTask.deleteMany({
+        where: { roomId: roomB.id },
+      });
+      await prisma.roomStatusLog.deleteMany({ where: { roomId: roomB.id } });
+      await prisma.room.deleteMany({ where: { id: roomB.id } });
+      await prisma.roomType.deleteMany({ where: { id: typeIdentique.id } });
+      await prisma.taxRateConfig.update({
+        where: { id: taxRate.id },
+        data: { actif: true },
+      });
+    });
+
+    it('7. Second changement de chambre : chaque ajustement réel apparaît exactement une fois dans la facture', async () => {
+      const ctxA = await createRealStay('DOUBLE-A', 400);
+      const typeB = await prisma.roomType.create({
+        data: {
+          nom: `TEST-009B1-DOUBLE-TYPEB-${Date.now()}`,
+          prixBase: new Prisma.Decimal(500),
+          capacite: 2,
+        },
+      });
+      const roomB = await prisma.room.create({
+        data: {
+          numero: `TEST-009B1-DOUBLE-B-${Date.now()}`,
+          roomTypeId: typeB.id,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+      const typeC = await prisma.roomType.create({
+        data: {
+          nom: `TEST-009B1-DOUBLE-TYPEC-${Date.now()}`,
+          prixBase: new Prisma.Decimal(300),
+          capacite: 2,
+        },
+      });
+      const roomC = await prisma.room.create({
+        data: {
+          numero: `TEST-009B1-DOUBLE-C-${Date.now()}`,
+          roomTypeId: typeC.id,
+          statut: StatutChambre.LIBRE_PROPRE,
+        },
+      });
+
+      const fingerprint1 = await previewFingerprint(ctxA.stay.id, roomB.id);
+      const change1 = await receptionClient
+        .post(`/api/stays/${ctxA.stay.id}/change-room`)
+        .send({
+          newRoomId: roomB.id,
+          motif: 'Premier changement 400->500',
+          pricingFingerprint: fingerprint1,
+        });
+      expect(change1.status).toBe(201);
+
+      const fingerprint2 = await previewFingerprint(ctxA.stay.id, roomC.id);
+      const change2 = await receptionClient
+        .post(`/api/stays/${ctxA.stay.id}/change-room`)
+        .send({
+          newRoomId: roomC.id,
+          motif: 'Second changement 500->300',
+          pricingFingerprint: fingerprint2,
+        });
+      expect(change2.status).toBe(201);
+
+      const lignesAjustement = await prisma.folioLine.findMany({
+        where: {
+          folio: { stayId: ctxA.stay.id },
+          type: { in: ['AJUSTEMENT_HAUSSE', 'AJUSTEMENT_BAISSE'] },
+        },
+      });
+      expect(lignesAjustement.length).toBe(2);
+
+      const foliosAvant = await prisma.folio.findMany({
+        where: { stayId: ctxA.stay.id },
+        include: { lignes: true },
+      });
+      const soldeAttendu = computeSoldeDu(foliosAvant);
+
+      const folio = await prisma.folio.findFirstOrThrow({
+        where: { stayId: ctxA.stay.id },
+      });
+      const invoiceRes = await client
+        .post(`/api/invoices/generer?folioId=${folio.id}`)
+        .send({});
+      expect(invoiceRes.status).toBe(201);
+      expect(Number(invoiceRes.body.montantTotal)).toBe(
+        soldeAttendu.toNumber(),
+      );
+
+      await cleanupRealStay(ctxA);
+      // roomB/roomC ont reçu la tâche housekeeping/le log de statut créés
+      // par changeRoom (ancienne chambre → A_NETTOYER) — à nettoyer avant
+      // de supprimer les chambres elles-mêmes (contrainte FK), même
+      // précédent que cleanupRealStay pour ctxA.room.
+      await prisma.housekeepingTaskLog.deleteMany({
+        where: { task: { roomId: { in: [roomB.id, roomC.id] } } },
+      });
+      await prisma.housekeepingTask.deleteMany({
+        where: { roomId: { in: [roomB.id, roomC.id] } },
+      });
+      await prisma.roomStatusLog.deleteMany({
+        where: { roomId: { in: [roomB.id, roomC.id] } },
+      });
+      await prisma.room.deleteMany({
+        where: { id: { in: [roomB.id, roomC.id] } },
+      });
+      await prisma.roomType.deleteMany({
+        where: { id: { in: [typeB.id, typeC.id] } },
+      });
+    });
+
+    it('8. Paiement partiel existant : intact après ajout d’un ajustement et génération de facture', async () => {
+      const ctx = await createManualFolio('PAIEMENT-PARTIEL');
+      await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: 'Hébergement — 1 nuit',
+          montant: new Prisma.Decimal(1191),
+        },
+      });
+      const paiement = await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.PAIEMENT,
+          libelle: 'Acompte reçu',
+          montant: new Prisma.Decimal(500),
+        },
+      });
+      await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.AJUSTEMENT_HAUSSE,
+          libelle: 'Ajustement — changement de chambre',
+          montant: new Prisma.Decimal(309),
+        },
+      });
+
+      const invoiceRes = await client
+        .post(`/api/invoices/generer?folioId=${ctx.folio.id}`)
+        .send({});
+      expect(invoiceRes.status).toBe(201);
+      // La facture (charges dues) n'inclut jamais les paiements : 1191 + 309.
+      expect(Number(invoiceRes.body.montantTotal)).toBe(1500);
+
+      const paiementApres = await prisma.folioLine.findUniqueOrThrow({
+        where: { id: paiement.id },
+      });
+      expect(paiementApres.montant.toNumber()).toBe(500);
+      expect(paiementApres.type).toBe('PAIEMENT');
+
+      await cleanupManualFolio(ctx);
+    });
+
+    it('9. Autres charges du folio (EXTRA/RESTAURANT) intactes en présence d’un ajustement', async () => {
+      const ctx = await createManualFolio('AUTRES-CHARGES');
+      await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: 'Hébergement — 1 nuit',
+          montant: new Prisma.Decimal(400),
+        },
+      });
+      const extra = await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.EXTRA,
+          libelle: 'Minibar',
+          montant: new Prisma.Decimal(50),
+        },
+      });
+      const restaurant = await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.RESTAURANT,
+          libelle: 'Note restaurant',
+          montant: new Prisma.Decimal(120),
+        },
+      });
+      await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.AJUSTEMENT_BAISSE,
+          libelle: 'Ajustement — changement de chambre',
+          montant: new Prisma.Decimal(100),
+        },
+      });
+
+      const invoiceRes = await client
+        .post(`/api/invoices/generer?folioId=${ctx.folio.id}`)
+        .send({});
+      expect(invoiceRes.status).toBe(201);
+      // 400 + 50 + 120 - 100 = 470.
+      expect(Number(invoiceRes.body.montantTotal)).toBe(470);
+
+      const extraApres = await prisma.folioLine.findUniqueOrThrow({
+        where: { id: extra.id },
+      });
+      const restaurantApres = await prisma.folioLine.findUniqueOrThrow({
+        where: { id: restaurant.id },
+      });
+      expect(extraApres.montant.toNumber()).toBe(50);
+      expect(restaurantApres.montant.toNumber()).toBe(120);
+
+      await cleanupManualFolio(ctx);
+    });
+
+    it('10. Ligne d’ajustement annulée : exclue de la facture, mêmes règles que les autres types (BR-AUD-002)', async () => {
+      const ctx = await createManualFolio('LIGNE-ANNULEE');
+      await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: 'Hébergement — 1 nuit',
+          montant: new Prisma.Decimal(400),
+        },
+      });
+      await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.AJUSTEMENT_HAUSSE,
+          libelle: 'Ajustement annulé (correction)',
+          montant: new Prisma.Decimal(50),
+          annulee: true,
+          motifAnnulation: 'Correction manuelle — motif de test suffisant',
+        },
+      });
+
+      const invoiceRes = await client
+        .post(`/api/invoices/generer?folioId=${ctx.folio.id}`)
+        .send({});
+      expect(invoiceRes.status).toBe(201);
+      // La ligne annulée n'est jamais comptée — même comportement que
+      // n'importe quelle autre ligne annulée (invoice-calc.ts, `if
+      // (line.annulee) continue`).
+      expect(Number(invoiceRes.body.montantTotal)).toBe(400);
+
+      await cleanupManualFolio(ctx);
+    });
+
+    it('11. Taxe de séjour (MONTANT_FIXE) déjà matérialisée : pas de recalcul indu en présence d’un ajustement', async () => {
+      const ctx = await createManualFolio('TAXE-FIXE');
+      await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: 'Hébergement — 3 nuits',
+          montant: new Prisma.Decimal(1191),
+        },
+      });
+      const taxRate = await prisma.taxRateConfig.findFirstOrThrow({
+        where: { type: 'TAXE_SEJOUR', actif: true },
+      });
+      const taxeLigne = await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.TAXE_SEJOUR,
+          libelle: 'Taxe de séjour',
+          montant: new Prisma.Decimal(9),
+          taxRateConfigId: taxRate.id,
+        },
+      });
+      await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.AJUSTEMENT_HAUSSE,
+          libelle: 'Ajustement — changement de chambre',
+          montant: new Prisma.Decimal(309),
+        },
+      });
+
+      const invoiceRes = await client
+        .post(`/api/invoices/generer?folioId=${ctx.folio.id}`)
+        .send({});
+      expect(invoiceRes.status).toBe(201);
+      // TAXE_SEJOUR déjà matérialisée (taxeDejaMaterialisee=true côté
+      // service) : jamais recalculée/dupliquée. 1191 + 9 + 309 = 1509.
+      expect(Number(invoiceRes.body.montantTotal)).toBe(1509);
+
+      const taxeApres = await prisma.folioLine.findUniqueOrThrow({
+        where: { id: taxeLigne.id },
+      });
+      expect(taxeApres.montant.toNumber()).toBe(9);
+      const nbTaxeLignes = await prisma.folioLine.count({
+        where: { folioId: ctx.folio.id, type: 'TAXE_SEJOUR' },
+      });
+      expect(nbTaxeLignes).toBe(1);
+
+      await cleanupManualFolio(ctx);
+    });
+
+    it('12. Retry/idempotence : une double tentative de génération de facture sur le même folio ne double jamais l’ajustement', async () => {
+      const ctx = await createManualFolio('RETRY-FACTURE');
+      await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.HEBERGEMENT,
+          libelle: 'Hébergement — 1 nuit',
+          montant: new Prisma.Decimal(400),
+        },
+      });
+      await prisma.folioLine.create({
+        data: {
+          folioId: ctx.folio.id,
+          type: TypeLigneFolio.AJUSTEMENT_HAUSSE,
+          libelle: 'Ajustement — changement de chambre',
+          montant: new Prisma.Decimal(100),
+        },
+      });
+
+      const first = await client
+        .post(`/api/invoices/generer?folioId=${ctx.folio.id}`)
+        .send({});
+      expect(first.status).toBe(201);
+      expect(Number(first.body.montantTotal)).toBe(500);
+
+      // Rejeu (retry réseau simulé) : le garde-fou « facture active déjà
+      // émise » existant (générique à tout le module, pas spécifique à
+      // 009B.1) bloque toute seconde génération — jamais une seconde
+      // ligne, jamais un second montant.
+      const retry = await client
+        .post(`/api/invoices/generer?folioId=${ctx.folio.id}`)
+        .send({});
+      expect(retry.status).toBe(409);
+
+      const nbFactures = await prisma.invoice.count({
+        where: { folioId: ctx.folio.id },
+      });
+      expect(nbFactures).toBe(1);
+      const nbAjustements = await prisma.folioLine.count({
+        where: { folioId: ctx.folio.id, type: 'AJUSTEMENT_HAUSSE' },
+      });
+      expect(nbAjustements).toBe(1);
+
+      await cleanupManualFolio(ctx);
+    });
+  });
 });

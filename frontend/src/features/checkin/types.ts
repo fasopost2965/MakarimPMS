@@ -8,7 +8,14 @@ import type { PoliceRecord } from '../police/types';
 
 export type StatutSejour = 'EN_COURS' | 'CHECKOUT';
 export type TypeLigneFolio =
-  'HEBERGEMENT' | 'EXTRA' | 'TAXE_SEJOUR' | 'PAIEMENT';
+  | 'HEBERGEMENT'
+  | 'EXTRA'
+  | 'TAXE_SEJOUR'
+  | 'PAIEMENT'
+  // DESIGN-009B — impact tarifaire d'un changement de chambre en cours de
+  // séjour (StayService.changeRoom), jamais saisi manuellement.
+  | 'AJUSTEMENT_HAUSSE'
+  | 'AJUSTEMENT_BAISSE';
 
 export interface FolioLine {
   id: number;
@@ -116,6 +123,35 @@ export interface PaymentRequiredErrorDetails {
   message: string;
   amountRequired: string;
   availableCredit: string;
+}
+
+// DESIGN-009B — réponse de POST /stays/:id/change-room/preview
+// (StayService.previewChangeRoom) : lecture seule, aucune écriture. Le
+// frontend n'affiche jamais un montant qu'il aurait recalculé lui-même —
+// ces valeurs viennent intégralement du serveur.
+export interface ChangeRoomPreview {
+  oldRoom: { id: number; numero: string; roomTypeNom: string };
+  newRoom: { id: number; numero: string; roomTypeNom: string };
+  nuitsImpactees: string[];
+  ancienMontantRestant: string;
+  nouveauMontantRestant: string;
+  difference: string;
+  pricingFingerprint: string;
+  warnings: string[];
+}
+
+// Formes des corps d'erreur structurés levés par StayService.changeRoom —
+// narrowing explicite de `ApiError.details`, même convention que
+// RoomUnavailableErrorDetails/PaymentRequiredErrorDetails ci-dessus.
+export interface ChangeRoomCapacityExceededErrorDetails {
+  code: 'CHANGE_ROOM_CAPACITY_EXCEEDED';
+  message: string;
+}
+
+export interface ChangeRoomPreviewStaleErrorDetails {
+  code: 'CHANGE_ROOM_PREVIEW_STALE';
+  message: string;
+  preview: ChangeRoomPreview;
 }
 
 // GL-003B — réponse de POST /stays/:id/extension-deposit

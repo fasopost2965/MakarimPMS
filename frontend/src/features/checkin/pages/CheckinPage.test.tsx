@@ -229,7 +229,11 @@ vi.mock('../components/ChangeRoomDialog', () => ({
     error,
   }: {
     stay: { id: number } | null;
-    onConfirm: (newRoomId: number, motif: string) => void;
+    onConfirm: (
+      newRoomId: number,
+      motif: string,
+      pricingFingerprint: string,
+    ) => void;
     error: unknown;
   }) =>
     stay ? (
@@ -238,7 +242,9 @@ vi.mock('../components/ChangeRoomDialog', () => ({
         {error ? <span>Erreur changement de chambre présente</span> : null}
         <button
           type="button"
-          onClick={() => onConfirm(4, 'motif de test recette')}
+          onClick={() =>
+            onConfirm(4, 'motif de test recette', 'fingerprint-de-test')
+          }
         >
           Confirmer le changement de chambre
         </button>
@@ -663,7 +669,12 @@ describe('CheckinPage — Séjours en cours : panneau, prolongation, changement 
     );
 
     await waitFor(() =>
-      expect(changeRoom).toHaveBeenCalledWith(6, 4, 'motif de test recette'),
+      expect(changeRoom).toHaveBeenCalledWith(
+        6,
+        4,
+        'motif de test recette',
+        'fingerprint-de-test',
+      ),
     );
   });
 });

@@ -11,14 +11,22 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ApiError } from '@/lib/api-client';
+import { previewChangeRoom } from '../api';
 import type { Room } from '../../reservations/types';
-import type { Stay } from '../types';
+import type { ChangeRoomPreview, Stay } from '../types';
 
 interface Props {
   stay: Stay | null;
   rooms: Room[];
   onClose: () => void;
-  onConfirm: (newRoomId: number, motif: string) => void;
+  // DESIGN-009B — pricingFingerprint ajouté (obtenu via previewChangeRoom
+  // ci-dessous, jamais inventé par ce composant).
+  onConfirm: (
+    newRoomId: number,
+    motif: string,
+    pricingFingerprint: string,
+  ) => void;
   submitting: boolean;
   error: unknown;
 }
@@ -33,6 +41,109 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error
     ? error.message
     : "Le changement de chambre n'a pas pu être enregistré. Réessayez ou contactez un responsable si le problème persiste.";
+}
+
+// DESIGN-009B — durcissement du corps d'erreur structuré (`ApiError.details`
+// vient du réseau, jamais fait confiance à un simple cast), même convention
+// que ExtendStayDialog::toSafeAlternative.
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function toSafeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((v): v is string => typeof v === 'string');
+}
+
+function toSafeRoomSummary(
+  value: unknown,
+): ChangeRoomPreview['oldRoom'] | null {
+  if (!isPlainObject(value)) return null;
+  const id = typeof value.id === 'number' ? value.id : null;
+  const numero = typeof value.numero === 'string' ? value.numero : null;
+  const roomTypeNom =
+    typeof value.roomTypeNom === 'string' ? value.roomTypeNom : null;
+  if (id === null || numero === null || roomTypeNom === null) return null;
+  return { id, numero, roomTypeNom };
+}
+
+// Corps de POST /stays/:id/change-room/preview (succès) OU du champ
+// `preview` d'une erreur CHANGE_ROOM_PREVIEW_STALE (même forme) — une seule
+// fonction de validation pour les deux origines.
+function toSafePreview(value: unknown): ChangeRoomPreview | null {
+  if (!isPlainObject(value)) return null;
+  const oldRoom = toSafeRoomSummary(value.oldRoom);
+  const newRoom = toSafeRoomSummary(value.newRoom);
+  const ancienMontantRestant =
+    typeof value.ancienMontantRestant === 'string'
+      ? value.ancienMontantRestant
+      : null;
+  const nouveauMontantRestant =
+    typeof value.nouveauMontantRestant === 'string'
+      ? value.nouveauMontantRestant
+      : null;
+  const difference =
+    typeof value.difference === 'string' ? value.difference : null;
+  const pricingFingerprint =
+    typeof value.pricingFingerprint === 'string'
+      ? value.pricingFingerprint
+      : null;
+  if (
+    !oldRoom ||
+    !newRoom ||
+    ancienMontantRestant === null ||
+    nouveauMontantRestant === null ||
+    difference === null ||
+    pricingFingerprint === null
+  ) {
+    return null;
+  }
+  return {
+    oldRoom,
+    newRoom,
+    nuitsImpactees: toSafeStringArray(value.nuitsImpactees),
+    ancienMontantRestant,
+    nouveauMontantRestant,
+    difference,
+    pricingFingerprint,
+    warnings: toSafeStringArray(value.warnings),
+  };
+}
+
+type ChangeRoomErrorTranslation =
+  | { kind: 'stale'; preview: ChangeRoomPreview; message: string }
+  | { kind: 'capacityExceeded'; message: string }
+  | { kind: 'generic'; message: string };
+
+// DESIGN-009B — traduit une erreur réseau (preview OU commit) en une forme
+// affichable. `CHANGE_ROOM_PREVIEW_STALE` ne peut provenir que du commit
+// (jamais du preview lui-même) mais reste géré au même endroit pour éviter
+// deux fonctions quasi identiques.
+function translateChangeRoomError(error: unknown): ChangeRoomErrorTranslation {
+  const message = getErrorMessage(error);
+  if (!(error instanceof ApiError)) return { kind: 'generic', message };
+  const details = error.details;
+
+  if (isPlainObject(details) && details.code === 'CHANGE_ROOM_PREVIEW_STALE') {
+    const preview = toSafePreview(details.preview);
+    if (preview) {
+      return {
+        kind: 'stale',
+        preview,
+        message:
+          'Les conditions tarifaires ont changé depuis votre confirmation.',
+      };
+    }
+  }
+
+  if (
+    isPlainObject(details) &&
+    details.code === 'CHANGE_ROOM_CAPACITY_EXCEEDED'
+  ) {
+    return { kind: 'capacityExceeded', message };
+  }
+
+  return { kind: 'generic', message };
 }
 
 // Tri explicite requis (RD architecture MX-002C §2) — jamais l'ordre
@@ -163,7 +274,66 @@ function MotifSection({
 }
 
 // ---------------------------------------------------------------------
-// 4. Résumé (étape de confirmation, avant tout appel API)
+// 4. Impact tarifaire (DESIGN-009B) — aperçu serveur affiché tel quel,
+// jamais un montant recalculé côté client (aucune logique financière
+// autoritative dans le frontend).
+// ---------------------------------------------------------------------
+function PricingImpactSection({ preview }: { preview: ChangeRoomPreview }) {
+  const aucuneNuitRestante = preview.nuitsImpactees.length === 0;
+  const aucunImpact = !aucuneNuitRestante && preview.difference === '0.00';
+
+  return (
+    <section className="flex flex-col gap-2">
+      <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+        Impact tarifaire
+      </h3>
+      <div className="flex flex-col gap-3 rounded-md border p-3 text-sm">
+        <div>
+          <p className="text-muted-foreground text-xs">Nuits impactées</p>
+          <p className="font-medium">
+            {preview.nuitsImpactees.length} nuit
+            {preview.nuitsImpactees.length > 1 ? 's' : ''}
+          </p>
+        </div>
+        {aucuneNuitRestante ? (
+          <p className="text-muted-foreground">
+            Aucune nuit restante — aucun impact tarifaire.
+          </p>
+        ) : aucunImpact ? (
+          <p className="text-muted-foreground">Aucun impact tarifaire.</p>
+        ) : (
+          <>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div>
+                <p className="text-muted-foreground text-xs">
+                  Ancien montant restant
+                </p>
+                <p className="font-medium">
+                  {preview.ancienMontantRestant} MAD
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">
+                  Nouveau montant restant
+                </p>
+                <p className="font-medium">
+                  {preview.nouveauMontantRestant} MAD
+                </p>
+              </div>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-xs">Différence</p>
+              <p className="font-semibold">{preview.difference} MAD</p>
+            </div>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------
+// 5. Résumé (étape de confirmation, avant tout appel API)
 // ---------------------------------------------------------------------
 function SummarySection({
   stay,
@@ -219,7 +389,19 @@ export function ChangeRoomDialog({
   const [step, setStep] = useState<'selection' | 'confirmation'>('selection');
   const [newRoomId, setNewRoomId] = useState<number | null>(null);
   const [motif, setMotif] = useState('');
+  const [preview, setPreview] = useState<ChangeRoomPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<unknown>(null);
   const submitLockRef = useRef(false);
+  // DESIGN-009B — erreur de commit (`error` prop) déjà prise en compte par
+  // un nouvel aperçu tarifaire (Modifier → Continuer) : sans ceci, un
+  // aperçu fraîchement rechargé resterait écrasé par l'ancienne erreur
+  // CHANGE_ROOM_PREVIEW_STALE tant que le parent ne l'a pas explicitement
+  // effacée (il ne le fait qu'au prochain clic Confirmer). `useState` et
+  // non `useRef` : lu pendant le rendu ci-dessous (react-hooks/refs
+  // interdit de lire un ref pendant le rendu), écrit uniquement depuis un
+  // gestionnaire d'évènement (handleContinue), jamais pendant le rendu.
+  const [ignoredError, setIgnoredError] = useState<unknown>(null);
   // Revue qualité PR #79 : focus initial explicite manquant (régression vs
   // ExtendStayDialog). Cible le titre plutôt qu'un champ précis — même
   // convention que ReservationCheckinDialog (headingRef), pertinente ici
@@ -239,6 +421,9 @@ export function ChangeRoomDialog({
     setStep('selection');
     setNewRoomId(null);
     setMotif('');
+    setPreview(null);
+    setPreviewError(null);
+    setIgnoredError(null);
   }
 
   useEffect(() => {
@@ -261,20 +446,57 @@ export function ChangeRoomDialog({
 
   const isSelectionValid = selectedRoom !== null && motif.trim().length >= 10;
 
+  // DESIGN-009B — seule la traduction CHANGE_ROOM_PREVIEW_STALE porte un
+  // aperçu de remplacement (`.preview`) : une fois qu'un nouvel aperçu a été
+  // rechargé (Modifier → Continuer, voir setIgnoredError ci-dessous), cette
+  // traduction devient obsolète et ne doit plus écraser l'aperçu fraîchement
+  // chargé — mais un message d'erreur générique/capacité (sans aperçu de
+  // remplacement) reste affiché tel quel, même comportement qu'avant
+  // DESIGN-009B (aucune régression du test "message backend tel quel").
+  const rawErrorTranslation = error ? translateChangeRoomError(error) : null;
+  const staleOverrideSuperseded = error === ignoredError;
+  const errorTranslation =
+    rawErrorTranslation?.kind === 'stale' && staleOverrideSuperseded
+      ? null
+      : rawErrorTranslation;
+  const effectivePreview =
+    errorTranslation?.kind === 'stale' ? errorTranslation.preview : preview;
+
   function handleOpenChange(next: boolean) {
     if (!next && !submitting) onClose();
   }
 
-  function handleContinue() {
-    if (!isSelectionValid) return;
-    setStep('confirmation');
+  async function handleContinue() {
+    if (!isSelectionValid || !selectedRoom || !stay || previewLoading) return;
+    // Toute erreur de commit affichée jusqu'ici concerne l'aperçu précédent
+    // — un nouvel aperçu la rend obsolète.
+    setIgnoredError(error);
+    setPreviewError(null);
+    setPreviewLoading(true);
+    try {
+      const result = await previewChangeRoom(stay.id, selectedRoom.id);
+      setPreview(result);
+      setStep('confirmation');
+    } catch (err) {
+      setPreviewError(err);
+    } finally {
+      setPreviewLoading(false);
+    }
   }
 
   function handleConfirm() {
-    if (!selectedRoom || submitLockRef.current) return;
+    if (!selectedRoom || !effectivePreview || submitLockRef.current) return;
     submitLockRef.current = true;
-    onConfirm(selectedRoom.id, motif.trim());
+    onConfirm(
+      selectedRoom.id,
+      motif.trim(),
+      effectivePreview.pricingFingerprint,
+    );
   }
+
+  const previewErrorTranslation = previewError
+    ? translateChangeRoomError(previewError)
+    : null;
 
   return (
     <Dialog open={stay !== null} onOpenChange={handleOpenChange}>
@@ -311,33 +533,42 @@ export function ChangeRoomDialog({
                       candidateRooms={candidateRooms}
                       selectedRoomId={newRoomId}
                       onSelect={setNewRoomId}
-                      disabled={submitting}
+                      disabled={previewLoading}
                     />
                     <MotifSection
                       motif={motif}
                       onChange={setMotif}
-                      disabled={submitting}
+                      disabled={previewLoading}
                     />
+                    {previewErrorTranslation && (
+                      <p className="text-destructive text-sm">
+                        {previewErrorTranslation.message}
+                      </p>
+                    )}
                   </>
                 )}
               </>
             ) : (
-              selectedRoom && (
-                <SummarySection
-                  stay={stay}
-                  newRoom={selectedRoom}
-                  motif={motif}
-                />
+              selectedRoom &&
+              effectivePreview && (
+                <>
+                  <SummarySection
+                    stay={stay}
+                    newRoom={selectedRoom}
+                    motif={motif}
+                  />
+                  <PricingImpactSection preview={effectivePreview} />
+                </>
               )
             )}
 
-            {step === 'confirmation' && !!error && (
+            {step === 'confirmation' && errorTranslation && (
               <p className="text-destructive text-sm">
-                {getErrorMessage(error)}
+                {errorTranslation.message}
               </p>
             )}
 
-            {/* 5. Actions */}
+            {/* 6. Actions */}
             <DialogFooter>
               {step === 'selection' ? (
                 <>
@@ -347,10 +578,10 @@ export function ChangeRoomDialog({
                   {candidateRooms.length > 0 && (
                     <Button
                       type="button"
-                      onClick={handleContinue}
-                      disabled={!isSelectionValid}
+                      onClick={() => void handleContinue()}
+                      disabled={!isSelectionValid || previewLoading}
                     >
-                      Continuer
+                      {previewLoading ? 'Vérification…' : 'Continuer'}
                     </Button>
                   )}
                 </>

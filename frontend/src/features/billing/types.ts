@@ -1,6 +1,15 @@
 export interface FolioLine {
   id: number;
-  type: 'HEBERGEMENT' | 'EXTRA' | 'RESTAURANT' | 'TAXE_SEJOUR' | 'PAIEMENT';
+  type:
+    | 'HEBERGEMENT'
+    | 'EXTRA'
+    | 'RESTAURANT'
+    | 'TAXE_SEJOUR'
+    | 'PAIEMENT'
+    // DESIGN-009B — ajustement tarifaire d'un changement de chambre en
+    // cours de séjour (StayService.changeRoom), jamais saisi manuellement.
+    | 'AJUSTEMENT_HAUSSE'
+    | 'AJUSTEMENT_BAISSE';
   libelle: string;
   montant: string;
   tauxTva: string;

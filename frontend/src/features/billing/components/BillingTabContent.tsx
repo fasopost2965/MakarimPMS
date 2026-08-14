@@ -24,6 +24,10 @@ const TYPE_LIGNE_LABEL: Record<string, string> = {
   RESTAURANT: 'Restaurant',
   TAXE_SEJOUR: 'Taxe de séjour',
   PAIEMENT: 'Paiement',
+  // DESIGN-009B — impact tarifaire d'un changement de chambre en cours de
+  // séjour (StayService.changeRoom), jamais saisi manuellement ici.
+  AJUSTEMENT_HAUSSE: 'Ajustement (hausse)',
+  AJUSTEMENT_BAISSE: 'Ajustement (baisse)',
 };
 
 const STATUT_FACTURE_LABEL: Record<string, string> = {
