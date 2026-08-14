@@ -124,6 +124,12 @@ describe('FIN-102 — composition du tarif public TTC (e2e)', () => {
     await prisma.payment.deleteMany({
       where: { folio: { stay: { room: { roomTypeId } } } },
     });
+    // DESIGN-010 — le test « facture EMISE + départ anticipé » crée un
+    // CreditNote (avoir) : à supprimer avant Invoice (contrainte FK), même
+    // précédent que billing.e2e-spec.ts.
+    await prisma.creditNote.deleteMany({
+      where: { invoice: { folio: { stay: { room: { roomTypeId } } } } },
+    });
     await prisma.invoice.deleteMany({
       where: { folio: { stay: { room: { roomTypeId } } } },
     });
@@ -586,6 +592,94 @@ describe('FIN-102 — composition du tarif public TTC (e2e)', () => {
       },
     });
     expect(auditLog).not.toBeNull();
+  });
+
+  // DESIGN-010 (Billing Center, mission §7/§23.D) — gap réel identifié à
+  // l'audit de la garde « facture figée » : rien n'empêche aujourd'hui
+  // BillingService.generateInvoice() d'émettre une facture EMISE sur le
+  // folio d'un séjour encore EN_COURS (aucune vérification de Stay.statut
+  // dans generateInvoice — voir aussi le commentaire dédié dans
+  // billing/utils/invoice.pdf.spec.ts). Un départ anticipé consécutif à une
+  // telle facture écrivait alors directement dans FolioLine
+  // (StayService.reconcileTaxeSejourDepartAnticipe : annulation +
+  // recréation de TAXE_SEJOUR/HEBERGEMENT), en dehors de
+  // BillingService.addFolioLine/cancelFolioLine et de leur garde « facture
+  // émise » — écart silencieux entre le solde recalculé au check-out et la
+  // facture déjà émise et remise au client, jamais mis à jour. Corrigé en
+  // ajoutant la même garde dans reconcileTaxeSejourDepartAnticipe elle-même
+  // (StayService), avant toute écriture, dans la même transaction que le
+  // check-out.
+  it('facture EMISE active sur le folio + départ anticipé → check-out rejeté (409), aucune réconciliation FolioLine', async () => {
+    const room = await createRoom('DEPART-ANTICIPE-EMISE');
+    const dateCheckoutPrevue = new Date(Date.now() + 4 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    const res = await receptionClient.post('/api/checkin/walk-in').send({
+      roomId: room.id,
+      dateCheckoutPrevue,
+      nombreOccupants: 2,
+      formule: 'ROOM_ONLY',
+      guest: { nom: 'DepartEmise', prenom: 'Anticipe' },
+    });
+    const stay = res.body as StayResponse;
+    const principal = findFolioPrincipal(stay);
+
+    // Générer une facture EMISE alors que le séjour est encore EN_COURS —
+    // seule façon d'atteindre ce scénario, aucune restriction serveur ne
+    // l'empêche aujourd'hui (voir commentaire ci-dessus).
+    const invoiceRes = await adminClient
+      .post(`/api/invoices/generer?folioId=${principal.id}`)
+      .send({});
+    expect(invoiceRes.status).toBe(201);
+    const invoice = invoiceRes.body as InvoiceResponse;
+    expect(invoice.statut).toBe('EMISE');
+
+    const lignesAvant = (await refetchStayFolios(stay.id)).folios.flatMap(
+      (f) => f.lignes,
+    );
+
+    // Preuve de rigueur sabotage/restore : avant l'ajout de la garde dans
+    // reconcileTaxeSejourDepartAnticipe (StayService), ce check-out forcé
+    // renvoyait 201 et réécrivait silencieusement TAXE_SEJOUR/HEBERGEMENT
+    // sur un folio déjà couvert par une facture EMISE — vérifié en
+    // retirant temporairement l'appel à assertFolioNonFacture() pendant le
+    // développement (201 au lieu du 409 attendu ci-dessous, confirmant que
+    // ce test est discriminant), puis restauré.
+    const checkoutRes = await adminClient
+      .post(`/api/checkout/${stay.id}`)
+      .send({
+        force: true,
+        motif: 'Départ anticipé test DESIGN-010 (folio déjà facturé)',
+      });
+    expect(checkoutRes.status).toBe(409);
+
+    // Aucune écriture FolioLine (ni annulation, ni recréation) : le séjour
+    // reste EN_COURS, la facture EMISE conserve la valeur exacte du folio
+    // qu'elle a figée.
+    const stayApres = await prisma.stay.findUniqueOrThrow({
+      where: { id: stay.id },
+    });
+    expect(stayApres.statut).toBe('EN_COURS');
+    const lignesApres = (await refetchStayFolios(stay.id)).folios.flatMap(
+      (f) => f.lignes,
+    );
+    expect(lignesApres.length).toBe(lignesAvant.length);
+    expect(lignesApres.every((l) => !l.annulee)).toBe(true);
+
+    // Avoir total : débloque le folio, un check-out forcé identique
+    // réussit alors normalement (réconciliation TAXE_SEJOUR appliquée).
+    const creditNoteRes = await adminClient
+      .post(`/api/invoices/${invoice.id}/credit-notes`)
+      .send({ motif: 'Avoir de test e2e pour débloquer le check-out' });
+    expect(creditNoteRes.status).toBe(201);
+
+    const checkoutApresAvoirRes = await adminClient
+      .post(`/api/checkout/${stay.id}`)
+      .send({
+        force: true,
+        motif: 'Départ anticipé après avoir — doit réussir',
+      });
+    expect(checkoutApresAvoirRes.status).toBe(201);
   });
 
   it('plusieurs taxes statutaires simultanées : la boucle fonctionne avec une seconde TaxRateConfig de test', async () => {

@@ -5,9 +5,10 @@ export const PERMISSION_KEY = 'requiredPermission';
 export interface RequiredPermission {
   module: string;
   // 'control' (housekeeping), 'change-room' (GL-002, stay), 'extend'
-  // (GL-003, stay) et 'report-incident' (B0.4A, housekeeping mobile) sont des
-  // actions dédiées hors de la grille CRUD générique mais dont l'exigibilité
-  // ne dépend jamais du contenu de la requête (contrairement à
+  // (GL-003, stay), 'report-incident' (B0.4A, housekeeping mobile) et 'send'
+  // (DESIGN-010, billing — demande d'envoi d'une facture déjà émise) sont
+  // des actions dédiées hors de la grille CRUD générique mais dont
+  // l'exigibilité ne dépend jamais du contenu de la requête (contrairement à
   // guests:blacklist/checkin:force-checkout/payments:refund, qui restent
   // volontairement hors de cette union et vérifiés dynamiquement dans le
   // service concerné) — elles peuvent donc être exprimées directement par ce
@@ -20,7 +21,8 @@ export interface RequiredPermission {
     | 'control'
     | 'change-room'
     | 'extend'
-    | 'report-incident';
+    | 'report-incident'
+    | 'send';
 }
 
 // Déclare la permission (module, action) nécessaire pour atteindre une

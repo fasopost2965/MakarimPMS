@@ -1,9 +1,9 @@
 import type { LucideIcon } from 'lucide-react';
 import {
-  BarChart3,
   BedDouble,
   CalendarRange,
   KeyRound,
+  Receipt,
   Sparkles,
   UtensilsCrossed,
   Users,
@@ -29,8 +29,13 @@ import type { DashboardTarget } from '../pages/DashboardPage';
 //
 // Écart assumé vs nav-items.ts : "Chambres" et "Housekeeping" pointent
 // toutes deux vers l'onglet réel `housekeeping` (aucun onglet "Rooms" dédié
-// aujourd'hui, CLAUDE.md/RD-024) — signalé ici plutôt que masqué. De même
-// "Facturation" pointe vers `checkin` (Folio/Billing y vit, CLAUDE.md).
+// aujourd'hui, CLAUDE.md/RD-024) — signalé ici plutôt que masqué.
+// DESIGN-010 — "Facturation" pointe désormais vers le vrai module Billing
+// Center (`billing`, permission `billing:read`) au lieu de `checkin` :
+// changement de comportement assumé, la Réception (qui n'a pas
+// `billing:read` aujourd'hui, RBAC gelé par la mission) ne voit plus cette
+// tuile alors qu'elle voyait auparavant l'onglet Facturation embarqué dans
+// checkin.
 interface ModuleDef {
   key: string;
   tab: DashboardTarget;
@@ -99,10 +104,10 @@ const MODULES: ModuleDef[] = [
   },
   {
     key: 'facturation',
-    tab: 'checkin',
+    tab: 'billing',
     label: 'Facturation',
-    icon: BarChart3,
-    permission: 'checkin:read',
+    icon: Receipt,
+    permission: 'billing:read',
     bg: 'bg-violet-600',
     hover: 'hover:bg-violet-700',
   },

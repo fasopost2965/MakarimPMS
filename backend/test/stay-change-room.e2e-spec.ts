@@ -1050,6 +1050,20 @@ describe('Stay - Change Room (GL-002)', () => {
       await prisma.roomNight.deleteMany({
         where: { room: { roomTypeId: { in: typeIds } } },
       });
+      // DESIGN-010 — le test « facture EMISE active → changeRoom rejeté »
+      // ci-dessus génère une Invoice (+ un CreditNote) sur le folio d'un
+      // séjour de ce bloc : les supprimer avant Folio/FolioLine (contrainte
+      // FK), même précédent que billing.e2e-spec.ts.
+      await prisma.creditNote.deleteMany({
+        where: {
+          invoice: {
+            folio: { stay: { room: { roomTypeId: { in: typeIds } } } },
+          },
+        },
+      });
+      await prisma.invoice.deleteMany({
+        where: { folio: { stay: { room: { roomTypeId: { in: typeIds } } } } },
+      });
       await prisma.folioLine.deleteMany({
         where: { folio: { stay: { room: { roomTypeId: { in: typeIds } } } } },
       });
@@ -1475,6 +1489,82 @@ describe('Stay - Change Room (GL-002)', () => {
         where: { id: typeDeluxe.id },
         data: { prixBase: 500 },
       });
+    });
+
+    // DESIGN-010 (Billing Center, mission §23.D) — « facture figée » :
+    // changeRoom() écrit sa ligne d'ajustement (AJUSTEMENT_HAUSSE/BAISSE)
+    // exclusivement via BillingService.addFolioLine (voir stay.service.ts),
+    // qui porte déjà la garde « facture EMISE active » (CH-050). Ce test
+    // n'a corrigé aucun code — il PROUVE que ce chemin est bien couvert
+    // (mission : « ce test doit exister pour le PROUVER, pas nécessairement
+    // pour corriger du code neuf »). Rien n'empêche aujourd'hui de générer
+    // une facture sur le folio d'un séjour encore EN_COURS
+    // (BillingService.generateInvoice ne vérifie jamais Stay.statut) — donc
+    // ce scénario est réellement atteignable, pas seulement théorique.
+    it('facture EMISE active sur le folio → changeRoom rejeté (409, hérité d’addFolioLine)', async () => {
+      const { stay: s, roomB } = await createStay3Nuits(
+        typeBasique.id,
+        typeDeluxe.id,
+      );
+
+      const previewRes = await receptionClient
+        .post(`/api/stays/${s.id}/change-room/preview`)
+        .send({ newRoomId: roomB.id });
+      expect(previewRes.status).toBe(201);
+      const preview = previewRes.body as ChangeRoomPreviewResponse;
+
+      const folio = await prisma.folio.findFirstOrThrow({
+        where: { stayId: s.id },
+      });
+      const invoiceRes = await adminClient
+        .post(`/api/invoices/generer?folioId=${folio.id}`)
+        .send({});
+      expect(invoiceRes.status).toBe(201);
+
+      const nbLignesAvant = await prisma.folioLine.count({
+        where: { folioId: folio.id },
+      });
+
+      const changeRes = await receptionClient
+        .post(`/api/stays/${s.id}/change-room`)
+        .send({
+          newRoomId: roomB.id,
+          motif: 'Tentative de changement après facture émise (e2e)',
+          pricingFingerprint: preview.pricingFingerprint,
+        });
+      expect(changeRes.status).toBe(409);
+
+      // Aucune ligne AJUSTEMENT_HAUSSE/BAISSE créée, Stay.roomId inchangé.
+      const nbLignesApres = await prisma.folioLine.count({
+        where: { folioId: folio.id },
+      });
+      expect(nbLignesApres).toBe(nbLignesAvant);
+      const stayApres = await prisma.stay.findUniqueOrThrow({
+        where: { id: s.id },
+      });
+      expect(stayApres.roomId).not.toBe(roomB.id);
+
+      // Avoir total : débloque le folio, changeRoom redevient possible.
+      const creditNoteRes = await adminClient
+        .post(
+          `/api/invoices/${(invoiceRes.body as { id: number }).id}/credit-notes`,
+        )
+        .send({ motif: 'Avoir de test e2e pour débloquer changeRoom' });
+      expect(creditNoteRes.status).toBe(201);
+
+      const freshPreview = await receptionClient
+        .post(`/api/stays/${s.id}/change-room/preview`)
+        .send({ newRoomId: roomB.id });
+      expect(freshPreview.status).toBe(201);
+      const retryRes = await receptionClient
+        .post(`/api/stays/${s.id}/change-room`)
+        .send({
+          newRoomId: roomB.id,
+          motif: 'Changement après avoir — doit réussir',
+          pricingFingerprint: (freshPreview.body as ChangeRoomPreviewResponse)
+            .pricingFingerprint,
+        });
+      expect(retryRes.status).toBe(201);
     });
   });
 });

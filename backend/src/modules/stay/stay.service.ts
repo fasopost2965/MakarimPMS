@@ -798,6 +798,30 @@ export class StayService {
 
     const taxesStatutaires = await this.getTaxesStatutaires(tx);
     let totalReclasseVersHebergement = new Prisma.Decimal(0);
+    // DESIGN-010 (audit facture figée) — rien n'empêche aujourd'hui
+    // BillingService.generateInvoice() d'émettre une facture sur le folio
+    // d'un séjour encore EN_COURS (aucune vérification de Stay.statut dans
+    // generateInvoice). Un départ anticipé consécutif à une telle facture
+    // écrirait donc directement dans FolioLine (annulation + recréation
+    // TAXE_SEJOUR/HEBERGEMENT ci-dessous) sans jamais passer par
+    // BillingService.addFolioLine/cancelFolioLine, contournant leur garde
+    // "facture émise". Vérifiée ici une seule fois avant toute écriture,
+    // uniquement si une réconciliation réelle serait nécessaire (sinon
+    // aucune écriture n'a jamais lieu, inutile de bloquer un checkout sans
+    // impact financier).
+    let invoicesActivesCache: { statut: string }[] | null = null;
+    const assertFolioNonFacture = async () => {
+      if (invoicesActivesCache === null) {
+        invoicesActivesCache = await tx.invoice.findMany({
+          where: { folioId: folioPrincipal.id },
+        });
+      }
+      if (invoicesActivesCache.some((i) => i.statut === 'EMISE')) {
+        throw new ConflictException(
+          `Une facture active existe déjà pour le folio ${folioPrincipal.id} — impossible de réconcilier la taxe de séjour d'un départ anticipé dont la facture est déjà émise. Génère un avoir avant le check-out.`,
+        );
+      }
+    };
 
     for (const taxe of taxesStatutaires) {
       const lignesActives = folioPrincipal.lignes.filter(
@@ -823,6 +847,8 @@ export class StayService {
         new Prisma.Decimal(0),
       );
       if (nouveauMontant.gte(ancienMontantTotal)) continue;
+
+      await assertFolioNonFacture();
 
       for (const ligne of lignesActives) {
         await tx.folioLine.update({
@@ -2038,6 +2064,22 @@ export class StayService {
         if (!folioPrincipal) {
           throw new NotFoundException(
             `Aucun folio trouvé pour le séjour ${id}.`,
+          );
+        }
+        // DESIGN-010 (audit facture figée) — la ligne TAXE_SEJOUR du delta
+        // (étape suivante) est écrite directement via tx.folioLine.create,
+        // en dehors de BillingService.addFolioLine (qui n'accepte pas
+        // taxRateConfigId) : elle échapperait donc à la garde "facture
+        // émise" qu'addFolioLine applique déjà aux lignes HEBERGEMENT/EXTRA
+        // ci-dessous. Vérifiée ici, une seule fois, avant toute écriture de
+        // cette étape — même message/sémantique que
+        // BillingService.addFolioLine.
+        const invoicesActives = await tx.invoice.findMany({
+          where: { folioId: folioPrincipal.id },
+        });
+        if (invoicesActives.some((i) => i.statut === 'EMISE')) {
+          throw new ConflictException(
+            `Une facture active existe déjà pour le folio ${folioPrincipal.id} — impossible de prolonger un séjour dont la facture est déjà émise. Génère un avoir avant de prolonger.`,
           );
         }
         await this.billingService.addFolioLine(

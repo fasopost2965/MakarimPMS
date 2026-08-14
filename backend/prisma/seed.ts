@@ -535,6 +535,16 @@ async function main() {
   permissions['purchase-orders:valider'] = await prisma.permission.create({
     data: { module: 'purchase-orders', action: 'valider' },
   });
+  // DESIGN-010 (correction RBAC finale suite) — demande de la facture au
+  // client (POST /invoices/:id/envoyer) : action distincte de billing:write,
+  // même famille que guests:blacklist/payments:refund/checkin:force-checkout
+  // ci-dessus. Ne modifie aucun montant/ligne de folio (juste une
+  // notification asynchrone) — la Réception peut donc la déclencher sans
+  // recevoir billing:write (générer une facture / créer un avoir restent
+  // billing:write, réservé au Comptable/Administrateur).
+  permissions['billing:send'] = await prisma.permission.create({
+    data: { module: 'billing', action: 'send' },
+  });
   // HK-P1-03A — contrôle final, refus et réouverture d'une tâche de ménage.
   // Permission dédiée à la Gouvernante et à l'Administrateur, jamais déduite
   // du nom de rôle dans le code applicatif.
@@ -593,6 +603,22 @@ async function main() {
         // jamais elle-même (contrôle interne de caisse, réservé au
         // Comptable/Admin).
         'payments:read',
+        // billing:read (DESIGN-010 §correction RBAC finale) — la Réception
+        // consulte le Billing Center (registre, recherche, panneau facture,
+        // PDF, impression, dossiers « à facturer ») mais ne génère jamais
+        // de facture ni d'avoir (billing:write réservé au Comptable/
+        // Administrateur, même séparation que payments:read/write
+        // ci-dessus).
+        'billing:read',
+        // billing:send (DESIGN-010 §correction RBAC finale suite, décision
+        // produit explicite) — permission dédiée distincte de billing:write
+        // pour POST /invoices/:id/envoyer (demande d'envoi email/WhatsApp) :
+        // n'écrit jamais dans FolioLine/Invoice, seulement un déclenchement
+        // asynchrone journalisé dans NotificationLog. La Réception peut
+        // donc envoyer une facture déjà émise à son client sans recevoir
+        // billing:write (générer une facture / créer un avoir restent hors
+        // de portée, voir billing-center.e2e-spec.ts pour la preuve RBAC).
+        'billing:send',
         // parameters:read seul (docs/modules/parameters.md §7) — la
         // Réception consulte la grille tarifaire saisonnière pour conseiller
         // un tarif, mais ne modifie jamais un taux/l'identité de l'hôtel
@@ -648,6 +674,12 @@ async function main() {
       permissionKeys: [
         'billing:read',
         'billing:write',
+        // billing:send (DESIGN-010 §correction RBAC finale suite) — couvert
+        // implicitement par billing:write pour le Comptable (aucune
+        // restriction supplémentaire n'a de sens pour ce rôle), mais
+        // attribué explicitement pour rester cohérent avec la matrice
+        // gelée par la mission (Administrateur/Comptable/Réception).
+        'billing:send',
         'payments:read',
         'payments:write',
         'dashboard:read',

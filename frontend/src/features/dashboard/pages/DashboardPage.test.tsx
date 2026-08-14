@@ -122,6 +122,39 @@ describe('DashboardPage — personnalisation par permissions', () => {
     ).not.toBeInTheDocument();
   });
 
+  // DESIGN-010 — la tuile "Facturation" ouvre désormais le vrai module
+  // Billing Center (`billing`, permission `billing:read`) au lieu de
+  // `checkin`. Réception (billing:read absent aujourd'hui, RBAC gelé) ne
+  // doit plus voir cette tuile.
+  it('affiche la tuile Facturation seulement avec billing:read, et navigue vers l’onglet billing', async () => {
+    const onNavigate = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <DashboardPage
+        onNavigate={onNavigate}
+        permissions={['dashboard:read', 'billing:read']}
+      />,
+    );
+
+    const tile = await screen.findByRole('button', { name: /Facturation/ });
+    await user.click(tile);
+    expect(onNavigate).toHaveBeenCalledWith('billing');
+  });
+
+  it('masque la tuile Facturation sans billing:read (ex. Réception, checkin:read seul)', async () => {
+    render(
+      <DashboardPage
+        onNavigate={vi.fn()}
+        permissions={['dashboard:read', 'checkin:read']}
+      />,
+    );
+
+    await screen.findByText("Taux d'occupation");
+    expect(
+      screen.queryByRole('button', { name: /Facturation/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it('navigue vers le bon onglet au clic sur une tuile Accès rapides', async () => {
     const onNavigate = vi.fn();
     const user = userEvent.setup();

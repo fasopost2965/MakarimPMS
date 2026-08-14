@@ -8,23 +8,27 @@ import { randomBytes } from 'node:crypto';
 import {
   AuditAction,
   AuditEntity,
+  FolioLine,
   Prisma,
   TypeLigneFolio,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ParametersService } from '../parameters/parameters.service';
 import { AuditService } from '../audit/audit.service';
+import { getTodayRange } from '../../common/utils/date-range';
 // Utilitaire pur (aucun Prisma/DI), même précédent que
 // StayService.createFolioPrincipal — pas une façade de module à contourner.
 import { getNightsBetween } from '../reservations/utils/nights';
 // UX-001B — même précédent que getNightsBetween ci-dessus : utilitaire pur
 // (aucun Prisma/DI), computeFolioSummary délègue à computeSoldeDu (LA
 // fonction canonique unique de calcul du solde, jamais réimplémentée ici).
-import { computeFolioSummary } from '../stay/utils/solde';
+import { computeFolioSummary, computeSoldeDu } from '../stay/utils/solde';
 import { AddFolioLineDto } from './dto/add-folio-line.dto';
 import { ExcludeFolioTaxesDto } from './dto/exclude-folio-taxes.dto';
 import { CreateCreditNoteDto } from './dto/create-credit-note.dto';
 import { CancelFolioLineDto } from './dto/cancel-folio-line.dto';
+import { ListInvoicesQueryDto } from './dto/list-invoices-query.dto';
+import { ListStaysFacturablesQueryDto } from './dto/list-stays-facturables-query.dto';
 import {
   calculateInvoiceTotal,
   computeTaxLineAmount,
@@ -648,12 +652,22 @@ export class BillingService {
     return this.generateInvoicePdf(record.invoiceId);
   }
 
+  // DESIGN-010 — stay.guest/stay.room.roomType ajoutés à l'include (absents
+  // avant cette itération) : le panneau facture du Billing Center (mission
+  // §14) a besoin du client/de la chambre affichés sans requête
+  // supplémentaire, même contexte que generateInvoicePdf ci-dessus, qui
+  // charge déjà exactement ces mêmes relations pour construire le PDF.
   async findInvoiceById(id: number) {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id },
       include: {
         folio: {
-          include: { lignes: true, stay: true },
+          include: {
+            lignes: true,
+            stay: {
+              include: { guest: true, room: { include: { roomType: true } } },
+            },
+          },
         },
         creditNotes: true,
         payments: true,
@@ -693,5 +707,243 @@ export class BillingService {
       where: { folio: { stay: { guestId } } },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  // DESIGN-010 (Billing Center) — GET /invoices, registre global paginé.
+  // Date filtrée sur Invoice.createdAt (date d'émission, jamais modifiée —
+  // mission §3). Sélection volontairement étroite (pas d'`include` complet
+  // du folio/de ses lignes) : seuls les champs affichés par le registre
+  // (client/séjour/chambre/montant/statut) sont chargés, pour éviter
+  // l'over-fetch explicitement proscrit par la mission.
+  async findInvoicesPaginated(query: ListInvoicesQueryDto) {
+    const { page, limit, from, to, numero, statut, guestId, stayId, roomId } =
+      query;
+    const take = Math.min(limit, 100);
+    const skip = (page - 1) * take;
+
+    const where: Prisma.InvoiceWhereInput = {};
+    if (from || to) {
+      where.createdAt = {
+        ...(from ? { gte: new Date(from) } : {}),
+        ...(to ? { lte: new Date(to) } : {}),
+      };
+    }
+    if (numero) where.numero = { contains: numero };
+    if (statut) where.statut = statut;
+    if (guestId || stayId || roomId) {
+      where.folio = {
+        stay: {
+          ...(guestId ? { guestId } : {}),
+          ...(stayId ? { id: stayId } : {}),
+          ...(roomId ? { roomId } : {}),
+        },
+      };
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.invoice.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          numero: true,
+          montantTotal: true,
+          statut: true,
+          createdAt: true,
+          folio: {
+            select: {
+              id: true,
+              stay: {
+                select: {
+                  id: true,
+                  guest: { select: { id: true, nom: true, prenom: true } },
+                  room: { select: { id: true, numero: true } },
+                },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.invoice.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: { page, limit: take, total, totalPages: Math.ceil(total / take) },
+    };
+  }
+
+  // DESIGN-010 — GET /stays/facturables. Définition v1 gelée (mission §5) :
+  // Stay.statut = CHECKOUT ET aucune Invoice EMISE active sur son/ses
+  // folio(s) (une facture ANNULEE_PAR_AVOIR ne bloque jamais une nouvelle
+  // facturation — `none: { invoices: { some: { statut: EMISE } } }` exclut
+  // donc bien uniquement les folios encore couverts par une facture
+  // active).
+  //
+  // Champ de période choisi : Stay.dateCheckoutReelle (jamais
+  // dateCheckoutPrevue, qui reste une prévision, ni Folio.createdAt, qui
+  // date de l'ouverture du folio — au check-in, bien avant que le séjour ne
+  // devienne facturable). dateCheckoutReelle est renseigné exactement au
+  // moment où StayService.checkout() fait passer Stay.statut à CHECKOUT
+  // (même transaction) — c'est donc la seule date qui correspond
+  // exactement à "quand ce séjour est devenu facturable".
+  async findStaysFacturables(query: ListStaysFacturablesQueryDto) {
+    const { page, limit, from, to, guestId, roomId } = query;
+    const take = Math.min(limit, 100);
+    const skip = (page - 1) * take;
+
+    const where: Prisma.StayWhereInput = {
+      statut: 'CHECKOUT',
+      folios: { none: { invoices: { some: { statut: 'EMISE' } } } },
+      ...(guestId ? { guestId } : {}),
+      ...(roomId ? { roomId } : {}),
+    };
+    if (from || to) {
+      where.dateCheckoutReelle = {
+        ...(from ? { gte: new Date(from) } : {}),
+        ...(to ? { lte: new Date(to) } : {}),
+      };
+    }
+
+    const [stays, total] = await Promise.all([
+      this.prisma.stay.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { dateCheckoutReelle: 'desc' },
+        select: {
+          id: true,
+          dateCheckin: true,
+          dateCheckoutPrevue: true,
+          dateCheckoutReelle: true,
+          guest: { select: { id: true, nom: true, prenom: true } },
+          room: { select: { id: true, numero: true } },
+          folios: {
+            select: {
+              id: true,
+              lignes: {
+                select: { type: true, montant: true, annulee: true },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.stay.count({ where }),
+    ]);
+
+    // Total facturable — même formule que BillingService.generateInvoice
+    // appliquerait sur ces lignes (calculateInvoiceTotal), jamais une
+    // seconde formule financière inventée pour cet écran (mission §6.D).
+    // N'inclut pas d'éventuelles taxes de séjour encore à matérialiser pour
+    // un séjour legacy (Stay.nombreOccupants IS NULL, cf.
+    // generateInvoice) — limitation acceptée, ce total reste indicatif tant
+    // que la facture n'est pas réellement générée.
+    const data = stays.map((stay) => {
+      const totalFacturable = stay.folios.reduce(
+        (acc, folio) =>
+          acc.add(
+            calculateInvoiceTotal(folio.lignes as unknown as FolioLine[]),
+          ),
+        new Prisma.Decimal(0),
+      );
+      return { ...stay, totalFacturable: totalFacturable.toFixed(2) };
+    });
+
+    return {
+      data,
+      meta: { page, limit: take, total, totalPages: Math.ceil(total / take) },
+    };
+  }
+
+  // DESIGN-010 — bande de KPI du Billing Center. Formules gelées par la
+  // mission (§6) :
+  //   A. Factures aujourd'hui = COUNT(Invoice créée aujourd'hui), toute
+  //      facture confondue (EMISE ou déjà ANNULEE_PAR_AVOIR — l'émission a
+  //      bien eu lieu aujourd'hui, ce compteur d'activité n'est pas un
+  //      indicateur de CA).
+  //   B. CA facturé = SUM(Invoice.montantTotal) sur la période demandée,
+  //      EXCLUT les factures ANNULEE_PAR_AVOIR (préférence produit
+  //      explicite, mission §6.B).
+  //   C. À facturer = COUNT(résultat de findStaysFacturables), mêmes
+  //      filtres from/to/guestId/roomId.
+  //   D. À encaisser = SUM(computeSoldeDu par folio, folios à solde
+  //      positif) — jamais une formule financière divergente (mission
+  //      §6.D exige de réutiliser computeSoldeDu). Périmètre volontairement
+  //      borné (voir commentaire ci-dessous) plutôt que de charger tous les
+  //      folios existants de l'hôtel.
+  async getKpis(from?: string, to?: string) {
+    const { today, tomorrow } = getTodayRange();
+    const period: { gte?: Date; lte?: Date } = {};
+    if (from) period.gte = new Date(from);
+    if (to) period.lte = new Date(to);
+    const hasPeriod = Boolean(from || to);
+
+    const [facturesAujourdhui, invoicesActivesPeriode, staysFacturables] =
+      await Promise.all([
+        this.prisma.invoice.count({
+          where: { createdAt: { gte: today, lt: tomorrow } },
+        }),
+        this.prisma.invoice.findMany({
+          where: {
+            statut: 'EMISE',
+            ...(hasPeriod ? { createdAt: period } : {}),
+          },
+          select: { montantTotal: true },
+        }),
+        this.findStaysFacturables({
+          from,
+          to,
+          page: 1,
+          limit: 1,
+        }),
+      ]);
+
+    const caFacture = invoicesActivesPeriode.reduce(
+      (acc, i) => acc.add(i.montantTotal),
+      new Prisma.Decimal(0),
+    );
+
+    // À encaisser — périmètre réel couvert (documenté, mission §6.D) :
+    // uniquement les folios des séjours EN_COURS (dette active en cours de
+    // séjour) et des séjours CHECKOUT dont le départ réel remonte à moins
+    // de 30 jours (fenêtre de recouvrement usuelle pour un solde résiduel
+    // post-séjour). Un solde positif oublié sur un séjour clôturé il y a
+    // plus de 30 jours n'apparaît PAS dans ce total — parcourir tous les
+    // folios de l'historique complet de l'hôtel à chaque affichage du
+    // tableau de bord n'est pas une requête raisonnable pour ce projet
+    // (aucune agrégation SQL du solde n'existe : computeSoldeDu s'applique
+    // en mémoire sur les FolioLine chargées, jamais recalculée en SQL,
+    // CLAUDE.md règle 3).
+    const trenteJoursAvant = new Date(today);
+    trenteJoursAvant.setUTCDate(trenteJoursAvant.getUTCDate() - 30);
+    const foliosPourEncaisser = await this.prisma.folio.findMany({
+      where: {
+        stay: {
+          OR: [
+            { statut: 'EN_COURS' },
+            {
+              statut: 'CHECKOUT',
+              dateCheckoutReelle: { gte: trenteJoursAvant },
+            },
+          ],
+        },
+      },
+      select: {
+        lignes: { select: { type: true, montant: true, annulee: true } },
+      },
+    });
+    const aEncaisser = foliosPourEncaisser.reduce((acc, folio) => {
+      const solde = computeSoldeDu([folio]);
+      return solde.gt(0) ? acc.add(solde) : acc;
+    }, new Prisma.Decimal(0));
+
+    return {
+      facturesAujourdhui,
+      caFacture: caFacture.toFixed(2),
+      aFacturer: staysFacturables.meta.total,
+      aEncaisser: aEncaisser.toFixed(2),
+    };
   }
 }
