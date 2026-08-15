@@ -13,6 +13,11 @@ export interface RequiredPermission {
   // volontairement hors de cette union et vérifiés dynamiquement dans le
   // service concerné) — elles peuvent donc être exprimées directement par ce
   // décorateur statique.
+  // 'run'/'close' (ARCH-011A, module night-audit) sont deux actions dédiées
+  // supplémentaires, hors de la grille CRUD générique mais dont
+  // l'exigibilité ne dépend jamais du contenu de la requête — exprimables
+  // directement par ce décorateur statique, même famille que 'control'/
+  // 'change-room'/'extend' ci-dessus.
   action:
     | 'read'
     | 'write'
@@ -22,7 +27,9 @@ export interface RequiredPermission {
     | 'change-room'
     | 'extend'
     | 'report-incident'
-    | 'send';
+    | 'send'
+    | 'run'
+    | 'close';
 }
 
 // Déclare la permission (module, action) nécessaire pour atteindre une

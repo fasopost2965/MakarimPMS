@@ -545,6 +545,27 @@ export class StayService {
     });
   }
 
+  // ARCH-011A — façade en lecture seule pour night-audit (PRECHECK,
+  // contrôle DEPARTURES_UNRESOLVED, BLOCKER) : night-audit ne lit jamais la
+  // table Stay directement (CLAUDE.md, "un module ne doit jamais lire
+  // directement les tables d'un autre domaine via Prisma"). Distincte de
+  // departsToday ci-dessus (bornée à la fenêtre UTC du jour serveur) : ici
+  // `businessDate` (résolu dans le fuseau hôtel par
+  // BusinessDateService) est une borne <= explicite, pas une fenêtre
+  // [jour, jour+1[ — un séjour dont le départ était prévu il y a plusieurs
+  // jours et jamais clôturé doit rester bloquant tant qu'il n'est pas
+  // traité, pas seulement le jour même.
+  async findActiveStaysDueForCheckout(businessDate: Date) {
+    return this.prisma.stay.findMany({
+      where: {
+        statut: StatutSejour.EN_COURS,
+        dateCheckoutPrevue: { lte: businessDate },
+      },
+      include: STAY_INCLUDE,
+      orderBy: { room: { numero: 'asc' } },
+    });
+  }
+
   async findOne(id: number) {
     const stay = await this.prisma.stay.findUnique({
       where: { id },

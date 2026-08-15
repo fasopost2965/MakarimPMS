@@ -31,6 +31,7 @@ import { DocumentOcrModule } from './modules/document-ocr/document-ocr.module';
 import { ChannelManagerModule } from './modules/channel-manager/channel-manager.module';
 import { RestaurantModule } from './modules/restaurant/restaurant.module';
 import { PurchaseOrdersModule } from './modules/purchase-orders/purchase-orders.module';
+import { NightAuditModule } from './modules/night-audit/night-audit.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { CsrfGuard } from './common/guards/csrf.guard';
@@ -102,6 +103,7 @@ import { CsrfGuard } from './common/guards/csrf.guard';
     ChannelManagerModule,
     RestaurantModule,
     PurchaseOrdersModule,
+    NightAuditModule,
   ],
   controllers: [AppController],
   providers: [

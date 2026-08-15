@@ -6,6 +6,7 @@ import {
   History,
   KeyRound,
   LayoutDashboard,
+  Moon,
   Package,
   Receipt,
   ScanLine,
@@ -200,5 +201,17 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Settings,
     category: 'admin',
     permission: 'parameters:read',
+  },
+  {
+    tab: 'night-audit',
+    label: 'Night Audit',
+    icon: Moon,
+    // ARCH-011A — Réception/Comptable ont night-audit:read (consultation
+    // seule) ; night-audit:run/close (Administrateur uniquement) gèrent la
+    // visibilité des boutons de mutation à l'intérieur de l'écran, jamais
+    // l'accès à l'onglet lui-même (même convention que le reste de cette
+    // liste).
+    category: 'admin',
+    permission: 'night-audit:read',
   },
 ];
