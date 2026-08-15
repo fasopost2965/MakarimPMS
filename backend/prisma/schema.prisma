@@ -216,24 +216,24 @@ enum TypeLogTacheHousekeeping {
 // les états actifs : l'unicité nullable MySQL garantit ainsi au niveau base
 // qu'une chambre ne possède jamais deux tâches actives simultanément.
 model HousekeepingTask {
-  id             Int                      @id @default(autoincrement())
-  roomId         Int
-  room           Room                     @relation(fields: [roomId], references: [id], onDelete: Restrict)
-  assignedUserId Int?
-  assignedUser   User?                    @relation("HousekeepingTaskAssignedUser", fields: [assignedUserId], references: [id], onDelete: SetNull)
-  statut         StatutTacheHousekeeping  @default(A_FAIRE)
-  origine        OrigineTacheHousekeeping
-  sourceEventKey String?                  @unique @db.VarChar(64)
-  activeRoomKey  Int?                     @unique
-  assignedAt     DateTime?
-  startedAt      DateTime?
-  completedAt    DateTime?
-  validatedAt    DateTime?
-  cancelledAt    DateTime?
-  createdAt      DateTime                 @default(now())
-  updatedAt      DateTime                 @updatedAt
-  stockCycle     Int                      @default(1)
-  logs           HousekeepingTaskLog[]
+  id                Int                            @id @default(autoincrement())
+  roomId            Int
+  room              Room                           @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  assignedUserId    Int?
+  assignedUser      User?                          @relation("HousekeepingTaskAssignedUser", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  statut            StatutTacheHousekeeping        @default(A_FAIRE)
+  origine           OrigineTacheHousekeeping
+  sourceEventKey    String?                        @unique @db.VarChar(64)
+  activeRoomKey     Int?                           @unique
+  assignedAt        DateTime?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  validatedAt       DateTime?
+  cancelledAt       DateTime?
+  createdAt         DateTime                       @default(now())
+  updatedAt         DateTime                       @updatedAt
+  stockCycle        Int                            @default(1)
+  logs              HousekeepingTaskLog[]
   stockConsumptions HousekeepingStockConsumption[]
 
   @@index([roomId, createdAt])
@@ -248,19 +248,19 @@ enum HousekeepingStockConsumptionStatus {
 }
 
 model HousekeepingStockConsumption {
-  id                   Int                              @id @default(autoincrement())
-  housekeepingTaskId   Int
-  housekeepingTask     HousekeepingTask                 @relation(fields: [housekeepingTaskId], references: [id], onDelete: Restrict)
-  cycle                Int
-  stockItemId          Int
-  stockItem            StockItem                        @relation(fields: [stockItemId], references: [id], onDelete: Restrict)
-  quantite             Int
-  statut               HousekeepingStockConsumptionStatus @default(PENDING)
-  erreur               String?                          @db.VarChar(191)
-  createdAt            DateTime                         @default(now())
-  updatedAt            DateTime                         @updatedAt
-  processedAt          DateTime?
-  movement             StockMovement?
+  id                 Int                                @id @default(autoincrement())
+  housekeepingTaskId Int
+  housekeepingTask   HousekeepingTask                   @relation(fields: [housekeepingTaskId], references: [id], onDelete: Restrict)
+  cycle              Int
+  stockItemId        Int
+  stockItem          StockItem                          @relation(fields: [stockItemId], references: [id], onDelete: Restrict)
+  quantite           Int
+  statut             HousekeepingStockConsumptionStatus @default(PENDING)
+  erreur             String?                            @db.VarChar(191)
+  createdAt          DateTime                           @default(now())
+  updatedAt          DateTime                           @updatedAt
+  processedAt        DateTime?
+  movement           StockMovement?
 
   @@unique([housekeepingTaskId, cycle, stockItemId])
   @@index([statut, createdAt])
@@ -830,27 +830,35 @@ model Payment {
 // par la facturation (en-tête de facture) et par l'UI (devise, format de
 // date). Pas de multi-hôtel dans ce projet (voir CLAUDE.md).
 model HotelConfig {
-  id                Int      @id @default(autoincrement())
-  raisonSociale     String
-  ice               String
-  identifiantFiscal String
-  rc                String
-  adresse           String
+  id                                      Int      @id @default(autoincrement())
+  raisonSociale                           String
+  ice                                     String
+  identifiantFiscal                       String
+  rc                                      String
+  adresse                                 String
   // Logo de l'hôtel — data URI base64 (même convention que
   // MaintenanceTicket.photoUrl, CH-055 : jamais de persistance disque,
   // stockage LongText). Utilisé par le frontend (sidebar, écran de
   // connexion) et par la génération de facture PDF.
-  logoUrl           String?  @db.LongText
-  categorieEtoiles  Int
-  devise            String   @default("MAD")
-  formatDate        String   @default("DD/MM/YYYY")
+  logoUrl                                 String?  @db.LongText
+  categorieEtoiles                        Int
+  devise                                  String   @default("MAD")
+  formatDate                              String   @default("DD/MM/YYYY")
   // GL-003 — quand actif, une prolongation de séjour (StayService.extendStay)
   // n'est appliquée que si le crédit disponible du folio couvre déjà le
   // supplément (sinon 409 PAYMENT_REQUIRED, aucune écriture committée).
   // Défaut false : comportement actuel inchangé tant que l'Administrateur
   // n'active pas explicitement cette exigence via parameters:write.
-  paiementImmediatProlongationObligatoire Boolean @default(false)
-  updatedAt         DateTime @updatedAt
+  paiementImmediatProlongationObligatoire Boolean  @default(false)
+  // ARCH-011A — fuseau horaire hôtel, unique source de vérité pour la
+  // Business Date (jamais le fuseau du navigateur client). Consommé en
+  // façade par le module night-audit via ParametersService.getHotelConfig()
+  // — aucune lecture Prisma directe de HotelConfig hors du module
+  // parameters (CLAUDE.md, "parameters est un module feuille"). Valeur
+  // cible environnement actuel : "Africa/Casablanca", jamais codée en dur
+  // dans la logique métier night-audit elle-même (seulement en seed).
+  timezone                                String   @default("Africa/Casablanca")
+  updatedAt                               DateTime @updatedAt
 }
 
 model Role {
@@ -906,6 +914,11 @@ model User {
   purchaseOrdersValidated   PurchaseOrder[]       @relation("PurchaseOrderValidatedBy")
   housekeepingTasksAssigned HousekeepingTask[]    @relation("HousekeepingTaskAssignedUser")
   housekeepingTaskLogs      HousekeepingTaskLog[] @relation("HousekeepingTaskLogActor")
+  // ARCH-011A — Business Date / clôture de nuit (module night-audit).
+  businessDaysOpened        BusinessDay[]         @relation("BusinessDayOpenedBy")
+  businessDaysClosed        BusinessDay[]         @relation("BusinessDayClosedBy")
+  nightAuditRunsStarted     NightAuditRun[]
+  nightAuditExceptionsAcked NightAuditException[]
   // Soft delete (ADR-005 §3.1) — voir commentaire équivalent sur Reservation.
   deletedAt                 DateTime?
 
@@ -1129,21 +1142,21 @@ enum TypeMouvementStock {
 }
 
 model StockItem {
-  id                 Int                 @id @default(autoincrement())
-  code               String              @unique
-  libelle            String
-  quantiteDisponible Int                 @default(0)
-  seuilAlerte        Int
-  uniteMesure        String
+  id                            Int                            @id @default(autoincrement())
+  code                          String                         @unique
+  libelle                       String
+  quantiteDisponible            Int                            @default(0)
+  seuilAlerte                   Int
+  uniteMesure                   String
   // Marque les articles du kit d'accueil standard (savons, shampoings...)
   // soumis au décompte automatique de BR-STK-001. Les autres articles
   // (linge, fournitures) ne sont mouvementés que manuellement (réassort).
-  kitAccueil         Boolean             @default(false)
-  movements          StockMovement[]
+  kitAccueil                    Boolean                        @default(false)
+  movements                     StockMovement[]
   housekeepingStockConsumptions HousekeepingStockConsumption[]
-  purchaseOrderLines PurchaseOrderLine[]
-  createdAt          DateTime            @default(now())
-  deletedAt          DateTime?
+  purchaseOrderLines            PurchaseOrderLine[]
+  createdAt                     DateTime                       @default(now())
+  deletedAt                     DateTime?
 
   @@index([deletedAt])
 }
@@ -1154,22 +1167,22 @@ model StockItem {
 // déclenchée par le nettoyage n'a pas d'auteur humain direct (voir
 // StockService.decompterKitAccueil).
 model StockMovement {
-  id                   Int                @id @default(autoincrement())
-  stockItemId          Int
-  stockItem            StockItem          @relation(fields: [stockItemId], references: [id])
-  typeMouvement        TypeMouvementStock
-  quantite             Int
-  motif                String
+  id                             Int                           @id @default(autoincrement())
+  stockItemId                    Int
+  stockItem                      StockItem                     @relation(fields: [stockItemId], references: [id])
+  typeMouvement                  TypeMouvementStock
+  quantite                       Int
+  motif                          String
   // Renseigné uniquement pour une ENTREE de réassort (bon de livraison /
   // n° de commande fournisseur) — toujours null pour une SORTIE.
-  referenceFournisseur String?
-  userId               Int?
-  user                 User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
-  roomId               Int?
-  room                 Room?              @relation(fields: [roomId], references: [id])
-  createdAt            DateTime           @default(now())
-  housekeepingStockConsumptionId Int?    @unique
-  housekeepingStockConsumption HousekeepingStockConsumption? @relation(fields: [housekeepingStockConsumptionId], references: [id], onDelete: Restrict)
+  referenceFournisseur           String?
+  userId                         Int?
+  user                           User?                         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  roomId                         Int?
+  room                           Room?                         @relation(fields: [roomId], references: [id])
+  createdAt                      DateTime                      @default(now())
+  housekeepingStockConsumptionId Int?                          @unique
+  housekeepingStockConsumption   HousekeepingStockConsumption? @relation(fields: [housekeepingStockConsumptionId], references: [id], onDelete: Restrict)
 
   @@index([stockItemId])
   @@index([createdAt])
@@ -1415,6 +1428,10 @@ enum AuditEntity {
   Supplier
   PurchaseOrder
   HousekeepingTask
+  // ARCH-011A — Business Date / clôture de nuit (module night-audit).
+  BusinessDay
+  NightAuditRun
+  NightAuditException
 }
 
 enum AuditAction {
@@ -1506,6 +1523,13 @@ enum AuditAction {
   // (annulee=true + motifAnnulation) puis recréation au montant réellement
   // dû — jamais de montant négatif écrit directement.
   RECONCILE_TAXE_SEJOUR
+  // ARCH-011A — Business Date / clôture de nuit (module night-audit).
+  NIGHT_AUDIT_STARTED
+  NIGHT_AUDIT_WARNING_ACKNOWLEDGED
+  NIGHT_AUDIT_POSTING_COMPLETED
+  NIGHT_AUDIT_RECONCILIATED
+  BUSINESS_DAY_CLOSED
+  BUSINESS_DAY_OPENED
 }
 
 // ------------------------------------------------------------------
@@ -1568,4 +1592,178 @@ model AuditLog {
   @@index([targetEntity, targetId])
   @@index([userId])
   @@index([createdAt])
+}
+
+// ------------------------------------------------------------------
+// ARCH-011A — Business Date + Night Audit Foundation
+// ------------------------------------------------------------------
+//
+// Fondation uniquement : aucun champ businessDayId n'est ajouté à
+// Payment/FolioLine/Invoice dans cette itération (hors scope absolu, voir
+// CLAUDE.md). Le module night-audit ne fait que LIRE Reservation/Stay/
+// HousekeepingTask/MaintenanceTicket via les façades des modules
+// propriétaires — jamais d'écriture directe Prisma sur ces tables.
+
+enum BusinessDayStatus {
+  OPEN
+  CLOSING
+  CLOSED
+}
+
+enum BusinessDaySource {
+  SYSTEM_BOOTSTRAP
+  NIGHT_AUDIT
+}
+
+// Une ligne par journée d'exploitation hôtelière. `date` unique — jamais
+// deux BusinessDay pour le même jour. CLOSED = immuable (aucune
+// réouverture dans cette itération, voir CLAUDE.md/mission ARCH-011A).
+model BusinessDay {
+  id             Int               @id @default(autoincrement())
+  date           DateTime          @unique @db.Date
+  status         BusinessDayStatus @default(OPEN)
+  // Contrainte DB garantissant qu'une seule BusinessDay est OPEN à la fois
+  // (jamais un mutex mémoire) : dupliqué depuis l'id de cette même ligne
+  // uniquement pendant status=OPEN, remis à null dès CLOSING/CLOSED — MySQL
+  // autorise plusieurs valeurs NULL dans un index unique, même pattern déjà
+  // établi par HousekeepingTask.activeRoomKey (fondation HK-P1-03A).
+  openLock       Int?              @unique
+  openedAt       DateTime?
+  openedByUserId Int?
+  openedByUser   User?             @relation("BusinessDayOpenedBy", fields: [openedByUserId], references: [id])
+  closedAt       DateTime?
+  closedByUserId Int?
+  closedByUser   User?             @relation("BusinessDayClosedBy", fields: [closedByUserId], references: [id])
+  source         BusinessDaySource
+  nightAuditRuns NightAuditRun[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+}
+
+enum NightAuditRunStatus {
+  PRECHECK
+  EXCEPTIONS
+  POSTING
+  RECONCILIATION
+  CLOSING
+  COMPLETED
+  FAILED
+}
+
+// Un run = une exécution (persistante) du processus de nuit pour une
+// BusinessDay. Reprise après refresh navigateur/redémarrage backend :
+// aucun état de ce workflow ne vit en mémoire React ou serveur, tout est
+// relu depuis cette table + NightAuditStep/NightAuditException.
+model NightAuditRun {
+  id                   Int                   @id @default(autoincrement())
+  businessDayId        Int
+  businessDay          BusinessDay           @relation(fields: [businessDayId], references: [id])
+  status               NightAuditRunStatus   @default(PRECHECK)
+  // Un seul run actif par BusinessDay (contrainte DB) : dupliqué depuis
+  // businessDayId uniquement tant que status n'est ni COMPLETED ni FAILED,
+  // remis à null ensuite — même pattern que BusinessDay.openLock ci-dessus
+  // et HousekeepingTask.activeRoomKey.
+  activeBusinessDayKey Int?                  @unique
+  startedAt            DateTime              @default(now())
+  startedByUserId      Int?
+  startedByUser        User?                 @relation(fields: [startedByUserId], references: [id])
+  completedAt          DateTime?
+  failedAt             DateTime?
+  error                String?               @db.Text
+  // Snapshot figé (RECONCILIATION réussie) — jamais recalculé une fois la
+  // BusinessDay CLOSED (voir NightAuditService.getReport).
+  reportVersion        Int?
+  reportSnapshot       Json?
+  steps                NightAuditStep[]
+  exceptions           NightAuditException[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  @@index([businessDayId])
+}
+
+enum NightAuditStepType {
+  PRECHECK
+  POSTING_FOUNDATION
+  RECONCILIATION
+  CLOSING
+}
+
+enum NightAuditStepStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+// Idempotence stricte (idempotencyKey unique, format
+// "NIGHT_AUDIT:{businessDate}:{TYPE}") : une relance après crash relit
+// cette table avant toute mutation — jamais une seconde exécution
+// effective du même step pour la même BusinessDay.
+model NightAuditStep {
+  id             Int                  @id @default(autoincrement())
+  runId          Int
+  run            NightAuditRun        @relation(fields: [runId], references: [id])
+  type           NightAuditStepType
+  status         NightAuditStepStatus @default(PENDING)
+  attempt        Int                  @default(1)
+  idempotencyKey String               @unique
+  startedAt      DateTime?
+  completedAt    DateTime?
+  error          String?              @db.Text
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([runId])
+}
+
+enum NightAuditExceptionSeverity {
+  BLOCKER
+  WARNING
+  INFO
+}
+
+enum NightAuditExceptionStatus {
+  OPEN
+  RESOLVED
+  ACKNOWLEDGED
+}
+
+// entityType/entityId permettent au frontend d'ouvrir le module canonique
+// concerné (jamais de mutation Reservation/Stay/Housekeeping/Maintenance/
+// Billing depuis ce module — voir CLAUDE.md). BLOCKER ne peut jamais passer
+// à ACKNOWLEDGED (seule une revalidation qui ne détecte plus le problème le
+// fait passer à RESOLVED) — appliqué côté service, pas par une contrainte
+// SQL (MySQL 8 n'exprime pas correctement une contrainte CHECK inter-
+// colonnes portant sur un enum dépendant d'un autre enum de la même ligne,
+// voir CH-024 pour un précédent similaire déjà documenté dans ce projet).
+model NightAuditException {
+  id                    Int                         @id @default(autoincrement())
+  runId                 Int
+  run                   NightAuditRun               @relation(fields: [runId], references: [id])
+  code                  String
+  severity              NightAuditExceptionSeverity
+  entityType            String
+  entityId              Int?
+  status                NightAuditExceptionStatus   @default(OPEN)
+  message               String                      @db.Text
+  detectedAt            DateTime                    @default(now())
+  resolvedAt            DateTime?
+  acknowledgedAt        DateTime?
+  acknowledgedByUserId  Int?
+  acknowledgedByUser    User?                       @relation(fields: [acknowledgedByUserId], references: [id])
+  acknowledgementReason String?
+  metadata              Json?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+
+  // Empêche la duplication de la même exception au sein d'un même run lors
+  // d'une relecture idempotente du PRECHECK/REVALIDATE (upsert par cette
+  // clé). entityId nullable : MySQL autorise plusieurs NULL dans un index
+  // unique, donc cette contrainte ne dé-duplique pas les exceptions sans
+  // entité précise au sein d'un même run — cas rare, sans mutation
+  // concurrente possible (un seul run actif par BusinessDay).
+  @@unique([runId, code, entityType, entityId])
+  @@index([runId])
 }

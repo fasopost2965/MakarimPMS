@@ -104,6 +104,12 @@ const BillingPage = lazy(() =>
     default: m.BillingPage,
   })),
 );
+// ARCH-011A — Business Date + Night Audit.
+const NightAuditPage = lazy(() =>
+  import('@/features/night-audit/pages/NightAuditPage').then((m) => ({
+    default: m.NightAuditPage,
+  })),
+);
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { AppTopbar } from '@/components/layout/AppTopbar';
 import { NAV_ITEMS } from '@/components/layout/nav-items';
@@ -131,7 +137,8 @@ export type Tab =
   | 'notifications'
   | 'audit'
   | 'document-ocr'
-  | 'billing';
+  | 'billing'
+  | 'night-audit';
 type AuthScreen = 'login' | 'forgot-password';
 
 // Coquille applicative : sidebar repliable (navigation principale) + topbar
@@ -361,6 +368,9 @@ function App() {
               {tab === 'audit' && <AuditPage />}
               {tab === 'document-ocr' && <DocumentOcrPage />}
               {tab === 'billing' && <BillingPage permissions={permissions} />}
+              {tab === 'night-audit' && (
+                <NightAuditPage permissions={permissions} />
+              )}
             </Suspense>
           </ErrorBoundary>
         </div>

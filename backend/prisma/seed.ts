@@ -572,6 +572,29 @@ async function main() {
   permissions['stay:extend'] = await prisma.permission.create({
     data: { module: 'stay', action: 'extend' },
   });
+  // ARCH-011A — Business Date / clôture de nuit (module night-audit). Pas
+  // de module ajouté à ALL_MODULES ci-dessus : ce module n'a pas besoin de
+  // write/delete/export génériques (night-audit ne mute jamais
+  // Reservation/Stay/Housekeeping/Maintenance/Billing directement, voir
+  // CLAUDE.md), seulement 3 actions dédiées, même convention que
+  // guests:blacklist/payments:refund/checkin:force-checkout ci-dessus.
+  // night-audit:read (Administrateur/Réception/Comptable) : consulte
+  // l'état courant, l'historique et les rapports figés. night-audit:run
+  // (Administrateur uniquement, v1 — pas de rôle "Night Auditor" dédié
+  // sans nécessité démontrée) : démarre un run, revalide/acquitte une
+  // exception, exécute posting/reconciliation/prepare-closing.
+  // night-audit:close (Administrateur uniquement) : clôture effective de la
+  // BusinessDay, distincte de :run pour isoler l'action la plus sensible
+  // (transition irréversible J CLOSED -> J+1 OPEN).
+  permissions['night-audit:read'] = await prisma.permission.create({
+    data: { module: 'night-audit', action: 'read' },
+  });
+  permissions['night-audit:run'] = await prisma.permission.create({
+    data: { module: 'night-audit', action: 'run' },
+  });
+  permissions['night-audit:close'] = await prisma.permission.create({
+    data: { module: 'night-audit', action: 'close' },
+  });
 
   const rolesData: Array<{
     nom: string;
@@ -633,6 +656,11 @@ async function main() {
         // types de chambre (tarifs de base) pour conseiller un client,
         // jamais rooms:write (configuration réservée à l'Administrateur).
         'rooms:read',
+        // ARCH-011A — night-audit:read seul (consultation de la Business
+        // Date, du statut du run en cours, de l'historique) : la Réception
+        // n'exécute jamais elle-même la clôture de nuit (night-audit:run/
+        // close réservés à l'Administrateur ci-dessous).
+        'night-audit:read',
       ],
     },
     {
@@ -704,6 +732,10 @@ async function main() {
         // (montants engagés), jamais d'écriture (le Comptable ne crée ni ne
         // valide un bon, ce sont l'Économat/Gouvernante et la Direction).
         'purchase-orders:read',
+        // ARCH-011A — night-audit:read seul, même logique que Réception
+        // ci-dessus : le Comptable consulte la réconciliation financière du
+        // rapport de nuit mais n'exécute jamais le run lui-même.
+        'night-audit:read',
       ],
     },
     {
