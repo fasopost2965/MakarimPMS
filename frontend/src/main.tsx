@@ -18,6 +18,7 @@ import {
   PrototypeHousekeepingA,
   PrototypeFrontDeskA,
   PrototypeBillingA,
+  PrototypeNightAuditA,
 } from './design-prototypes/lazy.tsx';
 
 // Handoff design final, lot 4 (HousekeepingMobile.dc.html/MaintenanceMobile.dc.html)
@@ -40,6 +41,15 @@ function renderRoot() {
     return (
       <Suspense fallback={null}>
         <PrototypeBillingA />
+      </Suspense>
+    );
+  // ARCH-011 — Night Audit prototype, vérifié AVANT '/design-preview/a' :
+  // 'night-audit-a' commence par 'n', pas de collision directe, mais plus
+  // clair d'être explicite.
+  if (pathname.startsWith('/design-preview/night-audit-a'))
+    return (
+      <Suspense fallback={null}>
+        <PrototypeNightAuditA />
       </Suspense>
     );
   if (pathname.startsWith('/design-preview/a'))

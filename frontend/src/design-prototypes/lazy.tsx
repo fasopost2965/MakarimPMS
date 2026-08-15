@@ -51,3 +51,13 @@ export const PrototypeFrontDeskA = lazy(
 // lié à App.tsx/AppSidebar en dur. Export par défaut, même convention que
 // PrototypeReservationsC/PrototypeHousekeepingA/PrototypeFrontDeskA.
 export const PrototypeBillingA = lazy(() => import('./PrototypeBillingA.tsx'));
+
+// ARCH-011 — Night Audit desktop, prototype Phase 3 UX (clôture quotidienne,
+// workflow PRECHECK → EXCEPTIONS → POSTING → RECONCILIATION → CLOSING). Isolé
+// de la même façon, jamais lié à App.tsx/AppSidebar en dur. Export par défaut,
+// même convention que les prototypes précédents.
+export const PrototypeNightAuditA = lazy(() =>
+  import('./PrototypeNightAuditA.tsx').then((m) => ({
+    default: m.PrototypeNightAuditA,
+  })),
+);
