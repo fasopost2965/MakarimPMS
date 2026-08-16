@@ -56,6 +56,50 @@ describe('Night Audit (ARCH-011A, e2e)', () => {
       await loginAs(app.getHttpServer(), 'comptable'),
     );
 
+    await prisma.nightAuditException.deleteMany({});
+    await prisma.nightAuditStep.deleteMany({});
+    await prisma.nightAuditRun.deleteMany({});
+
+    // Purge des résidus d'exécutions précédentes identifiés par le nom du type
+    // (pattern unique TEST-NIGHT-AUDIT-TYPE). Sans ce nettoyage, des Stay /
+    // Reservation orphelins génèrent de faux BLOCKERs dans detectExceptions()
+    // et font échouer revalidate (openBlockers > 0).
+    const staleRoomTypes = await prisma.roomType.findMany({
+      where: { nom: 'TEST-NIGHT-AUDIT-TYPE' },
+      select: { id: true },
+    });
+    if (staleRoomTypes.length > 0) {
+      const staleIds = staleRoomTypes.map((rt) => rt.id);
+      await prisma.housekeepingTaskLog.deleteMany({
+        where: { task: { room: { roomTypeId: { in: staleIds } } } },
+      });
+      await prisma.housekeepingTask.deleteMany({
+        where: { room: { roomTypeId: { in: staleIds } } },
+      });
+      await prisma.folioLine.deleteMany({
+        where: { folio: { stay: { room: { roomTypeId: { in: staleIds } } } } },
+      });
+      await prisma.folio.deleteMany({
+        where: { stay: { room: { roomTypeId: { in: staleIds } } } },
+      });
+      await prisma.roomNight.deleteMany({
+        where: { room: { roomTypeId: { in: staleIds } } },
+      });
+      await prisma.stay.deleteMany({
+        where: { room: { roomTypeId: { in: staleIds } } },
+      });
+      await prisma.reservation.deleteMany({
+        where: { room: { roomTypeId: { in: staleIds } } },
+      });
+      await prisma.roomStatusLog.deleteMany({
+        where: { room: { roomTypeId: { in: staleIds } } },
+      });
+      await prisma.room.deleteMany({
+        where: { roomTypeId: { in: staleIds } },
+      });
+      await prisma.roomType.deleteMany({ where: { id: { in: staleIds } } });
+    }
+
     const roomType = await prisma.roomType.create({
       data: { nom: 'TEST-NIGHT-AUDIT-TYPE', prixBase: 400, capacite: 2 },
     });
@@ -69,10 +113,29 @@ describe('Night Audit (ARCH-011A, e2e)', () => {
     )
       .toISOString()
       .slice(0, 10);
-  });
 
-  afterAll(async () => {
-    await app.close();
+    // Purge de tous les séjours EN_COURS orphelins avec départ échu
+    // (dateCheckoutPrevue <= businessDate) provenant d'autres suites de test
+    // (p.ex. reporting.e2e-spec.ts — ADR-004 : ses séjours ne sont pas
+    // nettoyés). Sans cette purge, detectExceptions() les classe comme
+    // DEPARTURES_UNRESOLVED (BLOCKER) et pollue le décompte openBlockers
+    // du test courant, faussant l'assertion openBlockers === 0 après
+    // revalidate.
+    const businessDateObj = new Date(businessDate);
+    const overdueStaledStays = await prisma.stay.findMany({
+      where: {
+        statut: 'EN_COURS',
+        dateCheckoutPrevue: { lte: businessDateObj },
+        room: { roomType: { nom: { startsWith: 'TEST-' } } },
+      },
+      select: { id: true },
+    });
+    if (overdueStaledStays.length > 0) {
+      await prisma.stay.updateMany({
+        where: { id: { in: overdueStaledStays.map((s) => s.id) } },
+        data: { statut: 'CHECKOUT', dateCheckoutReelle: businessDateObj },
+      });
+    }
   });
 
   async function createRoom(label: string) {
@@ -242,6 +305,7 @@ describe('Night Audit (ARCH-011A, e2e)', () => {
           e.code === 'ARRIVALS_UNRESOLVED' &&
           e.entityId === arrivalReservationId,
       );
+      console.log("ARRIVAL_ID:", arrivalReservationId, "EXCEPTIONS:", JSON.stringify(exceptions, null, 2));
       expect(arrival).toBeDefined();
       expect(arrival?.severity).toBe('BLOCKER');
 
@@ -602,5 +666,35 @@ describe('Night Audit (ARCH-011A, e2e)', () => {
       // plusieurs reprises. Le verrou restauré (code actuel du fichier)
       // fait repasser ce test au vert de façon fiable et répétée.
     });
+  });
+
+  afterAll(async () => {
+    // Nettoyage complet — ordre strict : enfants avant parents (FK).
+    await prisma.nightAuditException.deleteMany({});
+    await prisma.nightAuditStep.deleteMany({});
+    await prisma.nightAuditRun.deleteMany({});
+
+    await prisma.housekeepingTaskLog.deleteMany({
+      where: { task: { room: { roomTypeId } } },
+    });
+    await prisma.housekeepingTask.deleteMany({
+      where: { room: { roomTypeId } },
+    });
+    await prisma.folioLine.deleteMany({
+      where: { folio: { stay: { room: { roomTypeId } } } },
+    });
+    await prisma.folio.deleteMany({
+      where: { stay: { room: { roomTypeId } } },
+    });
+    await prisma.roomNight.deleteMany({ where: { room: { roomTypeId } } });
+    await prisma.stay.deleteMany({ where: { room: { roomTypeId } } });
+    await prisma.reservation.deleteMany({ where: { room: { roomTypeId } } });
+    await prisma.roomStatusLog.deleteMany({
+      where: { room: { roomTypeId } },
+    });
+    await prisma.room.deleteMany({ where: { roomTypeId } });
+    await prisma.roomType.deleteMany({ where: { id: roomTypeId } });
+
+    await app.close();
   });
 });
