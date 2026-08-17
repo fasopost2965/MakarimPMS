@@ -305,7 +305,12 @@ describe('Night Audit (ARCH-011A, e2e)', () => {
           e.code === 'ARRIVALS_UNRESOLVED' &&
           e.entityId === arrivalReservationId,
       );
-      console.log("ARRIVAL_ID:", arrivalReservationId, "EXCEPTIONS:", JSON.stringify(exceptions, null, 2));
+      console.log(
+        'ARRIVAL_ID:',
+        arrivalReservationId,
+        'EXCEPTIONS:',
+        JSON.stringify(exceptions, null, 2),
+      );
       expect(arrival).toBeDefined();
       expect(arrival?.severity).toBe('BLOCKER');
 

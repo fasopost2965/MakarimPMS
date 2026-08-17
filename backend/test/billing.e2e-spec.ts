@@ -1432,8 +1432,22 @@ describe('Billing Module (5.13)', () => {
       const guest = await prisma.guest.create({
         data: { nom: 'Chraibi', prenom: 'Salma' },
       });
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const businessDay = await prisma.businessDay.findFirst({
+        where: { status: 'OPEN' },
+        orderBy: { date: 'desc' },
+      });
+      if (!businessDay) {
+        throw new Error(
+          'Aucune BusinessDay OPEN disponible pour DESIGN-009B.1',
+        );
+      }
+      const today = new Date(
+        Date.UTC(
+          businessDay.date.getUTCFullYear(),
+          businessDay.date.getUTCMonth(),
+          businessDay.date.getUTCDate(),
+        ),
+      );
       const dateDepart = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000);
       const reservationRes = await receptionClient
         .post('/api/reservations')

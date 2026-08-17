@@ -67,6 +67,7 @@ import { CheckoutEffectueEvent } from './events/checkout-effectue.event';
 // createExtensionDeposit, jamais consommé par extendStay lui-même.
 import { PaymentsService } from '../payments/payments.service';
 import { MaintenanceService } from '../maintenance/maintenance.service';
+import { BusinessDateService } from '../night-audit/business-date.service';
 // DESIGN-009B — hash déterministe du pricing preview (pricingFingerprint),
 // jamais utilisé comme secret d'autorisation (voir computeChangeRoomPricing
 // ci-dessous), simple détection de dérive entre preview et commit.
@@ -108,6 +109,20 @@ export class StayService {
     private readonly paymentsService: PaymentsService,
     private readonly maintenanceService: MaintenanceService,
   ) {}
+
+  private async getCurrentBusinessDate(): Promise<Date> {
+    const businessDateService = this.moduleRef.get(BusinessDateService, {
+      strict: false,
+    });
+
+    if (!businessDateService) {
+      throw new Error(
+        'BusinessDateService is required for stay business date calculations.',
+      );
+    }
+
+    return businessDateService.getCurrentBusinessDate();
+  }
 
   // FIN-102 — taxes statutaires à matérialiser au check-in/à la
   // prolongation (jamais à la facturation pour un séjour non-legacy, voir
@@ -1040,7 +1055,7 @@ export class StayService {
       throw new NotFoundException(`Chambre ${newRoomId} introuvable.`);
     }
 
-    const { today: todayStart } = getTodayRange();
+    const todayStart = await this.getCurrentBusinessDate();
     const nuitsImpactees = allStayNights
       .map((n) => n.date)
       .filter((date) => date >= todayStart);
@@ -1165,7 +1180,7 @@ export class StayService {
         `La chambre cible (${newRoomId}) n'est pas disponible (statut actuel : ${newRoom.statut}).`,
       );
     }
-    const { today: todayStart } = getTodayRange();
+    const todayStart = await this.getCurrentBusinessDate();
     const conflict = await this.prisma.roomNight.findFirst({
       where: {
         roomId: newRoomId,
@@ -1291,7 +1306,7 @@ export class StayService {
       throw new ForbiddenException('Permission requise : stay:change-room.');
     }
 
-    const { today: todayStart } = getTodayRange();
+    const todayStart = await this.getCurrentBusinessDate();
 
     const result = await this.prisma.$transaction(async (tx) => {
       // 1. Verrou Stay — état frais, jamais l'objet lu avant la
