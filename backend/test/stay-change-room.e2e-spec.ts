@@ -67,6 +67,25 @@ describe('Stay - Change Room (GL-002)', () => {
   let gouvernanteClient: ReturnType<typeof authedRequest>;
   let roomTypeId: number;
 
+  async function getOpenBusinessDate(): Promise<Date> {
+    const businessDay = await prisma.businessDay.findFirst({
+      where: { status: 'OPEN' },
+      orderBy: { date: 'desc' },
+    });
+
+    if (!businessDay) {
+      throw new Error('Aucune BusinessDay OPEN disponible pour le test');
+    }
+
+    return new Date(
+      Date.UTC(
+        businessDay.date.getUTCFullYear(),
+        businessDay.date.getUTCMonth(),
+        businessDay.date.getUTCDate(),
+      ),
+    );
+  }
+
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -140,8 +159,7 @@ describe('Stay - Change Room (GL-002)', () => {
     let today: Date;
 
     beforeEach(async () => {
-      today = new Date();
-      today.setHours(0, 0, 0, 0);
+      today = await getOpenBusinessDate();
 
       const suffix = `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 
@@ -1135,8 +1153,7 @@ describe('Stay - Change Room (GL-002)', () => {
           categorie: 'STANDARD',
         },
       });
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const today = await getOpenBusinessDate();
       const dateDepart = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000);
       const reservationRes = await receptionClient
         .post('/api/reservations')
@@ -1299,8 +1316,7 @@ describe('Stay - Change Room (GL-002)', () => {
           categorie: 'STANDARD',
         },
       });
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const today = await getOpenBusinessDate();
       const dateDepart = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000);
       const reservationRes = await receptionClient
         .post('/api/reservations')
