@@ -485,4 +485,120 @@ describe('Reservations — tarification saisonnière (e2e)', () => {
       await prisma.reservation.delete({ where: { id: reservationId } });
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PRICING-001E.1 — GET /reservations/estimation-prix + nombreOccupants
+  // Vérifie que le bridge contrôleur → service transmet correctement les
+  // occupants et que le DTO rejette HB/FB sans valeur.
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('PRICING-001E.1 — estimation-prix avec nombreOccupants', () => {
+    let app: INestApplication<App>;
+    let prisma: PrismaService;
+    let roomTypeId: number;
+    let client: ReturnType<typeof authedRequest>;
+
+    const PRIX_BASE_E1 = 400;
+    const PRIX_HB = 150;
+    const PRIX_FB = 200;
+
+    beforeAll(async () => {
+      const moduleFixture: TestingModule = await Test.createTestingModule({
+        imports: [AppModule],
+      }).compile();
+
+      app = moduleFixture.createNestApplication();
+      app.setGlobalPrefix('api');
+      app.useGlobalPipes(
+        new ValidationPipe({ whitelist: true, transform: true }),
+      );
+      await app.init();
+
+      prisma = app.get(PrismaService);
+      const token = await loginAs(app.getHttpServer(), 'reception');
+      client = authedRequest(app.getHttpServer(), token);
+
+      const roomType = await prisma.roomType.create({
+        data: {
+          nom: `TEST-PRICING-001E1-${Date.now()}`,
+          prixBase: PRIX_BASE_E1,
+          capacite: 3,
+          prixDemiPension: PRIX_HB,
+          prixPensionComplete: PRIX_FB,
+          prixPetitDejeuner: 50,
+        },
+      });
+      roomTypeId = roomType.id;
+    });
+
+    afterAll(async () => {
+      await prisma.roomType.deleteMany({ where: { id: roomTypeId } });
+      await app.close();
+    });
+
+    it('HB + 1 occupant => prixEstime = base + 1×prixDemiPension', async () => {
+      const res = await client
+        .get('/api/reservations/estimation-prix')
+        .query({
+          roomTypeId,
+          dateArrivee: '2026-10-01',
+          dateDepart: '2026-10-02',
+          formule: 'HALF_BOARD',
+          nombreOccupants: 1,
+        });
+      expect(res.status).toBe(200);
+      expect(Number((res.body as { prixEstime: string }).prixEstime)).toBe(
+        PRIX_BASE_E1 + 1 * PRIX_HB,
+      );
+    });
+
+    it('HB + 2 occupants => prixEstime = base + 2×prixDemiPension', async () => {
+      const res = await client
+        .get('/api/reservations/estimation-prix')
+        .query({
+          roomTypeId,
+          dateArrivee: '2026-10-01',
+          dateDepart: '2026-10-02',
+          formule: 'HALF_BOARD',
+          nombreOccupants: 2,
+        });
+      expect(res.status).toBe(200);
+      expect(Number((res.body as { prixEstime: string }).prixEstime)).toBe(
+        PRIX_BASE_E1 + 2 * PRIX_HB,
+      );
+    });
+
+    it('FB + 2 occupants => prixEstime = base + 2×prixPensionComplete', async () => {
+      const res = await client
+        .get('/api/reservations/estimation-prix')
+        .query({
+          roomTypeId,
+          dateArrivee: '2026-10-01',
+          dateDepart: '2026-10-02',
+          formule: 'FULL_BOARD',
+          nombreOccupants: 2,
+        });
+      expect(res.status).toBe(200);
+      expect(Number((res.body as { prixEstime: string }).prixEstime)).toBe(
+        PRIX_BASE_E1 + 2 * PRIX_FB,
+      );
+    });
+
+    it('HB sans nombreOccupants => 400 (validation DTO)', async () => {
+      const res = await client
+        .get('/api/reservations/estimation-prix')
+        .query({
+          roomTypeId,
+          dateArrivee: '2026-10-01',
+          dateDepart: '2026-10-02',
+          formule: 'HALF_BOARD',
+          // nombreOccupants intentionnellement absent
+        });
+      expect(res.status).toBe(400);
+      const body = res.body as ApiErrorBody;
+      const messages = Array.isArray(body.message)
+        ? body.message
+        : [body.message];
+      expect(messages.some((m) => /nombreOccupants/i.test(m))).toBe(true);
+    });
+  });
 });

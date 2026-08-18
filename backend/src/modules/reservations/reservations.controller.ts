@@ -75,6 +75,10 @@ export class ReservationsController {
       dto.dateArrivee,
       dto.dateDepart,
       dto.formule,
+      // PRICING-001E.1 — bridge : le service acceptait déjà nombreOccupants
+      // (PRICING-001C), mais le contrôleur ne le transmettait pas, causant
+      // un supplément HB/FB de 0 MAD dans toutes les estimations (GAP-1).
+      dto.nombreOccupants,
     );
     return { prixEstime: prixEstime.toString() };
   }
