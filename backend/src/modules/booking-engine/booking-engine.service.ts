@@ -48,6 +48,8 @@ export class BookingEngineService {
             entry.roomTypeId,
             dto.dateArrivee,
             dto.dateDepart,
+            dto.formule,
+            dto.nombreOccupants,
           )
         ).toFixed(2),
       })),
@@ -79,6 +81,7 @@ export class BookingEngineService {
       dateDepart: dto.dateDepart,
       formule: dto.formule,
       guest: dto.guest,
+      nombreOccupants: dto.nombreOccupants,
     });
   }
 }
