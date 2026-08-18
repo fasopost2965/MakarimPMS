@@ -157,6 +157,17 @@ function ReservationForm({
     !dateArrivee || !dateDepart || dateArrivee >= dateDepart;
   const nombreOccupantsNum =
     nombreOccupants === '' ? null : Number(nombreOccupants);
+  // PRICING-001E — occupants obligatoires pour HB/FB (règle métier) :
+  // la règle backend (ValidateIf) est désormais miroir côté frontend pour
+  // bloquer le submit avant même l'appel réseau.
+  const FORMULES_AVEC_OCCUPANTS_OBLIGATOIRES: FormuleHebergement[] = [
+    'HALF_BOARD',
+    'FULL_BOARD',
+  ];
+  const occupantsObligatoires =
+    FORMULES_AVEC_OCCUPANTS_OBLIGATOIRES.includes(formule);
+  const occupantsManquants =
+    occupantsObligatoires && nombreOccupantsNum === null;
   const occupantsInvalides =
     nombreOccupants !== '' &&
     (!Number.isInteger(nombreOccupantsNum) ||
@@ -176,14 +187,33 @@ function ReservationForm({
     }
     let cancelled = false;
     setEstimating(true);
-    estimatePrice({ roomTypeId, dateArrivee, dateDepart, formule })
+    // PRICING-001E — nombreOccupantsNum transmis pour que le supplément
+    // HB/FB soit correctement calculé dès sa saisie (GAP-1 & GAP-3).
+    estimatePrice({
+      roomTypeId,
+      dateArrivee,
+      dateDepart,
+      formule,
+      ...(nombreOccupantsNum !== null
+        ? { nombreOccupants: nombreOccupantsNum }
+        : {}),
+    })
       .then((result) => !cancelled && setPrixEstime(result.prixEstime))
       .catch(() => !cancelled && setPrixEstime(null))
       .finally(() => !cancelled && setEstimating(false));
     return () => {
       cancelled = true;
     };
-  }, [roomTypeId, dateArrivee, dateDepart, formule, datesInvalides]);
+    // nombreOccupantsNum intentionnellement dans les dépendances :
+    // un changement d'occupants rafraîchit l'estimation (GAP-3).
+  }, [
+    roomTypeId,
+    dateArrivee,
+    dateDepart,
+    formule,
+    nombreOccupantsNum,
+    datesInvalides,
+  ]);
 
   function changeRoomType(next: number) {
     setRoomTypeId(next);
@@ -195,7 +225,11 @@ function ReservationForm({
   const stepValid = [
     roomId !== null && !datesInvalides,
     guestSelection !== null,
-    !occupantsInvalides && !motifInvalide && !prixInvalide,
+    // PRICING-001E — occupantsManquants bloque step 2 si HB/FB sans occupants
+    !occupantsManquants &&
+      !occupantsInvalides &&
+      !motifInvalide &&
+      !prixInvalide,
     true,
   ];
   const canSubmit = stepValid.slice(0, 3).every(Boolean);
@@ -377,7 +411,15 @@ function ReservationForm({
               value={formule}
               onChange={(value) => setFormule(value as FormuleHebergement)}
             />
-            <Field label="Nombre d’occupants (optionnel)" id="nombreOccupants">
+            {/* PRICING-001E — label conditionnel : obligatoire pour HB/FB */}
+            <Field
+              label={
+                occupantsObligatoires
+                  ? "Nombre d'occupants"
+                  : "Nombre d'occupants (optionnel)"
+              }
+              id="nombreOccupants"
+            >
               <Input
                 id="nombreOccupants"
                 type="number"
@@ -385,8 +427,17 @@ function ReservationForm({
                 max={selectedRoomType?.capacite}
                 value={nombreOccupants}
                 onChange={(e) => setNombreOccupants(e.target.value)}
+                required={occupantsObligatoires}
+                aria-required={occupantsObligatoires}
               />
             </Field>
+            {occupantsManquants && (
+              <p className="text-destructive text-sm" role="alert">
+                Le nombre d&apos;occupants est obligatoire pour la formule{' '}
+                {formule === 'HALF_BOARD' ? 'demi-pension' : 'pension complète'}
+                .
+              </p>
+            )}
             {occupantsInvalides && (
               <p className="text-destructive text-sm">
                 Saisissez un entier entre 1 et{' '}
