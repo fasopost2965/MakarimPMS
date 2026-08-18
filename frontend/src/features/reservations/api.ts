@@ -30,11 +30,16 @@ export function listReservations(params?: { du?: string; au?: string }) {
 // CH-061 (Lot #3 design) — aperçu de prix en direct côté formulaire
 // réception, avant confirmation (ne crée rien). Réutilise le même calcul
 // que la création réelle (ReservationsService.estimatePrixTotal).
+// PRICING-001E — nombreOccupants transmis quand disponible : indispensable
+// pour que le supplément HALF_BOARD / FULL_BOARD soit calculé correctement
+// (calculateFormuleSupplement multiplie par le nombre d'occupants réels, pas
+// par 0 lorsque le paramètre est absent).
 export function estimatePrice(params: {
   roomTypeId: number;
   dateArrivee: string;
   dateDepart: string;
   formule?: FormuleHebergement;
+  nombreOccupants?: number;
 }) {
   const query = new URLSearchParams({
     roomTypeId: String(params.roomTypeId),
@@ -42,6 +47,8 @@ export function estimatePrice(params: {
     dateDepart: params.dateDepart,
   });
   if (params.formule) query.set('formule', params.formule);
+  if (params.nombreOccupants !== undefined)
+    query.set('nombreOccupants', String(params.nombreOccupants));
   return apiRequest<{ prixEstime: string }>(
     `/reservations/estimation-prix?${query.toString()}`,
   );

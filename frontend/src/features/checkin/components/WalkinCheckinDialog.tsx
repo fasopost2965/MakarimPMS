@@ -109,6 +109,10 @@ function WalkinForm({
 
   const selectedRoom = rooms.find((room) => String(room.id) === roomId);
   const today = toISODate(new Date());
+  // PRICING-001E — déclaré ici (avant les useEffect) pour être disponible
+  // dans les dépendances de l'effet d'estimation (GAP-4).
+  const nombreOccupantsNum =
+    nombreOccupants === '' ? null : Number(nombreOccupants);
 
   useEffect(() => {
     headingRef.current?.focus();
@@ -152,11 +156,16 @@ function WalkinForm({
       }
       setEstimating(true);
       try {
+        // PRICING-001E — nombreOccupantsNum transmis pour que le supplément
+        // HB/FB soit correct dans l'aperçu walk-in (GAP-4).
         const res = await estimatePrice({
           roomTypeId: selectedRoom.roomTypeId,
           dateArrivee: today,
           dateDepart: dateCheckoutPrevue,
           formule,
+          ...(nombreOccupantsNum !== null
+            ? { nombreOccupants: nombreOccupantsNum }
+            : {}),
         });
         if (!cancelled) setPrixEstime(res.prixEstime);
       } catch {
@@ -169,7 +178,7 @@ function WalkinForm({
     return () => {
       cancelled = true;
     };
-  }, [selectedRoom, dateCheckoutPrevue, formule, today]);
+  }, [selectedRoom, dateCheckoutPrevue, formule, nombreOccupantsNum, today]);
 
   useEffect(() => {
     if (!selectedRoom || !dateCheckoutPrevue || dateCheckoutPrevue <= today) {
@@ -230,8 +239,6 @@ function WalkinForm({
   // FIN-102 — entier >= 1, jamais dérivé de selectedRoom.roomType.capacite
   // (interdiction absolue) : cette valeur ne sert qu'à borner la saisie, la
   // capacité elle-même n'est jamais une valeur par défaut silencieuse.
-  const nombreOccupantsNum =
-    nombreOccupants === '' ? null : Number(nombreOccupants);
   const occupantsValid =
     nombreOccupantsNum !== null &&
     Number.isInteger(nombreOccupantsNum) &&
