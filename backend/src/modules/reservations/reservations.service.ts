@@ -91,6 +91,7 @@ export class ReservationsService {
     roomTypeId: number,
     nights: Date[],
     formule: FormuleHebergement,
+    nombreOccupants?: number,
   ) {
     const roomType = await tx.roomType.findUnique({
       where: { id: roomTypeId },
@@ -114,7 +115,7 @@ export class ReservationsService {
       formule,
       roomType,
       nights.length,
-      roomType.capacite,
+      nombreOccupants ?? 0,
     );
     return hebergement.add(formuleTotal);
   }
@@ -130,10 +131,17 @@ export class ReservationsService {
     dateArrivee: string,
     dateDepart: string,
     formule: FormuleHebergement = FormuleHebergement.BED_AND_BREAKFAST,
+    nombreOccupants?: number,
   ) {
     this.assertDateRangeValid(dateArrivee, dateDepart);
     const nights = getNightsBetween(dateArrivee, dateDepart);
-    return this.calculatePrixTotal(this.prisma, roomTypeId, nights, formule);
+    return this.calculatePrixTotal(
+      this.prisma,
+      roomTypeId,
+      nights,
+      formule,
+      nombreOccupants,
+    );
   }
 
   // B5 — restrictions tarifaires (min stay / stop sale). Chargées via le
@@ -214,6 +222,7 @@ export class ReservationsService {
           room.roomTypeId,
           nights,
           formule,
+          dto.nombreOccupants,
         );
 
         const created = await tx.reservation.create({
@@ -493,15 +502,38 @@ export class ReservationsService {
             room.roomTypeId,
             nights,
             existing.formule,
+            existing.nombreOccupants ?? undefined,
           );
         }
 
         const manualOverride = dto.prixTotalFinal !== undefined;
-        const prixTotalFinal = manualOverride
+        let prixTotalFinal = manualOverride
           ? new Prisma.Decimal(dto.prixTotalFinal!)
           : prixTotalCalcule && !existing.ajustementManuel
             ? prixTotalCalcule
             : undefined;
+
+        // PRICING-001C — Protection Legacy
+        // Si modification d'une réservation existante HB/FB sans nombreOccupants connu,
+        // le prix calculé utilise 0 occupant. On ne doit jamais écraser le prix final à la baisse.
+        const activeFormule = existing.formule;
+        if (
+          !manualOverride &&
+          !existing.ajustementManuel &&
+          (activeFormule === FormuleHebergement.HALF_BOARD ||
+            activeFormule === FormuleHebergement.FULL_BOARD) &&
+          existing.nombreOccupants === null
+        ) {
+          if (
+            prixTotalFinal &&
+            existing.prixTotalFinal &&
+            prixTotalFinal.lt(existing.prixTotalFinal)
+          ) {
+            prixTotalFinal = existing.prixTotalFinal;
+            // On restaure également prixTotalCalcule pour la cohérence en BD
+            prixTotalCalcule = existing.prixTotalCalcule;
+          }
+        }
 
         // Ajustement manuel de tarif = opération sensible auditée (ADR-005
         // §6.1, BR-AUD-002). motifAjustement est déjà validé requis/≥10

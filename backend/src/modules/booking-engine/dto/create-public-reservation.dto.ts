@@ -3,7 +3,10 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
+  IsNotEmpty,
   IsOptional,
+  Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { FormuleHebergement } from '@prisma/client';
@@ -27,6 +30,21 @@ export class CreatePublicReservationDto {
   @IsOptional()
   @IsEnum(FormuleHebergement)
   formule?: FormuleHebergement;
+
+  @ValidateIf(
+    (o: CreatePublicReservationDto) =>
+      o.nombreOccupants !== undefined ||
+      ([FormuleHebergement.HALF_BOARD, FormuleHebergement.FULL_BOARD] as FormuleHebergement[]).includes(
+        o.formule as FormuleHebergement,
+      ),
+  )
+  @IsNotEmpty({
+    message:
+      'nombreOccupants est obligatoire pour les formules HALF_BOARD et FULL_BOARD',
+  })
+  @IsInt()
+  @Min(1)
+  nombreOccupants?: number;
 
   @ValidateNested()
   @Type(() => PublicGuestInputDto)

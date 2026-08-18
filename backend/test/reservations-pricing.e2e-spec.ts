@@ -13,6 +13,10 @@ interface ReservationResponse {
   motifAjustement: string | null;
 }
 
+type ApiReservationBody = ReservationResponse & { id: number };
+type ApiErrorBody = { message: string | string[] };
+type ApiAvailabilityBody = { prixTotalEstime: string }[];
+
 // Tarification saisonnière (cahier des charges §5.1/§5.4) : vérifie le calcul
 // nuit par nuit contre une vraie base MySQL (docker-compose), avec des
 // tarifs saisonniers isolés (pas ceux du seed) pour un test reproductible.
@@ -204,6 +208,281 @@ describe('Reservations — tarification saisonnière (e2e)', () => {
         dateDepart: '2026-07-18',
       });
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe('PRICING-001C — Occupancy-Aware Pricing', () => {
+    let app: INestApplication<App>;
+    let prisma: PrismaService;
+    let roomTypeId: number;
+    let roomId: number;
+    let client: ReturnType<typeof authedRequest>;
+
+    beforeAll(async () => {
+      const moduleFixture: TestingModule = await Test.createTestingModule({
+        imports: [AppModule],
+      }).compile();
+
+      app = moduleFixture.createNestApplication();
+      app.setGlobalPrefix('api');
+      app.useGlobalPipes(
+        new ValidationPipe({ whitelist: true, transform: true }),
+      );
+      await app.init();
+
+      prisma = app.get(PrismaService);
+      const token = await loginAs(app.getHttpServer(), 'reception');
+      client = authedRequest(app.getHttpServer(), token);
+
+      const roomType = await prisma.roomType.create({
+        data: {
+          nom: 'TEST-PRICING-001C',
+          prixBase: 400,
+          capacite: 2,
+          prixDemiPension: 150,
+          prixPensionComplete: 200,
+          prixPetitDejeuner: 50,
+        },
+      });
+      roomTypeId = roomType.id;
+
+      const room = await prisma.room.create({
+        data: { numero: `TEST-PRICING-001C-${Date.now()}`, roomTypeId },
+      });
+      roomId = room.id;
+    });
+
+    afterAll(async () => {
+      await prisma.roomNight.deleteMany({ where: { roomId } });
+      await prisma.reservation.deleteMany({ where: { roomId } });
+      await prisma.room.deleteMany({ where: { id: roomId } });
+      await prisma.roomType.deleteMany({ where: { id: roomTypeId } });
+      await app.close();
+    });
+
+    it('400 DH, capacité 2, 1 occupant, ROOM_ONLY => 400', async () => {
+      const res = await client.post('/api/reservations').send({
+        roomId,
+        dateArrivee: '2026-09-01',
+        dateDepart: '2026-09-02',
+        formule: 'ROOM_ONLY',
+        nombreOccupants: 1,
+        guest: { nom: 'Test', prenom: '1' },
+      });
+      const body = res.body as ApiReservationBody;
+      expect(res.status).toBe(201);
+      expect(Number(body.prixTotalFinal)).toBe(400);
+      await prisma.roomNight.deleteMany({
+        where: { reservationId: body.id },
+      });
+      await prisma.reservation.delete({ where: { id: body.id } });
+    });
+
+    it('400 DH, capacité 2, 1 occupant, BED_AND_BREAKFAST => 400', async () => {
+      const res = await client.post('/api/reservations').send({
+        roomId,
+        dateArrivee: '2026-09-01',
+        dateDepart: '2026-09-02',
+        formule: 'BED_AND_BREAKFAST',
+        nombreOccupants: 1,
+        guest: { nom: 'Test', prenom: '2' },
+      });
+      const body = res.body as ApiReservationBody;
+      expect(res.status).toBe(201);
+      expect(Number(body.prixTotalFinal)).toBe(400);
+      await prisma.roomNight.deleteMany({
+        where: { reservationId: body.id },
+      });
+      await prisma.reservation.delete({ where: { id: body.id } });
+    });
+
+    it('400 DH, capacité 2, 1 occupant, HALF_BOARD 150 => 550', async () => {
+      const res = await client.post('/api/reservations').send({
+        roomId,
+        dateArrivee: '2026-09-01',
+        dateDepart: '2026-09-02',
+        formule: 'HALF_BOARD',
+        nombreOccupants: 1,
+        guest: { nom: 'Test', prenom: '3' },
+      });
+      const body = res.body as ApiReservationBody;
+      expect(res.status).toBe(201);
+      expect(Number(body.prixTotalFinal)).toBe(550);
+      await prisma.roomNight.deleteMany({
+        where: { reservationId: body.id },
+      });
+      await prisma.reservation.delete({ where: { id: body.id } });
+    });
+
+    it('même chambre, 2 occupants, HALF_BOARD 150 => 700', async () => {
+      const res = await client.post('/api/reservations').send({
+        roomId,
+        dateArrivee: '2026-09-01',
+        dateDepart: '2026-09-02',
+        formule: 'HALF_BOARD',
+        nombreOccupants: 2,
+        guest: { nom: 'Test', prenom: '4' },
+      });
+      const body = res.body as ApiReservationBody;
+      expect(res.status).toBe(201);
+      expect(Number(body.prixTotalFinal)).toBe(700);
+      await prisma.roomNight.deleteMany({
+        where: { reservationId: body.id },
+      });
+      await prisma.reservation.delete({ where: { id: body.id } });
+    });
+
+    it('HB sans nombreOccupants => rejet validation', async () => {
+      const res = await client.post('/api/reservations').send({
+        roomId,
+        dateArrivee: '2026-09-01',
+        dateDepart: '2026-09-02',
+        formule: 'HALF_BOARD',
+        guest: { nom: 'Test', prenom: '5' },
+      });
+      const body = res.body as ApiErrorBody;
+      expect(res.status).toBe(400);
+      expect(body.message).toContain(
+        'nombreOccupants est obligatoire pour les formules HALF_BOARD et FULL_BOARD',
+      );
+    });
+
+    it('FB sans nombreOccupants => rejet validation', async () => {
+      const res = await client.post('/api/reservations').send({
+        roomId,
+        dateArrivee: '2026-09-01',
+        dateDepart: '2026-09-02',
+        formule: 'FULL_BOARD',
+        guest: { nom: 'Test', prenom: '6' },
+      });
+      const body = res.body as ApiErrorBody;
+      expect(res.status).toBe(400);
+      expect(body.message).toContain(
+        'nombreOccupants est obligatoire pour les formules HALF_BOARD et FULL_BOARD',
+      );
+    });
+
+    it('RO sans nombreOccupants => comportement existant conservé', async () => {
+      const res = await client.post('/api/reservations').send({
+        roomId,
+        dateArrivee: '2026-09-01',
+        dateDepart: '2026-09-02',
+        formule: 'ROOM_ONLY',
+        guest: { nom: 'Test', prenom: '7' },
+      });
+      const body = res.body as ApiReservationBody;
+      expect(res.status).toBe(201);
+      expect(Number(body.prixTotalFinal)).toBe(400);
+      await prisma.roomNight.deleteMany({
+        where: { reservationId: body.id },
+      });
+      await prisma.reservation.delete({ where: { id: body.id } });
+    });
+
+    it('B&B sans nombreOccupants => comportement existant conservé', async () => {
+      const res = await client.post('/api/reservations').send({
+        roomId,
+        dateArrivee: '2026-09-01',
+        dateDepart: '2026-09-02',
+        formule: 'BED_AND_BREAKFAST',
+        guest: { nom: 'Test', prenom: '8' },
+      });
+      const body = res.body as ApiReservationBody;
+      expect(res.status).toBe(201);
+      expect(Number(body.prixTotalFinal)).toBe(400);
+      await prisma.roomNight.deleteMany({
+        where: { reservationId: body.id },
+      });
+      await prisma.reservation.delete({ where: { id: body.id } });
+    });
+
+    it('Booking Engine : même logique que réception', async () => {
+      // Pour une disponibilité publique en HB sans nombreOccupants => 400
+      const getRes = await client.get('/api/booking/availability').query({
+        dateArrivee: '2026-09-01',
+        dateDepart: '2026-09-02',
+        roomTypeId,
+        formule: 'HALF_BOARD',
+      });
+      const getResBody = getRes.body as ApiErrorBody;
+      expect(getRes.status).toBe(400);
+      expect(getResBody.message).toContain(
+        'nombreOccupants est obligatoire pour les formules HALF_BOARD et FULL_BOARD',
+      );
+
+      // Pour une disponibilité publique en HB avec 1 occupant => 550
+      const getResOk = await client.get('/api/booking/availability').query({
+        dateArrivee: '2026-09-01',
+        dateDepart: '2026-09-02',
+        roomTypeId,
+        formule: 'HALF_BOARD',
+        nombreOccupants: 1,
+      });
+      const getResOkBody = getResOk.body as ApiAvailabilityBody;
+      expect(getResOk.status).toBe(200);
+      expect(Number(getResOkBody[0].prixTotalEstime)).toBe(550);
+
+      // Création publique en HB sans nombreOccupants => 400
+      const postRes = await client.post('/api/booking/reservations').send({
+        dateArrivee: '2026-09-01',
+        dateDepart: '2026-09-02',
+        roomTypeId,
+        formule: 'HALF_BOARD',
+        guest: {
+          nom: 'Public',
+          prenom: 'Test',
+          email: 'test@example.com',
+          telephone: '0600000000',
+        },
+      });
+      const postResBody = postRes.body as ApiErrorBody;
+      expect(postRes.status).toBe(400);
+      expect(postResBody.message).toContain(
+        'nombreOccupants est obligatoire pour les formules HALF_BOARD et FULL_BOARD',
+      );
+    });
+
+    it('vérifier qu’une réservation existante n’est jamais recalculée automatiquement', async () => {
+      // Simule une réservation legacy (créée en BD sans nombreOccupants)
+      const res1 = await client.post('/api/reservations').send({
+        roomId,
+        dateArrivee: '2026-09-10',
+        dateDepart: '2026-09-11',
+        formule: 'ROOM_ONLY', // Permet de passer la validation
+        guest: { nom: 'Legacy', prenom: 'Test' },
+      });
+      const body1 = res1.body as ApiReservationBody;
+      const reservationId = body1.id;
+
+      // On la met à jour en BD pour simuler un historique corrompu (formule=HALF_BOARD, prixTotalCalcule=700, prixTotalFinal=700, nombreOccupants=null)
+      await prisma.reservation.update({
+        where: { id: reservationId },
+        data: {
+          formule: 'HALF_BOARD',
+          prixTotalCalcule: 700,
+          prixTotalFinal: 700,
+          nombreOccupants: null,
+          ajustementManuel: false,
+        },
+      });
+
+      // La réception modifie les dates
+      const patchRes = await client
+        .patch(`/api/reservations/${reservationId}`)
+        .send({
+          dateArrivee: '2026-09-11',
+          dateDepart: '2026-09-12',
+        });
+
+      const patchBody = patchRes.body as ApiReservationBody;
+      expect(patchRes.status).toBe(200);
+      // Le prix final d'une réservation HB legacy (nombreOccupants = null)
+      // ne doit jamais être écrasé à la baisse même lors d'un recalcul.
+      expect(Number(patchBody.prixTotalFinal)).toBe(700);
+      expect(Number(patchBody.prixTotalCalcule)).toBe(700);
+
+      await prisma.roomNight.deleteMany({ where: { reservationId } });
+      await prisma.reservation.delete({ where: { id: reservationId } });
     });
   });
 });

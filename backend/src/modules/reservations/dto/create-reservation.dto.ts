@@ -3,9 +3,11 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { CanalReservation, FormuleHebergement } from '@prisma/client';
@@ -55,7 +57,17 @@ export class CreateReservationDto {
   // statique. Jamais rendue obligatoire ici : le Booking Engine public (F4)
   // et l'import Channel Manager (F10) restent hors périmètre de cette
   // mission, non modifiés.
-  @IsOptional()
+  @ValidateIf(
+    (o: CreateReservationDto) =>
+      o.nombreOccupants !== undefined ||
+      ([FormuleHebergement.HALF_BOARD, FormuleHebergement.FULL_BOARD] as FormuleHebergement[]).includes(
+        o.formule as FormuleHebergement,
+      ),
+  )
+  @IsNotEmpty({
+    message:
+      'nombreOccupants est obligatoire pour les formules HALF_BOARD et FULL_BOARD',
+  })
   @IsInt()
   @Min(1)
   nombreOccupants?: number;
