@@ -101,7 +101,7 @@ async function main() {
       nom: 'Single',
       prixBase: 400,
       capacite: 1,
-      prixPetitDejeuner: 50,
+      prixPetitDejeuner: 45,
       prixDemiPension: 150,
       prixPensionComplete: 220,
     },
@@ -109,7 +109,7 @@ async function main() {
       nom: 'Double',
       prixBase: 500,
       capacite: 2,
-      prixPetitDejeuner: 50,
+      prixPetitDejeuner: 45,
       prixDemiPension: 150,
       prixPensionComplete: 220,
     },
@@ -117,7 +117,7 @@ async function main() {
       nom: 'Triple',
       prixBase: 750,
       capacite: 3,
-      prixPetitDejeuner: 50,
+      prixPetitDejeuner: 45,
       prixDemiPension: 150,
       prixPensionComplete: 220,
     },
@@ -125,7 +125,7 @@ async function main() {
       nom: 'Suite',
       prixBase: 650,
       capacite: 2,
-      prixPetitDejeuner: 50,
+      prixPetitDejeuner: 45,
       prixDemiPension: 150,
       prixPensionComplete: 220,
     },
@@ -133,7 +133,7 @@ async function main() {
       nom: 'Quadruple',
       prixBase: 900,
       capacite: 4,
-      prixPetitDejeuner: 50,
+      prixPetitDejeuner: 45,
       prixDemiPension: 150,
       prixPensionComplete: 220,
     },
@@ -259,11 +259,10 @@ async function main() {
     }
   }
 
-  // Configuration des taux TVA et taxe de séjour (module billing 5.13,
-  // fiscalité configurable). Jamais de taux codé en dur — toujours lus
-  // depuis cette table. Valeurs réelles Hôtel Makarim (Tétouan) : TVA
-  // hébergement 10%, taxe de séjour 3 DH/nuit/adulte (montant fixe,
-  // reversé au Trésor public — collectePourTresor: true).
+  // COMMERCIAL-001C — taxe de séjour libellée 'TS' (type court normalisé attendu
+  // sur le folio) + TPT (Taxe de Promotion Touristique) 1.30 MAD/nuit/adulte,
+  // montant fixe, réversé au Trésor public. Aucune migration Prisma nécessaire :
+  // TaxRateConfig.type est un String libre.
   const taxRates = [
     {
       type: 'TVA_HEBERGEMENT',
@@ -281,10 +280,22 @@ async function main() {
       collectePourTresor: true,
       applicableParDefaut: true,
     },
+    // Taxe de séjour : libellé court 'TS' pour que FolioLine.libelle = 'TS'
+    // corresponde au libellé attendu sur la facture PDF (COMMERCIAL-001C).
     {
-      type: 'TAXE_SEJOUR',
+      type: 'TS',
       mode: TaxMode.MONTANT_FIXE,
       taux: 3,
+      actif: true,
+      collectePourTresor: true,
+      applicableParDefaut: true,
+    },
+    // TPT (Taxe de Promotion Touristique) — 1.30 MAD/nuit/adulte.
+    // COMMERCIAL-001C.1 : conservé pour les environnements neufs/tests (migration 20260820203000_commercial_001c_1_tpt_data_migration pour la prod).
+    {
+      type: 'TPT',
+      mode: TaxMode.MONTANT_FIXE,
+      taux: 1.30,
       actif: true,
       collectePourTresor: true,
       applicableParDefaut: true,

@@ -67,10 +67,10 @@ const CANAL_OPTIONS: { value: CanalReservation; label: string }[] = [
   { value: 'BOOKING_COM', label: 'Booking.com' },
 ];
 const FORMULE_OPTIONS: { value: FormuleHebergement; label: string }[] = [
-  { value: 'ROOM_ONLY', label: 'Logement seul' },
-  { value: 'BED_AND_BREAKFAST', label: 'Petit-déjeuner' },
+  { value: 'BED_AND_BREAKFAST', label: 'Petit-déjeuner (B&B)' },
   { value: 'HALF_BOARD', label: 'Demi-pension' },
   { value: 'FULL_BOARD', label: 'Pension complète' },
+  // COMMERCIAL-001C : ROOM_ONLY supprimé — interdit pour les nuitées (PD inclus dans tous les tarifs TTC).
 ];
 const STATUT_LABEL: Record<StatutChambre, string> = {
   LIBRE_PROPRE: 'libre',

@@ -87,12 +87,13 @@ const STAY_INCLUDE = {
 const POLICE_RECORD_WARNING =
   'Fiche de police (registre légal des personnes hébergées) non renseignée pour ce séjour.';
 
-// Priorité 3 (formules d'hébergement) — libellé de la FolioLine EXTRA créée
-// au check-in pour toute formule ≠ ROOM_ONLY.
-const FORMULE_LABEL: Partial<Record<FormuleHebergement, string>> = {
-  BED_AND_BREAKFAST: 'petit-déjeuner',
-  HALF_BOARD: 'demi-pension',
-  FULL_BOARD: 'pension complète',
+// COMMERCIAL-001C — libellé court normalisé pour chaque type de ligne formule.
+// BED_AND_BREAKFAST → 'PD' (Petit Déjeuner, composante ventilée TTC).
+// HALF_BOARD / FULL_BOARD → libellé long + nombre de couverts.
+const FORMULE_LIBELLE_COURT: Partial<Record<FormuleHebergement, string>> = {
+  BED_AND_BREAKFAST: 'PD',
+  HALF_BOARD: 'Demi-pension',
+  FULL_BOARD: 'Pension complète',
 };
 
 @Injectable()
@@ -465,21 +466,25 @@ export class StayService {
         montant: montantHebergement,
       },
     });
+    // COMMERCIAL-001C — ligne formule incluse (PD / HB / FB).
+    // Le libellé court normalisé permet au PDF de distinguer 'PD' des extras
+    // consommés. ROOM_ONLY est désormais interdit au niveau DTO — cette garde
+    // est conservée pour robustesse de la couche service (appels legacy
+    // éventuels depuis des données historiques).
     if (formule !== FormuleHebergement.ROOM_ONLY && montantFormule.gt(0)) {
+      const libelleFormule = FORMULE_LIBELLE_COURT[formule] ?? 'Formule incluse';
       await tx.folioLine.create({
         data: {
           folioId: folio.id,
           type: TypeLigneFolio.EXTRA,
-          libelle: `Formule ${FORMULE_LABEL[formule]} — ${nights} nuit${nights > 1 ? 's' : ''}`,
+          libelle: `${libelleFormule} — ${nights} nuit${nights > 1 ? 's' : ''}`,
           montant: montantFormule,
         },
       });
     }
-    // FIN-102 — TAXE_SEJOUR (et toute future taxe statutaire) matérialisée
-    // dès le check-in pour un séjour non-legacy, plus jamais à la
-    // facturation (BillingService.generateInvoice devient strictement
-    // lecture seule sur les charges d'un tel séjour, voir §7/§8 de la
-    // mission FIN-102).
+    // FIN-102 — taxes statutaires (TS, TPT, …) matérialisées dès le check-in.
+    // Chaque taxe est libellée par son type court (ex. 'TS', 'TPT') afin que
+    // le PDF affiche les 4 composantes attendues : HEB / PD / TPT / TS.
     for (const taxe of taxesStatutaires) {
       if (taxe.montant.lte(0)) continue;
       await tx.folioLine.create({
@@ -2135,7 +2140,7 @@ export class StayService {
             folioPrincipal.id,
             {
               type: TypeLigneFolio.EXTRA,
-              libelle: `Prolongation — formule ${FORMULE_LABEL[lockedStay.formule]} — ${nights.length} nuit${nights.length > 1 ? 's' : ''}`,
+              libelle: `Prolongation — formule ${FORMULE_LIBELLE_COURT[lockedStay.formule] ?? 'Formule'} — ${nights.length} nuit${nights.length > 1 ? 's' : ''}`,
               montant: montantFormule.toFixed(2),
             },
             tx,

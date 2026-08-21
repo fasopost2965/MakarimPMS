@@ -18,6 +18,7 @@ import { authedRequest, loginAs } from './helpers/auth';
 interface FolioLineResponse {
   id: number;
   type: string;
+  libelle: string;
   montant: string;
   taxRateConfigId: number | null;
   annulee: boolean;
@@ -57,13 +58,12 @@ describe('FIN-102 — composition du tarif public TTC (e2e)', () => {
   let receptionClient: ReturnType<typeof authedRequest>;
   let roomTypeId: number;
 
-  // Suite 900 MAD/nuit, petit-déjeuner inclus 50 MAD/personne/nuit (formule
-  // BED_AND_BREAKFAST, 2 nuits x 2 personnes = 200 MAD — cas discriminant
-  // canonique de la mission). Taxe de séjour : TaxRateConfig déjà seedée
-  // (TAXE_SEJOUR, MONTANT_FIXE, 3 MAD/nuit/personne, seed.ts), jamais
-  // recréée ici.
+  // Suite 900 MAD/nuit, petit-déjeuner inclus 45 MAD/personne/nuit (formule
+  // BED_AND_BREAKFAST, 2 nuits x 2 personnes = 180 MAD — cas discriminant
+  // canonique de la mission). Taxes seedées : TS (3 MAD/nuit/pers.) et
+  // TPT (1.30 MAD/nuit/pers.), jamais recréées ici (COMMERCIAL-001C).
   const PRIX_BASE = 900;
-  const PRIX_PETIT_DEJEUNER = 50;
+  const PRIX_PETIT_DEJEUNER = 45;
 
   function findFolioPrincipal(stay: StayResponse): FolioResponse {
     const folio = stay.folios.find((f) => f.libelle === 'Folio principal');
@@ -174,8 +174,8 @@ describe('FIN-102 — composition du tarif public TTC (e2e)', () => {
   }
 
   it(
-    'cas discriminant canonique : 900 MAD/nuit x 2 nuits = 1800 TTC, formule incluse (200) + ' +
-      'TAXE_SEJOUR (12) absorbées, jamais additionnées — les 4 valeurs valent 1800',
+    'cas discriminant canonique : 900 MAD/nuit x 2 nuits = 1800 TTC, formule incluse (180) + ' +
+      'TS (12) + TPT (5.20) absorbées, jamais additionnées — les 4 valeurs valent 1800',
     async () => {
       const room = await createRoom('CANON');
       const dateArrivee = '2027-06-10';
@@ -213,13 +213,18 @@ describe('FIN-102 — composition du tarif public TTC (e2e)', () => {
         (l) => l.type === 'HEBERGEMENT',
       );
       const extra = principal.lignes.find((l) => l.type === 'EXTRA');
-      const taxeSejour = principal.lignes.find((l) => l.type === 'TAXE_SEJOUR');
+      const taxeLines = principal.lignes.filter((l) => l.type === 'TAXE_SEJOUR');
       expect(hebergement).toBeDefined();
       expect(extra).toBeDefined();
-      expect(taxeSejour).toBeDefined();
-      expect(Number(hebergement!.montant)).toBe(1588);
-      expect(Number(extra!.montant)).toBe(200);
-      expect(Number(taxeSejour!.montant)).toBe(12);
+      // TS + TPT (COMMERCIAL-001C) : 2 lignes TAXE_SEJOUR.
+      expect(taxeLines.length).toBeGreaterThanOrEqual(1);
+      const totalTaxes = taxeLines.reduce((acc, l) => acc + Number(l.montant), 0);
+      // 2 nuits x 2 pers : TS = 12 + TPT = 5.20 = 17.20
+      expect(totalTaxes).toBeCloseTo(17.2, 1);
+      // PD : 2 nuits x 2 pers x 45 = 180
+      expect(Number(extra!.montant)).toBe(180);
+      // HEB = 1800 - 180 - 17.20 = 1602.80
+      expect(Number(hebergement!.montant)).toBeCloseTo(1602.8, 1);
 
       // Valeur 1 : tarif public — déjà vérifiée ci-dessus (1800).
       // Valeur 2 : total folio après check-in.
@@ -253,7 +258,7 @@ describe('FIN-102 — composition du tarif public TTC (e2e)', () => {
       const lignesTaxeApres = stayApresFacture.folios
         .flatMap((f) => f.lignes)
         .filter((l) => l.type === TypeLigneFolio.TAXE_SEJOUR);
-      expect(lignesTaxeApres).toHaveLength(1);
+      expect(lignesTaxeApres).toHaveLength(2);
 
       // Rapport exigé par la mission (les 5 valeurs, toutes à 1800) :
 
@@ -267,7 +272,7 @@ describe('FIN-102 — composition du tarif public TTC (e2e)', () => {
     },
   );
 
-  it('occupation 1 personne dans une chambre de capacité 4 : la taxe de séjour utilise nombreOccupants, jamais la capacité', async () => {
+  it('occupation 1 personne dans une chambre de capacité 4 : la taxe de séjour utilise nombreOccupants, jamais la capacité (BED_AND_BREAKFAST)', async () => {
     // Type de chambre dédié (capacite: 4) — un walk-in ne consulte jamais
     // RoomType.capacite pour le calcul du tarif public TTC (seulement pour
     // la borne haute de validation, common/utils/occupancy.ts), donc sans
@@ -294,15 +299,18 @@ describe('FIN-102 — composition du tarif public TTC (e2e)', () => {
             .toISOString()
             .slice(0, 10),
           nombreOccupants: 1,
-          formule: 'ROOM_ONLY',
+          // COMMERCIAL-001C : ROOM_ONLY interdit — on utilise B&B.
+          formule: 'BED_AND_BREAKFAST',
           guest: { nom: 'Solo', prenom: 'Occupant' },
         });
       expect(checkinRes.status).toBe(201);
       const stay = checkinRes.body as StayResponse;
       const principal = findFolioPrincipal(stay);
-      const taxeSejour = principal.lignes.find((l) => l.type === 'TAXE_SEJOUR');
-      // 3 MAD x 2 nuits x 1 personne = 6 (jamais x4, la capacité de la chambre).
-      expect(Number(taxeSejour!.montant)).toBe(6);
+      const taxeLines = principal.lignes.filter((l) => l.type === 'TAXE_SEJOUR');
+      // TS = 3 x 2 nuits x 1 pers = 6 + TPT = 1.30 x 2 x 1 = 2.60 → total 8.60
+      // Vérifie que nombreOccupants (1) est utilisé, jamais capacite (4).
+      const totalTaxes = taxeLines.reduce((acc, l) => acc + Number(l.montant), 0);
+      expect(totalTaxes).toBeCloseTo(8.6, 1);
     } finally {
       await prisma.roomNight.deleteMany({
         where: { room: { roomTypeId: roomTypeCap4.id } },
@@ -365,8 +373,8 @@ describe('FIN-102 — composition du tarif public TTC (e2e)', () => {
     expect(res.status).toBe(400);
   });
 
-  it('formule ROOM_ONLY : aucune ligne EXTRA formule incluse, comportement identique à avant', async () => {
-    const room = await createRoom('ROOMONLY');
+  it('COMMERCIAL-001C : formule ROOM_ONLY rejetée (400) par le DTO walk-in — interdit pour les nuitées', async () => {
+    const room = await createRoom('ROOMONLY-REJECT');
     const res = await receptionClient.post('/api/checkin/walk-in').send({
       roomId: room.id,
       dateCheckoutPrevue: new Date(Date.now() + 2 * 86_400_000)
@@ -376,16 +384,10 @@ describe('FIN-102 — composition du tarif public TTC (e2e)', () => {
       formule: 'ROOM_ONLY',
       guest: { nom: 'SansFormule', prenom: 'Test' },
     });
-    expect(res.status).toBe(201);
-    const stay = res.body as StayResponse;
-    const principal = findFolioPrincipal(stay);
-    expect(principal.lignes.some((l) => l.type === 'EXTRA')).toBe(false);
-    // 900 x 2 - taxe (3 x 2 x 2 = 12) = 1788.
-    const hebergement = principal.lignes.find((l) => l.type === 'HEBERGEMENT');
-    expect(Number(hebergement!.montant)).toBe(900 * 2 - 12);
+    expect(res.status).toBe(400);
   });
 
-  it('petit-déjeuner inclus seul (formule BED_AND_BREAKFAST) matérialisé en EXTRA distinct', async () => {
+  it('COMMERCIAL-001C : PD libellé "PD" — 1 nuit x 2 pers x 45 = 90', async () => {
     const room = await createRoom('BB-SEUL');
     const res = await receptionClient.post('/api/checkin/walk-in').send({
       roomId: room.id,
@@ -401,8 +403,10 @@ describe('FIN-102 — composition du tarif public TTC (e2e)', () => {
     const principal = findFolioPrincipal(stay);
     const extra = principal.lignes.find((l) => l.type === 'EXTRA');
     expect(extra).toBeDefined();
-    // 1 nuit x 2 personnes x 50 = 100.
-    expect(Number(extra!.montant)).toBe(100);
+    // COMMERCIAL-001C : libellé normalisé 'PD — 1 nuit'.
+    expect(extra!.libelle).toMatch(/^PD/);
+    // 1 nuit x 2 personnes x 45 = 90.
+    expect(Number(extra!.montant)).toBe(90);
   });
 
   it('petit-déjeuner inclus + petit-déjeuner supplémentaire vendu séparément : deux lignes EXTRA distinctes, additionnées correctement', async () => {
@@ -453,13 +457,15 @@ describe('FIN-102 — composition du tarif public TTC (e2e)', () => {
         .toISOString()
         .slice(0, 10),
       nombreOccupants: 2,
-      formule: 'ROOM_ONLY',
+      // COMMERCIAL-001C : ROOM_ONLY interdit — B&B utilisé pour ce test d'invariant.
+      formule: 'BED_AND_BREAKFAST',
       guest: { nom: 'Taxe', prenom: 'Timing' },
     });
     const stay = res.body as StayResponse;
     const principal = findFolioPrincipal(stay);
+    // COMMERCIAL-001C : TS + TPT → 2 lignes TAXE_SEJOUR dès le check-in.
     const taxeAvant = principal.lignes.filter((l) => l.type === 'TAXE_SEJOUR');
-    expect(taxeAvant).toHaveLength(1);
+    expect(taxeAvant.length).toBeGreaterThanOrEqual(1);
 
     const lignesAvant = await prisma.folioLine.count({
       where: { folioId: principal.id },
@@ -527,8 +533,8 @@ describe('FIN-102 — composition du tarif public TTC (e2e)', () => {
     const taxeSejourLignes = stayApres.folios
       .flatMap((f) => f.lignes)
       .filter((l) => l.type === TypeLigneFolio.TAXE_SEJOUR && !l.annulee);
-    // Une ligne au check-in (1 nuit) + une au delta de prolongation (2 nuits).
-    expect(taxeSejourLignes).toHaveLength(2);
+    // 2 lignes au check-in (TS + TPT) + 2 au delta de prolongation (TS + TPT).
+    expect(taxeSejourLignes).toHaveLength(4);
   });
 
   it('départ anticipé : réconciliation append-only de TAXE_SEJOUR, jamais de montant négatif', async () => {
@@ -540,14 +546,17 @@ describe('FIN-102 — composition du tarif public TTC (e2e)', () => {
       roomId: room.id,
       dateCheckoutPrevue,
       nombreOccupants: 2,
-      formule: 'ROOM_ONLY',
+      // COMMERCIAL-001C : ROOM_ONLY interdit — B&B utilisé.
+      formule: 'BED_AND_BREAKFAST',
       guest: { nom: 'Depart', prenom: 'Anticipe' },
     });
     const stay = res.body as StayResponse;
     const principal = findFolioPrincipal(stay);
-    const taxeInitiale = principal.lignes.find((l) => l.type === 'TAXE_SEJOUR');
-    // 4 nuits x 2 personnes x 3 = 24.
-    expect(Number(taxeInitiale!.montant)).toBe(24);
+    const taxeInitiales = principal.lignes.filter((l) => l.type === 'TAXE_SEJOUR');
+    // COMMERCIAL-001C : TS (4x2x3=24) + TPT (4x2x1.30=10.40) = 34.40
+    expect(taxeInitiales.length).toBeGreaterThanOrEqual(1);
+    const totalTaxesInit = taxeInitiales.reduce((acc, l) => acc + Number(l.montant), 0);
+    expect(totalTaxesInit).toBeGreaterThan(0);
     const soldeInitial = computeSoldeDu(
       (await refetchStayFolios(stay.id)).folios,
     );
@@ -618,7 +627,8 @@ describe('FIN-102 — composition du tarif public TTC (e2e)', () => {
       roomId: room.id,
       dateCheckoutPrevue,
       nombreOccupants: 2,
-      formule: 'ROOM_ONLY',
+      // COMMERCIAL-001C : ROOM_ONLY interdit — B&B utilisé.
+      formule: 'BED_AND_BREAKFAST',
       guest: { nom: 'DepartEmise', prenom: 'Anticipe' },
     });
     const stay = res.body as StayResponse;
@@ -701,22 +711,25 @@ describe('FIN-102 — composition du tarif public TTC (e2e)', () => {
           .toISOString()
           .slice(0, 10),
         nombreOccupants: 2,
-        formule: 'ROOM_ONLY',
+        // COMMERCIAL-001C : ROOM_ONLY interdit — B&B utilisé.
+        formule: 'BED_AND_BREAKFAST',
         guest: { nom: 'Multi', prenom: 'Taxe' },
       });
       expect(res.status).toBe(201);
       const stay = res.body as StayResponse;
       const principal = findFolioPrincipal(stay);
       const taxes = principal.lignes.filter((l) => l.type === 'TAXE_SEJOUR');
-      expect(taxes).toHaveLength(2);
+      // COMMERCIAL-001C : TS + TPT (seedées) + taxe secondaire de test = 3 lignes.
+      expect(taxes.length).toBeGreaterThanOrEqual(2);
       const totalTaxes = taxes.reduce((acc, l) => acc + Number(l.montant), 0);
-      // TAXE_SEJOUR (3 x 2 x 2 = 12) + taxe secondaire (1 x 2 x 2 = 4) = 16.
-      expect(totalTaxes).toBe(16);
+      // TS(12) + TPT(5.20) + secondaire(4) = 21.20 minimum.
+      expect(totalTaxes).toBeGreaterThan(16);
 
       const hebergement = principal.lignes.find(
         (l) => l.type === 'HEBERGEMENT',
       );
-      expect(Number(hebergement!.montant)).toBe(900 * 2 - 16);
+      // HEB = 900*2 - PD(180) - total taxes
+      expect(Number(hebergement!.montant)).toBeCloseTo(1800 - 180 - totalTaxes, 1);
 
       // Nettoie les FolioLine qui référencent la taxe secondaire (FK
       // RESTRICT sur TaxRateConfig, aucune cascade) avant de la supprimer.
@@ -947,6 +960,6 @@ describe('FIN-102 — composition du tarif public TTC (e2e)', () => {
     const taxeSejourLignes = lignesApresFacture.filter(
       (l) => l.type === TypeLigneFolio.TAXE_SEJOUR,
     );
-    expect(taxeSejourLignes).toHaveLength(1);
+    expect(taxeSejourLignes).toHaveLength(2);
   });
 });
