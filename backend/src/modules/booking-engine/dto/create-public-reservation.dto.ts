@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsDateString,
-  IsIn,
+  IsEnum,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -28,25 +28,15 @@ export class CreatePublicReservationDto {
   dateDepart: string;
 
   @IsOptional()
-  @IsIn(
-    [
-      FormuleHebergement.BED_AND_BREAKFAST,
-      FormuleHebergement.HALF_BOARD,
-      FormuleHebergement.FULL_BOARD,
-    ],
-    { message: "La formule ROOM_ONLY n'est plus autorisée." },
-  )
+  @IsEnum(FormuleHebergement)
   formule?: FormuleHebergement;
 
   @ValidateIf(
     (o: CreatePublicReservationDto) =>
       o.nombreOccupants !== undefined ||
-      (
-        [
-          FormuleHebergement.HALF_BOARD,
-          FormuleHebergement.FULL_BOARD,
-        ] as FormuleHebergement[]
-      ).includes(o.formule as FormuleHebergement),
+      ([FormuleHebergement.HALF_BOARD, FormuleHebergement.FULL_BOARD] as FormuleHebergement[]).includes(
+        o.formule as FormuleHebergement,
+      ),
   )
   @IsNotEmpty({
     message:

@@ -1,7 +1,6 @@
 import { Type } from 'class-transformer';
 import {
   IsDateString,
-  IsIn,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -40,14 +39,7 @@ export class CreateReservationDto {
   // Défaut BED_AND_BREAKFAST (même défaut que le schéma) si omis — l'hôtel
   // vend systématiquement en B&B minimum (docs métier Priorité 3).
   @IsOptional()
-  @IsIn(
-    [
-      FormuleHebergement.BED_AND_BREAKFAST,
-      FormuleHebergement.HALF_BOARD,
-      FormuleHebergement.FULL_BOARD,
-    ],
-    { message: "La formule ROOM_ONLY n'est plus autorisée pour les nuitées." },
-  )
+  @IsEnum(FormuleHebergement)
   formule?: FormuleHebergement;
 
   // BR-RES-006 — optionnelle : une réservation sans politique rattachée
@@ -68,12 +60,9 @@ export class CreateReservationDto {
   @ValidateIf(
     (o: CreateReservationDto) =>
       o.nombreOccupants !== undefined ||
-      (
-        [
-          FormuleHebergement.HALF_BOARD,
-          FormuleHebergement.FULL_BOARD,
-        ] as FormuleHebergement[]
-      ).includes(o.formule as FormuleHebergement),
+      ([FormuleHebergement.HALF_BOARD, FormuleHebergement.FULL_BOARD] as FormuleHebergement[]).includes(
+        o.formule as FormuleHebergement,
+      ),
   )
   @IsNotEmpty({
     message:

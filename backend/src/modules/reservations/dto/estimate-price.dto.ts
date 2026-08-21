@@ -2,7 +2,7 @@ import { Type } from 'class-transformer';
 import { FormuleHebergement } from '@prisma/client';
 import {
   IsDateString,
-  IsIn,
+  IsEnum,
   IsInt,
   IsOptional,
   IsPositive,
@@ -28,14 +28,7 @@ export class EstimatePriceDto {
   dateDepart: string;
 
   @IsOptional()
-  @IsIn(
-    [
-      FormuleHebergement.BED_AND_BREAKFAST,
-      FormuleHebergement.HALF_BOARD,
-      FormuleHebergement.FULL_BOARD,
-    ],
-    { message: "La formule ROOM_ONLY n'est plus autorisée." },
-  )
+  @IsEnum(FormuleHebergement)
   formule?: FormuleHebergement;
 
   // PRICING-001E.1 — même règle ValidateIf que CreateReservationDto et

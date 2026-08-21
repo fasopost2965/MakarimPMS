@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsDateString,
-  IsIn,
+  IsEnum,
   IsInt,
   IsOptional,
   Min,
@@ -42,13 +42,6 @@ export class WalkinDto {
 
   // Défaut BED_AND_BREAKFAST (même défaut que le schéma) si omis.
   @IsOptional()
-  @IsIn(
-    [
-      FormuleHebergement.BED_AND_BREAKFAST,
-      FormuleHebergement.HALF_BOARD,
-      FormuleHebergement.FULL_BOARD,
-    ],
-    { message: "La formule ROOM_ONLY n'est plus autorisée." },
-  )
+  @IsEnum(FormuleHebergement)
   formule?: FormuleHebergement;
 }

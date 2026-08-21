@@ -491,7 +491,7 @@ export class StayService {
         data: {
           folioId: folio.id,
           type: TypeLigneFolio.TAXE_SEJOUR,
-          libelle: taxe.type,
+          libelle: taxe.type === 'TAXE_SEJOUR' ? 'TS' : taxe.type,
           montant: taxe.montant,
           tauxTva: new Prisma.Decimal(0),
           taxRateConfigId: taxe.taxRateConfigId,

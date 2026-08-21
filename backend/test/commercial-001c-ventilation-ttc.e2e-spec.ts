@@ -89,6 +89,18 @@ describe('COMMERCIAL-001C — Ventilation TTC nuitée (e2e)', () => {
       },
     });
     roomTypeId = roomType.id;
+
+    await prisma.taxRateConfig.deleteMany({ where: { type: 'TPT' } });
+    await prisma.taxRateConfig.create({
+      data: {
+        type: 'TPT',
+        taux: new Prisma.Decimal('1.30'),
+        mode: 'MONTANT_FIXE',
+        actif: true,
+        applicableParDefaut: true,
+        collectePourTresor: true,
+      },
+    });
   });
 
   afterAll(async () => {
@@ -129,6 +141,7 @@ describe('COMMERCIAL-001C — Ventilation TTC nuitée (e2e)', () => {
     });
     await prisma.room.deleteMany({ where: { roomTypeId } });
     await prisma.roomType.delete({ where: { id: roomTypeId } });
+    await prisma.taxRateConfig.deleteMany({ where: { type: 'TPT' } });
     await app.close();
   });
 
@@ -210,10 +223,10 @@ describe('COMMERCIAL-001C — Ventilation TTC nuitée (e2e)', () => {
   );
 
   // ────────────────────────────────────────────────────────────────────────────
-  // T2 — Rejet ROOM_ONLY (DTO walk-in)
+  // T2 — Compatibilité legacy ROOM_ONLY (walk-in)
   // ────────────────────────────────────────────────────────────────────────────
-  it('T2 — ROOM_ONLY rejeté 400 par le DTO walk-in', async () => {
-    const room = await createRoom('RO-REJECT');
+  it('T2 — ROOM_ONLY reste accepté par le backend pour compatibilité legacy walk-in', async () => {
+    const room = await createRoom('RO-LEGACY');
     const res = await receptionClient.post('/api/checkin/walk-in').send({
       roomId: room.id,
       dateCheckoutPrevue: new Date(Date.now() + 86_400_000)
@@ -223,15 +236,14 @@ describe('COMMERCIAL-001C — Ventilation TTC nuitée (e2e)', () => {
       formule: 'ROOM_ONLY',
       guest: { nom: 'RoomOnly', prenom: 'Reject' },
     });
-    expect(res.status).toBe(400);
-    expect(JSON.stringify(res.body)).toContain('ROOM_ONLY');
+    expect(res.status).toBe(201);
   });
 
   // ────────────────────────────────────────────────────────────────────────────
-  // T3 — Rejet ROOM_ONLY (DTO réservation)
+  // T3 — Compatibilité legacy ROOM_ONLY (réservation)
   // ────────────────────────────────────────────────────────────────────────────
-  it('T3 — ROOM_ONLY rejeté 400 par le DTO réservation', async () => {
-    const room = await createRoom('RO-RES-REJECT');
+  it('T3 — ROOM_ONLY reste accepté par le backend pour compatibilité legacy réservation', async () => {
+    const room = await createRoom('RO-RES-LEGACY');
     const res = await receptionClient.post('/api/reservations').send({
       roomId: room.id,
       dateArrivee: '2027-09-01',
@@ -239,7 +251,7 @@ describe('COMMERCIAL-001C — Ventilation TTC nuitée (e2e)', () => {
       formule: 'ROOM_ONLY',
       guest: { nom: 'RoomOnly', prenom: 'ResReject' },
     });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(201);
   });
 
   // ────────────────────────────────────────────────────────────────────────────
