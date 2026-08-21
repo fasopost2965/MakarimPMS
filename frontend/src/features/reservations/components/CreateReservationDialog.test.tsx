@@ -217,11 +217,13 @@ describe('PRICING-001E — occupancy dans CreateReservationDialog', () => {
     estimateSpy.mockResolvedValue({ prixEstime: '500.00' });
   });
 
-  // Test 5 — ROOM_ONLY sans nombreOccupants => step 2 valide (comportement existant)
-  it('5. ROOM_ONLY sans nombreOccupants : le bouton Continuer reste actif', async () => {
+  // Test 5 — BED_AND_BREAKFAST (ROOM_ONLY supprimé par COMMERCIAL-001C) sans nombreOccupants => step 2 valide
+  it('5. B&B sans nombreOccupants : le bouton Continuer reste actif (ROOM_ONLY supprimé)', async () => {
     const user = userEvent.setup();
     await navigateToStep2(user);
-    await user.click(screen.getByRole('button', { name: 'Logement seul' }));
+    // COMMERCIAL-001C a supprimé ROOM_ONLY. BED_AND_BREAKFAST est sélectionné par défaut
+    // et ne requiert pas nombreOccupants — le bouton Continuer doit rester actif.
+    await user.click(screen.getByRole('button', { name: 'Petit-déjeuner (B&B)' }));
     const continuer = screen.getByRole('button', { name: 'Continuer' });
     expect(continuer).not.toBeDisabled();
   });
@@ -230,7 +232,8 @@ describe('PRICING-001E — occupancy dans CreateReservationDialog', () => {
   it('6. B&B sans nombreOccupants : le bouton Continuer reste actif', async () => {
     const user = userEvent.setup();
     await navigateToStep2(user);
-    await user.click(screen.getByRole('button', { name: 'Petit-déjeuner' }));
+    // COMMERCIAL-001C : libellé du bouton est désormais 'Petit-déjeuner (B&B)'
+    await user.click(screen.getByRole('button', { name: 'Petit-déjeuner (B&B)' }));
     const continuer = screen.getByRole('button', { name: 'Continuer' });
     expect(continuer).not.toBeDisabled();
   });

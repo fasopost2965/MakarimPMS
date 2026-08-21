@@ -28,9 +28,9 @@ import type { CheckinGuestSummary, RoomAvailability } from '../types';
 import { checkRoomAvailability, getCheckinGuest } from '../api';
 
 // CH-061 (Lot #3 design) — même liste que CreateReservationDialog.
+// COMMERCIAL-001C : ROOM_ONLY supprimé — interdit pour les nuitées.
 const FORMULE_OPTIONS: { value: FormuleHebergement; label: string }[] = [
-  { value: 'ROOM_ONLY', label: 'Logement seul' },
-  { value: 'BED_AND_BREAKFAST', label: 'Petit-déjeuner' },
+  { value: 'BED_AND_BREAKFAST', label: 'Petit-déjeuner (B&B)' },
   { value: 'HALF_BOARD', label: 'Demi-pension' },
   { value: 'FULL_BOARD', label: 'Pension complète' },
 ];
