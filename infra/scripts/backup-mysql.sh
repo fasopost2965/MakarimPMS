@@ -22,6 +22,9 @@ BACKUP_DIR="${REPO_DIR}/infra/backups"
 RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-14}"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 OUTPUT_FILE="${BACKUP_DIR}/pms_makarim_${TIMESTAMP}.sql.gz"
+# Seconde base sauvegardée à part (fichier distinct, préfixe distinct).
+AUDIT_DATABASE="${BACKUP_AUDIT_DATABASE:-pms_makarim_audit}"
+AUDIT_OUTPUT_FILE="${BACKUP_DIR}/pms_makarim_audit_${TIMESTAMP}.sql.gz"
 
 mkdir -p "${BACKUP_DIR}"
 
@@ -30,10 +33,19 @@ cd "${REPO_DIR}"
 # --single-transaction : dump cohérent sans verrouiller les tables InnoDB en écriture
 # pendant la durée du dump (le PMS reste utilisable pendant la sauvegarde).
 docker compose exec -T mysql sh -c \
-  'exec mysqldump --single-transaction --routines --triggers -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' \
+  'exec mysqldump --single-transaction --routines --triggers --no-tablespaces -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' \
   | gzip > "${OUTPUT_FILE}"
 
 echo "Sauvegarde écrite : ${OUTPUT_FILE} ($(du -h "${OUTPUT_FILE}" | cut -f1))"
+
+# --databases inscrit CREATE DATABASE + USE dans le fichier : une restauration de ce dump
+# retombe toujours dans ${AUDIT_DATABASE}, même s'il était passé par erreur à
+# restore-mysql.sh (qui cible pms_makarim) : il ne peut jamais écraser la production.
+docker compose exec -T -e AUDIT_DB="${AUDIT_DATABASE}" mysql sh -c \
+  'exec mysqldump --single-transaction --routines --triggers --no-tablespaces -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" --databases "$AUDIT_DB"' \
+  | gzip > "${AUDIT_OUTPUT_FILE}"
+
+echo "Sauvegarde écrite : ${AUDIT_OUTPUT_FILE} ($(du -h "${AUDIT_OUTPUT_FILE}" | cut -f1))"
 
 # Purge des sauvegardes locales plus anciennes que RETENTION_DAYS — ne s'applique
 # qu'à la copie locale ; la rétention du stockage externe (une fois configuré) est
