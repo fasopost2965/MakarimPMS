@@ -17,10 +17,10 @@ name: Deploy
 # docker-compose.yml + docker-compose.prod.yml présents, fichier .env réel (voir
 # OPERATIONS_RUNBOOK.md §1.2) à côté, MySQL/Redis déjà démarrés au moins une fois.
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
+  # Désactivé en bêta : plus aucun déploiement automatique après CI sur main.
+  # workflow_dispatch seul ; le job build-and-push est alors ignoré (il exige
+  # workflow_run). Réactiver après validation de la checklist go-live (J2).
+  workflow_dispatch:
 
 concurrency:
   group: production-deploy
