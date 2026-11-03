@@ -16,6 +16,10 @@ set -euo pipefail
 DOMAIN="${1:-hotelmakarim.cloud}"
 PMS_URL="https://pms.${DOMAIN}"
 API_URL="https://api.${DOMAIN}/api"
+BOOKING_DATE_START="$(date -u -d '+7 days' +%Y-%m-%dT00:00:00.000Z)"
+BOOKING_DATE_END="$(date -u -d '+8 days' +%Y-%m-%dT00:00:00.000Z)"
+: "${SMOKE_TEST_EMAIL:?SMOKE_TEST_EMAIL doit être défini}"
+: "${SMOKE_TEST_PASSWORD:?SMOKE_TEST_PASSWORD doit être défini}"
 
 PASS=0
 FAIL=0
@@ -48,17 +52,17 @@ check "En-tête HSTS présent (HTTPS forcé, GO_LIVE_CHECKLIST point 6)" \
 check "Endpoint public branding répond (logo/raison sociale)" \
   "curl -fsS --max-time 10 '${API_URL}/branding' | grep -q raisonSociale"
 
-check "Login accepte les identifiants de seed (admin@makarim.test)" \
+check "Login accepte le compte de smoke-test configuré" \
   "curl -fsS --max-time 10 -X POST '${API_URL}/auth/login' \
     -H 'Content-Type: application/json' \
-    -d '{\"email\":\"admin@makarim.test\",\"motDePasse\":\"Password123!\"}' \
+    -d \"{\\\"email\\\":\\\"${SMOKE_TEST_EMAIL}\\\",\\\"motDePasse\\\":\\\"${SMOKE_TEST_PASSWORD}\\\"}\" \
     -c /tmp/smoke-test-cookies.txt | grep -q '\"ok\":true'"
 
 check "Route protégée refuse un accès non authentifié (401 attendu)" \
   "test \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 '${API_URL}/reservations')\" = '401'"
 
 check "Route publique de réservation (booking engine, F4) répond" \
-  "curl -fsS --max-time 10 '${API_URL}/booking/availability?dateDebut=2026-08-01&dateFin=2026-08-02' -o /dev/null"
+  "curl -fsS --max-time 10 '${API_URL}/booking/availability?dateArrivee=${BOOKING_DATE_START}&dateDepart=${BOOKING_DATE_END}' -o /dev/null"
 
 echo ""
 echo "=== Résultat : ${PASS} OK, ${FAIL} échec(s) ==="

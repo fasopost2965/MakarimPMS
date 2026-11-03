@@ -10,25 +10,38 @@ Projet mono-développeur (agent IA + validation utilisateur, voir `docs/executio
 
 Toutes les étapes doivent être marquées **[OK]** avant le lancement officiel en direct.
 
-| Périmètre de Contrôle | Action / Vérification Physique | Statut | Responsable |
-| :--- | :--- | :---: | :--- |
-| **1. Sauvegarde d'Origine** | Première sauvegarde `infra/scripts/backup-mysql.sh` exécutée avec succès sur la base de production, restauration testée au moins une fois (`infra/scripts/restore-mysql.sh`) | `[ ]` | Admin BD |
-| **2. Clés & Secrets d'Env** | Fichier `.env` réel à la racine du dépôt sur le VPS (voir `docs/operations/OPERATIONS_RUNBOOK.md` §1.2), aucune valeur par défaut de `backend/.env.example` conservée | `[ ]` | DevOps |
-| **3. JWT Security** | `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` générés (`openssl rand -base64 48`), le bootstrap (`assertStrongSecrets`) refuse déjà de démarrer sinon en `NODE_ENV=production` — vérifier que le démarrage réel réussit avec les vraies valeurs | `[ ]` | DevOps |
-| **4. Chiffrement au repos (Guest)** | `ENCRYPTION_KEY` réelle (32 octets base64, `openssl rand -base64 32`), différente de la valeur de développement — même garde de démarrage que le point 3 | `[ ]` | DevOps |
-| **5. Sécurisation HTTPS** | Certificat SAN Let's Encrypt actif (`certbot --nginx -d pms.hotelmakarim.cloud -d api.hotelmakarim.cloud`), renouvellement automatique vérifié (`certbot renew --dry-run`) | `[ ]` | DevOps |
-| **6. Nginx hôte & en-têtes de sécurité** | `infra/nginx/pms-hotel-makarim.conf` déployé (HSTS, `X-Frame-Options`, `X-Content-Type-Options` déjà inclus dans le gabarit) | `[ ]` | DevOps |
-| **7. Base de données MySQL** | Conteneur `mysql` démarré, healthcheck vert (`docker compose ps`), volume `mysql_data` sur un disque persistant du VPS | `[ ]` | DevOps / Admin BD |
-| **8. Journalisation des Logs** | Rotation Docker configurée (`/etc/docker/daemon.json`, voir `OPERATIONS_RUNBOOK.md` §5.2) — sans quoi les logs JSON saturent le disque unique du VPS avec le temps | `[ ]` | DevOps |
-| **9. Monitoring de l'Hôte** | Surveillance manuelle a minima documentée (`docker stats`, `df -h`) ; outil auto-hébergé (ex. Uptime Kuma) explicitement hors périmètre de ce Go-Live si non installé — ne pas cocher ce point en prétendant un outil géré inexistant | `[ ]` | DevOps |
-| **10. Vérification post-déploiement** | `deploy.yml` a exécuté avec succès son healthcheck (`GET /api/health`) sur un déploiement réel, pas seulement en local | `[ ]` | DevOps |
-| **11. Plan de Sauvegardes Automatiques** | `infra/scripts/backup-mysql.sh` planifié en crontab sur le VPS (`crontab -l` le confirme), rétention locale + destination hors VPS confirmée par l'utilisateur | `[ ]` | DevOps / Admin BD |
-| **12. Plan de Reprise (Rollback)** | Rollback applicatif testé au moins une fois en conditions réelles (déploiement volontairement cassé puis rollback, voir `OPERATIONS_RUNBOOK.md` §4.1) — pas seulement lu, exécuté | `[ ]` | Équipe Ops |
-| **13. Smoke Tests** | `infra/scripts/smoke-test.sh [domaine]` (lecture seule : health check, HSTS, endpoint public, login, 401 sur route protégée) **puis** parcours manuel réel : check-in walk-in sur une chambre de test, encaissement, check-out — jamais automatisé en aveugle contre la prod (voir `docs/execution/RELEASE_CHECKLIST.md`) | `[ ]` | Lead Developer / QA |
-| **14. Approbation Métier** | Confirmation explicite du Product Owner (utilisateur) que les fonctionnalités livrées couvrent le besoin minimal d'exploitation quotidienne | `[ ]` | Product Owner |
-| **15. Accord Direction** | Autorisation officielle de bascule par la direction de l'hôtel | `[ ]` | Direction Générale |
+| Périmètre de Contrôle | Action / Vérification Physique | Statut | Responsable | Preuve J2 |
+| :--- | :--- | :---: | :--- | :--- |
+| **1. Sauvegarde d'Origine** | Première sauvegarde `infra/scripts/backup-mysql.sh` exécutée avec succès sur la base de production, restauration testée au moins une fois (`infra/scripts/restore-mysql.sh`) | `[OK]` | Admin BD | Backup `pms_makarim_20261103T175814Z.sql.gz` (336K), audit (24K) ; restauration isolée validée sur 56 tables. |
+| **2. Clés & Secrets d'Env** | Fichier `.env` réel à la racine du dépôt sur le VPS (voir `docs/operations/OPERATIONS_RUNBOOK.md` §1.2), aucune valeur par défaut de `backend/.env.example` conservée | `[OK]` | DevOps | `.env` présent, `640 root:deploy`, `NODE_ENV=production`, URLs publiques correctes. |
+| **3. JWT Security** | `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` générés (`openssl rand -base64 48`), le bootstrap (`assertStrongSecrets`) refuse déjà de démarrer sinon en `NODE_ENV=production` — vérifier que le démarrage réel réussit avec les vraies valeurs | `[OK]` | DevOps | Secrets de longueur 96 ; backend `stable` démarré et healthcheck `200`. |
+| **4. Chiffrement au repos (Guest)** | `ENCRYPTION_KEY` réelle (32 octets base64, `openssl rand -base64 32`), différente de la valeur de développement — même garde de démarrage que le point 3 | `[OK]` | DevOps | Clé base64 de longueur 44, décodée à 32 octets ; backend démarré en production. |
+| **5. Sécurisation HTTPS** | Certificat SAN Let's Encrypt actif (`certbot --nginx -d pms.hotelmakarim.cloud -d api.hotelmakarim.cloud`), renouvellement automatique vérifié (`certbot renew --dry-run`) | `[KO]` | DevOps | Certificat SAN actif jusqu'au 2026-12-27 et `certbot.timer` actif ; `--dry-run` non exécutable par `deploy` sans sudo. |
+| **6. Nginx hôte & en-têtes de sécurité** | `infra/nginx/pms-hotel-makarim.conf` déployé (HSTS, `X-Frame-Options`, `X-Content-Type-Options` déjà inclus dans le gabarit) | `[OK]` | DevOps | HTTPS externe : HSTS, X-Frame-Options et X-Content-Type-Options présents sur `pms.` et `api.`. |
+| **7. Base de données MySQL** | Conteneur `mysql` démarré, healthcheck vert (`docker compose ps`), volume `mysql_data` sur un disque persistant du VPS | `[OK]` | DevOps / Admin BD | `makarimpms-mysql-1` healthy ; volume `makarimpms_mysql_data` ; disque `/dev/sda1`, 88G libres. |
+| **8. Journalisation des Logs** | Rotation Docker configurée (`/etc/docker/daemon.json`, voir `OPERATIONS_RUNBOOK.md` §5.2) — sans quoi les logs JSON saturent le disque unique du VPS avec le temps | `[OK]` | DevOps | `/etc/docker/daemon.json` : `json-file`, `10m`, `3` fichiers. |
+| **9. Monitoring de l'Hôte** | Surveillance manuelle a minima documentée (`docker stats`, `df -h`) ; outil auto-hébergé (ex. Uptime Kuma) explicitement hors périmètre de ce Go-Live si non installé — ne pas cocher ce point en prétendant un outil géré inexistant | `[OK]` | DevOps | Contrôle manuel `df -h` effectué : 9% utilisés ; aucun outil d'alerting simulé. |
+| **10. Vérification post-déploiement** | Le chemin de déploiement utilisé (workflow ou procédure manuelle documentée) a exécuté avec succès son healthcheck (`GET /api/health`) sur un déploiement réel, pas seulement en local | `[OK]` | DevOps | Procédure manuelle J2 : bascule vers `stable`, `GET /api/health` `200` ; workflow automatique reste désactivé en bêta. |
+| **11. Plan de Sauvegardes Automatiques** | `infra/scripts/backup-mysql.sh` planifié en crontab sur le VPS (`crontab -l` le confirme), rétention locale + destination hors VPS confirmée par l'utilisateur | `[KO]` | DevOps / Admin BD | Cron `0 3 * * *` et rétention 14 jours présents ; rclone sans configuration Google Drive, copie hors VPS non activée. |
+| **12. Plan de Reprise (Rollback)** | Rollback applicatif testé au moins une fois en conditions réelles entre deux images applicatives valides (voir `OPERATIONS_RUNBOOK.md` §4.1) — pas seulement lu, exécuté | `[OK]` | Équipe Ops | Retour `stable` → image valide `sha-e95bc317` healthy → `stable` healthy, sans recréer MySQL/Redis ; ce n'était pas une image volontairement cassée. |
+| **13. Smoke Tests** | `infra/scripts/smoke-test.sh [domaine]` (lecture seule : health check, HSTS, endpoint public, login, 401 sur route protégée) **puis** parcours manuel réel : check-in walk-in sur une chambre de test, encaissement, check-out — jamais automatisé en aveugle contre la prod (voir `docs/execution/RELEASE_CHECKLIST.md`) | `[OK]` | Lead Developer / QA | Smoke-test corrigé : `7 OK, 0 échec` ; parcours réel room 1 : login 201, check-in 201, paiement 201, check-out 201. |
+| **14. Approbation Métier** | Confirmation explicite du Product Owner (utilisateur) que les fonctionnalités livrées couvrent le besoin minimal d'exploitation quotidienne | `[ ]` | Product Owner | À confirmer par l'utilisateur. |
+| **15. Accord Direction** | Autorisation officielle de bascule par la direction de l'hôtel | `[ ]` | Direction Générale | À confirmer par la direction. |
 
 ---
+
+## Pré-ouverture — remise à zéro propre (préparée, non exécutée)
+
+Cette étape ne doit être lancée qu'après la recette utilisateur et une confirmation explicite de fin de test. Elle est volontairement séparée du déploiement J2 :
+
+1. Faire une sauvegarde PMS et audit, puis vérifier les fichiers et leur taille.
+2. Mettre l'application en maintenance et conserver une copie des identifiants des données de test.
+3. Purger uniquement les réservations, séjours, folios, paiements, invités et journaux créés par la recette J2, identifiés par leurs IDs et l'email `j2.test.20261103@makarim.test` ; ne jamais purger par date seule.
+4. Vérifier que les 24 chambres et les paramètres métier attendus sont cohérents.
+5. Conserver l'admin de production nouvellement sécurisé et vérifier qu'un seul compte initial actif est prévu ; ne pas réactiver les comptes seed désactivés.
+6. Retirer la maintenance, exécuter le smoke-test avec `SMOKE_TEST_EMAIL`/`SMOKE_TEST_PASSWORD`, puis faire valider les points 14 et 15.
+
+La purge est destructive et reste interdite tant que l'utilisateur n'a pas déclaré la recette terminée.
 
 ## 📝 Guide Technique de Déploiement & Sécurisation
 
