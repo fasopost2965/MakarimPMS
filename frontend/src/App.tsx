@@ -351,9 +351,14 @@ function App() {
               {tab === 'reservations' && (
                 <ReservationsCalendarPage permissions={permissions ?? []} />
               )}
-              {tab === 'checkin' && <CheckinPage permissions={permissions} />}
+              {tab === 'checkin' && (
+                <CheckinPage permissions={permissions} onNavigate={setTab} />
+              )}
               {tab === 'housekeeping' && (
-                <HousekeepingPage permissions={permissions} />
+                <HousekeepingPage
+                  permissions={permissions}
+                  onNavigate={setTab}
+                />
               )}
               {tab === 'maintenance' && <MaintenancePage />}
               {tab === 'restaurant' && <RestaurantPage />}

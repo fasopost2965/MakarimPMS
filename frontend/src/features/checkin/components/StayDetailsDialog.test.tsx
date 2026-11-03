@@ -455,3 +455,54 @@ describe('StayDetailsDialog — solde estimé (DESIGN-009, vue Départs)', () =>
     expect(screen.getByText(/Solde dû au check-out/)).toBeVisible();
   });
 });
+
+describe('StayDetailsDialog — check-out bloqué par une facture émise (recette 1)', () => {
+  const MESSAGE =
+    "Une facture active existe déjà pour le folio 26 — impossible de réconcilier la taxe de séjour d'un départ anticipé dont la facture est déjà émise. Génère un avoir avant le check-out.";
+
+  it('ne propose pas le check-out forcé (il ne contourne pas la facture) et guide vers l’avoir', async () => {
+    const user = userEvent.setup();
+    render(
+      <StayDetailsDialog
+        stay={BASE_STAY}
+        onClose={noop}
+        onCheckout={noop}
+        checkingOut={false}
+        error={MESSAGE}
+        soldeDu={null}
+        permissions={null}
+        canForceCheckout
+        onForceCheckout={noop}
+      />,
+    );
+
+    expect(
+      screen.queryByRole('button', { name: 'Forcer le check-out' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/Que faire \?/)).toBeVisible();
+
+    await user.click(
+      screen.getByRole('button', { name: 'Aller à la facturation' }),
+    );
+    expect(screen.getByText('Contenu facturation')).toBeVisible();
+  });
+
+  it('continue de proposer le check-out forcé pour un autre blocage (solde impayé)', () => {
+    render(
+      <StayDetailsDialog
+        stay={BASE_STAY}
+        onClose={noop}
+        onCheckout={noop}
+        checkingOut={false}
+        error="Solde impayé : 120.00 MAD."
+        soldeDu={null}
+        permissions={null}
+        canForceCheckout
+        onForceCheckout={noop}
+      />,
+    );
+    expect(
+      screen.getByRole('button', { name: 'Forcer le check-out' }),
+    ).toBeVisible();
+  });
+});

@@ -19,6 +19,12 @@ interface Props {
   confirmLabel: string;
   onConfirm: (motif: string) => void;
   submitting: boolean;
+  // Erreur serveur de l'action en cours : affichée DANS la fenêtre, jamais
+  // derrière elle (la fenêtre modale masque le reste de la page).
+  actionError?: string | null;
+  // Raison pour laquelle l'action est impossible pour cet utilisateur : le
+  // bouton est désactivé et la raison est affichée (au lieu d'un refus serveur).
+  blockedReason?: string | null;
 }
 
 export function HousekeepingReasonDialog({
@@ -29,10 +35,12 @@ export function HousekeepingReasonDialog({
   confirmLabel,
   onConfirm,
   submitting,
+  actionError,
+  blockedReason,
 }: Props) {
   const [motif, setMotif] = useState('');
 
-  const isValid = motif.trim().length >= 10;
+  const isValid = motif.trim().length >= 10 && !blockedReason;
 
   function handleConfirm() {
     if (!isValid) return;
@@ -54,6 +62,16 @@ export function HousekeepingReasonDialog({
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
         <div className="grid gap-4 py-4">
+          {blockedReason && (
+            <p role="alert" className="text-sm font-medium text-amber-700">
+              {blockedReason}
+            </p>
+          )}
+          {actionError && (
+            <p role="alert" className="text-destructive text-sm font-medium">
+              {actionError}
+            </p>
+          )}
           <div className="grid gap-2">
             <Label htmlFor="reason">Motif (minimum 10 caractères)</Label>
             <Input
