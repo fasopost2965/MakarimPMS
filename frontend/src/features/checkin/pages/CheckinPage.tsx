@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ErrorState } from '@/components/ui/error-state';
 import { toastManager } from '@/components/ui/toast';
 import { RoomContextModal } from '../../dashboard/components/RoomContextModal';
+import type { DashboardTarget } from '../../dashboard/pages/DashboardPage';
 import { arrivalsToday, listRooms, markNoShow } from '../../reservations/api';
 import { toISODate } from '../../reservations/date-utils';
 import { NoShowDialog } from '../../reservations/components/NoShowDialog';
@@ -67,7 +68,15 @@ function matchesSearch(
 // avant action, plutôt que 3 listes empilées (ancien CheckinPage.tsx).
 // Aucun nouvel endpoint, aucune règle métier modifiée — uniquement une
 // réorganisation de l'existant, cf. rapport de mission DESIGN-009.
-export function CheckinPage({ permissions }: { permissions: string[] | null }) {
+export function CheckinPage({
+  permissions,
+  onNavigate,
+}: {
+  permissions: string[] | null;
+  // Navigation vers un autre module (ex. « Ouvrir Housekeeping » depuis la
+  // fiche chambre) : le routage vit dans App.tsx (useState<Tab>), pas ici.
+  onNavigate?: (target: DashboardTarget) => void;
+}) {
   const [view, setView] = useState<FrontDeskView>('arrivees');
   const [search, setSearch] = useState('');
 
@@ -575,7 +584,10 @@ export function CheckinPage({ permissions }: { permissions: string[] | null }) {
         rooms={rooms}
         permissions={permissions}
         onClose={() => setSelectedRoom(null)}
-        onNavigate={() => setSelectedRoom(null)}
+        onNavigate={(target) => {
+          setSelectedRoom(null);
+          onNavigate?.(target);
+        }}
       />
     </div>
   );

@@ -18,6 +18,7 @@ import {
 import { listTickets } from '../../maintenance/api';
 import { me } from '../../auth/api';
 import { RoomContextModal } from '../../dashboard/components/RoomContextModal';
+import type { DashboardTarget } from '../../dashboard/pages/DashboardPage';
 import { HousekeepingKpiStrip } from '../components/HousekeepingKpiStrip';
 import { HousekeepingControlQueue } from '../components/HousekeepingControlQueue';
 import {
@@ -41,8 +42,10 @@ type LoadMode = 'initial' | 'refresh' | 'status-update';
 
 export function HousekeepingPage({
   permissions,
+  onNavigate,
 }: {
   permissions?: string[] | null;
+  onNavigate?: (target: DashboardTarget) => void;
 }) {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [tasks, setTasks] = useState<HousekeepingTask[]>([]);
@@ -548,7 +551,10 @@ export function HousekeepingPage({
         rooms={rooms}
         permissions={permissions ?? null}
         onClose={() => setSelectedRoom(null)}
-        onNavigate={() => setSelectedRoom(null)}
+        onNavigate={(target) => {
+          setSelectedRoom(null);
+          onNavigate?.(target);
+        }}
         onRoomsChanged={() => void loadData('status-update')}
       />
 
