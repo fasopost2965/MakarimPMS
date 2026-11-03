@@ -16,6 +16,7 @@ import {
   reportIncident,
 } from '../api';
 import { listTickets } from '../../maintenance/api';
+import { me } from '../../auth/api';
 import { RoomContextModal } from '../../dashboard/components/RoomContextModal';
 import { HousekeepingKpiStrip } from '../components/HousekeepingKpiStrip';
 import { HousekeepingControlQueue } from '../components/HousekeepingControlQueue';
@@ -75,7 +76,30 @@ export function HousekeepingPage({
     task: HousekeepingTask;
     action: 'validate' | 'refuse' | 'cancel' | 'reopen';
   } | null>(null);
+  // Une erreur précédente ne doit pas apparaître à l'ouverture d'une fenêtre.
+  function openReason(
+    task: HousekeepingTask,
+    action: 'validate' | 'refuse' | 'cancel' | 'reopen',
+  ) {
+    setActionError(null);
+    setReasonTask({ task, action });
+  }
   const [historyTask, setHistoryTask] = useState<HousekeepingTask | null>(null);
+  // Identité de l'utilisateur connecté : sert uniquement à expliquer d'avance
+  // la règle « le contrôleur ne peut pas être l'agent affecté » (le serveur
+  // reste l'arbitre). En cas d'échec, aucune pré-vérification n'est faite.
+  const [meId, setMeId] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    me()
+      .then((u) => {
+        if (!cancelled) setMeId(u.id);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [incidentDialogOpen, setIncidentDialogOpen] = useState(false);
   const [incidentSubmitting, setIncidentSubmitting] = useState(false);
   const [incidentError, setIncidentError] = useState<string | null>(null);
@@ -426,7 +450,7 @@ export function HousekeepingPage({
         </div>
       </div>
 
-      {actionError && (
+      {actionError && !reasonTask && !assignTask && !createRoom && (
         <p className="text-destructive text-sm" role="alert">
           {actionError}
         </p>
@@ -469,8 +493,8 @@ export function HousekeepingPage({
               tasks={controlQueue}
               permissions={permissions}
               updatingTaskId={updatingTaskId}
-              onValidate={(task) => setReasonTask({ task, action: 'validate' })}
-              onRefuse={(task) => setReasonTask({ task, action: 'refuse' })}
+              onValidate={(task) => openReason(task, 'validate')}
+              onRefuse={(task) => openReason(task, 'refuse')}
               onTaskHistory={(task) => setHistoryTask(task)}
             />
           )}
@@ -509,10 +533,10 @@ export function HousekeepingPage({
               onAssign={(task) => setAssignTask(task)}
               onStart={handleStart}
               onComplete={handleComplete}
-              onValidate={(task) => setReasonTask({ task, action: 'validate' })}
-              onRefuse={(task) => setReasonTask({ task, action: 'refuse' })}
-              onCancel={(task) => setReasonTask({ task, action: 'cancel' })}
-              onReopen={(task) => setReasonTask({ task, action: 'reopen' })}
+              onValidate={(task) => openReason(task, 'validate')}
+              onRefuse={(task) => openReason(task, 'refuse')}
+              onCancel={(task) => openReason(task, 'cancel')}
+              onReopen={(task) => openReason(task, 'reopen')}
               onTaskHistory={(task) => setHistoryTask(task)}
             />
           )}
@@ -544,6 +568,10 @@ export function HousekeepingPage({
       />
 
       <HousekeepingReasonDialog
+        // Remonte le composant à chaque tâche/action : le motif saisi ne fuit pas.
+        key={
+          reasonTask ? `${reasonTask.task.id}-${reasonTask.action}` : 'closed'
+        }
         open={reasonTask !== null}
         onClose={() => setReasonTask(null)}
         title={
@@ -566,6 +594,14 @@ export function HousekeepingPage({
         }
         submitting={reasonTask ? updatingTaskId === reasonTask.task.id : false}
         onConfirm={handleReasonConfirm}
+        actionError={reasonTask ? actionError : null}
+        blockedReason={
+          reasonTask?.action === 'validate' &&
+          meId !== null &&
+          reasonTask.task.assignedUserId === meId
+            ? 'Tu as effectué ce nettoyage : un autre contrôleur doit le valider (règle d’auto-validation interdite).'
+            : null
+        }
       />
 
       <HousekeepingTaskHistoryDialog
