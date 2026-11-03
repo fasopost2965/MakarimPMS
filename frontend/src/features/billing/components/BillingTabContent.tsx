@@ -10,6 +10,7 @@ import {
   downloadInvoicePdf,
   requestInvoiceDelivery,
   cancelFolioLine,
+  createCreditNote,
 } from '../api';
 import { RecordPaymentDialog } from '@/features/payments/components/RecordPaymentDialog';
 import { InvoicePrintModal } from './InvoicePrintModal';
@@ -76,6 +77,34 @@ export function BillingTabContent({
   const [cancelSubmittingId, setCancelSubmittingId] = useState<number | null>(
     null,
   );
+  // Avoir total sur une facture émise (POST /invoices/:id/credit-notes,
+  // billing:write) : motif ≥ 10 caractères saisi inline, comme ci-dessus.
+  // Chemin nécessaire avant un départ anticipé ou l'ajout d'une charge sur un
+  // folio déjà facturé (factures émises immuables, ADR-002/ADR-004).
+  const [avoirInvoiceId, setAvoirInvoiceId] = useState<number | null>(null);
+  const [avoirMotif, setAvoirMotif] = useState('');
+  const [avoirSubmitting, setAvoirSubmitting] = useState(false);
+
+  async function handleCreateAvoir(invoiceId: number) {
+    setAvoirSubmitting(true);
+    try {
+      await createCreditNote(invoiceId, avoirMotif.trim());
+      setAvoirInvoiceId(null);
+      setAvoirMotif('');
+      toastManager.add({
+        title: 'Facture annulée par avoir',
+        description:
+          'Tu peux maintenant relancer le check-out ou régénérer une facture corrigée.',
+      });
+      await refetch();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Erreur de création de l’avoir',
+      );
+    } finally {
+      setAvoirSubmitting(false);
+    }
+  }
 
   const refetch = useCallback(async () => {
     setLoading(true);
@@ -90,7 +119,6 @@ export function BillingTabContent({
   }, [stayId]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refetch();
   }, [refetch]);
 
@@ -207,6 +235,15 @@ export function BillingTabContent({
               </Button>
             </div>
           </div>
+
+          {folio.invoices.some((i) => i.statut === 'EMISE') && (
+            <p className="mb-3 text-xs text-amber-700">
+              Une facture est déjà émise sur ce folio : elle ne peut plus être
+              modifiée. Pour ajouter une charge ou faire un départ anticipé,
+              annule d’abord la facture par avoir (bouton « Annuler par avoir »
+              ci-dessous), puis génère une nouvelle facture.
+            </p>
+          )}
 
           {/* Lignes du folio */}
           <div className="mb-3">
@@ -338,7 +375,7 @@ export function BillingTabContent({
                 {folio.invoices.map((invoice) => (
                   <div
                     key={invoice.id}
-                    className="flex items-center justify-between rounded bg-gray-50 p-2"
+                    className="flex flex-wrap items-center justify-between rounded bg-gray-50 p-2"
                   >
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-xs">
@@ -387,6 +424,63 @@ export function BillingTabContent({
                         </Button>
                       )}
                     </div>
+                    {invoice.statut === 'EMISE' && (
+                      <div className="mt-2 w-full basis-full">
+                        {avoirInvoiceId === invoice.id ? (
+                          <div className="flex flex-col gap-2">
+                            <Input
+                              value={avoirMotif}
+                              onChange={(e) => setAvoirMotif(e.target.value)}
+                              placeholder="Motif de l’avoir (minimum 10 caractères)"
+                              aria-label="Motif de l’avoir"
+                              disabled={avoirSubmitting}
+                            />
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="destructive"
+                                disabled={
+                                  avoirMotif.trim().length < 10 ||
+                                  avoirSubmitting
+                                }
+                                onClick={() =>
+                                  void handleCreateAvoir(invoice.id)
+                                }
+                              >
+                                {avoirSubmitting
+                                  ? 'Création de l’avoir…'
+                                  : 'Confirmer l’avoir'}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={avoirSubmitting}
+                                onClick={() => {
+                                  setAvoirInvoiceId(null);
+                                  setAvoirMotif('');
+                                }}
+                              >
+                                Annuler
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setAvoirInvoiceId(invoice.id);
+                              setAvoirMotif('');
+                            }}
+                          >
+                            Annuler par avoir
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

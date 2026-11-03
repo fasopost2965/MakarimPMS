@@ -97,9 +97,16 @@ export function StayDetailsDialog({
   }
   const canExtend = permissions?.includes('stay:extend') ?? false;
   const canChangeRoom = permissions?.includes('stay:change-room') ?? false;
+  // Le check-out forcé ne contourne JAMAIS une facture déjà émise (la
+  // réconciliation de la taxe de séjour s'exécute après le contrôle du
+  // solde, StayService.checkout) : on ne le propose alors pas, et on guide
+  // vers l'avoir. Détection sur le message serveur (409) faute de code typé.
+  const blockedByIssuedInvoice =
+    error !== null && /facture active existe/i.test(error);
   const showForceCheckout =
     stay?.statut === 'EN_COURS' &&
     error !== null &&
+    !blockedByIssuedInvoice &&
     canForceCheckout &&
     onForceCheckout !== undefined;
 
@@ -214,6 +221,29 @@ export function StayDetailsDialog({
             </Tabs>
 
             {error && <p className="text-destructive text-sm">{error}</p>}
+
+            {blockedByIssuedInvoice && (
+              <div className="flex flex-col gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
+                <p className="font-medium text-amber-900">
+                  Que faire ? La facture est déjà émise et ne peut plus être
+                  modifiée.
+                </p>
+                <ol className="list-decimal pl-5 text-amber-900">
+                  <li>Ouvre l’onglet « Facturation » de ce séjour.</li>
+                  <li>Clique sur « Annuler par avoir » et saisis un motif.</li>
+                  <li>Reviens ici et relance le check-out.</li>
+                </ol>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="self-start"
+                  onClick={() => setActiveTab('facturation')}
+                >
+                  Aller à la facturation
+                </Button>
+              </div>
+            )}
 
             {showForceCheckout && (
               <div className="border-destructive/30 bg-destructive/8 flex flex-col gap-2 rounded-md border p-3">
