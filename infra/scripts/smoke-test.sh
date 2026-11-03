@@ -16,6 +16,8 @@ set -euo pipefail
 DOMAIN="${1:-hotelmakarim.cloud}"
 PMS_URL="https://pms.${DOMAIN}"
 API_URL="https://api.${DOMAIN}/api"
+BOOKING_DATE_START="$(date -u -d '+7 days' +%Y-%m-%dT00:00:00.000Z)"
+BOOKING_DATE_END="$(date -u -d '+8 days' +%Y-%m-%dT00:00:00.000Z)"
 
 PASS=0
 FAIL=0
@@ -58,7 +60,7 @@ check "Route protégée refuse un accès non authentifié (401 attendu)" \
   "test \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 '${API_URL}/reservations')\" = '401'"
 
 check "Route publique de réservation (booking engine, F4) répond" \
-  "curl -fsS --max-time 10 '${API_URL}/booking/availability?dateDebut=2026-08-01&dateFin=2026-08-02' -o /dev/null"
+  "curl -fsS --max-time 10 '${API_URL}/booking/availability?dateArrivee=${BOOKING_DATE_START}&dateDepart=${BOOKING_DATE_END}' -o /dev/null"
 
 echo ""
 echo "=== Résultat : ${PASS} OK, ${FAIL} échec(s) ==="
