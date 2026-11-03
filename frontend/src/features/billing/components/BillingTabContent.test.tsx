@@ -7,10 +7,11 @@ vi.mock('../api', () => ({
   listFoliosByStay: vi.fn(),
   generateInvoice: vi.fn(),
   cancelFolioLine: vi.fn(),
+  createCreditNote: vi.fn(),
 }));
 
 import { BillingTabContent } from './BillingTabContent';
-import { listFoliosByStay, cancelFolioLine } from '../api';
+import { listFoliosByStay, cancelFolioLine, createCreditNote } from '../api';
 
 const ISO = '2026-01-01T00:00:00.000Z';
 
@@ -225,5 +226,42 @@ describe('BillingTabContent — annulation de ligne EXTRA (CH-040/CH-053)', () =
         'Client insatisfait, geste commercial',
       );
     });
+  });
+});
+
+describe('BillingTabContent — avoir sur facture émise (recette 1, check-out anticipé)', () => {
+  it('propose « Annuler par avoir » sur une facture émise, exige un motif de 10 caractères puis appelle createCreditNote', async () => {
+    vi.mocked(listFoliosByStay).mockResolvedValue([folioFixture]);
+    vi.mocked(createCreditNote).mockResolvedValue({} as never);
+    const user = userEvent.setup();
+    render(<BillingTabContent stayId={42} />);
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Annuler par avoir' }),
+    );
+    const confirmer = screen.getByRole('button', { name: 'Confirmer l’avoir' });
+    expect(confirmer).toBeDisabled();
+
+    await user.type(
+      screen.getByLabelText('Motif de l’avoir'),
+      'départ anticipé du client',
+    );
+    expect(confirmer).toBeEnabled();
+    await user.click(confirmer);
+
+    await waitFor(() => {
+      expect(createCreditNote).toHaveBeenCalledWith(
+        1,
+        'départ anticipé du client',
+      );
+    });
+  });
+
+  it('explique pourquoi le folio est verrouillé quand une facture est émise', async () => {
+    vi.mocked(listFoliosByStay).mockResolvedValue([folioFixture]);
+    render(<BillingTabContent stayId={42} />);
+    expect(
+      await screen.findByText(/Une facture est déjà émise sur ce folio/),
+    ).toBeInTheDocument();
   });
 });
