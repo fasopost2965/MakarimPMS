@@ -35,13 +35,26 @@ export class ApiError extends Error {
   }
 }
 
+export function extractErrorMessage(raw: unknown): string | null {
+  if (typeof raw === 'string') return raw.trim() === '' ? null : raw;
+  if (Array.isArray(raw)) {
+    const parts = raw.filter(
+      (item): item is string => typeof item === 'string' && item.trim() !== '',
+    );
+    return parts.length > 0 ? parts.join(' ; ') : null;
+  }
+  return null;
+}
+
 async function parseErrorBody(res: Response): Promise<ApiError> {
   const body = (await res.json().catch(() => null)) as Record<
     string,
     unknown
   > | null;
-  const message =
-    typeof body?.message === 'string' ? body.message : `Erreur ${res.status}`;
+  // NestJS renvoie `message` sous forme de TABLEAU pour les erreurs de
+  // validation (class-validator) : on les joint en une phrase lisible plutôt
+  // que de retomber sur « Erreur 400 », qui masque le champ en cause.
+  const message = extractErrorMessage(body?.message) ?? `Erreur ${res.status}`;
   const code = typeof body?.code === 'string' ? body.code : undefined;
   return new ApiError(res.status, message, code, body ?? undefined);
 }
