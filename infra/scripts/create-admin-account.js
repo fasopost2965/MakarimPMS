@@ -1,15 +1,16 @@
 /*
- * ÉTAPE 0 — création ponctuelle du compte Administrateur personnel.
+ * Création ponctuelle d'un compte utilisateur (ÉTAPE 0 : Administrateur ; recette : Gouvernante, Réception…).
  *
  * Usage (depuis le dépôt, sur le VPS ou en local avec docker compose) :
  *   cat infra/scripts/create-admin-account.js | \
  *     docker compose -f docker-compose.yml -f docker-compose.prod.yml \
  *       exec -T -e ADMIN_EMAIL=moi@exemple.com -e ADMIN_NOM="Prénom Nom" \
+ *       -e ADMIN_ROLE=Gouvernante   (optionnel, défaut : Administrateur) \
  *       backend node -
  *
  * Règles :
  *  - Même hachage que l'application (bcrypt, 10 tours, cf. AuthService).
- *  - Rôle « Administrateur » existant, jamais créé ici.
+ *  - Rôle existant (ADMIN_ROLE, défaut « Administrateur »), jamais créé ici.
  *  - Refuse d'écraser un compte existant (email déjà pris).
  *  - Le mot de passe est généré ici, affiché UNE SEULE FOIS sur la sortie
  *    standard, jamais écrit sur disque, dans le dépôt ni dans un journal.
@@ -48,6 +49,7 @@ function genererMotDePasse() {
 async function main() {
   const email = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
   const nom = (process.env.ADMIN_NOM || 'Administrateur').trim();
+  const nomRole = (process.env.ADMIN_ROLE || 'Administrateur').trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new Error('ADMIN_EMAIL manquant ou invalide.');
   }
@@ -55,9 +57,9 @@ async function main() {
   const prisma = new PrismaClient();
   try {
     const role = await prisma.role.findUnique({
-      where: { nom: 'Administrateur' },
+      where: { nom: nomRole },
     });
-    if (!role) throw new Error('Rôle « Administrateur » introuvable.');
+    if (!role) throw new Error(`Rôle « ${nomRole} » introuvable.`);
 
     const existant = await prisma.user.findUnique({ where: { email } });
     if (existant) {
@@ -73,7 +75,7 @@ async function main() {
     });
 
     console.log('');
-    console.log('Compte Administrateur créé.');
+    console.log(`Compte ${role.nom} créé.`);
     console.log(`  id        : ${user.id}`);
     console.log(`  email     : ${email}`);
     console.log(`  rôle      : ${role.nom}`);
