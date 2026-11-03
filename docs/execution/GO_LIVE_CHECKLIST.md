@@ -21,14 +21,27 @@ Toutes les étapes doivent être marquées **[OK]** avant le lancement officiel 
 | **7. Base de données MySQL** | Conteneur `mysql` démarré, healthcheck vert (`docker compose ps`), volume `mysql_data` sur un disque persistant du VPS | `[OK]` | DevOps / Admin BD | `makarimpms-mysql-1` healthy ; volume `makarimpms_mysql_data` ; disque `/dev/sda1`, 88G libres. |
 | **8. Journalisation des Logs** | Rotation Docker configurée (`/etc/docker/daemon.json`, voir `OPERATIONS_RUNBOOK.md` §5.2) — sans quoi les logs JSON saturent le disque unique du VPS avec le temps | `[OK]` | DevOps | `/etc/docker/daemon.json` : `json-file`, `10m`, `3` fichiers. |
 | **9. Monitoring de l'Hôte** | Surveillance manuelle a minima documentée (`docker stats`, `df -h`) ; outil auto-hébergé (ex. Uptime Kuma) explicitement hors périmètre de ce Go-Live si non installé — ne pas cocher ce point en prétendant un outil géré inexistant | `[OK]` | DevOps | Contrôle manuel `df -h` effectué : 9% utilisés ; aucun outil d'alerting simulé. |
-| **10. Vérification post-déploiement** | `deploy.yml` a exécuté avec succès son healthcheck (`GET /api/health`) sur un déploiement réel, pas seulement en local | `[KO]` | DevOps | Déploiement manuel réussi, `GET /api/health` `200` ; workflow automatique volontairement désactivé, donc non exécuté. |
+| **10. Vérification post-déploiement** | Le chemin de déploiement utilisé (workflow ou procédure manuelle documentée) a exécuté avec succès son healthcheck (`GET /api/health`) sur un déploiement réel, pas seulement en local | `[OK]` | DevOps | Procédure manuelle J2 : bascule vers `stable`, `GET /api/health` `200` ; workflow automatique reste désactivé en bêta. |
 | **11. Plan de Sauvegardes Automatiques** | `infra/scripts/backup-mysql.sh` planifié en crontab sur le VPS (`crontab -l` le confirme), rétention locale + destination hors VPS confirmée par l'utilisateur | `[KO]` | DevOps / Admin BD | Cron `0 3 * * *` et rétention 14 jours présents ; rclone sans configuration Google Drive, copie hors VPS non activée. |
-| **12. Plan de Reprise (Rollback)** | Rollback applicatif testé au moins une fois en conditions réelles (déploiement volontairement cassé puis rollback, voir `OPERATIONS_RUNBOOK.md` §4.1) — pas seulement lu, exécuté | `[OK]` | Équipe Ops | Retour `stable` → `sha-e95bc317` healthy → `stable` healthy, sans recréer MySQL/Redis. |
+| **12. Plan de Reprise (Rollback)** | Rollback applicatif testé au moins une fois en conditions réelles entre deux images applicatives valides (voir `OPERATIONS_RUNBOOK.md` §4.1) — pas seulement lu, exécuté | `[OK]` | Équipe Ops | Retour `stable` → image valide `sha-e95bc317` healthy → `stable` healthy, sans recréer MySQL/Redis ; ce n'était pas une image volontairement cassée. |
 | **13. Smoke Tests** | `infra/scripts/smoke-test.sh [domaine]` (lecture seule : health check, HSTS, endpoint public, login, 401 sur route protégée) **puis** parcours manuel réel : check-in walk-in sur une chambre de test, encaissement, check-out — jamais automatisé en aveugle contre la prod (voir `docs/execution/RELEASE_CHECKLIST.md`) | `[OK]` | Lead Developer / QA | Smoke-test corrigé : `7 OK, 0 échec` ; parcours réel room 1 : login 201, check-in 201, paiement 201, check-out 201. |
 | **14. Approbation Métier** | Confirmation explicite du Product Owner (utilisateur) que les fonctionnalités livrées couvrent le besoin minimal d'exploitation quotidienne | `[ ]` | Product Owner | À confirmer par l'utilisateur. |
 | **15. Accord Direction** | Autorisation officielle de bascule par la direction de l'hôtel | `[ ]` | Direction Générale | À confirmer par la direction. |
 
 ---
+
+## Pré-ouverture — remise à zéro propre (préparée, non exécutée)
+
+Cette étape ne doit être lancée qu'après la recette utilisateur et une confirmation explicite de fin de test. Elle est volontairement séparée du déploiement J2 :
+
+1. Faire une sauvegarde PMS et audit, puis vérifier les fichiers et leur taille.
+2. Mettre l'application en maintenance et conserver une copie des identifiants des données de test.
+3. Purger uniquement les réservations, séjours, folios, paiements, invités et journaux créés par la recette J2, identifiés par leurs IDs et l'email `j2.test.20261103@makarim.test` ; ne jamais purger par date seule.
+4. Vérifier que les 24 chambres et les paramètres métier attendus sont cohérents.
+5. Conserver l'admin de production nouvellement sécurisé et vérifier qu'un seul compte initial actif est prévu ; ne pas réactiver les comptes seed désactivés.
+6. Retirer la maintenance, exécuter le smoke-test avec `SMOKE_TEST_EMAIL`/`SMOKE_TEST_PASSWORD`, puis faire valider les points 14 et 15.
+
+La purge est destructive et reste interdite tant que l'utilisateur n'a pas déclaré la recette terminée.
 
 ## 📝 Guide Technique de Déploiement & Sécurisation
 
