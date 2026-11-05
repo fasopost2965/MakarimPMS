@@ -140,7 +140,7 @@ function ConstructeurDevis({ dateParDefaut }) {
               {participants}
             </span>
             <Button variant="outline" size="sm" onClick={() => setParticipants((p) => Math.min(capaciteMax, p + 1))} aria-label="Ajouter un participant">+</Button>
-            <span className={cx('text-[11px]', capaciteOk ? 'text-ink-2' : 'text-crimson')}>
+            <span className={cx('text-[12px]', capaciteOk ? 'text-ink-2' : 'text-crimson')}>
               {capaciteOk
                 ? `capacité max. ${capaciteMax} places (théâtre)`
                 : `au-delà de ${capaciteMax} places en théâtre`}
@@ -190,7 +190,7 @@ function ConstructeurDevis({ dateParDefaut }) {
                     className="sr-only"
                   />
                   <span className="flex-1 text-[12px] text-ink-2">{o.label}</span>
-                  <span className="tnum text-[11px] text-ink-3">{o.prix} MAD{o.type === 'pers' ? ' / pers.' : ''}</span>
+                  <span className="tnum text-[12px] text-ink-3">{o.prix} MAD{o.type === 'pers' ? ' / pers.' : ''}</span>
                 </label>
               </li>
             ))}
@@ -211,7 +211,7 @@ function ConstructeurDevis({ dateParDefaut }) {
             <div className="flex justify-between text-ink-2"><span>TVA 20 %</span><span className="tnum">{money(tva)} MAD</span></div>
             <div className="flex justify-between text-[14px] font-semibold text-ink"><span>Total TTC</span><span className="tnum">{money(ttc)} MAD</span></div>
           </div>
-          <p className="mt-2 text-[10px] text-ink-3">Acompte de 30 % à la confirmation : {money(acompte)} MAD</p>
+          <p className="mt-2 text-[12px] text-ink-3">Acompte de 30 % à la confirmation : {money(acompte)} MAD</p>
         </div>
 
         <div className="flex gap-2">
@@ -245,7 +245,7 @@ export function Conference() {
         <div>
           <p className="text-[11px] font-medium tracking-[0.1em] text-ink-3 uppercase">Exploitation · Événementiel</p>
           <h2 className="font-display mt-1 text-[26px] leading-tight">{SALLE.nom}</h2>
-          <p className="mt-1 text-[13px] text-ink-2">{SALLE.superficie} m² modulables · {CAPACITE_SALLE} places théâtre · devis en 2 minutes</p>
+          <p className="mt-1 text-[14px] text-ink-2">{SALLE.superficie} m² modulables · {CAPACITE_SALLE} places théâtre · devis en 2 minutes</p>
         </div>
         <Button onClick={() => push('Formulaire de devis disponible dans le panneau de droite', 'info')}>
           <Plus className="size-3.5" /> Nouvel événement
@@ -264,7 +264,7 @@ export function Conference() {
               <Card key={l} className="p-4">
                 <p className="text-[10px] font-medium tracking-[0.06em] text-ink-3 uppercase">{l}</p>
                 <p className="tnum mt-1 text-lg font-semibold text-ink">{v}</p>
-                <p className="mt-0.5 text-[11px] text-ink-3">{h}</p>
+                <p className="mt-0.5 text-[12px] text-ink-3">{h}</p>
               </Card>
             ))}
           </div>
@@ -343,7 +343,7 @@ export function Conference() {
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[13px] font-medium text-ink">{e.titre}</p>
-                        <p className="truncate text-[11px] text-ink-3">
+                        <p className="truncate text-[12px] text-ink-3">
                           {e.entreprise} · {fmtCourt(e.date)} · {CRENEAUX[e.creneau]?.split(' ')[0]} · {e.participants} pers.
                         </p>
                       </div>

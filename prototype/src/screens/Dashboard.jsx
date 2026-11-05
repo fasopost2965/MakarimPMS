@@ -171,7 +171,7 @@ export function Dashboard({ onNavigate }) {
             {fmtLong(state.date)} · Shift 14:00 → 22:00
           </p>
           <h2 className="font-display mt-1 text-[26px] leading-tight">Bonsoir, Youssef.</h2>
-          <p className="mt-1 max-w-xl text-[13px] text-ink-2">
+          <p className="mt-1 max-w-xl text-[14px] text-ink-2">
             {kpi.arrivees} arrivées attendues, {kpi.departs} départs à solder,{' '}
             {parStatut.a_nettoyer ?? 0} chambres à remettre en vente.
           </p>
@@ -276,7 +276,7 @@ export function Dashboard({ onNavigate }) {
                         </span>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-[13px] font-medium text-ink">{a.client}</p>
-                          <p className="truncate text-[11px] text-ink-3">
+                          <p className="truncate text-[12px] text-ink-3">
                             {TYPES_CHAMBRE[chambre?.type]?.court} · {a.occupants} pers. · formule {a.formule}
                             {!prete && ' · chambre non prête'}
                           </p>
@@ -308,7 +308,7 @@ export function Dashboard({ onNavigate }) {
                         </span>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-[13px] font-medium text-ink">{d.client}</p>
-                          <p className="truncate text-[11px] text-ink-3">Chambre {d.chambre}</p>
+                          <p className="truncate text-[12px] text-ink-3">Chambre {d.chambre}</p>
                         </div>
                         {solde > 0 ? (
                           <Pill tone="crimson">Solde {money(solde)} MAD</Pill>
@@ -357,7 +357,7 @@ export function Dashboard({ onNavigate }) {
             <div className="px-5 py-4">
               <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1.5">
                 {Object.entries(STATUTS_CHAMBRE).map(([cle, s]) => (
-                  <span key={cle} className="flex items-center gap-1.5 text-[11px] text-ink-2">
+                  <span key={cle} className="flex items-center gap-1.5 text-[12px] text-ink-2">
                     <span className={cx('size-2 rounded-full', s.dot)} />
                     {s.label}
                     <span className="tnum font-semibold text-ink">{parStatut[cle] ?? 0}</span>
@@ -400,7 +400,7 @@ export function Dashboard({ onNavigate }) {
                   <AlerteIcone niveau={a.niveau} />
                   <div className="min-w-0">
                     <p className="text-[12px] leading-4 font-medium text-ink">{a.titre}</p>
-                    <p className="mt-0.5 text-[11px] leading-4 text-ink-3">{a.detail}</p>
+                    <p className="mt-0.5 text-[12px] leading-4 text-ink-3">{a.detail}</p>
                   </div>
                 </li>
               ))}
@@ -449,7 +449,7 @@ export function Dashboard({ onNavigate }) {
               ))}
             </ul>
             <div className="border-t border-line-soft px-5 py-2.5">
-              <p className="text-[10px] leading-4 text-ink-3">
+              <p className="text-[12px] leading-4 text-ink-3">
                 Cible cahier des charges §1.1 : walk-in 70 %, direct 20 %, Booking 10 %.
               </p>
             </div>
@@ -475,7 +475,7 @@ export function Dashboard({ onNavigate }) {
                   <p className="text-[12px] font-medium text-ink">
                     {evenementDemain ? `${evenementDemain.entreprise} — ${evenementDemain.participants} pers.` : 'Salle libre demain'}
                   </p>
-                  <p className="mt-0.5 text-[11px] text-ink-3">
+                  <p className="mt-0.5 text-[12px] text-ink-3">
                     {evenementDemain ? 'Mise en place à partir de 8:00' : 'Aucun événement confirmé'}
                   </p>
                 </div>
@@ -488,7 +488,7 @@ export function Dashboard({ onNavigate }) {
                   <p className="text-[12px] font-medium text-ink">
                     {state.chambres.length - kpi.vendues} chambres à vendre ce soir
                   </p>
-                  <p className="mt-0.5 text-[11px] text-ink-3">Dont {parStatut.propre ?? 0} prêtes immédiatement</p>
+                  <p className="mt-0.5 text-[12px] text-ink-3">Dont {parStatut.propre ?? 0} prêtes immédiatement</p>
                 </div>
               </div>
             </div>
@@ -505,7 +505,7 @@ export function Dashboard({ onNavigate }) {
               {state.journal.slice(0, 5).map((j) => (
                 <li key={j.id} className="flex gap-2.5 px-5 py-2.5">
                   <span className="tnum text-[10px] text-ink-3">{j.heure}</span>
-                  <p className="flex-1 text-[11px] leading-4 text-ink-2">{j.texte}</p>
+                  <p className="flex-1 text-[12px] leading-4 text-ink-2">{j.texte}</p>
                 </li>
               ))}
             </ul>

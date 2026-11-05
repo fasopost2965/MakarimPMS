@@ -53,7 +53,7 @@ export function NightAudit({ open, onClose }) {
       subtitle={`${fmtLong(state.date)} — contrôle avant passage à J+1`}
       footer={
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[11px] text-ink-3">
+          <p className="text-[12px] text-ink-3">
             Les arrivées non enregistrées seront marquées « non présentées ».
           </p>
           <Button
@@ -115,14 +115,14 @@ export function NightAudit({ open, onClose }) {
             )}
             <div>
               <p className="text-[12px] font-medium text-ink">{ligne.titre}</p>
-              <p className="mt-0.5 text-[11px] leading-4 text-ink-3">{ligne.detail}</p>
+              <p className="mt-0.5 text-[12px] leading-4 text-ink-3">{ligne.detail}</p>
             </div>
           </li>
         ))}
       </ul>
       <div className="mt-4 flex items-start gap-2 rounded-xl bg-sand-100 p-3">
         <ShieldCheck className="mt-0.5 size-4 shrink-0 text-ink-3" />
-        <p className="text-[11px] leading-4 text-ink-2">
+        <p className="text-[12px] leading-4 text-ink-2">
           La clôture est journalisée et figée : la date d’exploitation avance,
           les KPI se réinitialisent et les arrivées restantes passent en
           non-présentation. Aucune donnée n’est supprimée.

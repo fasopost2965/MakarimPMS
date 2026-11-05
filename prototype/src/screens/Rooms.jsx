@@ -75,7 +75,7 @@ export function Rooms() {
         <div>
           <p className="text-[11px] font-medium tracking-[0.1em] text-ink-3 uppercase">Exploitation · Housekeeping</p>
           <h2 className="font-display mt-1 text-[26px] leading-tight">Plan des chambres</h2>
-          <p className="mt-1 text-[13px] text-ink-2">
+          <p className="mt-1 text-[14px] text-ink-2">
             30 chambres sur 3 étages · 12 doubles, 7 twins, 7 triples familiales, 4 suites junior.
           </p>
         </div>
@@ -109,7 +109,7 @@ export function Rooms() {
           >
             {f.cle !== 'toutes' && <span className={cx('size-2 rounded-full', STATUTS_CHAMBRE[f.cle].dot)} />}
             {f.label}
-            <span className="tnum text-[11px] text-ink-3">{compteur(f.cle)}</span>
+            <span className="tnum text-[12px] text-ink-3">{compteur(f.cle)}</span>
           </button>
         ))}
         <span className="mx-1 h-5 w-px bg-line" />
@@ -138,7 +138,7 @@ export function Rooms() {
               <Card key={etage} className="overflow-hidden">
                 <div className="flex items-center justify-between border-b border-line-soft px-5 py-3">
                   <h3 className="text-[13px] font-semibold text-ink">
-                    {etage}ᵉ étage <span className="ml-2 text-[11px] font-normal text-ink-3">{duRdc.length} chambres</span>
+                    {etage}ᵉ étage <span className="ml-2 text-[12px] font-normal text-ink-3">{duRdc.length} chambres</span>
                   </h3>
                   <div className="tnum flex gap-3 text-[11px] text-ink-3">
                     <span>{duRdc.filter((c) => c.statut === 'occupee').length} occupées</span>
@@ -163,7 +163,7 @@ export function Rooms() {
                             </span>
                             <div>
                               <p className="text-[12px] font-medium text-ink">{TYPES_CHAMBRE[c.type].court}</p>
-                              <p className="text-[10px] text-ink-3">{TYPES_CHAMBRE[c.type].label}</p>
+                              <p className="text-[12px] text-ink-3">{TYPES_CHAMBRE[c.type].label}</p>
                             </div>
                           </div>
                           <span className={cx('mt-1 size-2 rounded-full', s.dot)} title={s.label} />
@@ -173,24 +173,24 @@ export function Rooms() {
                           {sj ? (
                             <>
                               <p className="truncate text-[12px] font-medium text-ink">{sj.client}</p>
-                              <p className="mt-0.5 text-[10px] text-ink-3">
+                              <p className="mt-0.5 text-[12px] text-ink-3">
                                 Départ {fmtCourt(sj.depart)} · {sj.formule} · {sj.occupants} pers.
                               </p>
                             </>
                           ) : c.note ? (
-                            <p className="text-[10px] leading-4 text-crimson">{c.note}</p>
+                            <p className="text-[12px] leading-4 text-crimson">{c.note}</p>
                           ) : c.statut === 'propre' ? (
-                            <p className="text-[10px] text-ink-3">
+                            <p className="text-[12px] text-ink-3">
                               {montants ? `Prête à la vente · ${TYPES_CHAMBRE[c.type].prix} MAD` : 'Prête à la vente'}
                             </p>
                           ) : (
-                            <p className="text-[10px] text-ink-3">En attente de validation gouvernante</p>
+                            <p className="text-[12px] text-ink-3">En attente de validation gouvernante</p>
                           )}
                         </div>
 
                         <div className="mt-2 flex items-center justify-between border-t border-line-soft pt-2">
                           <Pill tone={TONE[c.statut]}>{s.label}</Pill>
-                          <span className="tnum text-[11px] font-medium text-ink-2">
+                          <span className="tnum text-[12px] font-medium text-ink-2">
                             {montants ? `${TYPES_CHAMBRE[c.type].prix} MAD` : TYPES_CHAMBRE[c.type].court}
                           </span>
                         </div>
@@ -249,12 +249,12 @@ export function Rooms() {
                   {montants ? (
                     <>
                       <p className="mt-2 font-display text-2xl">{TYPES_CHAMBRE[chambre.type].prix} MAD</p>
-                      <p className="text-[11px] text-ink-3">Tarif de base TTC · TVA 10 % incluse</p>
+                      <p className="text-[12px] text-ink-3">Tarif de base TTC · TVA 10 % incluse</p>
                     </>
                   ) : (
                     <>
                       <p className="mt-2 font-display text-2xl">{TYPES_CHAMBRE[chambre.type].label}</p>
-                      <p className="text-[11px] text-ink-3">Vue housekeeping — données de facturation masquées</p>
+                      <p className="text-[12px] text-ink-3">Vue housekeeping — données de facturation masquées</p>
                     </>
                   )}
                 </div>
@@ -290,7 +290,7 @@ export function Rooms() {
                     </div>
                   ))}
                 </dl>
-                <p className="mt-3 rounded-lg bg-sand-100 px-3 py-2 text-[11px] leading-4 text-ink-2">
+                <p className="mt-3 rounded-lg bg-sand-100 px-3 py-2 text-[12px] leading-4 text-ink-2">
                   Le check-out se fait depuis la caisse : il exige un solde nul et génère
                   automatiquement la facture.
                 </p>
@@ -301,7 +301,7 @@ export function Rooms() {
                   <DoorOpen className="mt-0.5 size-4 shrink-0 text-maj" />
                   <div>
                     <p className="text-[12px] font-medium text-ink">Arrivée attendue — {resaAttendue.client}</p>
-                    <p className="mt-0.5 text-[11px] leading-4 text-ink-2">
+                    <p className="mt-0.5 text-[12px] leading-4 text-ink-2">
                       {resaAttendue.occupants} personne(s) · {fmtCourt(resaAttendue.arrivee)} → {fmtCourt(resaAttendue.depart)}
                       {chambre.statut !== 'propre' && ' · chambre à valider avant check-in'}
                     </p>

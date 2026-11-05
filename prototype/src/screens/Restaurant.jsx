@@ -91,7 +91,7 @@ function PanneauCommande({ table, onClose }) {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-[13px] font-semibold text-ink">Table {table.id}</p>
-            <p className="text-[11px] text-ink-3">{table.couverts} couverts · {table.zone}</p>
+            <p className="text-[12px] text-ink-3">{table.couverts} couverts · {table.zone}</p>
           </div>
           <Pill tone={commandeOuverte ? 'maj' : 'jade'}>{commandeOuverte ? 'Commande ouverte' : 'Libre'}</Pill>
         </div>
@@ -138,11 +138,11 @@ function PanneauCommande({ table, onClose }) {
       <div className="rounded-xl border border-line bg-surface">
         <div className="flex items-center justify-between border-b border-line-soft px-3 py-2">
           <p className="text-[11px] font-semibold tracking-[0.05em] text-ink-3 uppercase">Commande en cours</p>
-          <span className="tnum text-[11px] text-ink-3">{lignes.reduce((s, l) => s + l.qte, 0)} article(s)</span>
+          <span className="tnum text-[12px] text-ink-3">{lignes.reduce((s, l) => s + l.qte, 0)} article(s)</span>
         </div>
         <div className="max-h-40 overflow-y-auto">
           {lignes.length === 0 && (
-            <p className="px-3 py-6 text-center text-[11px] text-ink-3">Aucun article — sélectionnez un plat dans la carte.</p>
+            <p className="px-3 py-6 text-center text-[12px] text-ink-3">Aucun article — sélectionnez un plat dans la carte.</p>
           )}
           {lignes.map((l) => (
             <div key={l.articleId} className="flex items-center gap-2 border-b border-line-soft px-3 py-1.5 last:border-b-0">
@@ -164,7 +164,7 @@ function PanneauCommande({ table, onClose }) {
           <div>
             <p className="text-[12px] font-medium text-ink-2">Total TTC</p>
             <p className="tnum text-lg font-semibold text-ink">{money(total)} MAD</p>
-            <p className="text-[10px] text-ink-3">TVA 20 % · {money(total / 1.2)} MAD HT</p>
+            <p className="text-[12px] text-ink-3">TVA 20 % · {money(total / 1.2)} MAD HT</p>
           </div>
           <div className="flex flex-col gap-1.5">
             <Button size="sm" onClick={() => setModaleChambre(true)} disabled={!lignes.length}>
@@ -224,7 +224,7 @@ function PanneauCommande({ table, onClose }) {
             </option>
           ))}
         </select>
-        <p className="mt-3 rounded-lg bg-saffron-100 px-3 py-2 text-[11px] leading-4 text-ink-2">
+        <p className="mt-3 rounded-lg bg-saffron-100 px-3 py-2 text-[12px] leading-4 text-ink-2">
           Règle conservée : la note n’est possible que si le séjour est en cours.
           Une trace d’audit est écrite et le check-out restera bloqué tant que le
           folio n’est pas soldé.
@@ -280,7 +280,7 @@ export function Restaurant() {
         <div>
           <p className="text-[11px] font-medium tracking-[0.1em] text-ink-3 uppercase">Exploitation · Restauration</p>
           <h2 className="font-display mt-1 text-[26px] leading-tight">Restaurant Le Marsa</h2>
-          <p className="mt-1 text-[13px] text-ink-2">48 couverts · 12 tables · service midi & soir · cuisine marocaine</p>
+          <p className="mt-1 text-[14px] text-ink-2">48 couverts · 12 tables · service midi & soir · cuisine marocaine</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => push('Bon de commande imprimé en cuisine', 'info')}>
@@ -324,7 +324,7 @@ export function Restaurant() {
                 <Card key={l} className="p-4">
                   <p className="text-[10px] font-medium tracking-[0.06em] text-ink-3 uppercase">{l}</p>
                   <p className="tnum mt-1 text-xl font-semibold text-ink">{v}</p>
-                  <p className="mt-0.5 text-[11px] text-ink-3">{h}</p>
+                  <p className="mt-0.5 text-[12px] text-ink-3">{h}</p>
                 </Card>
               ))}
             </div>
@@ -371,7 +371,7 @@ export function Restaurant() {
                                 <Users className="size-3" /> {t.couverts}
                               </span>
                             </div>
-                            <p className="mt-1 truncate text-[10px] opacity-80">
+                            <p className="mt-1 truncate text-[12px] opacity-80">
                               {ouvert ? `${money(totalCommande(ouvert))} MAD · ${ouvert.heure}` : occupee ? 'Note en chambre' : 'Disponible'}
                             </p>
                           </button>
@@ -389,7 +389,7 @@ export function Restaurant() {
                 {servies.length === 0 && <li className="px-5 py-6 text-center text-[12px] text-ink-3">Aucune note envoyée aujourd’hui.</li>}
                 {servies.slice(0, 5).map((c) => (
                   <li key={c.id} className="flex items-center gap-3 px-5 py-2.5">
-                    <span className="tnum text-[11px] text-ink-3">{c.heure}</span>
+                    <span className="tnum text-[12px] text-ink-3">{c.heure}</span>
                     <span className="grid size-9 place-items-center rounded-lg bg-maj-50 text-maj">
                       <BedDouble className="size-3.5" />
                     </span>
@@ -397,7 +397,7 @@ export function Restaurant() {
                       <p className="truncate text-[12px] font-medium text-ink">
                         Chambre {c.folioChambre} — table {c.table}
                       </p>
-                      <p className="truncate text-[10px] text-ink-3">
+                      <p className="truncate text-[12px] text-ink-3">
                         {c.lignes.map((l) => `${l.qte} × ${l.nom}`).join(', ')}
                       </p>
                     </div>
@@ -415,7 +415,7 @@ export function Restaurant() {
               <div className="py-10 text-center">
                 <ChefHat className="mx-auto size-6 text-ink-3" />
                 <p className="mt-2 text-[12px] font-medium text-ink">Aucune table sélectionnée</p>
-                <p className="mt-1 text-[11px] text-ink-3">
+                <p className="mt-1 text-[12px] text-ink-3">
                   Choisissez une table dans le plan de salle pour ouvrir une commande
                   ou envoyer une note en chambre.
                 </p>
@@ -452,7 +452,7 @@ export function Restaurant() {
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[12px] font-medium text-ink">{p.nom}</p>
-                    <p className="truncate text-[10px] text-ink-3">{p.cat} · {p.desc}</p>
+                    <p className="truncate text-[12px] text-ink-3">{p.cat} · {p.desc}</p>
                   </div>
                   <span className="tnum w-16 text-right text-[12px] font-semibold text-ink">{p.price ?? p.prix} MAD</span>
                   <button
@@ -487,10 +487,10 @@ export function Restaurant() {
               {petitDej.length === 0 && <li className="px-5 py-6 text-center text-[12px] text-ink-3">Aucun séjour avec petit-déjeuner.</li>}
               {petitDej.map((s) => (
                 <li key={s.id} className="flex items-center gap-3 px-5 py-2.5">
-                  <span className="tnum grid size-9 place-items-center rounded-lg bg-maj-50 text-[11px] font-semibold text-maj">{s.chambre}</span>
+                  <span className="tnum grid size-9 place-items-center rounded-lg bg-maj-50 text-[12px] font-semibold text-maj">{s.chambre}</span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[12px] font-medium text-ink">{s.client}</p>
-                    <p className="text-[10px] text-ink-3">
+                    <p className="text-[12px] text-ink-3">
                       {s.formule === 'PC' ? 'Pension complète' : s.formule === 'DP' ? 'Demi-pension' : 'Petit-déjeuner inclus'}
                     </p>
                   </div>

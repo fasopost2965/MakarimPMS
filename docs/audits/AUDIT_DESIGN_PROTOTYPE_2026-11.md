@@ -13,7 +13,7 @@ et les écrans d'exploitation sont denses sans être confus. Trois familles de d
 restent : **contraste des textes secondaires**, **échelle typographique trop fine**
 et **finitions d'accessibilité** (annonces, cibles tactiles, association des labels).
 
-**15 corrections appliquées** dans cette passe, dont 6 échecs de contraste WCAG et
+**17 corrections appliquées** dans cette passe, dont 6 échecs de contraste WCAG et
 un défaut de cohérence produit (le devis séminaire autorisait 70 participants pour
 une salle annoncée à 60 places).
 
@@ -91,6 +91,13 @@ entre en conflit direct avec la règle de confort du référentiel.
 12 px, casse normale, `ink-2` (le DS interdit explicitement le label de champ en
 10 px uppercase).
 
+**Arbitrage rendu (RD-030, `docs/governance/REGISTRE_DECISIONS.md`)** : échelle à
+quatre paliers — 14 px pour le contenu, 12 px pour les données et libellés
+secondaires, 11 px pour les zones de densité (planning, pastilles, navigation
+mobile), 10 px **exclusivement** pour les eyebrows et les `kbd`. Les données
+métier ne descendent plus jamais à 10 px. Après application : 39 occurrences en
+10 px, toutes en eyebrow/kbd/axe ; le corps de lecture est passé à 14 px.
+
 **Ce qui n'a pas été fait, volontairement** : relever tout le corps à 14 px.
 Sans rendu navigateur, un changement d'échelle global sur des cartes à hauteur
 fixe, des barres de planning et des tableaux denses **casserait des mises en page
@@ -138,10 +145,15 @@ pour les tableaux et les cartes de consultation, 12 px pour les zones de densit�
 `Échap`, focus visible global, `prefers-reduced-motion`, tableaux en
 `overflow-x-auto`, contrastes ci-dessus.
 
-**Restant (P1)**
+**Corrigé dans la passe 2 (RD-030)**
 
-- **Piège de focus absent** dans les modales et panneaux : `Tab` peut sortir vers
-  l'arrière-plan. À implémenter (~40 lignes) dans `Modal`/`Drawer`.
+- **Piège de focus** implémenté dans `Modal` et `Drawer` : `Tab`/`Shift+Tab`
+  cyclent dans le panneau, focus rendu à l'élément déclencheur à la fermeture
+  (WCAG 2.4.3), vérifié en jsdom.
+- **`aria-current="page"`** ajouté sur la navigation mobile.
+
+**Restant (P2)**
+
 - **Hiérarchie de titres** : le `h1` de la barre supérieure (« Chambres ») et le
   `h2` de l'écran (« Plan des chambres ») disent deux choses différentes. Un seul
   titre par écran serait plus propre.
@@ -192,13 +204,13 @@ pouvoir produire un état que la règle métier interdit.
 | 6 | Bordure de champ à 1.34:1 | 🟠 P1 | corrigé |
 | 7 | Pas de lien d'évitement | 🟠 P1 | corrigé |
 | 8 | Focus uniquement par bordure, sans anneau | 🟠 P1 | corrigé |
-| 9 | Corps de texte sous le seuil 14 px du DS | 🟠 P1 | **à arbitrer** (§3) |
-| 10 | Piège de focus absent dans les modales | 🟠 P1 | à faire |
+| 9 | Corps de texte sous le seuil 14 px du DS | 🟠 P1 | **tranché (RD-030)** |
+| 10 | Piège de focus absent dans les modales | 🟠 P1 | corrigé (RD-030) |
 | 11 | 5 rayons et 3 ombres hors tokens | 🟡 P2 | corrigé |
 | 12 | Cibles tactiles 28–32 px | 🟡 P2 | corrigé (36 px) |
 | 13 | `bg-white` non tokenisé | 🟡 P2 | corrigé (`surface`) |
 | 14 | Titre en double (h1 topbar / h2 écran) | 🟡 P2 | à faire |
-| 15 | `aria-current` manquant sur la barre mobile | 🟡 P2 | à faire |
+| 15 | `aria-current` manquant sur la barre mobile | 🟡 P2 | corrigé |
 
 ---
 

@@ -28,7 +28,7 @@ export function Rates() {
         <div>
           <p className="text-[11px] font-medium tracking-[0.1em] text-ink-3 uppercase">Administration · Référentiel</p>
           <h2 className="font-display mt-1 text-[26px] leading-tight">Tarifs & paramètres</h2>
-          <p className="mt-1 max-w-2xl text-[13px] text-ink-2">
+          <p className="mt-1 max-w-2xl text-[14px] text-ink-2">
             Grille, formules et fiscalité — aucun taux ni tarif codé en dur dans
             les parcours, tout est piloté depuis ce référentiel.
           </p>
@@ -74,12 +74,12 @@ export function Rates() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-line bg-sand-50">
-                    <td className="px-5 py-2.5 text-[11px] font-semibold text-ink">Total</td>
-                    <td className="tnum px-3 py-2.5 text-center text-[11px] font-semibold text-ink">{total}</td>
+                    <td className="px-5 py-2.5 text-[12px] font-semibold text-ink">Total</td>
+                    <td className="tnum px-3 py-2.5 text-center text-[12px] font-semibold text-ink">{total}</td>
                     <td />
-                    <td className="tnum px-3 py-2.5 text-right text-[11px] text-ink-2">ADR cible ~600</td>
+                    <td className="tnum px-3 py-2.5 text-right text-[12px] text-ink-2">ADR cible ~600</td>
                     <td />
-                    <td className="tnum px-5 py-2.5 text-right text-[11px] font-semibold text-ink">~360 MAD</td>
+                    <td className="tnum px-5 py-2.5 text-right text-[12px] font-semibold text-ink">~360 MAD</td>
                   </tr>
                 </tfoot>
               </table>
@@ -103,7 +103,7 @@ export function Rates() {
                 ))}
               </ul>
               <div className="border-t border-line-soft px-5 py-2.5">
-                <p className="text-[10px] leading-4 text-ink-3">
+                <p className="text-[12px] leading-4 text-ink-3">
                   Les pensions restent taxées à 10 % avec l’hébergement (cahier des charges §3.5.1).
                 </p>
               </div>
@@ -149,7 +149,7 @@ export function Rates() {
               </span>
               <div>
                 <p className="font-display text-lg leading-tight text-ink">{HOTEL.nom}</p>
-                <p className="text-[11px] text-ink-3">{HOTEL.categorie} · {HOTEL.ville}</p>
+                <p className="text-[12px] text-ink-3">{HOTEL.categorie} · {HOTEL.ville}</p>
               </div>
             </div>
             <dl className="mt-4 space-y-2 border-t border-line/60 pt-3 text-[11px]">
@@ -182,14 +182,14 @@ export function Rates() {
                 return (
                   <li key={r.l} className="flex items-center gap-3 px-5 py-2.5">
                     <Icone className="size-3.5 text-ink-3" />
-                    <span className="flex-1 text-[11px] text-ink-2">{r.l}</span>
-                    <span className="tnum text-[11px] font-medium text-ink">{r.v}</span>
+                    <span className="flex-1 text-[12px] text-ink-2">{r.l}</span>
+                    <span className="tnum text-[12px] font-medium text-ink">{r.v}</span>
                   </li>
                 );
               })}
             </ul>
             <div className="border-t border-line-soft px-5 py-3">
-              <p className="text-[10px] leading-4 text-ink-3">
+              <p className="text-[12px] leading-4 text-ink-3">
                 Source : cahier des charges §3.5.1 — « TVA 10 % sur l’hébergement,
                 la demi-pension et la pension complète ; 20 % sur les prestations
                 annexes, dont la restauration à la carte hors pension ».

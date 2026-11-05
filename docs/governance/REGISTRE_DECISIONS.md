@@ -261,6 +261,20 @@ Décisions structurantes prises **pendant ou après l'audit** (distinct des ADR 
 - **Date** : 2026-11-06.
 - **Décideur** : Claude (mise en conformité documentaire), les six arbitrages de fond restant explicitement à la direction.
 
+### RD-030 — Échelle typographique d'exploitation du prototype (amendement du DS §1.4) et clôture des réserves d'accessibilité
+
+- **Décision** : le `MAKARIM_DESIGN_SYSTEM_2026.md` §1.4 fixe un corps de texte à **14 px minimum**. Ce seuil est **maintenu pour le texte de contenu** (paragraphes, descriptions, états vides, sous-titres) et **assoupli pour les écrans d'exploitation** du prototype, selon une échelle d'usage explicite :
+  - **14 px** — contenu courant : paragraphes, descriptions de cartes, états vides ;
+  - **12 px** — données et libellés secondaires : cellules de tableaux, valeurs d'axe, badges, méta-informations ;
+  - **11 px** — zones de densité contrainte : cellules du planning 14 jours, pastilles de statut, navigation mobile ;
+  - **10 px** — réservé aux **eyebrows** (`uppercase` + tracking) et aux étiquettes de raccourci clavier (`kbd`). **Jamais pour une donnée métier.**
+- **Raison** : le prototype tient 8 écrans d'exploitation dans 1366×768. Une passe globale à 14 px a été écartée : elle réduit d'environ 15 % le contenu visible par écran et casse les dispositions à hauteur fixe (bandeau de chiffres, planning, plan des chambres) sans qu'un rendu navigateur puisse être vérifié dans cet environnement. Le référentiel ne distinguait pas « corps de lecture » et « donnée dense » ; la distinction est désormais explicite plutôt que laissée à l'improvisation de chaque écran.
+- **Alternatives considérées** : (a) imposer 14 px partout et accepter la perte de densité — écartée pour le prototype, à réévaluer sur un vrai rendu ; (b) ne rien trancher et laisser les 12 tailles arbitraires observées à l'audit — écartée, l'échelle devenait illisible ; (c) échelle à 4 paliers avec interdiction du 10 px hors eyebrows — **retenue**.
+- **Conséquence** : `index.css` reste la source des tokens ; le prototype applique l'échelle (154 occurrences en 12 px, 39 en 11 px, 39 en 10 px toutes eyebrows/kbd/axes, 9 en 14 px, 20 en 13 px). Toute nouvelle taille hors échelle doit être justifiée en commentaire. Le DS n'est pas réécrit : cet enregistrement fait foi comme dérogation documentée pour les écrans d'exploitation uniquement, la règle des 14 px restant applicable au texte de contenu.
+- **Décision liée** : les deux réserves d'accessibilité de l'audit design sont traitées dans la même passe — **piège de focus** dans `Modal` et `Drawer` (Tab/Shift+Tab cyclent dans le panneau, focus rendu à l'élément déclencheur à la fermeture, WCAG 2.4.3) et `aria-current="page"` sur la navigation mobile. Reste ouvert, sans impact utilisateur en démonstration : le titre en double (`h1` de barre supérieure + `h2` d'écran).
+- **Date** : 2026-11-06.
+- **Décideur** : Claude, sur mandat explicite (« pour tes questions décide pour moi »).
+
 ---
 
 ## Décisions en attente (questions ouvertes de l'audit nécessitant un arbitrage humain)

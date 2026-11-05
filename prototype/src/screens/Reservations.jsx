@@ -132,7 +132,7 @@ function NouvelleReservation({ open, onClose }) {
               {nbNuits}
             </span>
             <Button variant="outline" size="sm" onClick={() => setNbNuits((n) => Math.min(30, n + 1))} aria-label="Ajouter une nuit">+</Button>
-            <span className="ml-1 text-[11px] text-ink-3">→ départ {fmtCourt(depart)}</span>
+            <span className="ml-1 text-[12px] text-ink-3">→ départ {fmtCourt(depart)}</span>
           </div>
         </div>
 
@@ -172,7 +172,7 @@ function NouvelleReservation({ open, onClose }) {
             <span id="resa-chambres" className="text-[12px] font-semibold text-ink-2">
               Chambres disponibles ({dispo.length})
             </span>
-            <span className="text-[11px] text-ink-3">{fmtCourt(arrivee)} → {fmtCourt(depart)}</span>
+            <span className="text-[12px] text-ink-3">{fmtCourt(arrivee)} → {fmtCourt(depart)}</span>
           </div>
           <div
             role="group"
@@ -201,7 +201,7 @@ function NouvelleReservation({ open, onClose }) {
             ))}
           </div>
           {chambre && occupants > TYPES_CHAMBRE[chambre.type].capacite && (
-            <p className="mt-1 text-[11px] text-crimson">Cette chambre accueille {TYPES_CHAMBRE[chambre.type].capacite} personnes maximum.</p>
+            <p className="mt-1 text-[12px] text-crimson">Cette chambre accueille {TYPES_CHAMBRE[chambre.type].capacite} personnes maximum.</p>
           )}
         </div>
       </div>
@@ -239,7 +239,7 @@ export function Reservations() {
         <div>
           <p className="text-[11px] font-medium tracking-[0.1em] text-ink-3 uppercase">Pilotage · Planning</p>
           <h2 className="font-display mt-1 text-[26px] leading-tight">Réservations</h2>
-          <p className="mt-1 text-[13px] text-ink-2">
+          <p className="mt-1 text-[14px] text-ink-2">
             {fmtCourt(state.date)} → {fmtCourt(isoAdd(state.date, 13))} · {blocs.length} séjours au planning
           </p>
         </div>
@@ -263,7 +263,7 @@ export function Reservations() {
           <Card key={l} className="p-4">
             <p className="text-[10px] font-medium tracking-[0.06em] text-ink-3 uppercase">{l}</p>
             <p className="tnum mt-1.5 text-xl font-semibold text-ink">{v}</p>
-            <p className="mt-0.5 text-[11px] text-ink-3">{h}</p>
+            <p className="mt-0.5 text-[12px] text-ink-3">{h}</p>
           </Card>
         ))}
       </div>
@@ -293,7 +293,7 @@ export function Reservations() {
               </button>
             ))}
           </div>
-          <span className="flex items-center gap-1.5 text-[11px] text-ink-3">
+          <span className="flex items-center gap-1.5 text-[12px] text-ink-3">
             <MousePointerClick className="size-3.5" /> Cliquez sur un séjour pour le détail
           </span>
         </div>
@@ -397,7 +397,7 @@ export function Reservations() {
                   <X className="size-3.5" /> Annuler
                 </Button>
               ) : (
-                <span className="text-[11px] text-ink-3">Séjour en cours — actions disponibles en caisse.</span>
+                <span className="text-[12px] text-ink-3">Séjour en cours — actions disponibles en caisse.</span>
               )}
               <Button variant="outline" onClick={() => setDetail(null)}>Fermer</Button>
             </div>

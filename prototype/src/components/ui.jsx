@@ -5,7 +5,15 @@
 // Accessibilité : focus visible, fermeture des panneaux par `Échap`,
 // informations jamais portées par la seule couleur.
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { CheckCircle2, Info, X } from 'lucide-react';
 
 export function cx(...parts) {
@@ -133,7 +141,7 @@ export function Stat({ label, value, unit, delta, tone = 'neutral', hint }) {
             {delta > 0 ? '▲' : '▼'} {Math.abs(delta)}
           </Pill>
         )}
-        {hint && <span className="truncate text-[11px] text-ink-3">{hint}</span>}
+        {hint && <span className="truncate text-[12px] text-ink-3">{hint}</span>}
       </div>
     </Card>
   );
@@ -218,8 +226,61 @@ function useEchap(actif, onClose) {
   }, [actif, onClose]);
 }
 
+// Piège de focus — indispensable sur un panneau modal : sans lui, Tab fait
+// sortir le curseur derrière l'overlay, dans une interface que l'utilisateur ne
+// voit plus. On mémorise l'élément déclencheur pour lui rendre le focus à la
+// fermeture (WCAG 2.4.3 « ordre de tabulation »).
+const SELECTEUR_FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function usePiegeFocus(actif, refPanneau) {
+  useEffect(() => {
+    if (!actif) return undefined;
+    const precedent = document.activeElement;
+    // Premier champ utile : un [data-autofocus] s'il existe, sinon le premier
+    // élément focusable du panneau.
+    const cible = () => {
+      const noeud = refPanneau.current;
+      if (!noeud) return null;
+      return (
+        noeud.querySelector('[data-autofocus]') ||
+        noeud.querySelectorAll(SELECTEUR_FOCUSABLE)[0] ||
+        noeud
+      );
+    };
+    const t = setTimeout(() => cible()?.focus?.(), 0);
+    const onKey = (e) => {
+      if (e.key !== 'Tab') return;
+      const noeud = refPanneau.current;
+      if (!noeud) return;
+      // Pas de filtre de visibilité : `offsetParent` vaut null pour les
+      // éléments en position fixed (et n'est pas implémenté par jsdom), ce qui
+      // désactiverait le piège à tort. Le sélecteur suffit.
+      const liste = [...noeud.querySelectorAll(SELECTEUR_FOCUSABLE)];
+      if (liste.length === 0) return;
+      const premier = liste[0];
+      const dernier = liste[liste.length - 1];
+      if (e.shiftKey && document.activeElement === premier) {
+        e.preventDefault();
+        dernier.focus();
+      } else if (!e.shiftKey && document.activeElement === dernier) {
+        e.preventDefault();
+        premier.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener('keydown', onKey);
+      if (precedent instanceof HTMLElement) precedent.focus?.();
+    };
+  }, [actif, refPanneau]);
+}
+
 export function Drawer({ open, onClose, title, subtitle, children, footer }) {
   useEchap(open, onClose);
+  const panneau = useRef(null);
+  usePiegeFocus(open, panneau);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -230,6 +291,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer }) {
         className="absolute inset-0 bg-ink/25 backdrop-blur-[2px]"
       />
       <aside
+        ref={panneau}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -255,6 +317,8 @@ export function Drawer({ open, onClose, title, subtitle, children, footer }) {
 
 export function Modal({ open, onClose, title, subtitle, children, footer, width = 'max-w-lg' }) {
   useEchap(open, onClose);
+  const panneau = useRef(null);
+  usePiegeFocus(open, panneau);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -265,6 +329,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, width 
         className="absolute inset-0 bg-ink/30 backdrop-blur-[2px]"
       />
       <div
+        ref={panneau}
         role="dialog"
         aria-modal="true"
         aria-label={title}

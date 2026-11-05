@@ -144,7 +144,7 @@ export function Sidebar({ active, onNavigate, onNightAudit }) {
           <div className="flex items-center gap-3">
             <div className="relative grid place-items-center">
               <Ring value={kpi.occupation} size={52} stroke={5} />
-              <span className="tnum absolute text-[11px] font-semibold text-ink">{kpi.occupation}%</span>
+              <span className="tnum absolute text-[12px] font-semibold text-ink">{kpi.occupation}%</span>
             </div>
             <div className="min-w-0">
               <p className="text-[11px] font-medium tracking-[0.06em] text-ink-3 uppercase">Ce soir</p>
@@ -158,7 +158,7 @@ export function Sidebar({ active, onNavigate, onNightAudit }) {
             Clôture de journée
           </Button>
         </Card>
-        <p className="mt-3 px-1 text-[10px] leading-4 text-ink-3">
+        <p className="mt-3 px-1 text-[12px] leading-4 text-ink-3">
           Prototype fonctionnel · état enregistré localement
         </p>
       </div>
@@ -184,7 +184,7 @@ export function Topbar({ titre, sousTitre, onOpenMobileNav, onOpenPalette, onCha
 
       <div className="min-w-0">
         <h1 className="truncate text-[15px] font-semibold tracking-[-0.01em] text-ink">{titre}</h1>
-        <p className="truncate text-[11px] text-ink-3">{sousTitre}</p>
+        <p className="truncate text-[12px] text-ink-3">{sousTitre}</p>
       </div>
 
       <div className="ml-auto flex items-center gap-2">
@@ -233,12 +233,12 @@ export function Topbar({ titre, sousTitre, onOpenMobileNav, onOpenPalette, onCha
               menuProfil && 'border-maj/40 ring-2 ring-maj/15',
             )}
           >
-            <span className="grid size-9 place-items-center rounded-lg bg-ink text-[11px] font-semibold text-white">
+            <span className="grid size-9 place-items-center rounded-lg bg-ink text-[12px] font-semibold text-white">
               {profil.initiales}
             </span>
             <div className="hidden text-left leading-tight sm:block">
-              <p className="text-[11px] font-semibold text-ink">{profil.label}</p>
-              <p className="text-[10px] text-ink-3">{profil.personne}</p>
+              <p className="text-[12px] font-semibold text-ink">{profil.label}</p>
+              <p className="text-[12px] text-ink-3">{profil.personne}</p>
             </div>
             <ChevronDown className={cx('size-3.5 text-ink-3 transition-transform', menuProfil && 'rotate-180')} />
           </button>
@@ -289,7 +289,7 @@ export function Topbar({ titre, sousTitre, onOpenMobileNav, onOpenPalette, onCha
                     </li>
                   ))}
                 </ul>
-                <p className="border-t border-line-soft px-3 py-2 text-[10px] leading-4 text-ink-3">
+                <p className="border-t border-line-soft px-3 py-2 text-[12px] leading-4 text-ink-3">
                   Le serveur applique la même matrice sur chaque endpoint (BR-TR-004) :
                   l’interface ne fait que refléter les droits.
                 </p>
@@ -363,8 +363,9 @@ export function BottomNav({ active, onNavigate }) {
             key={item.cle}
             type="button"
             onClick={() => onNavigate(item.cle)}
+            aria-current={active === item.cle ? 'page' : undefined}
             className={cx(
-              'flex flex-1 flex-col items-center gap-1 py-2 text-[10px] font-medium',
+              'flex flex-1 flex-col items-center gap-1 py-2 text-[11px] font-medium',
               active === item.cle ? 'text-maj' : 'text-ink-3',
             )}
           >

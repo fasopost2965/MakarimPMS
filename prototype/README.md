@@ -98,6 +98,7 @@ Le menu de profil de la barre supérieure applique la matrice corrigée
 | **Mix par canal** au tableau de bord | CA ferme par canal + comparaison à la cible 70/20/10 (BR-REP-002) |
 | **Commentaires d'en-tête** | chaque fichier de `src/` documente son rôle et les règles métier (`BR-*`) qu'il matérialise |
 | Fermeture des panneaux par `Échap`, toasts repositionnés | conformité aux habitudes d'un logiciel de réception |
+| **Décisions de design** (RD-030) : échelle typographique à 4 paliers, piège de focus dans les modales, `aria-current` mobile | mise en œuvre de l'arbitrage rendu sur l'audit |
 | **Audit de design** (voir `docs/audits/AUDIT_DESIGN_PROTOTYPE_2026-11.md`) | contrastes WCAG corrigés (6 paires), échelle typographique ramenée de 12 à 8 tailles, 3 rayons et 2 ombres tokenisés, labels associés, toasts annoncés, lien d'évitement, cibles tactiles à 36 px, capacité de salle lue dans le référentiel |
 
 ## Vérification

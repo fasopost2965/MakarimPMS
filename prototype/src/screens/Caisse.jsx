@@ -82,7 +82,7 @@ export function Caisse() {
         <div>
           <p className="text-[11px] font-medium tracking-[0.1em] text-ink-3 uppercase">Administration · Caisse</p>
           <h2 className="font-display mt-1 text-[26px] leading-tight">Caisse & factures</h2>
-          <p className="mt-1 text-[13px] text-ink-2">{fmtLong(state.date)} · folios du jour, encaissements et notes restaurant.</p>
+          <p className="mt-1 text-[14px] text-ink-2">{fmtLong(state.date)} · folios du jour, encaissements et notes restaurant.</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => push('Journal de caisse exporté (CSV)', 'info')}>
@@ -211,7 +211,7 @@ export function Caisse() {
               ))}
             </div>
             <div className="border-t border-line-soft px-5 py-3">
-              <p className="flex items-center gap-1.5 text-[10px] text-ink-3">
+              <p className="flex items-center gap-1.5 text-[12px] text-ink-3">
                 <Receipt className="size-3" /> Plafond espèces : {money(PARAMS.plafondEspeces)} MAD / opération
               </p>
             </div>
@@ -225,7 +225,7 @@ export function Caisse() {
                   <FileText className="size-3.5 text-ink-3" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[12px] font-medium text-ink">{f.id}</p>
-                    <p className="truncate text-[10px] text-ink-3">{f.client}{f.chambre ? ` · ch. ${f.chambre}` : ''}</p>
+                    <p className="truncate text-[12px] text-ink-3">{f.client}{f.chambre ? ` · ch. ${f.chambre}` : ''}</p>
                   </div>
                   <span className="tnum text-[12px] font-semibold text-ink">{money(f.montant)}</span>
                 </li>
@@ -284,7 +284,7 @@ export function Caisse() {
                 <div>
                   <p className="text-[10px] tracking-[0.06em] text-ink-3 uppercase">Solde à régler</p>
                   <p className="tnum mt-1 text-2xl font-semibold text-ink">{money(Math.max(0, soldeDuFolio(folio)))} MAD</p>
-                  <p className="mt-0.5 text-[11px] text-ink-3">
+                  <p className="mt-0.5 text-[12px] text-ink-3">
                     {folio.statut === 'facture' ? 'Facture émise' : soldeDuFolio(folio) <= 0 ? 'Folio soldé' : 'En cours'}
                   </p>
                 </div>
@@ -365,7 +365,7 @@ export function Caisse() {
                 );
               })}
             </div>
-            <p className="mt-3 rounded-lg bg-sand-100 px-3 py-2 text-[11px] leading-4 text-ink-2">
+            <p className="mt-3 rounded-lg bg-sand-100 px-3 py-2 text-[12px] leading-4 text-ink-2">
               Le règlement est idempotent : un double clic ne crée jamais deux
               encaissements. Plafond espèces {money(PARAMS.plafondEspeces)} MAD.
             </p>
