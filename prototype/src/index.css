@@ -1,0 +1,133 @@
+/* Design tokens du prototype (Tailwind 4 `@theme`).
+   Palette « 3★ marocain » : sable (fond), bleu majorelle (action), terre cuite
+   (restauration), safran (événementiel), jade (succès), rouge brique (alerte).
+   Toute couleur utilisée par un écran doit exister ici — aucune valeur brute
+   dans les composants. */
+@import 'tailwindcss';
+@import '@fontsource-variable/geist';
+@import '@fontsource/marcellus';
+
+/* ------------------------------------------------------------------
+ * Identité « Makarim 3★ » — relecture du Design System 2026 pour un hôtel
+ * 3 étoiles de 30 chambres à Tétouan : fond sable chaud, encre vert-noir,
+ * bleu majorelle comme couleur d'action (héritage du DS), terre cuite et
+ * safran comme accents d'exploitation (restaurant, conférence).
+ * Aucune couleur brute Tailwind n'est utilisée dans les écrans : tout passe
+ * par ces tokens, comme l'exige docs/MAKARIM_DESIGN_SYSTEM_2026.md §1.
+ * ------------------------------------------------------------------ */
+@theme {
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Marcellus', Georgia, 'Times New Roman', serif;
+
+  --color-sand-50: #fcfaf5;
+  --color-sand-100: #f7f2e8;
+  --color-sand-200: #f0e8d9;
+  --color-sand-300: #e4d8c3;
+
+  --color-ink: #16211f;
+  --color-ink-2: #4b5a55;
+  --color-ink-3: #79877f;
+
+  --color-line: #e7ddcd;
+  --color-line-soft: #f0e9dd;
+
+  --color-maj: #2f4090;
+  --color-maj-700: #26357a;
+  --color-maj-100: #e6e9f8;
+  --color-maj-50: #f1f3fc;
+
+  --color-terra: #c05b3c;
+  --color-terra-100: #faeae3;
+
+  --color-saffron: #b57c10;
+  --color-saffron-100: #fbf0d8;
+
+  --color-jade: #17795e;
+  --color-jade-100: #dff1e9;
+
+  --color-crimson: #b4332a;
+  --color-crimson-100: #fae3e0;
+
+  --shadow-card:
+    0 1px 2px rgb(22 33 31 / 0.04), 0 12px 28px -20px rgb(22 33 31 / 0.28);
+  --shadow-pop: 0 24px 64px -24px rgb(22 33 31 / 0.35);
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-sand-100 text-ink font-sans;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+
+  ::selection {
+    background: var(--color-maj-100);
+  }
+
+  /* Chiffres alignés dans toutes les colonnes de données (ADR/RevPAR,
+     montants, compteurs) — lisibilité opérationnelle. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-maj);
+    outline-offset: 2px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-sand-300);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+}
+
+/* Motif zellige (étoile à huit branches) — décor discret de la marque,
+   jamais porteur d'information. */
+.zellige {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Cg fill='none' stroke='%232f4090' stroke-opacity='0.13' stroke-width='1'%3E%3Cpath d='M28 4l7 10h12l-6 10 6 10H35l-7 10-7-10H9l6-10-6-10h12z'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.animate-slide-in {
+  animation: slide-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-up {
+  animation: fade-up 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-slide-in,
+  .animate-fade-up {
+    animation: none;
+  }
+}
