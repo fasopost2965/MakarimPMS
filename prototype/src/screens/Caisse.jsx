@@ -115,9 +115,10 @@ export function Caisse() {
             titre="Folios"
             sousTitre={`${liste.length} dossier(s) · ${money(totalSoldes)} MAD de soldes ouverts`}
             action={
-              <div className="flex items-center gap-2 rounded-lg border border-line bg-white px-2.5 py-1.5">
+              <div className="flex items-center gap-2 rounded-lg border border-line-strong bg-surface px-2.5 py-1.5">
                 <Search className="size-3.5 text-ink-3" />
                 <input
+                  aria-label="Rechercher un folio par numéro, chambre ou client"
                   value={recherche}
                   onChange={(e) => setRecherche(e.target.value)}
                   placeholder="Folio, chambre, client"
@@ -210,7 +211,7 @@ export function Caisse() {
               ))}
             </div>
             <div className="border-t border-line-soft px-5 py-3">
-              <p className="flex items-center gap-1.5 text-[10.5px] text-ink-3">
+              <p className="flex items-center gap-1.5 text-[10px] text-ink-3">
                 <Receipt className="size-3" /> Plafond espèces : {money(PARAMS.plafondEspeces)} MAD / opération
               </p>
             </div>
@@ -224,7 +225,7 @@ export function Caisse() {
                   <FileText className="size-3.5 text-ink-3" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[12px] font-medium text-ink">{f.id}</p>
-                    <p className="truncate text-[10.5px] text-ink-3">{f.client}{f.chambre ? ` · ch. ${f.chambre}` : ''}</p>
+                    <p className="truncate text-[10px] text-ink-3">{f.client}{f.chambre ? ` · ch. ${f.chambre}` : ''}</p>
                   </div>
                   <span className="tnum text-[12px] font-semibold text-ink">{money(f.montant)}</span>
                 </li>
@@ -353,8 +354,8 @@ export function Caisse() {
                     type="button"
                     onClick={() => setMoyen(m.label)}
                     className={cx(
-                      'flex w-full items-center gap-2.5 rounded-xl border px-3 py-2.5 text-[12.5px] transition-colors',
-                      moyen === m.label ? 'border-maj bg-maj-50 text-maj' : 'border-line bg-white text-ink-2 hover:bg-sand-50',
+                      'flex w-full items-center gap-2.5 rounded-xl border px-3 py-2.5 text-[12px] transition-colors',
+                      moyen === m.label ? 'border-maj bg-maj-50 text-maj' : 'border-line bg-surface text-ink-2 hover:bg-sand-50',
                     )}
                   >
                     <Icone className="size-4" />

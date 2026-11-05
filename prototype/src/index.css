@@ -26,20 +26,24 @@
 
   --color-ink: #16211f;
   --color-ink-2: #4b5a55;
-  --color-ink-3: #79877f;
+  --color-ink-3: #647069;   /* 4.63:1 sur sable, 5.17:1 sur blanc — AA */
 
-  --color-line: #e7ddcd;
+  --color-line: #e7ddcd;        /* séparateurs décoratifs (cartes, listes) */
   --color-line-soft: #f0e9dd;
+  /* Bordure de composant interactif : 3.3:1 sur blanc (WCAG 1.4.11) —
+     réservée aux champs de formulaire et aux zones cliquables bordées. */
+  --color-line-strong: #a08a68;
+  --color-surface: #ffffff;
 
   --color-maj: #2f4090;
   --color-maj-700: #26357a;
   --color-maj-100: #e6e9f8;
   --color-maj-50: #f1f3fc;
 
-  --color-terra: #c05b3c;
+  --color-terra: #ab5135;   /* 4.53:1 sur terra-100, 5.30:1 en texte blanc */
   --color-terra-100: #faeae3;
 
-  --color-saffron: #b57c10;
+  --color-saffron: #92640d; /* 4.58:1 sur saffron-100, 5.18:1 en texte blanc */
   --color-saffron-100: #fbf0d8;
 
   --color-jade: #17795e;

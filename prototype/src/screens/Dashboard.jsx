@@ -226,7 +226,7 @@ export function Dashboard({ onNavigate }) {
                 { l: 'Chambres à vendre ce soir', v: state.chambres.length - kpi.vendues },
               ].map((s) => (
                 <div key={s.l} className="px-4 py-3">
-                  <p className="text-[10px] tracking-[0.05em] text-ink-3 uppercase">{s.l}</p>
+                  <p className="text-[12px] font-medium text-ink-2">{s.l}</p>
                   <p className="tnum mt-1 text-sm font-semibold text-ink">{s.v}</p>
                 </div>
               ))}
@@ -248,8 +248,8 @@ export function Dashboard({ onNavigate }) {
                       type="button"
                       onClick={() => setOnglet(t.cle)}
                       className={cx(
-                        'rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors',
-                        onglet === t.cle ? 'bg-white text-ink shadow-sm' : 'text-ink-3 hover:text-ink-2',
+                        'rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors',
+                        onglet === t.cle ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink-2',
                       )}
                     >
                       {t.label}
@@ -399,7 +399,7 @@ export function Dashboard({ onNavigate }) {
                 <li key={a.titre} className="flex gap-2.5 px-5 py-3">
                   <AlerteIcone niveau={a.niveau} />
                   <div className="min-w-0">
-                    <p className="text-[12.5px] leading-4 font-medium text-ink">{a.titre}</p>
+                    <p className="text-[12px] leading-4 font-medium text-ink">{a.titre}</p>
                     <p className="mt-0.5 text-[11px] leading-4 text-ink-3">{a.detail}</p>
                   </div>
                 </li>
@@ -449,7 +449,7 @@ export function Dashboard({ onNavigate }) {
               ))}
             </ul>
             <div className="border-t border-line-soft px-5 py-2.5">
-              <p className="text-[10.5px] leading-4 text-ink-3">
+              <p className="text-[10px] leading-4 text-ink-3">
                 Cible cahier des charges §1.1 : walk-in 70 %, direct 20 %, Booking 10 %.
               </p>
             </div>
@@ -459,7 +459,7 @@ export function Dashboard({ onNavigate }) {
             <CardHeader titre="Demain" sousTitre="Préparatifs cuisine & salle" />
             <div className="space-y-3 px-5 py-4">
               <div className="flex items-center gap-3">
-                <span className="grid size-8 place-items-center rounded-lg bg-terra-100 text-terra">
+                <span className="grid size-9 place-items-center rounded-lg bg-terra-100 text-terra">
                   <Coffee className="size-4" />
                 </span>
                 <div className="flex-1">
@@ -468,7 +468,7 @@ export function Dashboard({ onNavigate }) {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className="grid size-8 place-items-center rounded-lg bg-saffron-100 text-saffron">
+                <span className="grid size-9 place-items-center rounded-lg bg-saffron-100 text-saffron">
                   <Users className="size-4" />
                 </span>
                 <div className="flex-1">
@@ -481,7 +481,7 @@ export function Dashboard({ onNavigate }) {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className="grid size-8 place-items-center rounded-lg bg-maj-100 text-maj">
+                <span className="grid size-9 place-items-center rounded-lg bg-maj-100 text-maj">
                   <BedDouble className="size-4" />
                 </span>
                 <div className="flex-1">
@@ -504,8 +504,8 @@ export function Dashboard({ onNavigate }) {
             <ul className="divide-y divide-line-soft">
               {state.journal.slice(0, 5).map((j) => (
                 <li key={j.id} className="flex gap-2.5 px-5 py-2.5">
-                  <span className="tnum text-[10.5px] text-ink-3">{j.heure}</span>
-                  <p className="flex-1 text-[11.5px] leading-4 text-ink-2">{j.texte}</p>
+                  <span className="tnum text-[10px] text-ink-3">{j.heure}</span>
+                  <p className="flex-1 text-[11px] leading-4 text-ink-2">{j.texte}</p>
                 </li>
               ))}
             </ul>

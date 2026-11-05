@@ -114,7 +114,7 @@ export function NightAudit({ open, onClose }) {
               <TriangleAlert className="mt-0.5 size-4 shrink-0 text-saffron" />
             )}
             <div>
-              <p className="text-[12.5px] font-medium text-ink">{ligne.titre}</p>
+              <p className="text-[12px] font-medium text-ink">{ligne.titre}</p>
               <p className="mt-0.5 text-[11px] leading-4 text-ink-3">{ligne.detail}</p>
             </div>
           </li>
@@ -171,6 +171,14 @@ function Contenu() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-sand-100">
+      {/* Lien d'évitement : première cible du clavier, évite de retraverser
+          la navigation à chaque changement d'écran. */}
+      <a
+        href="#contenu"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[80] focus:rounded-lg focus:bg-ink focus:px-4 focus:py-2 focus:text-[13px] focus:font-medium focus:text-white"
+      >
+        Aller au contenu principal
+      </a>
       <Sidebar active={page} onNavigate={setPage} onNightAudit={() => setNightAudit(true)} />
       <MobileNav open={navMobile} onClose={() => setNavMobile(false)} active={page} onNavigate={setPage} />
 
@@ -186,7 +194,7 @@ function Contenu() {
             push(`Profil « ${PROFILS[cle].label} » activé — navigation et droits recalculés.`, 'info');
           }}
         />
-        <main className="flex-1 overflow-y-auto pb-16 lg:pb-0">
+        <main id="contenu" tabIndex={-1} className="flex-1 overflow-y-auto pb-16 outline-none lg:pb-0">
           <div key={page} className="animate-fade-up">
             <Composant onNavigate={setPage} kpi={kpi} />
           </div>

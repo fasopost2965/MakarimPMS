@@ -74,26 +74,32 @@ function NouvelleReservation({ open, onClose }) {
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
-          <label className="text-[10px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Client</label>
+          <label htmlFor="resa-client" className="text-[12px] font-semibold text-ink-2">
+            Client
+          </label>
           <input
+            id="resa-client"
+            autoFocus
             value={client}
             onChange={(e) => setClient(e.target.value)}
             placeholder="Nom du client ou de l’entreprise"
-            className="mt-1.5 w-full rounded-xl border border-line bg-white px-3 py-2.5 text-[13px] outline-none focus:border-maj"
+            className="mt-1.5 w-full rounded-xl border border-line-strong bg-surface px-3 py-2.5 text-[13px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
           />
         </div>
 
         <div className="sm:col-span-2">
-          <label className="text-[10px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Canal</label>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
+          <span id="resa-canal" className="text-[12px] font-semibold text-ink-2">
+            Canal
+          </span>
+          <div role="group" aria-labelledby="resa-canal" className="mt-1.5 flex flex-wrap gap-1.5">
             {Object.entries(CANAUX).map(([cle, c]) => (
               <button
                 key={cle}
                 type="button"
                 onClick={() => setCanal(cle)}
                 className={cx(
-                  'rounded-full border px-3 py-1.5 text-[11.5px] font-medium transition-colors',
-                  canal === cle ? c.classe : 'border-line bg-white text-ink-2 hover:bg-sand-50',
+                  'rounded-full border px-3 py-1.5 text-[11px] font-medium transition-colors',
+                  canal === cle ? c.classe : 'border-line bg-surface text-ink-2 hover:bg-sand-50',
                 )}
               >
                 {c.label}
@@ -103,41 +109,55 @@ function NouvelleReservation({ open, onClose }) {
         </div>
 
         <div>
-          <label className="text-[10px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Arrivée</label>
+          <label htmlFor="resa-arrivee" className="text-[12px] font-semibold text-ink-2">
+            Arrivée
+          </label>
           <input
+            id="resa-arrivee"
             type="date"
             value={arrivee}
             min={state.date}
             onChange={(e) => setArrivee(e.target.value)}
-            className="mt-1.5 w-full rounded-xl border border-line bg-white px-3 py-2 text-[13px] outline-none focus:border-maj"
+            className="mt-1.5 w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-[13px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
           />
         </div>
 
         <div>
-          <label className="text-[10px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Nuitées</label>
-          <div className="mt-1.5 flex items-center gap-2">
+          <span id="resa-nuitees" className="text-[12px] font-semibold text-ink-2">
+            Nuitées
+          </span>
+          <div role="group" aria-labelledby="resa-nuitees" className="mt-1.5 flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setNbNuits((n) => Math.max(1, n - 1))} aria-label="Retirer une nuit">−</Button>
-            <span className="tnum w-10 text-center text-[15px] font-semibold">{nbNuits}</span>
+            <span aria-live="polite" className="tnum w-10 text-center text-[15px] font-semibold">
+              {nbNuits}
+            </span>
             <Button variant="outline" size="sm" onClick={() => setNbNuits((n) => Math.min(30, n + 1))} aria-label="Ajouter une nuit">+</Button>
             <span className="ml-1 text-[11px] text-ink-3">→ départ {fmtCourt(depart)}</span>
           </div>
         </div>
 
         <div>
-          <label className="text-[10px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Occupants</label>
-          <div className="mt-1.5 flex items-center gap-2">
+          <span id="resa-occupants" className="text-[12px] font-semibold text-ink-2">
+            Occupants
+          </span>
+          <div role="group" aria-labelledby="resa-occupants" className="mt-1.5 flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setOccupants((n) => Math.max(1, n - 1))} aria-label="Retirer une personne">−</Button>
-            <span className="tnum w-8 text-center text-[15px] font-semibold">{occupants}</span>
+            <span aria-live="polite" className="tnum w-8 text-center text-[15px] font-semibold">
+              {occupants}
+            </span>
             <Button variant="outline" size="sm" onClick={() => setOccupants((n) => Math.min(3, n + 1))} aria-label="Ajouter une personne">+</Button>
           </div>
         </div>
 
         <div>
-          <label className="text-[10px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Formule</label>
+          <label htmlFor="resa-formule" className="text-[12px] font-semibold text-ink-2">
+            Formule
+          </label>
           <select
+            id="resa-formule"
             value={formule}
             onChange={(e) => setFormule(e.target.value)}
-            className="mt-1.5 w-full rounded-xl border border-line bg-white px-3 py-2 text-[13px] outline-none focus:border-maj"
+            className="mt-1.5 w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-[13px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
           >
             {FORMULES.map((f) => (
               <option key={f.code} value={f.code}>
@@ -149,12 +169,16 @@ function NouvelleReservation({ open, onClose }) {
 
         <div className="sm:col-span-2">
           <div className="flex items-center justify-between">
-            <label className="text-[10px] font-semibold tracking-[0.08em] text-ink-3 uppercase">
+            <span id="resa-chambres" className="text-[12px] font-semibold text-ink-2">
               Chambres disponibles ({dispo.length})
-            </label>
+            </span>
             <span className="text-[11px] text-ink-3">{fmtCourt(arrivee)} → {fmtCourt(depart)}</span>
           </div>
-          <div className="mt-1.5 grid max-h-44 grid-cols-[repeat(auto-fill,minmax(72px,1fr))] gap-1.5 overflow-y-auto rounded-xl border border-line bg-sand-50 p-2">
+          <div
+            role="group"
+            aria-labelledby="resa-chambres"
+            className="mt-1.5 grid max-h-44 grid-cols-[repeat(auto-fill,minmax(72px,1fr))] gap-1.5 overflow-y-auto rounded-xl border border-line bg-sand-50 p-2"
+          >
             {dispo.length === 0 && <p className="col-span-full px-2 py-4 text-center text-[12px] text-ink-3">Aucune chambre disponible sur ces dates.</p>}
             {dispo.map((c) => (
               <button
@@ -168,11 +192,11 @@ function NouvelleReservation({ open, onClose }) {
                   'rounded-lg border px-1 py-2 text-center transition-colors',
                   chambreChoisie === c.numero
                     ? 'border-maj bg-maj text-white'
-                    : 'border-line bg-white text-ink-2 hover:border-maj/40',
+                    : 'border-line bg-surface text-ink-2 hover:border-maj/40',
                 )}
               >
                 <span className="tnum block text-[12px] font-semibold">{c.numero}</span>
-                <span className="block text-[9.5px] opacity-80">{TYPES_CHAMBRE[c.type].court}</span>
+                <span className="block text-[10px] opacity-80">{TYPES_CHAMBRE[c.type].court}</span>
               </button>
             ))}
           </div>
@@ -261,7 +285,7 @@ export function Reservations() {
                 onClick={() => setFiltre(cle)}
                 className={cx(
                   'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
-                  filtre === cle ? c.classe : 'border-line bg-white text-ink-2 hover:bg-sand-50',
+                  filtre === cle ? c.classe : 'border-line bg-surface text-ink-2 hover:bg-sand-50',
                 )}
               >
                 <span className={cx('size-1.5 rounded-full', c.dot)} />
@@ -279,7 +303,7 @@ export function Reservations() {
             <div className="grid border-b border-line bg-sand-50" style={{ gridTemplateColumns: `116px repeat(${JOURS_AFFICHES}, minmax(62px, 1fr))` }}>
               <div className="px-3 py-2 text-[10px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Chambre</div>
               {jours.map((j, i) => (
-                <div key={j} className={cx('border-l border-line-soft px-2 py-2 text-center text-[10.5px] font-medium', i === 0 ? 'bg-maj-50 text-maj' : 'text-ink-2')}>
+                <div key={j} className={cx('border-l border-line-soft px-2 py-2 text-center text-[10px] font-medium', i === 0 ? 'bg-maj-50 text-maj' : 'text-ink-2')}>
                   {fmtCourt(j).slice(0, 7)}
                 </div>
               ))}
@@ -288,7 +312,7 @@ export function Reservations() {
             {[1, 2, 3].map((etage) => (
               <div key={etage}>
                 <div className="border-b border-line-soft bg-sand-50/60 px-3 py-1.5">
-                  <span className="text-[10px] font-semibold tracking-[0.08em] text-ink-3 uppercase">{etage}ᵉ étage</span>
+                  <span className="text-[12px] font-semibold text-ink-2">{etage}ᵉ étage</span>
                 </div>
                 {state.chambres.filter((c) => c.etage === etage).map((chambre) => {
                   const sejours = filtres.filter((b) => b.chambre === chambre.numero);
@@ -316,7 +340,7 @@ export function Reservations() {
                                 type="button"
                                 onClick={() => setDetail(b)}
                                 className={cx(
-                                  'pointer-events-auto mx-0.5 flex h-6 items-center gap-1 self-center overflow-hidden rounded-md border px-1.5 text-left text-[10px] font-medium transition-transform hover:z-10 hover:scale-[1.02]',
+                                  'pointer-events-auto mx-0.5 flex h-6 items-center gap-1 self-center overflow-hidden rounded-lg border px-1.5 text-left text-[10px] font-medium transition-transform hover:z-10 hover:scale-[1.02]',
                                   canal.classe,
                                 )}
                                 style={{ gridColumn: `${debut + 1} / span ${span}`, gridRow: 1 }}

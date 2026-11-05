@@ -117,7 +117,7 @@ export function CommandPalette({ open, onClose, onNavigate, onNightAudit }) {
         role="dialog"
         aria-modal="true"
         aria-label="Palette de commandes"
-        className="animate-fade-up relative w-full max-w-lg overflow-hidden rounded-2xl border border-line bg-white shadow-pop"
+        className="animate-fade-up relative w-full max-w-lg overflow-hidden rounded-xl border border-line bg-surface shadow-pop"
       >
         <div className="flex items-center gap-2.5 border-b border-line-soft px-4 py-3">
           <Search className="size-4 text-ink-3" />

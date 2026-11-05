@@ -80,9 +80,10 @@ export function Rooms() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 rounded-xl border border-line bg-white px-3 py-2">
+          <div className="flex items-center gap-2 rounded-xl border border-line-strong bg-surface px-3 py-2">
             <Search className="size-3.5 text-ink-3" />
             <input
+              aria-label="Rechercher une chambre par numéro, type ou client"
               value={recherche}
               onChange={(e) => setRecherche(e.target.value)}
               placeholder="N° chambre, client…"
@@ -103,7 +104,7 @@ export function Rooms() {
             onClick={() => setFiltre(f.cle)}
             className={cx(
               'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors',
-              filtre === f.cle ? 'border-maj/30 bg-maj-100 text-maj' : 'border-line bg-white text-ink-2 hover:bg-sand-50',
+              filtre === f.cle ? 'border-maj/30 bg-maj-100 text-maj' : 'border-line bg-surface text-ink-2 hover:bg-sand-50',
             )}
           >
             {f.cle !== 'toutes' && <span className={cx('size-2 rounded-full', STATUTS_CHAMBRE[f.cle].dot)} />}
@@ -119,7 +120,7 @@ export function Rooms() {
             onClick={() => setEtageActif(e)}
             className={cx(
               'rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors',
-              etageActif === e ? 'bg-ink text-white' : 'border border-line bg-white text-ink-2 hover:bg-sand-50',
+              etageActif === e ? 'bg-ink text-white' : 'border border-line bg-surface text-ink-2 hover:bg-sand-50',
             )}
           >
             {e === 'tous' ? 'Tous les étages' : `Étage ${e}`}
@@ -153,7 +154,7 @@ export function Rooms() {
                         key={c.numero}
                         type="button"
                         onClick={() => setSelection(c.numero)}
-                        className="group rounded-xl border border-line bg-white p-3 text-left transition-all hover:-translate-y-0.5 hover:border-maj/30 hover:shadow-card"
+                        className="group rounded-xl border border-line bg-surface p-3 text-left transition-all hover:-translate-y-0.5 hover:border-maj/30 hover:shadow-card"
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-2">
@@ -172,18 +173,18 @@ export function Rooms() {
                           {sj ? (
                             <>
                               <p className="truncate text-[12px] font-medium text-ink">{sj.client}</p>
-                              <p className="mt-0.5 text-[10.5px] text-ink-3">
+                              <p className="mt-0.5 text-[10px] text-ink-3">
                                 Départ {fmtCourt(sj.depart)} · {sj.formule} · {sj.occupants} pers.
                               </p>
                             </>
                           ) : c.note ? (
-                            <p className="text-[10.5px] leading-4 text-crimson">{c.note}</p>
+                            <p className="text-[10px] leading-4 text-crimson">{c.note}</p>
                           ) : c.statut === 'propre' ? (
-                            <p className="text-[10.5px] text-ink-3">
+                            <p className="text-[10px] text-ink-3">
                               {montants ? `Prête à la vente · ${TYPES_CHAMBRE[c.type].prix} MAD` : 'Prête à la vente'}
                             </p>
                           ) : (
-                            <p className="text-[10.5px] text-ink-3">En attente de validation gouvernante</p>
+                            <p className="text-[10px] text-ink-3">En attente de validation gouvernante</p>
                           )}
                         </div>
 

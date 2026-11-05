@@ -20,7 +20,7 @@ export function Card({ className, children, ...rest }) {
   return (
     <section
       className={cx(
-        'rounded-2xl border border-line bg-white shadow-card',
+        'rounded-xl border border-line bg-surface shadow-card',
         className,
       )}
       {...rest}
@@ -83,9 +83,9 @@ export function Button({
 }) {
   const variants = {
     primary:
-      'bg-maj text-white hover:bg-maj-700 active:translate-y-px shadow-[0_1px_2px_rgba(47,64,144,.25)]',
+      'bg-maj text-white hover:bg-maj-700 active:translate-y-px shadow-card',
     soft: 'bg-maj-50 text-maj hover:bg-maj-100',
-    outline: 'border border-line bg-white text-ink hover:bg-sand-100',
+    outline: 'border border-line bg-surface text-ink hover:bg-sand-100',
     ghost: 'text-ink-2 hover:bg-sand-200/70',
     danger: 'bg-crimson text-white hover:brightness-95',
     terra: 'bg-terra text-white hover:brightness-95',
@@ -235,7 +235,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer }) {
         aria-label={title}
         className="animate-slide-in relative flex h-full w-full max-w-[440px] flex-col bg-sand-50 shadow-pop"
       >
-        <header className="flex items-start justify-between gap-4 border-b border-line bg-white px-5 py-4">
+        <header className="flex items-start justify-between gap-4 border-b border-line bg-surface px-5 py-4">
           <div>
             <h2 className="font-display text-xl text-ink">{title}</h2>
             {subtitle && <p className="mt-1 text-xs text-ink-3">{subtitle}</p>}
@@ -246,7 +246,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer }) {
         </header>
         <div className="flex-1 overflow-y-auto px-5 py-5">{children}</div>
         {footer && (
-          <footer className="border-t border-line bg-white px-5 py-4">{footer}</footer>
+          <footer className="border-t border-line bg-surface px-5 py-4">{footer}</footer>
         )}
       </aside>
     </div>
@@ -269,7 +269,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, width 
         aria-modal="true"
         aria-label={title}
         className={cx(
-          'animate-fade-up relative flex max-h-[88vh] w-full flex-col overflow-hidden rounded-2xl bg-white shadow-pop',
+          'animate-fade-up relative flex max-h-[88vh] w-full flex-col overflow-hidden rounded-xl bg-surface shadow-pop',
           width,
         )}
       >
@@ -308,7 +308,12 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed bottom-20 left-1/2 z-[60] lg:bottom-5 flex w-full max-w-md -translate-x-1/2 flex-col gap-2 px-4">
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="false"
+        className="pointer-events-none fixed bottom-20 left-1/2 z-[60] flex w-full max-w-md -translate-x-1/2 flex-col gap-2 px-4 lg:bottom-5"
+      >
         {items.map((t) => (
           <div
             key={t.id}
@@ -343,7 +348,7 @@ export function Divider({ label }) {
 
 export function Kbd({ children }) {
   return (
-    <kbd className="rounded-md border border-line bg-white px-1.5 py-0.5 font-sans text-[10px] font-medium text-ink-3">
+    <kbd className="rounded-lg border border-line-strong bg-surface px-1.5 py-0.5 font-sans text-[10px] font-medium text-ink-3">
       {children}
     </kbd>
   );

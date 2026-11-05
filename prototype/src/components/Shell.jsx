@@ -63,14 +63,14 @@ export function navFiltree(profil) {
 
 function Mark() {
   return (
-    <div className="relative grid size-10 place-items-center overflow-hidden rounded-xl bg-maj text-white shadow-[0_6px_16px_-8px_rgba(47,64,144,.9)]">
+    <div className="relative grid size-10 place-items-center overflow-hidden rounded-xl bg-maj text-white shadow-card">
       <svg viewBox="0 0 32 32" className="size-6" aria-hidden>
         <path
           fill="currentColor"
           opacity="0.95"
           d="M16 2l3.2 6.6L26 6.6l-2 6.5 6.6 3.2-6.6 3.2 2 6.5-6.8-2L16 31l-3.2-6.9-6.8 2 2-6.5L1.4 16.6l6.6-3.2-2-6.5 6.8 2z"
         />
-        <circle cx="16" cy="16.5" r="3.4" fill="#2f4090" />
+        <circle cx="16" cy="16.5" r="3.4" fill="var(--color-maj)" />
       </svg>
     </div>
   );
@@ -172,7 +172,7 @@ export function Topbar({ titre, sousTitre, onOpenMobileNav, onOpenPalette, onCha
   const profil = PROFILS[state.profil] ?? PROFILS.direction;
 
   return (
-    <header className="flex h-16 shrink-0 items-center gap-4 border-b border-line bg-white/85 px-4 backdrop-blur-sm md:px-6">
+    <header className="flex h-16 shrink-0 items-center gap-4 border-b border-line bg-surface/85 px-4 backdrop-blur-sm md:px-6">
       <button
         type="button"
         onClick={onOpenMobileNav}
@@ -229,11 +229,11 @@ export function Topbar({ titre, sousTitre, onOpenMobileNav, onOpenPalette, onCha
             aria-expanded={menuProfil}
             aria-haspopup="menu"
             className={cx(
-              'flex items-center gap-2 rounded-xl border border-line bg-white py-1 pr-2 pl-1 transition-colors hover:border-maj/30',
+              'flex items-center gap-2 rounded-xl border border-line bg-surface py-1 pr-2 pl-1 transition-colors hover:border-maj/30',
               menuProfil && 'border-maj/40 ring-2 ring-maj/15',
             )}
           >
-            <span className="grid size-7 place-items-center rounded-lg bg-ink text-[11px] font-semibold text-white">
+            <span className="grid size-9 place-items-center rounded-lg bg-ink text-[11px] font-semibold text-white">
               {profil.initiales}
             </span>
             <div className="hidden text-left leading-tight sm:block">
@@ -252,7 +252,7 @@ export function Topbar({ titre, sousTitre, onOpenMobileNav, onOpenPalette, onCha
                 aria-label="Fermer le menu de profil"
                 tabIndex={-1}
               />
-              <div className="animate-fade-up absolute right-0 z-50 mt-2 w-72 overflow-hidden rounded-xl border border-line bg-white shadow-[0_20px_50px_-24px_rgba(28,26,23,.45)]">
+              <div className="animate-fade-up absolute right-0 z-50 mt-2 w-72 overflow-hidden rounded-xl border border-line bg-surface shadow-pop">
                 <p className="border-b border-line-soft bg-sand-50 px-3 py-2 text-[10px] font-semibold tracking-[0.09em] text-ink-3 uppercase">
                   Changer de profil — démonstration RBAC
                 </p>
@@ -280,7 +280,7 @@ export function Topbar({ titre, sousTitre, onOpenMobileNav, onOpenPalette, onCha
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="block text-[12px] font-medium text-ink">{p.label}</span>
-                          <span className="block truncate text-[10.5px] text-ink-3">{p.personne}</span>
+                          <span className="block truncate text-[10px] text-ink-3">{p.personne}</span>
                         </span>
                         <span className="tnum shrink-0 text-[10px] text-ink-3">
                           {p.ecrans.length} écran{p.ecrans.length > 1 ? 's' : ''}
@@ -355,7 +355,7 @@ export function BottomNav({ active, onNavigate }) {
     { cle: 'caisse', label: 'Caisse', icon: CircleDollarSign },
   ].filter((item) => ecransAutorises(state.profil).includes(item.cle));
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
       {items.map((item) => {
         const Icon = item.icon;
         return (

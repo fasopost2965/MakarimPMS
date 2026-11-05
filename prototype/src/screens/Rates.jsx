@@ -45,7 +45,7 @@ export function Rates() {
               action={<Pill tone="maj">{total} chambres</Pill>}
             />
             <div className="overflow-x-auto">
-              <table className="w-full text-[12.5px]">
+              <table className="w-full text-[12px]">
                 <thead>
                   <tr className="border-b border-line text-left text-[10px] tracking-[0.06em] text-ink-3 uppercase">
                     <th className="px-5 py-2.5 font-medium">Type</th>
@@ -103,7 +103,7 @@ export function Rates() {
                 ))}
               </ul>
               <div className="border-t border-line-soft px-5 py-2.5">
-                <p className="text-[10.5px] leading-4 text-ink-3">
+                <p className="text-[10px] leading-4 text-ink-3">
                   Les pensions restent taxées à 10 % avec l’hébergement (cahier des charges §3.5.1).
                 </p>
               </div>
@@ -152,7 +152,7 @@ export function Rates() {
                 <p className="text-[11px] text-ink-3">{HOTEL.categorie} · {HOTEL.ville}</p>
               </div>
             </div>
-            <dl className="mt-4 space-y-2 border-t border-line/60 pt-3 text-[11.5px]">
+            <dl className="mt-4 space-y-2 border-t border-line/60 pt-3 text-[11px]">
               {[
                 ['Raison sociale', 'Hôtel Makarim SARL'],
                 ['Catégorie', '3 étoiles — 30 chambres'],
@@ -182,14 +182,14 @@ export function Rates() {
                 return (
                   <li key={r.l} className="flex items-center gap-3 px-5 py-2.5">
                     <Icone className="size-3.5 text-ink-3" />
-                    <span className="flex-1 text-[11.5px] text-ink-2">{r.l}</span>
-                    <span className="tnum text-[11.5px] font-medium text-ink">{r.v}</span>
+                    <span className="flex-1 text-[11px] text-ink-2">{r.l}</span>
+                    <span className="tnum text-[11px] font-medium text-ink">{r.v}</span>
                   </li>
                 );
               })}
             </ul>
             <div className="border-t border-line-soft px-5 py-3">
-              <p className="text-[10.5px] leading-4 text-ink-3">
+              <p className="text-[10px] leading-4 text-ink-3">
                 Source : cahier des charges §3.5.1 — « TVA 10 % sur l’hébergement,
                 la demi-pension et la pension complète ; 20 % sur les prestations
                 annexes, dont la restauration à la carte hors pension ».

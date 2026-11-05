@@ -19,6 +19,10 @@ import {
   Wifi,
 } from 'lucide-react';
 import { CRENEAUX, PARAMS, PRESTATIONS_EVENEMENT, SALLE } from '../data';
+
+// Capacité de sécurité de la salle, lue dans le référentiel (BR-EVT-006).
+// Constante de module : partagée par l'écran et par le constructeur de devis.
+const CAPACITE_SALLE = SALLE.capacites[0].places;
 import { useApp } from '../store';
 import { fmtCourt, isoAdd, money } from '../lib/date';
 import { Button, Card, CardHeader, Pill, cx, useToast } from '../components/ui';
@@ -55,7 +59,9 @@ function ConstructeurDevis({ dateParDefaut }) {
   const tva = Math.round(ht * (PARAMS.tvaSalle / 100));
   const ttc = ht + tva;
   const acompte = Math.round(ttc * (PARAMS.acompteEvenement / 100));
-  const capaciteOk = participants <= 60;
+  // Capacité de sécurité = configuration théâtre de la salle (référentiel SALLE).
+  const capaciteMax = CAPACITE_SALLE;
+  const capaciteOk = participants <= capaciteMax;
 
   function confirmer() {
     if (!entreprise.trim() || !capaciteOk) return;
@@ -77,29 +83,37 @@ function ConstructeurDevis({ dateParDefaut }) {
       <div className="space-y-4 p-5">
         <div className="grid gap-2 sm:grid-cols-2">
           <div>
-            <label className="text-[10px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Entreprise</label>
+            <label htmlFor="evt-entreprise" className="text-[12px] font-semibold text-ink-2">
+              Entreprise
+            </label>
             <input
+              id="evt-entreprise"
               value={entreprise}
               onChange={(e) => setEntreprise(e.target.value)}
               placeholder="Nom du client"
-              className="mt-1.5 w-full rounded-lg border border-line bg-white px-2.5 py-2 text-[12px] outline-none focus:border-maj"
+              className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
             />
           </div>
           <div>
-            <label className="text-[10px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Date</label>
+            <label htmlFor="evt-date" className="text-[12px] font-semibold text-ink-2">
+              Date
+            </label>
             <input
+              id="evt-date"
               type="date"
               value={date}
               min={state.date}
               onChange={(e) => setDate(e.target.value)}
-              className="mt-1.5 w-full rounded-lg border border-line bg-white px-2.5 py-2 text-[12px] outline-none focus:border-maj"
+              className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
             />
           </div>
         </div>
 
         <div>
-          <label className="text-[10px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Créneau</label>
-          <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+          <span id="evt-creneau" className="text-[12px] font-semibold text-ink-2">
+            Créneau
+          </span>
+          <div role="group" aria-labelledby="evt-creneau" className="mt-1.5 grid grid-cols-3 gap-1.5">
             {Object.keys(CRENEAUX).map((c) => (
               <button
                 key={c}
@@ -107,7 +121,7 @@ function ConstructeurDevis({ dateParDefaut }) {
                 onClick={() => setCreneau(c)}
                 className={cx(
                   'rounded-lg border px-2 py-1.5 text-[11px] font-medium capitalize transition-colors',
-                  creneau === c ? 'border-maj bg-maj-50 text-maj' : 'border-line bg-white text-ink-2 hover:bg-sand-50',
+                  creneau === c ? 'border-maj bg-maj-50 text-maj' : 'border-line bg-surface text-ink-2 hover:bg-sand-50',
                 )}
               >
                 {c.replace('-', ' ')}
@@ -117,20 +131,28 @@ function ConstructeurDevis({ dateParDefaut }) {
         </div>
 
         <div>
-          <label className="text-[10px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Participants</label>
-          <div className="mt-1.5 flex items-center gap-2">
+          <span id="evt-participants" className="text-[12px] font-semibold text-ink-2">
+            Participants
+          </span>
+          <div role="group" aria-labelledby="evt-participants" className="mt-1.5 flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setParticipants((p) => Math.max(5, p - 1))} aria-label="Retirer un participant">−</Button>
-            <span className="tnum w-12 text-center text-lg font-semibold text-ink">{participants}</span>
-            <Button variant="outline" size="sm" onClick={() => setParticipants((p) => Math.min(70, p + 1))} aria-label="Ajouter un participant">+</Button>
-            <span className={cx('text-[11px]', capaciteOk ? 'text-ink-3' : 'text-crimson')}>
-              {capaciteOk ? 'capacité max. 60 (théâtre)' : 'au-delà de 60 places en théâtre'}
+            <span aria-live="polite" className="tnum w-12 text-center text-lg font-semibold text-ink">
+              {participants}
+            </span>
+            <Button variant="outline" size="sm" onClick={() => setParticipants((p) => Math.min(capaciteMax, p + 1))} aria-label="Ajouter un participant">+</Button>
+            <span className={cx('text-[11px]', capaciteOk ? 'text-ink-2' : 'text-crimson')}>
+              {capaciteOk
+                ? `capacité max. ${capaciteMax} places (théâtre)`
+                : `au-delà de ${capaciteMax} places en théâtre`}
             </span>
           </div>
         </div>
 
         <div>
-          <label className="text-[10px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Format</label>
-          <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+          <span id="evt-format" className="text-[12px] font-semibold text-ink-2">
+            Format
+          </span>
+          <div role="group" aria-labelledby="evt-format" className="mt-1.5 grid grid-cols-2 gap-1.5">
             {[
               { cle: 'journee', label: 'Journée' },
               { cle: 'demi', label: 'Demi-journée' },
@@ -140,8 +162,8 @@ function ConstructeurDevis({ dateParDefaut }) {
                 type="button"
                 onClick={() => setFormule(f.cle)}
                 className={cx(
-                  'rounded-lg border px-2 py-2 text-[11.5px] font-medium transition-colors',
-                  formule === f.cle ? 'border-maj bg-maj-50 text-maj' : 'border-line bg-white text-ink-2 hover:bg-sand-50',
+                  'rounded-lg border px-2 py-2 text-[11px] font-medium transition-colors',
+                  formule === f.cle ? 'border-maj bg-maj-50 text-maj' : 'border-line bg-surface text-ink-2 hover:bg-sand-50',
                 )}
               >
                 {f.label}
@@ -151,12 +173,14 @@ function ConstructeurDevis({ dateParDefaut }) {
         </div>
 
         <div>
-          <label className="text-[10px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Prestations</label>
-          <ul className="mt-1.5 space-y-0.5">
+          <span id="evt-prestations" className="text-[12px] font-semibold text-ink-2">
+            Prestations
+          </span>
+          <ul role="group" aria-labelledby="evt-prestations" className="mt-1.5 space-y-0.5">
             {PRESTATIONS_EVENEMENT.map((o) => (
               <li key={o.cle}>
                 <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-sand-50">
-                  <span className={cx('grid size-4 place-items-center rounded border transition-colors', options[o.cle] ? 'border-maj bg-maj text-white' : 'border-line bg-white')}>
+                  <span className={cx('grid size-4 place-items-center rounded border transition-colors', options[o.cle] ? 'border-maj bg-maj text-white' : 'border-line bg-surface')}>
                     {options[o.cle] && <Check className="size-3" />}
                   </span>
                   <input
@@ -174,7 +198,7 @@ function ConstructeurDevis({ dateParDefaut }) {
         </div>
 
         <div className="rounded-xl border border-line bg-sand-50 p-3">
-          <ul className="space-y-1 text-[11.5px]">
+          <ul className="space-y-1 text-[11px]">
             {lignes.map((l) => (
               <li key={l.label} className="flex justify-between">
                 <span className="text-ink-2">{l.label}</span>
@@ -182,12 +206,12 @@ function ConstructeurDevis({ dateParDefaut }) {
               </li>
             ))}
           </ul>
-          <div className="mt-2 space-y-1 border-t border-line pt-2 text-[11.5px]">
+          <div className="mt-2 space-y-1 border-t border-line pt-2 text-[11px]">
             <div className="flex justify-between text-ink-2"><span>Total HT</span><span className="tnum">{money(ht)} MAD</span></div>
             <div className="flex justify-between text-ink-2"><span>TVA 20 %</span><span className="tnum">{money(tva)} MAD</span></div>
             <div className="flex justify-between text-[14px] font-semibold text-ink"><span>Total TTC</span><span className="tnum">{money(ttc)} MAD</span></div>
           </div>
-          <p className="mt-2 text-[10.5px] text-ink-3">Acompte de 30 % à la confirmation : {money(acompte)} MAD</p>
+          <p className="mt-2 text-[10px] text-ink-3">Acompte de 30 % à la confirmation : {money(acompte)} MAD</p>
         </div>
 
         <div className="flex gap-2">
@@ -221,7 +245,7 @@ export function Conference() {
         <div>
           <p className="text-[11px] font-medium tracking-[0.1em] text-ink-3 uppercase">Exploitation · Événementiel</p>
           <h2 className="font-display mt-1 text-[26px] leading-tight">{SALLE.nom}</h2>
-          <p className="mt-1 text-[13px] text-ink-2">{SALLE.superficie} m² modulables · 60 places théâtre · devis en 2 minutes</p>
+          <p className="mt-1 text-[13px] text-ink-2">{SALLE.superficie} m² modulables · {CAPACITE_SALLE} places théâtre · devis en 2 minutes</p>
         </div>
         <Button onClick={() => push('Formulaire de devis disponible dans le panneau de droite', 'info')}>
           <Plus className="size-3.5" /> Nouvel événement
@@ -262,7 +286,7 @@ export function Conference() {
                 <div className="grid grid-cols-[92px_repeat(7,1fr)] gap-1">
                   <div />
                   {jours.map((j) => (
-                    <div key={j} className="pb-1 text-center text-[10.5px] font-medium text-ink-3">{fmtCourt(j).slice(0, 7)}</div>
+                    <div key={j} className="pb-1 text-center text-[10px] font-medium text-ink-3">{fmtCourt(j).slice(0, 7)}</div>
                   ))}
                   {Object.keys(CRENEAUX).map((creneau) => (
                     <div key={creneau} className="contents">
@@ -280,7 +304,7 @@ export function Conference() {
                               statut === 'confirme' && 'border-jade/30 bg-jade-100 text-jade hover:brightness-95',
                               statut === 'option' && 'border-saffron/30 bg-saffron-100 text-saffron hover:brightness-95',
                               statut === 'devis' && 'border-maj/30 bg-maj-50 text-maj hover:brightness-95',
-                              statut === 'libre' && 'border-dashed border-line bg-white text-ink-3',
+                              statut === 'libre' && 'border-dashed border-line bg-surface text-ink-3',
                             )}
                           >
                             {e ? (
@@ -329,7 +353,7 @@ export function Conference() {
                     </button>
                     {open && (
                       <div className="animate-fade-up border-t border-line-soft bg-sand-50/60 px-5 py-3">
-                        <div className="grid gap-2 text-[11.5px] sm:grid-cols-3">
+                        <div className="grid gap-2 text-[11px] sm:grid-cols-3">
                           {[
                             ['Créneau', CRENEAUX[e.creneau]],
                             ['Participants', `${e.participants} personnes`],
@@ -385,7 +409,7 @@ export function Conference() {
               <Users className="size-4 text-ink-3" />
               <p className="text-[12px] font-semibold text-ink">Capacités</p>
             </div>
-            <ul className="mt-2 space-y-1.5 text-[11.5px]">
+            <ul className="mt-2 space-y-1.5 text-[11px]">
               {SALLE.capacites.map((c) => (
                 <li key={c.format} className="flex justify-between">
                   <span className="text-ink-2">{c.format}</span>
@@ -399,7 +423,7 @@ export function Conference() {
             </div>
             <ul className="mt-2 space-y-1.5">
               {SALLE.equipements.map((e) => (
-                <li key={e} className="flex items-center gap-2 text-[11.5px] text-ink-2">
+                <li key={e} className="flex items-center gap-2 text-[11px] text-ink-2">
                   {e.includes('Wi-Fi') ? <Wifi className="size-3 text-jade" /> : e.includes('pause') ? <Coffee className="size-3 text-terra" /> : <Check className="size-3 text-jade" />}
                   {e}
                 </li>
