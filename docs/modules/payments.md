@@ -10,7 +10,7 @@ Le module **Paiements** gère de manière ultra-sécurisée l'ensemble des encai
 ## 2. Responsabilités
 Le module est seul responsable de :
 * L'enregistrement sécurisé de chaque encaissement de règlement client (`Payment`).
-* La qualification du moyen de paiement (Espèces, Carte, Virement, Acompte).
+* La qualification du moyen de paiement (Espèces, Carte, Virement, Chèque, À-compte-entreprise). L'**acompte** n'est pas un moyen de paiement : il relève du registre de dépôts (`ReservationDeposit`, BR-FAC-005) puis est imputé au folio au check-in.
 * L'application absolue des vérifications de plafonds d'espèces légaux lors de règlements physiques.
 * La garantie d'idempotence stricte des paiements via la clé unique `idempotencyKey` générée par le client.
 * La génération des reçus financiers d'encaissement et l'imputation créditrice automatique sur les folios.
@@ -35,9 +35,10 @@ Ce module manipule et gère directement les entités suivantes du `DATA_DICTIONA
 
 ## 5. BUSINESS_RULES concernées
 Les règles métiers applicables à ce module sont :
-* **BR-PAY-001 (Plafond Légal de Paiement en Espèces) :** Limitation stricte des paiements en espèces à un cumul de **10 000,00 MAD** par séjour d'exploitation pour se conformer à la loi marocaine de finances.
-* **BR-PAY-002 (Idempotence de transaction) :** Exigence d'une clé d'idempotence UUID unique pour écarter les double-saisies accidentelles de règlements.
-* **BR-PAY-003 (Enregistrement de la source du règlement) :** Renseignement obligatoire des données de transaction (numéro d'autorisation pour les cartes, numéro d'opération pour les virements bancaires).
+* **BR-PAI-001 (Idempotence) :** clé `Idempotency-Key` unique par requête, doublon rejeté.
+* **BR-PAI-002 (Modes autorisés) :** `ESPECES`, `CARTE`, `VIREMENT`, `CHEQUE`, `A_COMPTER` — l'acompte est un dépôt, jamais un mode de paiement.
+* **BR-PAI-003 (Plafond espèces) :** blocage au-delà de 10 000 MAD par jour et par client, dérogation motivée et journalisée (paramètre `HotelConfig.plafondEspeces`).
+* **BR-PAI-004 (Source du règlement) :** référence externe obligatoire (autorisation CB, opération de virement, numéro de chèque) au-delà du seuil paramétré.
 
 ---
 

@@ -32,7 +32,13 @@ Ces types personnalisés restreignent les valeurs possibles de certains attribut
 Définit le canal d'origine d'une réservation pour l'analyse des revenus et le reporting.
 * `WALK_IN` : Client se présentant spontanément au comptoir de l'hôtel sans réservation préalable.
 * `DIRECT` : Réservation effectuée directement auprès de l'hôtel (site officiel, téléphone, e-mail).
-* `BOOKING_COM` : Réservation provenant de l'OTA externe Booking.com.
+* `BOOKING_COM` : Réservation provenant de l'OTA Booking.com.
+* `EXPEDIA` : Réservation provenant de l'OTA Expedia.
+* `AIRBNB` : Réservation provenant de la plateforme Airbnb.
+
+> Liste **paramétrable** (BR-RES-003) : le mix cible du cahier des charges
+> (walk-in ~70 %, direct ~20 %, Booking ~10 %) est un indicateur de pilotage,
+> pas une contrainte de saisie.
 
 ### 2.2. `StatutReservation`
 Représente les états du cycle de vie d'une réservation de chambre.
@@ -63,6 +69,13 @@ Qualifie la nature comptable d'une transaction financière sur un folio.
 * `EXTRA` : Consommation annexe (Room Service, SPA, blanchisserie, minibar).
 * `TAXE_SEJOUR` : Taxe légale de séjour collectée par nuitée et par personne.
 * `PAIEMENT` : Ligne d'encaissement créditrice matérialisant un règlement reçu.
+* `RESTAURANT` : Consommation de restauration à la carte, TVA 20 % (BR-RST-002), distincte d'`EXTRA` pour le badge dédié et le contrôle de check-out.
+* `AJUSTEMENT_HAUSSE` : Impact tarifaire positif d'un changement de chambre en cours de séjour.
+* `AJUSTEMENT_BAISSE` : Impact tarifaire négatif du même événement, traité comme un crédit (montant stocké toujours positif).
+
+> Le **type** conditionne seul les calculs fiscaux ; la **nature** (`FolioLine.nature`,
+> axe analytique libre validé côté DTO) sert au libellé et au reporting par activité
+> (ADR-008 §4.7).
 
 ### 2.6. `StatutFacture`
 Spécifie l'état légal d'une facture.
@@ -74,7 +87,11 @@ Modes de règlement officiellement acceptés par l'établissement.
 * `ESPECES` : Paiement en numéraire (soumis aux plafonds légaux marocains).
 * `CARTE` : Paiement par carte bancaire.
 * `VIREMENT` : Transfert de compte à compte.
-* `ACOMPTE` : Imputation d'un paiement préalable déjà enregistré.
+* `ACOMPTE` : **héritage à résorber** — ce n'est pas un mode de règlement mais un dépôt (`ReservationDeposit`, BR-FAC-005). Valeur conservée en base pour l'historique ; aucune nouvelle écriture ne doit l'utiliser (BR-PAI-002, migration planifiée L0).
+* `CHEQUE` : Chèque bancaire (notamment caution de séjour, BR-FAC-006) — **à ajouter à l'énumération** (L0).
+
+> Écart documenté : l'énumération réelle contient encore `ACOMPTE` et n'a pas
+> `CHEQUE` ; la règle BR-PAI-002 v1.1 fait foi pour la cible.
 
 ### 2.8. `PrioriteTicket`
 Niveaux d'urgence pour la résolution des incidents techniques.

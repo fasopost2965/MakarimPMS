@@ -4,14 +4,39 @@ Ce document spécifie la matrice complète des droits et permissions de sécurit
 
 ---
 
+## ⚠️ Révision 2026-11 — cohérence avec le chantier de refonte
+
+Matrice révisée le 2026-11-06 (voir `docs/audits/REVUE_COHERENCE_REGLES_2026-11.md`) :
+
+| # | Correction | Motif |
+|---|---|---|
+| R1 | **Réception : encaissement autorisé** (`payments:write`, `billing:read`, émission du folio/reçu) ; avoirs, annulations, remboursements et exports restent au Comptable | BR-SEJ-004 exige un solde à 0 au check-out ; sans encaissement, aucun départ n'est possible |
+| R2 | Documentation du rôle **Restaurateur** — il **existe déjà en base** (`seed.ts`, F11/CH-056) mais n'apparaissait nulle part dans la matrice | Un rôle réel non documenté = permissions non revues |
+| R3 | Création du rôle **Équipier de ménage** ; les overrides de BR-CLI-002/BR-CLI-005 sont rattachés à **Administrateur** (pas de rôle « Directeur » séparé) | BR-HK-004 cite un rôle inexistant ; un rôle de plus n'est utile que s'il a un besoin propre |
+| R4 | Séparation **encaissement** (exploitation) / **facturation, avoirs et remboursements** (comptabilité) | Protège l'intégrité financière (BR-TR-002) sans bloquer le comptoir |
+| R5 | Rôles cumulables : Réception + Caisse + Night audit peuvent être portés par la même personne | Effectif réel d'un 3★ de 24 chambres |
+
+**Matrice cible : 8 rôles** = les **7 déjà seedés** (Administrateur, Réception,
+Gouvernante, Comptable, Maintenance, RH, Restaurateur) + **Équipier de ménage**
+à créer au lot L1. Cette cible dépasse l'énumération figée de l'ADR-006 : sa
+révision est donc un prérequis (revue de cohérence §C8).
+
+Le prototype de refonte en démontre 6 (Direction ≈ Administrateur, Réception,
+Gouvernante, Restaurateur, Comptable, Maintenance) : filtrage de la navigation
+et masquage des montants pour les rôles non financiers.
+
+---
+
 ## 🔑 Rôles du Système
-Le PMS s'articule autour de six rôles professionnels identifiés, correspondant aux profils réels d'utilisation de l'établissement :
-1. **Administrateur** : Accès total de configuration, d'audit et d'administration de la plateforme.
+Le PMS s'articule autour de **huit rôles** professionnels (six à l'origine, complétés par la révision 2026-11), correspondant aux profils réels d'utilisation de l'établissement :
+1. **Direction / Administrateur** : accès total de configuration, d'audit et d'administration, et validations sensibles (override).
 2. **Réception** : Acteur opérationnel du front-desk assurant la relation client, les réservations et les mouvements quotidiens.
 3. **Gouvernante** : Superviseur de l'état de propreté et du ménage des chambres physiques.
 4. **Comptable** : Gestionnaire financier de la facturation, des encaissements, des avoirs et des exports de clôture fiscale.
 5. **Maintenance** : Équipe technique en charge des réparations, du blocage technique et de l'entretien lourd.
 6. **RH** : En charge de la gestion des employés, des plannings de shifts, des pointages et de la préparation de la paie.
+7. **Restaurateur** : carte, tables, notes et envois en chambre (existait en base depuis F11, documenté 2026-11, §7).
+8. **Équipier de ménage** : écran mobile restreint, sans donnée client ni financière (à créer au lot L1, §8).
 
 ---
 
@@ -20,18 +45,21 @@ Le PMS s'articule autour de six rôles professionnels identifiés, correspondant
 Le croisement des **Modules** du PMS et des **Actions** d'accès s'établit selon la grille de répartition suivante.
 *Légende : **R** = Read (Lecture), **W** = Write (Écriture/Modification), **D** = Delete (Soft Delete uniquement), **E** = Export (Extraction externe).*
 
-| Module / Périmètre | Administrateur | Réception | Gouvernante | Comptable | Maintenance | RH |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **reservations** | R / W / D / E | R / W | ❌ | ❌ | ❌ | ❌ |
-| **checkin** (Stays) | R / W / D / E | R / W | ❌ | ❌ | ❌ | ❌ |
-| **guests** (CRM / Blacklist) | R / W / D / E | R / W | ❌ | ❌ | ❌ | ❌ |
-| **housekeeping** | R / W / D / E | R / W | R / W | ❌ | ❌ | ❌ |
-| **maintenance** | R / W / D / E | ❌ | R | ❌ | R / W | ❌ |
-| **billing** (Folios, Factures) | R / W / D / E | ❌ | ❌ | R / W / E | ❌ | ❌ |
-| **dashboard** (Météo/Stats) | R / W / D / E | R | ❌ | R | ❌ | ❌ |
-| **stock** (Fournisseurs) | R / W / D / E | ❌ | R / W | ❌ | ❌ | ❌ |
-| **rh** (Shifts, Paie CNSS) | R / W / D / E | ❌ | ❌ | ❌ | ❌ | R / W / E |
-| **audit** (Logs système) | R / E | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Module / Périmètre | Direction | Réception | Gouvernante | Restaurateur | Comptable | Maintenance | RH |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **reservations** | R / W / D / E | R / W | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **checkin** (Stays) | R / W / D / E | R / W | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **guests** (CRM / Blacklist) | R / W / D / E | R / W | ❌ | R (nom, chambre) | ❌ | ❌ | ❌ |
+| **housekeeping** | R / W / D / E | R / W | R / W | ❌ | ❌ | ❌ | ❌ |
+| **maintenance** | R / W / D / E | ❌ | R | ❌ | ❌ | R / W | ❌ |
+| **billing** (folios, factures) | R / W / D / E | R + encaissement | ❌ | R (notes) | R / W / E + avoirs | ❌ | ❌ |
+| **restaurant** (carte, notes) | R / W / D / E | R / W | ❌ | R / W | R | ❌ | ❌ |
+| **événementiel** (salle, devis, acomptes) | R / W / D / E | R / W | ❌ | ❌ | R / W / E | ❌ | ❌ |
+| **night audit** (clôture) | R / W | R / W | ❌ | ❌ | R | ❌ | ❌ |
+| **dashboard** (météo, stats) | R / W / D / E | R | ❌ | ❌ | R | ❌ | ❌ |
+| **stock** (fournisseurs) | R / W / D / E | ❌ | R / W | R (ruptures) | ❌ | ❌ | ❌ |
+| **rh** (shifts, paie CNSS) | R / W / D / E | ❌ | ❌ | ❌ | ❌ | ❌ | R / W / E |
+| **audit** (logs système) | R / E | ❌ | ❌ | ❌ | R / E | ❌ | ❌ |
 
 ---
 
@@ -75,8 +103,12 @@ Le rôle Réception est centré sur le front-desk et le parcours opérationnel i
 | **housekeeping** | `delete` | **NON** | Aucun droit de suppression sur les plannings ou tâches d'entretien. | Plan d'exécution | Faible |
 | **housekeeping** | `export` | **NON** | Pas d'utilité opérationnelle d'exportation pour la réception. | Décision Product Owner | Faible |
 | **maintenance** | `read` / `write` | **NON** | Les questions techniques complexes sont escaladées directement à la Gouvernante ou aux techniciens. | ADR validée | Moyenne |
-| **billing** | `read` / `write` | **NON** | La validation des comptes de folio, l'émission des factures finales et des avoirs réglementaires incombent uniquement au Comptable ou à l'Admin. *Note : La réception peut voir l'état des soldes durant le checkout pour s'assurer qu'il est à 0 MAD, mais sans droits de write comptables.* | ADR validée | Haute |
-| **dashboard** | `read` | **OUI** | Suit le résumé immédiat de l'activité du jour (arrivées prévues, départs prévus, taux d'occupation actuel). | Cahier des charges | Moyenne |
+| **billing** | `read` | **OUI** | Doit consulter les folios et les soldes pour préparer le départ et répondre au client. | Révision 2026-11 (R1, R4) | Haute |
+| **billing** | `write` (folio / reçu) | **OUI** | Le départ ne peut être finalisé qu'avec un solde à 0 (BR-SEJ-004) : la réception produit la note et le reçu au comptoir. | Révision 2026-11 (R1) | Critique |
+| **billing** | `write` (avoir, annulation, réouverture) | **NON** | Correction d'une écriture fiscale : réservée au Comptable et à la Direction (BR-TR-002). | Révision 2026-11 (R4) | Critique |
+| **payments** | `write` (encaissement) | **OUI** | Encaisse au comptoir au départ du client ; aucun départ possible sinon. | Révision 2026-11 (R1) | Critique |
+| **payments** | `refund` (remboursement) | **NON** | Le remboursement reste au Comptable : contrôle de caisse et traçabilité. | Révision 2026-11 (R1) | Haute |
+| **restaurant** | `read` / `write` | **OUI** | Prend les commandes et envoie les notes en chambre en cas d'affluence. | Révision 2026-11 (R2) | Moyenne || **dashboard** | `read` | **OUI** | Suit le résumé immédiat de l'activité du jour (arrivées prévues, départs prévus, taux d'occupation actuel). | Cahier des charges | Moyenne |
 | **dashboard** | `write` / `delete` | **NON** | Le dashboard consolidé est une interface d'agrégation d'indicateurs système non modifiable manuellement. | Plan d'exécution | Moyenne |
 
 ---
@@ -141,3 +173,29 @@ Le rôle RH gère le capital humain de l'Hôtel Makarim, le planning des rouleme
 | **rh** (Staff & Paie) | `delete` | **NON** | Interdit de supprimer définitivement un dossier de paie ou d'employé (Soft Delete uniquement). | Plan d'exécution | Haute |
 | **rh** (Staff & Paie) | `export` | **OUI** | Extrait les relevés mensuels de cotisations CNSS et de masse salariale pour les télé-déclarations obligatoires. | Cahier des charges | Haute |
 | **Autres modules** | Tous | **NON** | Protection stricte des données opérationnelles de l'hôtel. Le pôle RH n'intervient pas dans la réservation, la facturation des clients ou la gestion technique des chambres. | ADR validée | Haute |
+
+---
+
+### 7. Rôle : Restaurateur (ajouté 2026-11)
+
+| Module | Action | Autorisé | Justification Métier | Source | Criticité |
+| :--- | :---: | :---: | :--- | :--- | :---: |
+| **restaurant** | `read` / `write` | **OUI** | Tient la carte, les ruptures, les tables, les notes et les envois en chambre (BR-RST-001 → 005). | Révision 2026-11 | Critique |
+| **billing** | `read` (lignes restaurant uniquement) | **OUI** | Vérifie qu'une note a été imputée au folio, sans accéder au reste du compte client. | Révision 2026-11 | Moyenne |
+| **billing** | `write` | **NON** | L'imputation passe par le module restaurant (BR-RST-002), jamais par une écriture libre. | Révision 2026-11 | Haute |
+| **guests** | `read` (nom, chambre) | **OUI** | Identifie le client pour un envoi en chambre. | Révision 2026-11 | Moyenne |
+| **stock** | `read` (ruptures) | **OUI** | Déclare les articles indisponibles (BR-RST-004). | Révision 2026-11 | Moyenne |
+| **Autres modules** | Tous | **NON** | Aucun accès aux réservations, tarifs hôteliers, RH, exports ou audit. | Révision 2026-11 | Haute |
+
+---
+
+### 8. Rôles à créer au lot L1
+
+| Rôle | Périmètre | Motif |
+| :--- | :--- | :--- |
+| **Équipier de ménage** | Écran mobile restreint : chambres affectées, démarrer (`EN_COURS`), déclarer fini (`TERMINEE`) ; **aucune donnée client ni financière** | BR-HK-004 |
+
+Les overrides sensibles (tarif, pièce d'identité expirée, dépassement d'espèces,
+annulation d'un no-show facturé) restent portés par **Administrateur** : ils
+exigent une permission explicite et un motif journalisé, jamais un rôle
+supplémentaire sans besoin propre.

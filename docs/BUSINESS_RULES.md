@@ -2,6 +2,23 @@
 
 Ce document constitue le référentiel unique et officiel des règles métier (Business Rules - BR) régissant le développement du **Property Management System (PMS) de l'Hôtel Makarim** (Tétouan, Maroc). Il sert de guide fonctionnel et d'invariant technique absolu pour l'implémentation de la logique applicative par l'équipe de développement.
 
+**Version : 1.1 — révisée le 2026-11-06** dans le cadre de la revue de cohérence
+`docs/audits/REVUE_COHERENCE_REGLES_2026-11.md` (confrontation des règles au code,
+aux ADR et au chantier de refonte 3★).
+
+| Changement | Règles | Nature |
+|---|---|---|
+| Typologie des charges alignée sur l'ADR-008 §4.7 (+ `nature` analytique) | BR-FAC-002 | Correction |
+| Modes de paiement : `ACOMPTE` retiré (c'est un dépôt), `CHEQUE` ajouté | BR-PAI-002 | Correction |
+| Plafond espèces tranché : alerte bloquante + dérogation motivée | BR-PAI-003 | Décision |
+| CA sur charges postées TTC, ventilation par type, TPT | BR-COM-002 | Correction |
+| ADR, RevPAR et mix par canal dans le tableau de bord | BR-REP-002 | Correction |
+| `RESERVEE` explicitement autorisée au check-in | BR-CHA-003 | Correction |
+| Refus de contrôle (`CONTROLEE → A_REFAIRE`) et état de la chambre à `TERMINEE` | BR-HK-002 | Correction |
+| Dérogation de pré-facturation identifiée, étapes de clôture, cut-off | BR-TR-005, BR-TR-006 | Précision |
+| No-show, départ anticipé, prolongation, taxe de séjour, TPT, recouche | BR-RES-007, BR-SEJ-006, BR-SEJ-007, BR-FAC-007, BR-FAC-008, BR-HK-006 | Ajout |
+| Restaurant et salle de conférence : aucun référentiel auparavant | BR-RST-001 → 005, BR-EVT-001 → 006 | Ajout |
+
 ---
 
 ## 📋 Table des Matières
@@ -19,6 +36,8 @@ Ce document constitue le référentiel unique et officiel des règles métier (B
 12. [Maintenance (Maintenance Tickets)](#12-maintenance-maintenance-tickets)
 13. [Reporting (Rapports)](#13-reporting-rapports)
 14. [Audit, Sécurité & Logs](#14-audit-sécurité--logs)
+15. [Restauration (Restaurant, Room service, Petit-déjeuner)](#15-restauration-restaurant-room-service-petit-déjeuner)
+16. [Salle de conférence & événementiel](#16-salle-de-conférence--événementiel)
 
 ---
 
@@ -59,6 +78,20 @@ Ce document constitue le référentiel unique et officiel des règles métier (B
 * **Impact sur les autres modules :** Réservations, Séjours, Facturation, Comptabilité, Reporting.
 * **Niveau de criticité :** Critique.
 
+### BR-TR-005-bis : Imputation de la nuitée
+* **Module concerné :** Séjours, Facturation, Reporting
+* **Description :** La cible est **une ligne de folio `HEBERGEMENT` datée par nuit**, postée au moment de la clôture journalière, accompagnée de la taxe de séjour de la nuit. La pré-facturation de l'intégralité du séjour au check-in, encore en vigueur dans `stay.service.ts`, est une **dérogation documentée** ; elle doit être résorbée lors du lot L0 afin de produire un chiffre d'affaires journalier exact, de rendre le no-show facturable (BR-RES-007) et de simplifier le départ anticipé (BR-SEJ-006).
+* **Source :** Revue de cohérence 2026-11 (décision D1)
+* **Impact sur les autres modules :** Facturation, Comptabilité, Reporting, Dashboard.
+* **Niveau de criticité :** Critique.
+
+### BR-TR-006 : Cut-off de la journée d'exploitation
+* **Module concerné :** Tout le système
+* **Description :** La bascule de date d'exploitation intervient à une **heure de cut-off paramétrée** (`HotelConfig.heureCutOff`, valeur par défaut 05:00), jamais à minuit par effet de l'horloge système. Toute opération postée après le cut-off appartient à la journée suivante. Le cut-off est affiché sur le tableau de bord et dans le rapport de clôture.
+* **Source :** Décision technique (revue de cohérence 2026-11)
+* **Impact sur les autres modules :** Réservations, Séjours, Facturation, Reporting.
+* **Niveau de criticité :** Haute.
+
 ---
 
 ## 2. Réservations
@@ -82,7 +115,7 @@ Ce document constitue le référentiel unique et officiel des règles métier (B
 
 ### BR-RES-003 : Origine de Réservation Obligatoire
 * **Module concerné :** Réservations, Reporting
-* **Description :** Chaque réservation doit être liée à un canal de distribution valide (`CanalReservation`) : `WALK_IN` (client spontané), `DIRECT` (site web, téléphone), ou `BOOKING_COM` (OTA externe).
+* **Description :** Chaque réservation doit être liée à un canal de distribution valide (`CanalReservation`). La liste est **paramétrable** ; elle contient à ce jour `WALK_IN` (client spontané), `DIRECT` (site web, téléphone), `BOOKING_COM`, `EXPEDIA` et `AIRBNB` (OTA). Le cahier des charges ne fixe pas la liste fermée mais un **mix cible** : walk-in ~70 %, direct ~20 %, Booking ~10 % (§1.1) ; ce mix est un indicateur de pilotage, jamais une contrainte de saisie.
 * **Source :** Cahier des charges
 * **Impact sur les autres modules :** Reporting (Revenus par canal).
 * **Niveau de criticité :** Haute.
@@ -107,6 +140,17 @@ Ce document constitue le référentiel unique et officiel des règles métier (B
 * **Source :** Bureau d'études externe — retenu 2026-07-22
 * **Impact sur les autres modules :** Facturation.
 * **Niveau de criticité :** Moyenne.
+
+### BR-RES-007 : No-Show (Non-présentation)
+* **Module concerné :** Réservations, Séjours, Facturation, Chambres
+* **Description :** À la clôture de la journée d'exploitation, toute réservation `CONFIRMEE` dont la date d'arrivée est la journée clôturée et qui n'a pas été transformée en séjour passe automatiquement au statut `NO_SHOW`. Cette transition :
+  1. libère l'inventaire de la chambre pour les nuits suivantes ;
+  2. facture **la première nuit** selon la politique d'annulation applicable (BR-RES-006), avec la taxe de séjour due ;
+  3. écrit une entrée d'audit avec l'identifiant de la réservation et le motif.
+  Un no-show ne peut être annulé que par un rôle disposant de la permission `reservations:write` et d'un motif écrit ; l'annulation d'un no-show facturé génère un avoir.
+* **Source :** Revue de cohérence 2026-11 (manque constaté : 70 % de walk-in, aucune règle de non-présentation)
+* **Impact sur les autres modules :** Facturation, Chambres, Reporting.
+* **Niveau de criticité :** Haute.
 
 ---
 
@@ -149,6 +193,25 @@ Ce document constitue le référentiel unique et officiel des règles métier (B
 * **Source :** Cahier des charges
 * **Impact sur les autres modules :** Chambres, Housekeeping.
 * **Niveau de criticité :** Haute.
+
+### BR-SEJ-006 : Départ Anticipé
+* **Module concerné :** Séjours, Facturation, Housekeeping
+* **Description :** Lorsqu'un client quitte l'hôtel avant sa date de départ prévue, le séjour est clôturé à la date réelle. Les conséquences sont calculées automatiquement :
+  1. les nuits non consommées sont annulées (annulation logique, jamais de suppression) ;
+  2. la taxe de séjour est due **au nombre de nuits réellement occupées** ;
+  3. si le séjour a été pré-payé, la différence donne lieu à un avoir ou à un remboursement tracé ;
+  4. la chambre passe en `A_NETTOYER` et une tâche de ménage est créée (BR-HK-001).
+  La règle de facturation des nuits réservées restant dues est celle de la politique d'annulation du séjour, jamais une décision implicite du réceptionniste.
+* **Source :** Revue de cohérence 2026-11 (le code gère déjà un réajustement ; la règle manquait)
+* **Impact sur les autres modules :** Facturation, Chambres, Housekeeping.
+* **Niveau de criticité :** Haute.
+
+### BR-SEJ-007 : Prolongation de Séjour
+* **Module concerné :** Séjours, Chambres, Facturation
+* **Description :** Une prolongation n'est possible que si la chambre est **disponible** sur les nuits ajoutées (contrôle de chevauchement identique à BR-RES-001) et si le séjour n'est pas clôturé. Elle crée un avenant tarifaire daté, applique le tarif du jour (saison en cours) et n'écrase jamais le tarif initial déjà posté.
+* **Source :** Revue de cohérence 2026-11
+* **Impact sur les autres modules :** Chambres, Facturation.
+* **Niveau de criticité :** Moyenne.
 
 ---
 
@@ -230,7 +293,7 @@ Ce document constitue le référentiel unique et officiel des règles métier (B
 
 ### BR-CHA-003 : Vente Interdite hors Disponible Propre
 * **Module concerné :** Chambres, Réservations, Séjours
-* **Description :** Seules les chambres au statut `LIBRE_PROPRE` (ou `RESERVEE` pour le client de l'arrivée spécifiée) peuvent être attribuées pour un check-in. Toute attribution de chambre au statut `A_NETTOYER`, `EN_NETTOYAGE` ou `EN_MAINTENANCE` est techniquement impossible.
+* **Description :** Seules les chambres au statut `LIBRE_PROPRE` — ou `RESERVEE` lorsqu'il s'agit de l'arrivée nominative prévue sur cette chambre — peuvent être attribuées pour un check-in. Toute attribution de chambre aux statuts `A_NETTOYER`, `EN_NETTOYAGE`, `EN_MAINTENANCE`, `OCCUPEE` ou `DEPART_PREVU` est techniquement impossible (INV-CHA-001).
 * **Source :** Cahier des charges
 * **Impact sur les autres modules :** Réservations, Séjours.
 * **Niveau de criticité :** Critique.
@@ -264,8 +327,10 @@ Ce document constitue le référentiel unique et officiel des règles métier (B
 * **Module concerné :** Housekeeping
 * **Description :** Les tâches de ménage suivent une machine à états stricte :
   `A_FAIRE` ➔ `EN_COURS` (Prise en charge par un équipier)
-  `EN_COURS` ➔ `TERMINEE` (Ménage fini)
-  `TERMINEE` ➔ `CONTROLEE` (Validée par la Gouvernante)
+  `EN_COURS` ➔ `TERMINEE` (Ménage fini — la chambre reste `A_NETTOYER`, non vendable)
+  `TERMINEE` ➔ `CONTROLEE` (Validée par la Gouvernante — la chambre passe à `LIBRE_PROPRE`)
+  `TERMINEE` ➔ `A_REFAIRE` (Contrôle négatif par la Gouvernante, avec motif obligatoire)
+  Le passage à `TERMINEE` ne rend donc **jamais** la chambre vendable (BR-HK-003).
 * **Source :** Plan d'exécution
 * **Impact sur les autres modules :** Chambres.
 * **Niveau de criticité :** Haute.
@@ -291,6 +356,13 @@ Ce document constitue le référentiel unique et officiel des règles métier (B
 * **Impact sur les autres modules :** Séjours, Audit.
 * **Niveau de criticité :** Haute.
 
+### BR-HK-006 : Recouche (Stayover) et Priorité de Service
+* **Module concerné :** Housekeeping, Chambres
+* **Description :** Le housekeeping quotidien distingue deux natures de tâches : la **recouche** (chambre occupée, entretien léger) et le **grand ménage** (après départ). La priorité d'exécution est : (1) chambres libérées avec arrivée le jour même, (2) départs du jour, (3) recouches, (4) chambres hors service. Une chambre occupée reste au statut `OCCUPEE` durant la recouche : elle n'est jamais repassée par `A_NETTOYER` tant que le séjour est actif.
+* **Source :** Revue de cohérence 2026-11
+* **Impact sur les autres modules :** Chambres, Séjours.
+* **Niveau de criticité :** Moyenne.
+
 ---
 
 ## 7. Facturation (Billing & Invoicing)
@@ -304,11 +376,16 @@ Ce document constitue le référentiel unique et officiel des règles métier (B
 
 ### BR-FAC-002 : Typologie des Charges de Folio
 * **Module concerné :** Facturation
-* **Description :** Chaque ligne de folio (`FolioLine`) doit être rattachée à un type précis :
-  - `HEBERGEMENT` : Prix de la nuitée.
-  - `EXTRA` : Consommation annexe (Room service, SPA, Minibar...).
-  - `TAXE_SEJOUR` : Taxe touristique légale.
-  - `PAIEMENT` : Ligne d'encaissement créditrice.
+* **Description :** Chaque ligne de folio (`FolioLine`) doit être rattachée à un **type comptable** parmi (ADR-008 §4.7) :
+  - `HEBERGEMENT` : Nuitée et formule d'hébergement (TVA 10 %).
+  - `EXTRA` : Prestation annexe non restauration (room service, spa, minibar, blanchisserie — TVA 20 %).
+  - `RESTAURANT` : Consommation de restauration à la carte (TVA 20 %, CDC §3.5.1).
+  - `TAXE_SEJOUR` : Taxe touristique légale, hors TVA, reversée.
+  - `PAIEMENT` : Ligne d'encaissement créditrice (jamais une charge).
+  - `AJUSTEMENT_HAUSSE` : Impact tarifaire positif d'un changement de chambre en cours de séjour.
+  - `AJUSTEMENT_BAISSE` : Impact tarifaire négatif du même événement, traité comme un crédit (même convention que `PAIEMENT` : le montant stocké reste positif, le sens est porté par le type).
+  Cette liste est celle de l'énumération `TypeLigneFolio` en base (7 valeurs) ; toute nouvelle valeur exige une migration et une mise à jour du présent article.
+  Le type conditionne **seul** les calculs fiscaux (taux, ventilation). Il est complété par un axe analytique `nature` (liste validée côté DTO, ex. `RESTAURANT`, `PETIT_DEJEUNER`, `SALLE_REUNION`, `SPA`) qui ne sert qu'aux libellés et au reporting par activité.
 * **Source :** Plan d'exécution
 * **Impact sur les autres modules :** Comptabilité.
 * **Niveau de criticité :** Haute.
@@ -341,6 +418,20 @@ Ce document constitue le référentiel unique et officiel des règles métier (B
 * **Impact sur les autres modules :** Paiements, Housekeeping.
 * **Niveau de criticité :** Moyenne.
 
+### BR-FAC-007 : Taxe de Séjour — Assiette et Exonérations
+* **Module concerné :** Facturation, Paramétrage
+* **Description :** La taxe de séjour est due **par personne majeure et par nuit** effectivement occupée. Son montant est lu dans la table de paramétrage (`TaxRateConfig`, type `TAXE_SEJOUR`), jamais codé en dur. Les exonérations (mineurs sous un âge paramétrable, personnel en mission, groupes conventionnés) sont configurables et **jamais implicites** : une ligne exonérée doit être traçable. La taxe est hors TVA (taux 0 %) et figure sur des lignes dédiées du folio principal.
+* **Source :** Revue de cohérence 2026-11 (décision D3) — cahier des charges §3.5.1, ADR-002
+* **Impact sur les autres modules :** Comptabilité, Reporting.
+* **Niveau de criticité :** Haute.
+
+### BR-FAC-008 : Taxe de Promotion Touristique (TPT)
+* **Module concerné :** Facturation, Paramétrage
+* **Description :** Lorsque la TPT est applicable, elle constitue une **composante fiscale distincte** de la taxe de séjour et de la TVA : elle possède son propre type dans `TaxRateConfig`, sa propre ligne de folio et sa propre rubrique dans la ventilation fiscale et les exports comptables. Le montant de référence du cahier des charges (1,00 MAD par personne et par nuit, ADR-008) est un paramètre modifiable, jamais une constante.
+* **Source :** ADR-008 §4.4 / revue de cohérence 2026-11
+* **Impact sur les autres modules :** Comptabilité, Reporting.
+* **Niveau de criticité :** Moyenne.
+
 ---
 
 ## 8. Paiements (Payments)
@@ -354,16 +445,23 @@ Ce document constitue le référentiel unique et officiel des règles métier (B
 
 ### BR-PAI-002 : Modes de Paiement Autorisés
 * **Module concerné :** Paiements
-* **Description :** Les modes de paiement acceptés sont limités aux types énumérés : `ESPECES`, `CARTE` (Carte bancaire), `VIREMENT` (Virement bancaire), et `ACOMPTE`.
+* **Description :** Les modes de paiement acceptés sont limités aux types énumérés : `ESPECES`, `CARTE` (carte bancaire), `VIREMENT` (virement bancaire), `CHEQUE` (chèque, notamment pour la caution de séjour — BR-FAC-006) et `A_COMPTER` (prise en charge entreprise). L'acompte n'est **pas** un mode de paiement : c'est un dépôt enregistré dans le registre dédié (BR-FAC-005) puis imputé au folio au check-in.
 * **Source :** Cahier des charges
 * **Impact sur les autres modules :** Comptabilité.
 * **Niveau de criticité :** Haute.
 
 ### BR-PAI-003 : Plafonnement des Paiements en Espèces (Maroc)
 * **Module concerné :** Paiements, Comptabilité
-* **Description :** Doit-on intégrer un avertissement ou un blocage strict lorsque le règlement en espèces dépasse la limite légale marocaine de 10 000 MAD par jour et par client ?
+* **Description :** Tout règlement en espèces supérieur à **10 000 MAD par jour et par client** déclenche un **blocage** de l'encaissement. Le dépassement n'est possible que par un rôle habilité (Direction, Comptable), avec un **motif obligatoire** consigné en audit ; le montant est plafonné à la limite légale par opération. Le seuil est un paramètre (`HotelConfig.plafondEspeces`), jamais une constante.
 * **Source :** Décision à confirmer
 * **Impact sur les autres modules :** Aucun.
+* **Niveau de criticité :** Moyenne.
+
+### BR-PAI-004 : Traçabilité de la Source du Règlement
+* **Module concerné :** Paiements, Comptabilité
+* **Description :** Tout encaissement non espèces doit conserver sa référence externe : numéro d'autorisation pour une carte, référence d'opération pour un virement, numéro de chèque et banque émettrice pour un chèque. Ces données sont obligatoires au-delà d'un montant paramétrable, ne sont jamais modifiables après validation, et figurent sur le reçu et dans l'export comptable — condition d'un rapprochement bancaire fiable.
+* **Source :** Revue de cohérence 2026-11 (règle citée par `docs/modules/payments.md` mais absente du référentiel)
+* **Impact sur les autres modules :** Comptabilité, Reporting.
 * **Niveau de criticité :** Moyenne.
 
 ---
@@ -379,7 +477,7 @@ Ce document constitue le référentiel unique et officiel des règles métier (B
 
 ### BR-COM-002 : Imputation Fiscale du Chiffre d'Affaires
 * **Module concerné :** Comptabilité, Facturation
-* **Description :** Le chiffre d'affaires hôtelier doit être comptabilisé sur la base de factures émise (`Invoice`), en ventilant le montant HT, le montant de la TVA Hebergement (10%), le montant de la TVA Extras (20%), et le total de la Taxe de séjour (collectée séparément).
+* **Description :** Le chiffre d'affaires est constaté sur les **charges réellement postées** (et non sur l'émission des factures), les montants étant saisis **TTC** puis ventilés (ADR-008) : base HT, TVA hébergement et pensions (10 %), TVA prestations annexes et restauration à la carte (20 %), taxe de séjour et TPT (hors TVA, collectées pour reversement). La somme de la ventilation reconstitue toujours exactement le TTC facturé ; l'émission d'une facture ou d'un avoir ne crée ni n'annule de chiffre d'affaires.
 * **Source :** Cahier des charges
 * **Impact sur les autres modules :** Reporting.
 * **Niveau de criticité :** Haute.
@@ -487,9 +585,11 @@ Ce document constitue le référentiel unique et officiel des règles métier (B
 ### BR-REP-002 : Métriques Clés du Dashboard d'Exploitation
 * **Module concerné :** Reporting, Dashboard
 * **Description :** Le tableau de bord d'exploitation doit afficher en temps réel des indicateurs consolidés non falsifiables :
-  - Taux d'occupation quotidien (%).
+  - Taux d'occupation quotidien (%), calculé hors chambres `EN_MAINTENANCE` de catégorie OOS (BR-CHA-005).
+  - **ADR** (prix moyen de la chambre vendue) et **RevPAR** (revenu par chambre disponible), attendus au cahier des charges §5.15.
   - Volume d'arrivées et départs programmés.
-  - Ventilation du chiffre d'affaires cumulé par canal de vente (`CanalReservation`).
+  - Ventilation du chiffre d'affaires **par activité** (hébergement, restauration, événementiel) et **par canal de vente** (`CanalReservation`), avec comparaison au mix cible 70 % walk-in / 20 % direct / 10 % Booking.
+  - Prévision d'occupation à 14 jours issue des réservations fermes.
 * **Source :** Cahier des charges
 * **Impact sur les autres modules :** Dashboard.
 * **Niveau de criticité :** Haute.
@@ -523,4 +623,98 @@ Ce document constitue le référentiel unique et officiel des règles métier (B
 * **Description :** Les jetons et liens de réinitialisation de mot de passe envoyés par e-mail (`forgot-password`) doivent expirer de manière stricte après une durée de **30 minutes**. Passé ce délai, le jeton est invalidé en base et la procédure doit être réitérée.
 * **Source :** Décision technique
 * **Impact sur les autres modules :** Aucun.
+* **Niveau de criticité :** Haute.
+
+---
+
+## 15. Restauration (Restaurant, Room service, Petit-déjeuner)
+
+> Section créée en v1.1. Aucune règle ne couvrait la restauration, alors que le
+> module est planifié au lot L3 et que la TVA applicable (20 % à la carte) est un
+> point fiscal sensible du cahier des charges (§3.5.1).
+
+### BR-RST-001 : Note par Table et par Service
+* **Module concerné :** Restaurant, Facturation
+* **Description :** Une table ne peut porter qu'**une seule note ouverte** par service. La note contient la table, le nombre de couverts, l'heure d'ouverture, les lignes de commande et l'utilisateur qui l'a ouverte. Elle est clôturée soit par un encaissement direct (BR-RST-005), soit par un envoi en chambre (BR-RST-002). Une table dont la note est clôturée est immédiatement disponible.
+* **Source :** Cahier des charges §3.5 / prototype de refonte
+* **Impact sur les autres modules :** Facturation.
+* **Niveau de criticité :** Haute.
+
+### BR-RST-002 : Envoi en Chambre et Imputation au Folio
+* **Module concerné :** Restaurant, Séjours, Facturation
+* **Description :** L'envoi d'une note en chambre crée sur le folio du séjour actif les lignes de type `RESTAURANT` (TVA 20 %) correspondant aux articles commandés, avec `nature = RESTAURANT`. L'opération est refusée si la chambre n'a pas de séjour en cours, si le folio est clôturé ou facturé, et si le séjour a été soldé. Chaque envoi est journalisé (utilisateur, table, chambre, montant) et le client signe la note papier conservée au service.
+* **Source :** Cahier des charges §3.5.1 / ADR-008 §4.6
+* **Impact sur les autres modules :** Facturation, Audit.
+* **Niveau de criticité :** Critique.
+
+### BR-RST-003 : Petit-déjeuner Inclus — Aucune Double Facturation
+* **Module concerné :** Restaurant, Séjours, Facturation
+* **Description :** Le petit-déjeuner compris dans la formule réservée (`BB`, `DP`, `PC`) est **déjà couvert par le tarif d'hébergement TTC** : il ne crée aucune charge additive (ADR-008 §4.5) et apparaît uniquement à titre informatif sur la facture. Un petit-déjeuner servi hors formule (client `RO`, accompagnant supplémentaire) est une prestation indépendante, facturée à la carte (TVA 20 %) ou envoyée en chambre. Les couverts du service sont pointés pour le coût matière et le rapport du jour, indépendamment de la facturation.
+* **Source :** ADR-008 §4.5
+* **Impact sur les autres modules :** Facturation, Reporting.
+* **Niveau de criticité :** Haute.
+
+### BR-RST-004 : Rupture de Carte
+* **Module concerné :** Restaurant
+* **Description :** Un article peut être déclaré en rupture par le restaurant ; il devient immédiatement **non commandable** depuis le point de vente comme depuis un envoi en chambre. La rupture est réversible et chaque changement d'état est journalisé (auteur, horodatage). Un article en rupture ne peut pas figurer dans une nouvelle commande, même si une note ouverte le contenait déjà.
+* **Source :** Prototype de refonte / exploitation 3★
+* **Impact sur les autres modules :** Aucun.
+* **Niveau de criticité :** Moyenne.
+
+### BR-RST-005 : Encaissement Direct, Annulation et TVA
+* **Module concerné :** Restaurant, Paiements, Comptabilité
+* **Description :** L'encaissement direct d'une note (espèces, carte, virement) suit BR-PAI-001 (idempotence) et BR-PAI-003 (plafond espèces). Il produit un ticket non fiscal et alimente le chiffre d'affaires restauration avec une TVA de **20 %**. Une ligne de commande ne peut jamais être supprimée : elle est annulée logiquement (`annulee = true`) avec un motif et une entrée d'audit (BR-AUD-002). Les tickets annulés apparaissent dans le rapport du jour avec leur motif.
+* **Source :** Cahier des charges §3.5.1 / BR-AUD-002
+* **Impact sur les autres modules :** Comptabilité, Audit.
+* **Niveau de criticité :** Haute.
+
+---
+
+## 16. Salle de conférence & événementiel
+
+> Section créée en v1.1. La salle de conférence est une **extension assumée** du
+> périmètre (absente du cahier des charges) : les valeurs de référence
+> (capacité, tarifs, prestations) sont paramétrables et doivent être confirmées
+> par la direction avant facturation réelle.
+
+### BR-EVT-001 : Disponibilité et Exclusivité de la Salle
+* **Module concerné :** Événementiel, Paramétrage
+* **Description :** Deux événements ne peuvent jamais se chevaucher sur la même salle pour un même créneau (journée, demi-journée, soirée). Une demande non confirmée bloque l'inventaire au statut `OPTION` pour une durée paramétrable (48 h par défaut) ; à expiration, l'option tombe automatiquement. Le contrôle est identique à celui de BR-RES-001 (transactionnel, non contournable).
+* **Source :** Extension assumée (audit de refonte)
+* **Impact sur les autres modules :** Facturation.
+* **Niveau de criticité :** Critique.
+
+### BR-EVT-002 : Devis — Construction, Validité et TVA
+* **Module concerné :** Événementiel, Facturation
+* **Description :** Un devis comprend : participants (≤ capacité maximale de la salle), format, prestations (location, pause-café, déjeuner, dîner, technique) et un total ventilé **HT / TVA 20 % / TTC**. Les prix sont saisis TTC (ADR-008). Le devis est valable une durée paramétrable (15 jours par défaut) ; au-delà, il doit être régénéré avec les tarifs en vigueur.
+* **Source :** Extension assumée / ADR-008
+* **Impact sur les autres modules :** Facturation, Comptabilité.
+* **Niveau de criticité :** Haute.
+
+### BR-EVT-003 : Acompte et Solde d'un Événement
+* **Module concerné :** Événementiel, Facturation, Paiements
+* **Description :** La confirmation d'un devis exige un **acompte de 30 %** du TTC, encaissé et enregistré dans le registre de dépôts (BR-FAC-005), matérialisé par une facture d'acompte. Le solde est dû **au plus tard le jour de l'événement**. Un événement dont l'acompte n'est pas encaissé reste au statut `OPTION` et n'est pas planifié définitivement.
+* **Source :** Extension assumée (prototype de refonte)
+* **Impact sur les autres modules :** Paiements, Comptabilité.
+* **Niveau de criticité :** Haute.
+
+### BR-EVT-004 : Annulation d'un Événement
+* **Module concerné :** Événementiel, Facturation
+* **Description :** L'annulation suit un barème paramétrable : plus de 15 jours avant l'événement, l'acompte est remboursé ; entre 7 et 15 jours, 50 % de l'acompte est retenu ; moins de 7 jours, l'acompte est acquis. Toute annulation est motivée, journalisée, et donne lieu à un avoir si une facture a été émise (BR-TR-002).
+* **Source :** Extension assumée
+* **Impact sur les autres modules :** Facturation, Comptabilité, Audit.
+* **Niveau de criticité :** Moyenne.
+
+### BR-EVT-005 : Facturation à une Entreprise
+* **Module concerné :** Événementiel, Clients, Facturation
+* **Description :** Un événement peut être facturé à une société partenaire (`Company`) : les identifiants légaux (ICE, RC, IF) sont obligatoires (BR-CLI-006), le plafond de crédit s'applique (BR-CLI-004) et la créance suit le circuit city ledger. Le taux de TVA reste celui de chaque prestation (20 % pour la location et les prestations annexes).
+* **Source :** Cahier des charges §3.5.1 / BR-CLI-004, BR-CLI-006
+* **Impact sur les autres modules :** Comptabilité.
+* **Niveau de criticité :** Haute.
+
+### BR-EVT-006 : Capacité, Effectif et Sécurité
+* **Module concerné :** Événementiel
+* **Description :** Le nombre de participants déclaré ne peut jamais dépasser la capacité de sécurité de la salle (paramètre `capaciteMax`). Un dépassement est refusé côté serveur, y compris en modification. L'effectif retenu sert à la fois au devis (nombre de couverts, pauses) et à la feuille de service remise à l'équipe.
+* **Source :** Extension assumée
+* **Impact sur les autres modules :** Reporting.
 * **Niveau de criticité :** Haute.

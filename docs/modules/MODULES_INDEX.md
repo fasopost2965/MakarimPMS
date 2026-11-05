@@ -6,9 +6,11 @@ Ce document sert de table des matières officielle et de plan directeur d'archit
 
 ## 1. Cartographie des Modules du PMS
 
-Le PMS Makarim est structuré en **21 modules fonctionnels réels** (`backend/src/modules/`), rattachés par des événements lâches et respectant les principes d'autorité serveur et de ségrégation des privilèges — voir `CLAUDE.md` pour la liste faisant foi. Le tableau ci-dessous inclut aussi `accounting`, une **22ᵉ ligne qui n'est pas un module réel** (voir note en bas de tableau).
+Le PMS Makarim est structuré en **24 modules fonctionnels réels** (`backend/src/modules/`), rattachés par des événements lâches et respectant les principes d'autorité serveur et de ségrégation des privilèges — voir `CLAUDE.md` pour la liste faisant foi. Le tableau ci-dessous inclut aussi deux lignes qui **ne sont pas des modules réels** : `events` (spécification cible du lot L4) et `accounting` (spec jamais construite).
 
-CH-018 (`docs/governance/REGISTRE_CHANTIERS.md`) a resynchronisé ce tableau (auparavant 14 lignes, désynchronisé depuis plusieurs itérations F1-F10) et créé les 8 fiches manquantes ci-dessous.
+CH-018 (`docs/governance/REGISTRE_CHANTIERS.md`) a resynchronisé ce tableau (auparavant 14 lignes) et créé les 8 fiches manquantes.
+
+**Resynchronisation du 2026-11-06** (revue `docs/audits/CONFORMITE_DOCUMENTAIRE_2026-11.md`) : le dossier `backend/src/modules/` contient **24** modules et non 21 — `restaurant`, `night-audit` et `purchase-orders` n'étaient listés nulle part. Les fiches `restaurant.md` et `events.md` ont été créées, les deux autres lignes sont marquées « spec à créer ».
 
 | # | Fichier Spécification | Module Fonctionnel | Entités Clés Gouvernées | Rôle Pivot Responsable |
 |---|---|---|---|---|
@@ -33,6 +35,10 @@ CH-018 (`docs/governance/REGISTRE_CHANTIERS.md`) a resynchronisé ce tableau (au
 | 19 | [document-ocr.md](/docs/modules/document-ocr.md) | **Scan OCR pièce d'identité (F5)** | *aucune (consultatif, aucune écriture)* | Réception |
 | 20 | [channel-manager.md](/docs/modules/channel-manager.md) | **Channel Manager / OTA (F10)** | `ChannelRoomTypeMapping`, `ChannelReservationImport` | Administrateur (mappings), OTA (webhooks) |
 | 21 | [dashboard.md](/docs/modules/dashboard.md) | **Tableau de bord** | *aucune (agrégation lecture seule)* | Tous rôles authentifiés |
+| 22 | [restaurant.md](/docs/modules/restaurant.md) | **Restauration** *(partiel : charge folio + rapport du jour)* | `FolioLine` (`RESTAURANT`), `ArticleCarte`, `Commande` *(cible L3)* | Restaurateur, Réception |
+| 23 | *spec à créer (CH-051)* | **Night audit / clôture journalière** | `BusinessDay`, `NightAuditRun`, `NightAuditStep`, `NightAuditException` | Réception, Comptable |
+| 24 | *spec à créer (CH-051)* | **Bons de commande fournisseurs** | `PurchaseOrder`, `PurchaseOrderLine` | Gouvernante, Administrateur |
+| — | [events.md](/docs/modules/events.md) | **Salle de conférence & événementiel** — **⚠️ non implémenté** (lot L4) | *(aucun code : `Salle`, `Evenement`, `Devis` à créer)* | Réception, Comptable |
 | — | [accounting.md](/docs/modules/accounting.md) | ~~Comptabilité~~ **⚠️ non implémenté** | *(aucun code — spec pré-implémentation jamais construite)* | — |
 
 **Note sur `accounting`** : ce spec décrit une clôture comptable journalière, un rapprochement de caisse et un suivi de City Ledger qui n'ont jamais été construits (aucun dossier `backend/src/modules/accounting/`) — écart déjà connu (`docs/governance/ECARTS_DOC_VS_CODE.md`). Le suivi des comptes entreprises (`Company`/City Ledger) qu'il décrit est le même périmètre que `CH-021`/`EA-001` (dépriorisé formellement, `docs/governance/ECARTS_ASSUMES.md`). Le reste (clôture journalière, rapprochement de caisse physique) n'a jamais été demandé par un chantier ni un audit distinct — reste une fonctionnalité potentielle non planifiée, pas une dette active. Ce fichier est conservé pour référence historique, pas comme une spec à implémenter telle quelle.

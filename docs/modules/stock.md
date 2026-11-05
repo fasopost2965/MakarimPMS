@@ -37,7 +37,7 @@ Ce module manipule et gère directement les entités suivantes du `DATA_DICTIONA
 Les règles métiers applicables à ce module sont :
 * **BR-STK-001 (Seuil critique d'alerte) :** Émission d'une notification prioritaire dès que le stock physique descend sous le seuil d'alerte configuré pour l'article.
 * **BR-STK-002 (Valorisation de stock) :** Évaluation comptable du stock de l'Hôtel Makarim selon la méthode du Coût Unitaire Moyen Pondéré (CUMP).
-* **BR-STK-003 (Justification de sortie exceptionnelle) :** Exigence de motif et saisie de justification explicative de 10 caractères minimum lors d'ajustements d'écarts d'inventaire.
+* **Justification des sorties exceptionnelles :** tout ajustement d'écart d'inventaire exige un motif écrit d'au moins 10 caractères et une entrée d'audit — application de **BR-AUD-002** (aucune règle `BR-STK-003` n'existe dans le référentiel : référence corrigée le 2026-11-06).
 
 ---
 
