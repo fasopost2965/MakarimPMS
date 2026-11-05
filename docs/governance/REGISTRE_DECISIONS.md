@@ -248,6 +248,21 @@ Décisions structurantes prises **pendant ou après l'audit** (distinct des ADR 
 - **Date** : session courante.
 - **Décideur** : utilisateur (choix du domaine réel, mandat de finalisation autonome avec demande d'accès si nécessaire), Claude (détection du bug `VITE_API_URL`, périmètre exact de ce qui reste hors de portée sans accès).
 
+### RD-029 — CH-051 : mise en conformité du référentiel (règles v1.1, RBAC 7+1, encaissement réception)
+
+- **Décision** : le référentiel documentaire est **aligné sur le code réel** et complété pour les modules à venir, selon quatre principes :
+  1. **Le code vérifié fait foi** sur ce qui est déjà implémenté (7 rôles seedés, 7 types de lignes de folio, 5 canaux, politiques d'annulation, registre de dépôts).
+  2. **La règle fait foi** sur ce qui reste à construire (restauration, événementiel, no-show automatique, imputation par nuit).
+  3. **L'encaissement est une opération d'exploitation**, la **facturation et les avoirs** restent comptables : la Réception encaisse et remet la note, le Comptable corrige (avoir, remboursement, réouverture).
+  4. **Aucun rôle sans besoin propre** : `direction` n'est pas créé (les overrides restent portés par Administrateur) ; `RESTAURATEUR` est documenté (il existait déjà) ; **Équipier de ménage** reste à créer pour BR-HK-004.
+- **Raison** : la documentation se présente comme normative ; tant qu'elle décrit 6 rôles pour 7 seedés ou 4 types de lignes pour 7, elle ne protège plus le développement et autorise des divergences silencieuses, notamment fiscales.
+- **Conséquence** : `BUSINESS_RULES.md` v1.1, `RBAC_MATRIX.md` révision 2026-11, `DATA_DICTIONARY.md` et `MODULES_INDEX.md` mis à jour ; **ADR-006 doit être amendée** (elle fige 6 rôles immuables) et **ADR-008 validée** avant L0.
+- **Arbitrages restant au propriétaire** : (D1) imputation nuit par nuit vs séjour entier au check-in ; (D2) contrôle gouvernante obligatoire ; (D3) assiette et exonérations de la taxe de séjour ; (D4) plafond espèces 10 000 MAD ; (D5) création du rôle Équipier de ménage ; (D6) validation d'ADR-008. Valeurs recommandées appliquées par défaut dans le référentiel, chacune réversible en une passe.
+- **Date** : 2026-11-06.
+- **Décideur** : Claude (mise en conformité documentaire), les six arbitrages de fond restant explicitement à la direction.
+
+---
+
 ## Décisions en attente (questions ouvertes de l'audit nécessitant un arbitrage humain)
 
 Aucune ne reste ouverte parmi les arbitrages initialement soumis (voir `ECARTS_ASSUMES.md` pour l'historique complet) — le périmètre de l'avoir (RD-005), le chiffrement PII (RD-006), le blocage du check-out sur solde impayé (RD-008), la granularité du gating RBAC frontend (RD-009), le filtrage soft-delete centralisé (RD-010), la déduplication client (RD-011), l'enum `StatutSejour.ANNULE` (RD-012), la numérotation de facture (RD-013), le city ledger (RD-014) et la matérialisation des pénalités (RD-015) sont désormais tous tranchés. CH-026(e) (RD-016) est un nouveau report technique explicite, pas un arbitrage produit en attente — sa reprise éventuelle nécessitera cependant une décision produit sur le calendrier (aucune urgence identifiée pour un PMS interne mono-établissement). Le seul écart encore ouvert et non trivial (multi-folio vs folio unique en pratique, `ECARTS_ASSUMES.md` §Candidats) n'a pas été soumis à arbitrage dans cette série de questions — reste en attente. CH-034 (portée responsive/mobile du frontend admin, issu de la Phase 11) est désormais tranché — voir RD-021 ci-dessus.

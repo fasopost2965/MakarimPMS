@@ -15,6 +15,20 @@
 | ~~Pas de spec `docs/modules/police.md` dédiée~~ | — | **Résolu (CH-018, session courante)** — `docs/modules/police.md` créé, ainsi que 7 autres specs manquantes découvertes au passage (`auth`, `booking-engine`, `channel-manager`, `dashboard`, `document-ocr`, `notifications`, `self-checkin`) — l'écart réel était plus large que ce qui avait été repéré pendant l'audit initial. | Résolu CH-018 |
 | `docs/api/API_INDEX.md` et fichiers `docs/api/*.md` | Liste des endpoints par module | **Non revérifiés endpoint par endpoint contre le code réel pendant cet audit** — statut de fraîcheur inconnu | À confirmer explicitement (chantier futur, non couvert par CH-018 en l'état) |
 
+## Écarts constatés le 2026-11-06 (revue de cohérence de la refonte 3★)
+
+| Document | Ce qu'il affirme | Réalité du code | Traitement |
+|---|---|---|---|
+| `docs/modules/MODULES_INDEX.md`, `CLAUDE.md` | 21 modules | **24** dossiers réels (`+ restaurant`, `+ night-audit`, `+ purchase-orders`) | Corrigé dans `MODULES_INDEX.md` ; fiches `restaurant.md`/`events.md` créées ; 2 specs restent à écrire (CH-051) |
+| `docs/RBAC_MATRIX.md`, `docs/ADR-006-RBAC-Enforcement.md` | **6 rôles**, immuables | **7** rôles seedés (`RESTAURATEUR` ajouté par F11/CH-056) ; aucun rôle « Équipier de ménage » | Matrice révisée (7 documentés + 1 à créer) ; **ADR-006 à amender** |
+| `docs/BUSINESS_RULES.md` (BR-FAC-002) | 4 types de lignes de folio | **7** valeurs dans `TypeLigneFolio` (`+ RESTAURANT`, `AJUSTEMENT_HAUSSE`, `AJUSTEMENT_BAISSE`) | Corrigé (v1.1) |
+| `docs/BUSINESS_RULES.md` (BR-RES-003) | 3 canaux de distribution | **5** dans `CanalReservation` (`+ EXPEDIA`, `+ AIRBNB`) | Règle élargie (v1.1) |
+| `docs/BUSINESS_RULES.md` (BR-PAI-002) | `ACOMPTE` est un moyen de paiement | L'enum `MoyenPaiement` contient `ACOMPTE` **et** un modèle `ReservationDeposit` distinct | Règle corrigée ; **migration d'enum** à planifier (L0) |
+| `docs/modules/payments.md` | cite `BR-PAY-001/002/003` | Ces identifiants n'existent pas (`BR-PAI-*`) | Renvois corrigés + `BR-PAI-004` créée |
+| `docs/modules/stock.md` | cite `BR-STK-003` | Inexistant | Renvoi remplacé par `BR-AUD-002` |
+| `docs/BUSINESS_RULES.md` (BR-RES-006, BR-FAC-005) | — | Politiques d'annulation et registre de dépôts **déjà implémentés** | Verdicts d'audit corrigés (la 1ʳᵉ passe les croyait absents) |
+| `docs/ADR-008` | statut « Proposé pour validation » | Modèle fiscal (TTC, ventilation) **de facto appliqué** par le code | **À valider formellement** avant L0 |
+
 ## Ce que cela signifie pour l'usage de `docs/`
 
 - **Pour comprendre l'intention d'origine et les décisions d'architecture fondamentales (ADR)** : `docs/` reste une référence utile et globalement fiable — les ADR n'ont pas été trouvés faux par l'audit, seulement l'ADR-002 en tension avec l'usage réel (folio unique en pratique).

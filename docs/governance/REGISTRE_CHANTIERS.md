@@ -1020,6 +1020,31 @@ Issus de `docs/execution/PLAN_MISE_EN_PRODUCTION_BETA.md` (audit du 29 juillet 2
 
 ---
 
+### CH-051 — Mise en conformité documentaire de la refonte 3★ (règles, RBAC, modules)
+
+- **Titre** : Aligner le référentiel documentaire (`BUSINESS_RULES`, `RBAC_MATRIX`, `DATA_DICTIONARY`, `MODULES_INDEX`, specs de modules) sur le code réel et sur le chantier de refonte 3★.
+- **Source** : `docs/audits/REVUE_COHERENCE_REGLES_2026-11.md` et `docs/audits/CONFORMITE_DOCUMENTAIRE_2026-11.md` (revue du 2026-11-06), elle-même issue de la demande propriétaire « les règles sont-elles en phase avec les futures implémentations ? ».
+- **Description factuelle** : le référentiel décrivait un hôtel différent du code sur neuf points mesurables — 6 rôles documentés pour 7 seedés, 4 types de lignes de folio pour 7 dans l'énumération, 3 canaux pour 5, `ACOMPTE` présenté comme moyen de paiement alors qu'un modèle `ReservationDeposit` existe, aucune règle pour la restauration ni l'événementiel, 21 modules listés pour 24 dossiers réels, et deux renvois de règles inexistants (`BR-PAY-*`, `BR-STK-003`).
+- **Pourquoi ce chantier existe** : la documentation est présentée par le projet comme normative (« aucun écart non documenté n'est toléré »). Tant qu'elle contredit le code, elle ne protège plus : elle autorise des implémentations divergentes, en particulier sur le fisc et les rôles.
+- **Modules concernés** : transversal (`billing`, `payments`, `reservations`, `restaurant`, `rooms`, `housekeeping`, `parameters`).
+- **Priorité** : Importante (avant le lot L0 de la refonte)
+- **Criticité** : Haute
+- **Impact métier** : Moyen — aucune fonctionnalité en dépend directement, mais les lots L1/L3/L4 en dépendent.
+- **Impact conformité** : Élevé — la ventilation TVA et l'assiette de la taxe de séjour sont des obligations légales.
+- **Livrable réalisé (2026-11-06)** :
+  1. `BUSINESS_RULES.md` **v1.1** : 8 règles corrigées (BR-FAC-002 → 7 types + `nature`, BR-PAI-002, BR-PAI-003 tranchée, BR-COM-002, BR-REP-002, BR-CHA-003, BR-HK-002, BR-TR-005) et **20 règles ajoutées** (no-show, départ anticipé, prolongation, taxe de séjour, TPT, recouche, cut-off, imputation par nuit, source du règlement, **RST-001→005**, **EVT-001→006**).
+  2. `RBAC_MATRIX.md` révision 2026-11 : encaissement autorisé à la Réception, séparation encaissement / avoirs, rôle `RESTAURATEUR` documenté, Équipier de ménage à créer, matrice visuelle à 7 colonnes.
+  3. `DATA_DICTIONARY.md` : `CanalReservation`, `TypeLigneFolio` et `MoyenPaiement` resynchronisés.
+  4. `MODULES_INDEX.md` : 24 modules, fiches `restaurant.md` et `events.md` créées.
+  5. Renvois de règles cassés corrigés (`payments.md`, `stock.md`) + `BR-PAI-004` créée.
+  6. Verdicts erronés de la première passe d'audit corrigés (BR-RES-006, BR-FAC-005 et no-show **étaient déjà partiellement implémentés**).
+- **Reste à faire** : deux specs de modules (`night-audit`, `purchase-orders`), révision d'ADR-006 (7 → 8 rôles), validation formelle d'ADR-008, et les six arbitrages listés en `RD-029`.
+- **Statut** : **en cours**
+- **Éléments testés** : vérification par grep/lecture des énumérations Prisma et des services cités (aucun test applicatif — chantier documentaire) ; contrôle final : 0 renvoi `BR-*` cassé hors historique de registre.
+- **Documents liés** : `docs/audits/REVUE_COHERENCE_REGLES_2026-11.md`, `docs/audits/CONFORMITE_DOCUMENTAIRE_2026-11.md`, `docs/governance/REGISTRE_DECISIONS.md` (RD-029).
+
+---
+
 ## Résumé quantitatif
 
 | Priorité | Nombre de chantiers | Charge cumulée estimée (ordre de grandeur) | Terminés |
