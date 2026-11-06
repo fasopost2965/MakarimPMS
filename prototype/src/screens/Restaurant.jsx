@@ -177,7 +177,7 @@ function PanneauCommande({ table, onClose }) {
         </div>
         <div className="border-t border-line-soft px-3 py-2">
           <span id="resto-moyen" className="text-[12px] font-medium text-ink-2">
-            Moyen de paiement direct
+            Encaissé sur place — reste au restaurant
           </span>
           <div role="group" aria-labelledby="resto-moyen" className="mt-1 flex gap-1.5">
             {MOYENS.map((m) => (
@@ -194,6 +194,10 @@ function PanneauCommande({ table, onClose }) {
               </button>
             ))}
           </div>
+          <p className="mt-1.5 text-[11px] leading-4 text-ink-3">
+            « Envoyer en chambre » porte la note au folio : la réception encaisse, l’hôtel reverse au
+            restaurant dans la journée (relevé de régie, écran Caisse).
+          </p>
         </div>
       </div>
 

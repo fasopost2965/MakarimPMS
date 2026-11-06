@@ -12,11 +12,15 @@ import {
   CalendarRange,
   ChevronDown,
   CircleDollarSign,
+  ClipboardList,
+  FileText,
+  IdCard,
   LayoutDashboard,
   Moon,
   RotateCcw,
   Search,
   Settings2,
+  ShieldCheck,
   UtensilsCrossed,
   Users,
 } from 'lucide-react';
@@ -40,21 +44,32 @@ export const NAV = [
     ],
   },
   {
+    groupe: 'Réception',
+    items: [
+      { cle: 'police', label: 'Fiches de police', icon: IdCard },
+      { cle: 'tournees', label: 'Tours de quart', icon: ClipboardList },
+    ],
+  },
+  {
     groupe: 'Administration',
     items: [
       { cle: 'caisse', label: 'Caisse & factures', icon: CircleDollarSign },
+      { cle: 'documents', label: 'Documents & PDF', icon: FileText },
+      { cle: 'roles', label: 'Rôles & permissions', icon: ShieldCheck },
       { cle: 'tarifs', label: 'Tarifs & paramètres', icon: Settings2 },
     ],
   },
 ];
 
 // Écrans autorisés pour le profil actif (miroir de la matrice RBAC).
-export function ecransAutorises(profil) {
-  return (PROFILS[profil] ?? PROFILS.direction).ecrans;
+// `roles` porte le paramétrage fait par la Direction dans l'écran dédié : il
+// prime sur la matrice documentée, qui reste la valeur par défaut.
+export function ecransAutorises(profil, roles) {
+  return roles?.[profil]?.ecrans ?? (PROFILS[profil] ?? PROFILS.direction).ecrans;
 }
 
-export function navFiltree(profil) {
-  const autorises = ecransAutorises(profil);
+export function navFiltree(profil, roles) {
+  const autorises = ecransAutorises(profil, roles);
   return NAV.map((section) => ({
     ...section,
     items: section.items.filter((item) => autorises.includes(item.cle)),
@@ -96,7 +111,7 @@ export function Sidebar({ active, onNavigate, onNightAudit }) {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">
-        {navFiltree(state.profil).map((section) => (
+        {navFiltree(state.profil, state.roles).map((section) => (
           <div key={section.groupe} className="mb-5">
             <p className="mb-1.5 px-2 text-[10px] font-semibold tracking-[0.11em] text-ink-3 uppercase">
               {section.groupe}
@@ -315,7 +330,7 @@ export function MobileNav({ open, onClose, active, onNavigate }) {
             ✕
           </Button>
         </div>
-        {navFiltree(state.profil).map((section) => (
+        {navFiltree(state.profil, state.roles).map((section) => (
           <div key={section.groupe} className="mb-3">
             <p className="px-2 pb-1 text-[10px] font-semibold tracking-[0.1em] text-ink-3 uppercase">{section.groupe}</p>
             {section.items.map((item) => {
@@ -353,7 +368,7 @@ export function BottomNav({ active, onNavigate }) {
     { cle: 'reservations', label: 'Planning', icon: CalendarRange },
     { cle: 'restaurant', label: 'Resto', icon: UtensilsCrossed },
     { cle: 'caisse', label: 'Caisse', icon: CircleDollarSign },
-  ].filter((item) => ecransAutorises(state.profil).includes(item.cle));
+    ].filter((item) => ecransAutorises(state.profil, state.roles).includes(item.cle));
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
       {items.map((item) => {

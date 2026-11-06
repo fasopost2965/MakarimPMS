@@ -24,6 +24,10 @@ import { Restaurant } from './screens/Restaurant';
 import { Conference } from './screens/Conference';
 import { Caisse } from './screens/Caisse';
 import { Rates } from './screens/Rates';
+import { Police } from './screens/Police';
+import { Tournees } from './screens/Tournees';
+import { Documents } from './screens/Documents';
+import { Roles } from './screens/Roles';
 
 const PAGES = {
   dashboard: { titre: 'Tableau de bord', sousTitre: 'Pilotage de l’exploitation · Hôtel Makarim 3★', Composant: Dashboard },
@@ -32,6 +36,10 @@ const PAGES = {
   restaurant: { titre: 'Restaurant Le Marsa', sousTitre: 'Service, carte et notes en chambre', Composant: Restaurant },
   conference: { titre: 'Salle de conférence', sousTitre: 'Planning, événements et devis séminaire', Composant: Conference },
   caisse: { titre: 'Caisse & factures', sousTitre: 'Folios, encaissements et notes restaurant', Composant: Caisse },
+  police: { titre: 'Fiches de police', sousTitre: 'Registre d’hébergement · obligation légale', Composant: Police },
+  tournees: { titre: 'Tours de quart', sousTitre: 'Relève des trois shifts · cahier de transmission', Composant: Tournees },
+  documents: { titre: 'Documents & PDF', sousTitre: 'Factures, fiches de police, rapports de tournée', Composant: Documents },
+  roles: { titre: 'Rôles & permissions', sousTitre: 'Paramétrage des accès par la Direction', Composant: Roles },
   tarifs: { titre: 'Tarifs & paramètres', sousTitre: 'Grille, formules, fiscalité et identité', Composant: Rates },
 };
 
@@ -147,8 +155,8 @@ function Contenu() {
   // Un changement de profil peut retirer l'écran courant : on retombe sur
   // l'écran d'accueil du profil (comme le ferait un 403 côté serveur).
   useEffect(() => {
-    if (!ecransAutorises(state.profil).includes(page)) setPage(profil.accueil);
-  }, [page, profil.accueil, state.profil]);
+    if (!ecransAutorises(state.profil, state.roles).includes(page)) setPage(profil.accueil);
+  }, [page, profil.accueil, state.profil, state.roles]);
 
   useEffect(() => {
     const onKey = (e) => {

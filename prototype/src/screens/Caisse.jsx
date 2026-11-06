@@ -3,24 +3,32 @@
 //
 // Règles métier : BR-SEJ-004 (solde à 0), BR-TR-002 (facture immuable),
 // BR-PAI-001/002 (idempotence et modes de règlement), BR-PAI-003 (plafond
-// espèces), BR-FAC-002 (typologie des lignes).
+// espèces), BR-FAC-002 (typologie des lignes), BR-FAC-001 (capacité
+// multi-folios : répartition société / client et émission de deux factures),
+// BR-SEJ-007 (prolongation facturée au client), BR-RST-002 (note en chambre)
+// et BR-RST-005 (encaissement direct au restaurant).
 
 import { useMemo, useState } from 'react';
 import {
   Banknote,
+  BedDouble,
+  Building2,
   CheckCircle2,
   CreditCard,
   Download,
   FileText,
   Landmark,
   LogOut,
+  Printer,
   Receipt,
   Search,
+  User,
 } from 'lucide-react';
 import { PARAMS } from '../data';
-import { soldeDuFolio, useApp } from '../store';
+import { regieRestaurant, repartirFolio, soldeDuFolio, useApp } from '../store';
 import { fmtCourt, fmtLong, money } from '../lib/date';
 import { Bar, Button, Card, CardHeader, Drawer, Modal, Pill, cx, useToast } from '../components/ui';
+import { ApercuDocument, FactureDoc, ReleveRegieDoc } from '../components/Document';
 
 const MOYENS = [
   { label: 'Espèces', icone: Banknote },
@@ -36,9 +44,16 @@ export function Caisse() {
   const [folioId, setFolioId] = useState(null);
   const [paiement, setPaiement] = useState(false);
   const [moyen, setMoyen] = useState('Espèces');
+  const [apercu, setApercu] = useState(null);
 
   const folio = state.folios.find((f) => f.id === folioId) ?? null;
   const sejour = folio ? state.sejours.find((s) => s.folioId === folio.id) : null;
+  // Répartition société / client du folio ouvert (source unique : store).
+  const repartition = folio ? repartirFolio(state, folio) : null;
+  const partSociete = repartition?.find((r) => r.payeur === 'societe');
+  const partClient = repartition?.find((r) => r.payeur === 'client');
+  // Régie du restaurant : ce que l'hôtel encaisse pour son compte.
+  const regie = regieRestaurant(state);
 
   const encaisse = state.folios.reduce(
     (s, f) => s + f.paiements.reduce((x, p) => x + p.montant, 0),
@@ -218,7 +233,50 @@ export function Caisse() {
           </Card>
 
           <Card>
-            <CardHeader titre="Factures" sousTitre={`${state.factures.length} documents émis`} />
+            <CardHeader
+              titre="Régie restaurant"
+              sousTitre="Ce que l’hôtel encaisse pour le compte du restaurant"
+              action={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setApercu({
+                      titre: 'Relevé de régie — Restaurant Le Marsa',
+                      rendu: <ReleveRegieDoc regie={regie} date={state.date} />,
+                    })
+                  }
+                >
+                  <Printer className="size-3.5" />
+                  <span className="sr-only sm:not-sr-only">Relevé</span>
+                </Button>
+              }
+            />
+            <div className="space-y-2 px-5 py-4 text-[12px]">
+              <div className="flex items-center justify-between">
+                <span className="text-ink-2">Notes portées en chambre</span>
+                <span className="tnum font-medium text-ink">{money(regie.totalChambre)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-ink-2">Tables réglées au restaurant</span>
+                <span className="tnum font-medium text-ink">{money(regie.totalDirect)}</span>
+              </div>
+              <div className="flex items-center justify-between border-t border-line-soft pt-2">
+                <span className="font-medium text-ink">À reverser au restaurant</span>
+                <span className="tnum font-semibold text-ink">{money(regie.aReverser)} MAD</span>
+              </div>
+              <p className="text-[11px] leading-4 text-ink-3">
+                Le client peut régler sa consommation à la réception : la note est alors portée au
+                folio de sa chambre. L’hôtel encaisse et reverse au restaurant en fin de journée.
+              </p>
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader
+              titre="Factures"
+              sousTitre={`${state.factures.length} documents émis · aperçu et impression`}
+            />
             <ul className="divide-y divide-line-soft">
               {state.factures.slice(0, 6).map((f) => (
                 <li key={f.id} className="flex items-center gap-2 px-5 py-2.5">
@@ -228,6 +286,14 @@ export function Caisse() {
                     <p className="truncate text-[12px] text-ink-3">{f.client}{f.chambre ? ` · ch. ${f.chambre}` : ''}</p>
                   </div>
                   <span className="tnum text-[12px] font-semibold text-ink">{money(f.montant)}</span>
+                  <button
+                    type="button"
+                    aria-label={`Imprimer la facture ${f.id}`}
+                    onClick={() => setApercu({ titre: `Facture ${f.id}`, rendu: <FactureDoc facture={f} /> })}
+                    className="grid size-9 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-sand-50 hover:text-ink"
+                  >
+                    <Printer className="size-3.5" />
+                  </button>
                 </li>
               ))}
             </ul>
@@ -266,12 +332,17 @@ export function Caisse() {
               <Button
                 variant="outline"
                 onClick={() => {
-                  actions.invoiceFolio(folio.id);
-                  push(`Facture émise pour ${folio.client}.`);
+                  actions.emettreFactures(folio.id);
+                  const nb = repartition.filter((r) => r.lignes.length > 0).length;
+                  push(
+                    nb > 1
+                      ? `Facturation séparée — ${nb} factures émises (société et client).`
+                      : `Facture émise pour ${folio.client}.`,
+                  );
                 }}
                 disabled={folio.statut === 'facture'}
               >
-                <FileText className="size-3.5" /> Facturer
+                <FileText className="size-3.5" /> Émettre les factures
               </Button>
             </div>
           )
@@ -295,18 +366,89 @@ export function Caisse() {
             </Card>
 
             <Card>
-              <CardHeader titre="Charges" sousTitre={`${folio.lignes.length} ligne(s)`} />
+              <CardHeader
+                titre="Charges"
+                sousTitre={`${folio.lignes.length} ligne(s) · le payeur se règle ligne par ligne`}
+              />
               <ul className="divide-y divide-line-soft">
-                {folio.lignes.map((l) => (
-                  <li key={l.id} className="flex items-center gap-2 px-4 py-2">
-                    <span className="min-w-0 flex-1 truncate text-[12px] text-ink-2">{l.libelle}</span>
-                    <Pill tone={l.type === 'hebergement' ? 'maj' : l.type === 'restaurant' ? 'terra' : 'saffron'}>
-                      {l.type === 'hebergement' ? 'Hébergement' : l.type === 'restaurant' ? 'Restaurant' : l.type === 'taxe' ? 'Taxe séjour' : 'Extra'}
-                    </Pill>
-                    <span className="tnum w-16 text-right text-[12px] font-medium text-ink">{money(l.montant)}</span>
-                  </li>
-                ))}
+                {folio.lignes.map((l) => {
+                  const auClient = (l.payeur ?? 'client') === 'client';
+                  return (
+                    <li key={l.id} className="px-4 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate text-[12px] text-ink-2">{l.libelle}</span>
+                        <Pill tone={l.type === 'hebergement' ? 'maj' : l.type === 'restaurant' ? 'terra' : 'saffron'}>
+                          {l.type === 'hebergement' ? 'Hébergement' : l.type === 'restaurant' ? 'Restaurant' : l.type === 'taxe' ? 'Taxe séjour' : 'Extra'}
+                        </Pill>
+                        <span className="tnum w-16 text-right text-[12px] font-medium text-ink">{money(l.montant)}</span>
+                      </div>
+                      <div className="mt-1 flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => actions.setPayeur(folio.id, l.id, auClient ? 'societe' : 'client')}
+                          disabled={!folio.societeId || folio.statut === 'facture'}
+                          className={cx(
+                            'flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors',
+                            auClient
+                              ? 'border-line bg-sand-50 text-ink-2'
+                              : 'border-maj/30 bg-maj-100 text-maj',
+                            (!folio.societeId || folio.statut === 'facture') && 'cursor-default opacity-70',
+                          )}
+                          title={
+                            folio.societeId
+                              ? 'Basculer la charge entre le client et l’entreprise'
+                              : 'Séjour sans entreprise : le client règle tout'
+                          }
+                        >
+                          {auClient ? <User className="size-3" /> : <Building2 className="size-3" />}
+                          {auClient ? 'Client' : 'Entreprise'}
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
+
+              {/* Répartition et facturation séparée */}
+              <div className="border-t border-line-soft px-4 py-3">
+                <p className="text-[10px] font-semibold tracking-[0.1em] text-ink-3 uppercase">
+                  Répartition de la facturation
+                </p>
+                <div className="mt-2 space-y-1.5">
+                  <div className="flex items-center justify-between text-[12px]">
+                    <span className="flex items-center gap-1.5 text-ink-2">
+                      <Building2 className="size-3.5 text-ink-3" />
+                      {partSociete?.libelle ?? 'Entreprise'}
+                    </span>
+                    <span className="tnum font-medium text-ink">{money(partSociete?.total ?? 0)} MAD</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[12px]">
+                    <span className="flex items-center gap-1.5 text-ink-2">
+                      <User className="size-3.5 text-ink-3" /> {folio.client}
+                    </span>
+                    <span className="tnum font-medium text-ink">{money(partClient?.total ?? 0)} MAD</span>
+                  </div>
+                </div>
+                {sejour && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 w-full"
+                    onClick={() => {
+                      actions.prolongerSejour(sejour.id);
+                      push('Nuit supplémentaire ajoutée — facturée au client, pas à l’entreprise.');
+                    }}
+                    disabled={folio.statut === 'facture'}
+                  >
+                    <BedDouble className="size-3.5" /> Ajouter une nuit au compte du client
+                  </Button>
+                )}
+                {partSociete && partSociete.total > 0 && partClient && partClient.total > 0 && (
+                  <p className="mt-2 text-[11px] leading-4 text-ink-3">
+                    Deux factures distinctes seront émises : une à l’entreprise, une au client.
+                  </p>
+                )}
+              </div>
             </Card>
 
             <Card>
@@ -374,6 +516,12 @@ export function Caisse() {
           <p className="text-[12px] text-ink-3">Sélectionnez d’abord un folio dans la liste.</p>
         )}
       </Modal>
+
+      {apercu && (
+        <ApercuDocument titre={apercu.titre} onClose={() => setApercu(null)}>
+          {apercu.rendu}
+        </ApercuDocument>
+      )}
     </div>
   );
 }

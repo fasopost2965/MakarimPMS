@@ -1,4 +1,7 @@
-import { BASE_DATE, isoAdd, isoDiff, nuits as nbNuits } from './lib/date';
+import {
+  BASE_DATE, isoAdd, isoDiff, nuits as nbNuits,
+} from './lib/date';
+import { CLIENTS, PROFILS, SHIFTS, TACHES_TOURNEE, TYPES_CHAMBRE } from './data';
 import { montantHebergement, montantTaxeSejour } from './lib/pricing';
 
 // ------------------------------------------------------------------
@@ -38,6 +41,18 @@ export const CLIENT_PAR_CHAMBRE = {
   307: { client: 'Famille Idrissi', formule: 'PC', occupants: 3, arrivee: -2, depart: 3, regle: false },
   309: { client: 'N. Haddad', formule: 'BB', occupants: 2, arrivee: -1, depart: 2, regle: true },
   310: { client: 'K. Andersen', formule: 'BB', occupants: 2, arrivee: -2, depart: 5, regle: false },
+};
+
+// Rattachement des séjours de démonstration aux fiches clients : seuls
+// quelques noms sont connus, les autres afficheront une fiche « à compléter »
+// — c'est exactement ce que la réception doit voir (obligation légale).
+export const CLIENT_PAR_NOM = {
+  'S. Bennani': 'CL-5',
+  'L. Moreau': 'CL-6',
+  'M. et Mme Tazi': 'CL-7',
+  'K. Schreiber': 'CL-2',
+  'Groupe Attijari': 'CL-3',
+  'Groupe Al Omrane': 'CL-4',
 };
 
 // Arrivées du jour, chambres déjà propres et vendues.
@@ -107,18 +122,26 @@ export function buildInitialState(carte = []) {
     const sejourId = `S-${seqSejour}`;
     const folioId = `F-${1000 + seqFolio}`;
 
+    // Rattachement éventuel à une entreprise : c'est lui qui autorise la
+    // facturation séparée (part société / part client) dans la Caisse.
+    const ficheClient = CLIENTS.find((c) => c.id === CLIENT_PAR_NOM[info.client]);
+    const societeId = ficheClient?.type === 'entreprise' ? ficheClient.societeId : null;
+    const payeurDefaut = societeId ? 'societe' : 'client';
+
     const lignes = [
       {
         id: `${folioId}-1`,
         libelle: `Hébergement ${nb} nuit${nb > 1 ? 's' : ''} — ${info.formule}`,
         montant: montantHebergement(chambre.type, info.formule, info.occupants, nb),
         type: 'hebergement',
+        payeur: payeurDefaut,
       },
       {
         id: `${folioId}-2`,
         libelle: `Taxe de séjour (${info.occupants} pers. × ${nb} nuit${nb > 1 ? 's' : ''})`,
         montant: montantTaxeSejour(info.occupants, nb),
         type: 'taxe',
+        payeur: payeurDefaut,
       },
     ];
 
@@ -130,6 +153,9 @@ export function buildInitialState(carte = []) {
         libelle: `${ligne.qte} × ${article.nom}`,
         montant: article.prix * ligne.qte,
         type: 'restaurant',
+        // Les consommations du client sur son propre compte restent à sa
+        // charge, même quand l'hébergement est payé par l'entreprise.
+        payeur: 'client',
       });
     }
 
@@ -143,6 +169,8 @@ export function buildInitialState(carte = []) {
       chambre: String(numero),
       client: info.client,
       sejourId,
+      clientId: ficheClient?.id ?? null,
+      societeId,
       statut: 'ouvert',
       lignes,
       paiements,
@@ -158,6 +186,8 @@ export function buildInitialState(carte = []) {
       occupants: info.occupants,
       folioId,
       statut: 'en_cours',
+      clientId: ficheClient?.id ?? null,
+      societeId,
     });
 
     chambre.statut = 'occupee';
@@ -280,11 +310,140 @@ export function buildInitialState(carte = []) {
     },
   ];
 
-  // 7. Factures déjà émises (historique de la journée)
+  // 7. Factures déjà émises (historique de la journée) — avec le détail des
+  //    lignes : sans lui, un PDF de facture n'est pas conforme (mention des
+  //    prestations et ventilation de TVA obligatoires).
   const factures = [
-    { id: 'FA-2026-0184', client: 'Groupe Al Omrane', montant: 9_420, statut: 'payee', date },
-    { id: 'FA-2026-0185', client: 'Attijariwafa Bank', montant: 3_960, statut: 'emise', date },
+    {
+      id: 'FA-2026-0184', client: 'Al Omrane Nord', type: 'societe', payeur: 'societe',
+      societe: 'Al Omrane Nord', chambre: '105', statut: 'payee', date,
+      lignes: [
+        { libelle: 'Hébergement 3 nuits — Demi-pension (2 pers.)', montant: 8_580, tva: 10 },
+        { libelle: 'Taxe de séjour (2 pers. × 3 nuits)', montant: 18, tva: 0 },
+        { libelle: 'Restaurant — 2 dîners', montant: 822, tva: 20 },
+      ],
+    },
+    {
+      id: 'FA-2026-0185', client: 'Attijariwafa Bank', type: 'societe', payeur: 'societe',
+      societe: 'Attijariwafa Bank', chambre: '—', statut: 'emise', date,
+      lignes: [
+        { libelle: 'Location salle Martil — matinée', montant: 1_500, tva: 20 },
+        { libelle: 'Pause-café 2 services (22 pers.)', montant: 770, tva: 20 },
+        { libelle: 'Vidéoprojecteur + sonorisation', montant: 500, tva: 20 },
+        { libelle: 'Déjeuner 3 plats (12 pers.)', montant: 1_440, tva: 20 },
+      ],
+    },
   ];
+  for (const f of factures) f.montant = f.lignes.reduce((t, l) => t + l.montant, 0);
+
+  // 8. Fiches de police — établies à l'arrivée pour chaque séjour en cours.
+  //    `complete` exige la pièce d'identité : une fiche sans CIN ou passeport
+  //    est signalée en rouge à la réception.
+  const fichesPolice = sejours.map((sj, i) => {
+    const cl = CLIENTS.find((c) => c.id === CLIENT_PAR_NOM[sj.client]) ?? null;
+    const complete = Boolean(cl && (cl.pieceNumero ?? '').trim());
+    return {
+      id: `FP-${String(i + 1).padStart(4, '0')}`,
+      sejourId: sj.id,
+      chambre: sj.chambre,
+      client: sj.client,
+      clientId: cl?.id ?? null,
+      type: cl?.type ?? 'particulier',
+      societeId: cl?.societeId ?? null,
+      nom: cl?.nom ?? sj.client,
+      prenom: cl?.prenom ?? '',
+      dateNaissance: cl?.dateNaissance ?? '',
+      lieuNaissance: cl?.lieuNaissance ?? '',
+      nationalite: cl?.nationalite ?? '',
+      profession: cl?.profession ?? '',
+      domicile: cl?.domicile ?? '',
+      ville: cl?.ville ?? '',
+      telephone: cl?.telephone ?? '',
+      pieceType: cl?.pieceType ?? 'CIN',
+      pieceNumero: cl?.pieceNumero ?? '',
+      arrivee: sj.arrivee,
+      depart: sj.depart,
+      occupants: sj.occupants,
+      etablieLe: sj.arrivee,
+      signee: complete,
+      statut: complete ? 'complete' : 'a_completer',
+    };
+  });
+
+  // 9. Tours de quart : le matin est clos et signé, l'après-midi en cours,
+  //    la nuit à venir. Le rapport de shift sert de cahier de transmission.
+  const tournees = [
+    {
+      id: `TQ-${date}-matin`,
+      date,
+      shift: 'matin',
+      agent: SHIFTS[0].agent,
+      statut: 'clos',
+      debut: '06:00',
+      fin: '14:00',
+      closLe: '14:05',
+      taches: TACHES_TOURNEE.filter((t) => t.shift === 'tous' || t.shift === 'matin').map((t, i) => ({
+        id: t.id, label: t.label, fait: i !== 2,
+      })),
+      evenements: [
+        { heure: '06:40', texte: 'Chambre 203 hors service : climatisation, pièce commandée chez le frigoriste.' },
+        { heure: '09:15', texte: 'Famille El Amrani (101) demande un lit d’appoint — installé, 0 MAD.' },
+        { heure: '11:20', texte: 'Arrivée chambre 106 enregistrée, fiche de police à compléter (passeport non remis).' },
+        { heure: '12:50', texte: 'Groupe Attijari : 2 chambres supplémentaires demandées pour demain.' },
+      ],
+      remarques:
+        'Deux départs en retard (103 et 202) : clients encore en chambre à 14 h, prévenir le soir.',
+      consignes: 'Relancer la pièce d’identité de la 106 avant 20 h. Contrôler la 110 remise en état.',
+      caisse: { fond: 500, comptage: 5240, ecart: 0 },
+      signe: true,
+    },
+    {
+      id: `TQ-${date}-apres-midi`,
+      date,
+      shift: 'apres-midi',
+      agent: SHIFTS[1].agent,
+      statut: 'en_cours',
+      debut: '14:00',
+      fin: null,
+      closLe: null,
+      taches: TACHES_TOURNEE.filter((t) => t.shift === 'tous' || t.shift === 'apres-midi').map((t, i) => ({
+        id: t.id, label: t.label, fait: i < 2,
+      })),
+      evenements: [
+        { heure: '14:30', texte: 'Passage de consignes avec Salma — 2 départs en retard signalés.' },
+      ],
+      remarques: '',
+      consignes: '',
+      caisse: { fond: 500, comptage: 0, ecart: 0 },
+      signe: false,
+    },
+    {
+      id: `TQ-${date}-nuit`,
+      date,
+      shift: 'nuit',
+      agent: SHIFTS[2].agent,
+      statut: 'a_venir',
+      debut: '22:00',
+      fin: null,
+      closLe: null,
+      taches: TACHES_TOURNEE.filter((t) => t.shift === 'tous' || t.shift === 'nuit').map((t) => ({
+        id: t.id, label: t.label, fait: false,
+      })),
+      evenements: [],
+      remarques: '',
+      consignes: '',
+      caisse: { fond: 500, comptage: 0, ecart: 0 },
+      signe: false,
+    },
+  ];
+
+  // 10. Droits paramétrables : la Direction part des profils documentés et
+  //     peut les ajuster depuis l'écran « Rôles & permissions ».
+  const roles = Object.fromEntries(
+    Object.entries(PROFILS).map(([cle, p]) => [cle, { ecrans: [...p.ecrans], montants: p.montants }]),
+  );
+
+  const clients = CLIENTS.map((c) => ({ ...c }));
 
   const journal = [
     { id: 'J-1', heure: '13:42', texte: 'Note restaurant 230 MAD envoyée au folio de la chambre 204', ton: 'maj' },
@@ -305,8 +464,13 @@ export function buildInitialState(carte = []) {
     commandes,
     evenements,
     factures,
+    // Nouveaux référentiels d'exploitation (voir data.js).
+    clients,
+    fichesPolice,
+    tournees,
+    roles,
     journal,
-    seq: { sejour: seqSejour, folio: seqFolio, resa: seqResa, commande: 205, evenement: 5, facture: 185 },
+    seq: { sejour: seqSejour, folio: seqFolio, resa: seqResa, commande: 205, evenement: 5, facture: 185, fiche: fichesPolice.length },
   };
 }
 

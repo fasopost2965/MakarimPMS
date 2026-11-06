@@ -71,7 +71,10 @@ export const PROFILS = {
     personne: 'Youssef Benali',
     initiales: 'YB',
     accueil: 'dashboard',
-    ecrans: ['dashboard', 'chambres', 'reservations', 'restaurant', 'conference', 'caisse', 'tarifs'],
+    ecrans: [
+      'dashboard', 'chambres', 'reservations', 'restaurant', 'conference',
+      'caisse', 'documents', 'police', 'tournees', 'roles', 'tarifs',
+    ],
     montants: true,
   },
   reception: {
@@ -79,7 +82,7 @@ export const PROFILS = {
     personne: 'Salma Idrissi',
     initiales: 'SI',
     accueil: 'dashboard',
-    ecrans: ['dashboard', 'chambres', 'reservations', 'caisse', 'restaurant'],
+    ecrans: ['dashboard', 'chambres', 'reservations', 'caisse', 'restaurant', 'police', 'tournees', 'documents'],
     montants: true,
   },
   gouvernante: {
@@ -87,7 +90,7 @@ export const PROFILS = {
     personne: 'Naïma Chafik',
     initiales: 'NC',
     accueil: 'chambres',
-    ecrans: ['chambres'],
+    ecrans: ['chambres', 'tournees'],
     montants: false,
   },
   restaurant: {
@@ -95,7 +98,7 @@ export const PROFILS = {
     personne: 'Karim Azzouzi',
     initiales: 'KA',
     accueil: 'restaurant',
-    ecrans: ['restaurant'],
+    ecrans: ['restaurant', 'tournees'],
     montants: true,
   },
   comptable: {
@@ -103,7 +106,7 @@ export const PROFILS = {
     personne: 'Hicham Loukili',
     initiales: 'HL',
     accueil: 'caisse',
-    ecrans: ['dashboard', 'caisse', 'tarifs'],
+    ecrans: ['dashboard', 'caisse', 'documents', 'tarifs'],
     montants: true,
   },
   maintenance: {
@@ -111,10 +114,164 @@ export const PROFILS = {
     personne: 'Rachid Amrani',
     initiales: 'RA',
     accueil: 'chambres',
-    ecrans: ['chambres'],
+    ecrans: ['chambres', 'tournees'],
     montants: false,
   },
 };
+
+// ------------------------------------------------------------------
+// Clients : particuliers et entreprises (BR-CLI-001, BR-CLI-006)
+// Un client « entreprise » porte une raison sociale, un ICE et des
+// conditions de règlement : c'est ce qui autorise la facturation à la
+// société au lieu du client lui-même (voir la répartition de facturation
+// dans l'écran Caisse).
+// ------------------------------------------------------------------
+export const TYPES_CLIENT = {
+  particulier: { label: 'Particulier', chip: 'bg-sand-200 text-ink-2', dot: 'bg-ink-3' },
+  entreprise: { label: 'Entreprise', chip: 'bg-maj-100 text-maj', dot: 'bg-maj' },
+};
+
+export const ENTREPRISES = [
+  {
+    id: 'EN-1',
+    raison: 'Attijariwafa Bank',
+    ice: '001648392000047',
+    adresse: '2 boulevard Al Massira, Tétouan',
+    contact: 'Mme Fadwa Rami — achats',
+    conditions: 'Facture mensuelle, 30 jours fin de mois',
+  },
+  {
+    id: 'EN-2',
+    raison: 'Al Omrane Nord',
+    ice: '002015487000031',
+    adresse: 'Avenue des FAR, Tétouan',
+    contact: 'M. Karim Belkacem',
+    conditions: 'Facture par séjour, virement à 15 jours',
+  },
+  {
+    id: 'EN-3',
+    raison: 'Cabinet Fiducia',
+    ice: '002998734000012',
+    adresse: 'Rue Ibn Battouta, Tétouan',
+    contact: 'Mme Salima Ouazzani',
+    conditions: 'Comptant à la remise de la facture',
+  },
+];
+
+// Fiches de police : les champs exigés par le registre d'hébergement
+// (nom, prénom, date et lieu de naissance, nationalité, profession,
+// domicile, pièce d'identité, dates de séjour). Une fiche incomplète doit
+// être signalée à la réception — c'est une obligation, pas une préférence.
+export const CLIENT_VIDE = {
+  type: 'particulier',
+  societeId: null,
+  nom: '',
+  prenom: '',
+  dateNaissance: '',
+  lieuNaissance: '',
+  nationalite: 'Marocaine',
+  profession: '',
+  domicile: '',
+  ville: '',
+  telephone: '',
+  email: '',
+  pieceType: 'CIN',
+  pieceNumero: '',
+  pieceDelivreeLe: '',
+};
+
+export const CLIENTS = [
+  {
+    id: 'CL-1', type: 'particulier', nom: 'El Amrani', prenom: 'Yassine',
+    dateNaissance: '1984-03-14', lieuNaissance: 'Tétouan', nationalite: 'Marocaine',
+    profession: 'Ingénieur conseil', domicile: '18 rue Souika', ville: 'Tétouan',
+    telephone: '+212 6 61 24 88 03', email: 'y.elamrani@example.ma',
+    pieceType: 'CIN', pieceNumero: 'TB 841 205', pieceDelivreeLe: '2019-06-11',
+  },
+  {
+    id: 'CL-2', type: 'particulier', nom: 'Schreiber', prenom: 'Katrin',
+    dateNaissance: '1978-11-02', lieuNaissance: 'München', nationalite: 'Allemande',
+    profession: 'Architecte', domicile: 'Leopoldstraße 42', ville: 'Munich',
+    telephone: '+49 171 552 8890', email: 'k.schreiber@example.de',
+    pieceType: 'Passeport', pieceNumero: 'C4K8L2P11', pieceDelivreeLe: '2022-02-17',
+  },
+  {
+    id: 'CL-3', type: 'entreprise', societeId: 'EN-1', nom: 'Attijariwafa Bank', prenom: '—',
+    dateNaissance: '', lieuNaissance: 'Casablanca', nationalite: 'Marocaine',
+    profession: 'Établissement bancaire', domicile: '2 bd Al Massira', ville: 'Tétouan',
+    telephone: '+212 5 39 96 12 00', email: 'achats.nord@example.ma',
+    pieceType: 'RC', pieceNumero: 'RC 11245', pieceDelivreeLe: '',
+  },
+  {
+    id: 'CL-4', type: 'entreprise', societeId: 'EN-2', nom: 'Al Omrane Nord', prenom: '—',
+    dateNaissance: '', lieuNaissance: 'Tétouan', nationalite: 'Marocaine',
+    profession: 'Aménagement urbain', domicile: 'Avenue des FAR', ville: 'Tétouan',
+    telephone: '+212 5 39 97 41 20', email: 'direction@example.ma',
+    pieceType: 'RC', pieceNumero: 'RC 20881', pieceDelivreeLe: '',
+  },
+  {
+    id: 'CL-5', type: 'particulier', nom: 'Bennani', prenom: 'Sofia',
+    dateNaissance: '1992-07-21', lieuNaissance: 'Rabat', nationalite: 'Marocaine',
+    profession: 'Journaliste', domicile: '45 avenue Hassan II', ville: 'Rabat',
+    telephone: '+212 6 12 44 71 90', email: 's.bennani@example.ma',
+    pieceType: 'CIN', pieceNumero: 'RB 552 118', pieceDelivreeLe: '2021-09-03',
+  },
+  {
+    id: 'CL-6', type: 'particulier', nom: 'Moreau', prenom: 'Léa',
+    dateNaissance: '1990-01-09', lieuNaissance: 'Lyon', nationalite: 'Française',
+    profession: 'Photographe', domicile: '12 rue des Capucins', ville: 'Lyon',
+    telephone: '+33 6 88 41 20 55', email: 'lea.moreau@example.fr',
+    pieceType: 'Passeport', pieceNumero: '21FR88410', pieceDelivreeLe: '2021-04-22',
+  },
+  {
+    id: 'CL-7', type: 'particulier', nom: 'Tazi', prenom: 'Mehdi',
+    dateNaissance: '1975-05-30', lieuNaissance: 'Fès', nationalite: 'Marocaine',
+    profession: 'Commerçant', domicile: '7 derb El Horra', ville: 'Fès',
+    telephone: '+212 6 70 11 22 33', email: 'm.tazi@example.ma',
+    pieceType: 'CIN', pieceNumero: 'FE 118 447', pieceDelivreeLe: '2018-12-01',
+  },
+];
+
+// ------------------------------------------------------------------
+// Tours de quart — trois agents se relaient toutes les 8 heures. Le
+// rapport de fin de shift tient lieu de cahier de transmission : ce que
+// l'agent sortant signale doit être lu par l'agent entrant.
+// ------------------------------------------------------------------
+export const SHIFTS = [
+  { cle: 'matin', label: 'Matin', plage: '06:00 → 14:00', agent: 'Salma Idrissi', role: 'Réception · Chef de shift' },
+  { cle: 'apres-midi', label: 'Après-midi', plage: '14:00 → 22:00', agent: 'Omar Tazi', role: 'Réception' },
+  { cle: 'nuit', label: 'Nuit', plage: '22:00 → 06:00', agent: 'Nadia El Fassi', role: 'Réception · veilleuse de nuit' },
+];
+
+export const TACHES_TOURNEE = [
+  { id: 'passage', label: 'Passage des consignes avec le shift sortant', shift: 'tous' },
+  { id: 'caisse', label: 'Comptage de caisse et fond de caisse vérifié', shift: 'tous' },
+  { id: 'chambres', label: 'Contrôle des chambres à nettoyer', shift: 'tous' },
+  { id: 'arrivees', label: 'Arrivées du jour pointées au planning', shift: 'tous' },
+  { id: 'departs', label: 'Départs du jour contrôlés (folios soldés)', shift: 'tous' },
+  { id: 'ronde', label: 'Ronde des étages et des issues de secours', shift: 'nuit' },
+  { id: 'releve', label: 'Relevé des compteurs eau / électricité', shift: 'nuit' },
+  { id: 'petitdej', label: 'Service petit-déjeuner dressé et contrôlé', shift: 'matin' },
+  { id: 'menage', label: 'Point ménage avec la gouvernante', shift: 'matin' },
+  { id: 'reservations', label: 'Rappel des réservations du lendemain', shift: 'apres-midi' },
+  { id: 'resto', label: 'Point service avec le restaurant', shift: 'apres-midi' },
+  { id: 'night-audit', label: 'Clôture de journée (night audit)', shift: 'nuit' },
+];
+
+// Catalogue des droits paramétrables par la Direction (écran « Rôles »).
+export const PERMISSIONS = [
+  { cle: 'dashboard', label: 'Tableau de bord', groupe: 'Pilotage' },
+  { cle: 'chambres', label: 'Chambres & housekeeping', groupe: 'Exploitation' },
+  { cle: 'reservations', label: 'Réservations', groupe: 'Exploitation' },
+  { cle: 'restaurant', label: 'Restaurant', groupe: 'Exploitation' },
+  { cle: 'conference', label: 'Salle de conférence', groupe: 'Exploitation' },
+  { cle: 'police', label: 'Fiches de police', groupe: 'Réception' },
+  { cle: 'tournees', label: 'Tours de quart', groupe: 'Réception' },
+  { cle: 'caisse', label: 'Caisse & factures', groupe: 'Administration' },
+  { cle: 'documents', label: 'Documents & PDF', groupe: 'Administration' },
+  { cle: 'roles', label: 'Rôles & permissions', groupe: 'Administration' },
+  { cle: 'tarifs', label: 'Tarifs & paramètres', groupe: 'Administration' },
+];
 
 export const CATEGORIES_RESTO = ['Entrées', 'Plats', 'Grillades', 'Desserts', 'Boissons'];
 

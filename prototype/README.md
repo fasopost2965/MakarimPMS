@@ -55,10 +55,28 @@ chambre, encaissement, petit-déjeuner (couverts et pensions), rapport du jour.
 confirmation et facturation d'acompte.
 
 **Caisse & factures** · folios, lignes détaillées (hébergement / restaurant /
-taxe), encaissements, émission de facture, check-out.
+taxe), **répartition de facturation par ligne** (part entreprise / part client),
+prolongation d'une nuit au compte du client, émission de deux factures
+distinctes, encaissements, check-out, **régie restaurant** (ce que l'hôtel
+encaisse pour le restaurant et doit lui reverser).
 
 **Tarifs & paramètres** · grille 30 chambres, formules, saisons, fiscalité
 (10 % hébergement et pensions, 20 % annexes), politique d'annulation.
+
+**Fiches de police** · registre d'hébergement : une fiche par séjour, contrôle
+des champs obligatoires (pièce d'identité, naissance, nationalité), édition et
+impression A4. Une fiche incomplète est signalée en rouge.
+
+**Tours de quart** · les trois shifts de 8 h (06–14, 14–22, 22–06) : checklist
+de contrôles, main courante horodatée, remarques et consignes, comptage de
+caisse, clôture signée et rapport imprimable (cahier de transmission).
+
+**Rôles & permissions** · matrice rôles × écrans paramétrable par la Direction,
+avec verrous anti-lockout, aperçu de la navigation résultante et journalisation.
+
+**Documents & PDF** · bibliothèque des pièces imprimables du jour : factures et
+notes d'hôtel (ventilation TVA), fiches de police, rapports de tournée, relevé de
+régie restaurant. Aperçu A4 puis impression navigateur (« Enregistrer en PDF »).
 
 ## Profils et droits (RBAC)
 
@@ -67,12 +85,16 @@ Le menu de profil de la barre supérieure applique la matrice corrigée
 
 | Profil | Écrans | Montants | Ce que ça démontre |
 |---|---|:--:|---|
-| Direction | tous | oui | Supervision, clôture, tarifs |
-| Réception | tableau de bord, chambres, réservations, caisse, restaurant | oui | Encaisse et fait les départs (correction R1) |
-| Gouvernante | chambres | **non** | Aucune donnée de facturation (BR-HK-004) |
-| Restaurateur | restaurant | oui | Rôle créé pour L3 |
-| Comptable | tableau de bord, caisse, tarifs | oui | Facturation et avoirs, sans réservations |
-| Maintenance | chambres | **non** | Vue technique, hors-sujet financier |
+| Direction | tous (11 écrans) | oui | Supervision, clôture, tarifs, **paramétrage des rôles** |
+| Réception | tableau de bord, chambres, réservations, caisse, restaurant, fiches de police, tours de quart, documents | oui | Encaisse et fait les départs (correction R1) |
+| Gouvernante | chambres, tours de quart | **non** | Aucune donnée de facturation (BR-HK-004) |
+| Restaurateur | restaurant, tours de quart | oui | Rôle créé pour L3 |
+| Comptable | tableau de bord, caisse, documents, tarifs | oui | Facturation et avoirs, sans réservations |
+| Maintenance | chambres, tours de quart | **non** | Vue technique, hors-sujet financier |
+
+Ces valeurs sont désormais **paramétrables** dans l'écran « Rôles &
+permissions » : le tableau ci-dessus est la matrice documentée par défaut, la
+Direction peut l'ajuster (le serveur reste seul juge en production, BR-TR-004).
 
 ## Choix techniques
 
@@ -91,7 +113,7 @@ Le menu de profil de la barre supérieure applique la matrice corrigée
 
 | Changement | Détail |
 |---|---|
-| Prototype rendu **fonctionnel** | état persisté (`makarim-prototype-v3`), parcours chaînés : réservation → check-in → folio → restaurant → encaissement → check-out ; clôture de journée ; housekeeping |
+| Prototype rendu **fonctionnel** | état persisté (`makarim-prototype-v4`, migration depuis v3), parcours chaînés : réservation → check-in → folio → restaurant → encaissement → check-out ; clôture de journée ; housekeeping |
 | **5 écrans réécrits** | Dashboard, Chambres, Réservations, Restaurant, Conférence, Caisse, Tarifs — tous alimentés par le store, aucun chiffre figé |
 | **Sélecteur de profil RBAC** | 6 profils, navigation filtrée, montants masqués pour Gouvernante et Maintenance (miroir de la matrice révisée) |
 | **Canaux alignés** | suppression d'« Expedia » : walk-in / direct / Booking.com, conformément au mix cible du cahier des charges |
@@ -99,10 +121,19 @@ Le menu de profil de la barre supérieure applique la matrice corrigée
 | **Commentaires d'en-tête** | chaque fichier de `src/` documente son rôle et les règles métier (`BR-*`) qu'il matérialise |
 | Fermeture des panneaux par `Échap`, toasts repositionnés | conformité aux habitudes d'un logiciel de réception |
 | **Décisions de design** (RD-030) : échelle typographique à 4 paliers, piège de focus dans les modales, `aria-current` mobile | mise en œuvre de l'arbitrage rendu sur l'audit |
+| **Fiche de police** | registre d'hébergement complet (identité, pièce, séjour), contrôle des champs obligatoires, édition et impression A4 (BR-CLI-003, BR-CLI-005) |
+| **Documents & PDF** | factures ventilées par taux de TVA, fiches de police, rapports de tournée, relevé de régie — aperçu A4 et impression navigateur (BR-CLI-006, BR-REP-001) |
+| **Rôles paramétrables** | matrice 6 rôles × 11 écrans modifiable par la Direction, verrou anti-lockout, navigation recalculée (BR-TR-004, BR-AUD-002) |
+| **Tours de quart** | 3 shifts de 8 h, checklist, main courante, consignes, comptage de caisse, rapport signé (BR-RH-003/004/005) |
+| **Particuliers / entreprises** | typologie de client, fiche société (ICE, conditions), incidence sur la facturation (BR-CLI-001/006) |
+| **Facturation séparée** | payeur ligne par ligne, nuit supplémentaire au compte du client, deux factures société + client (BR-FAC-001, BR-SEJ-007) |
+| **Régie restaurant** | notes en chambre vs encaissement direct, relevé de ce que l'hôtel doit reverser au restaurant (BR-RST-002/005) |
 | **Audit de design** (voir `docs/audits/AUDIT_DESIGN_PROTOTYPE_2026-11.md`) | contrastes WCAG corrigés (6 paires), échelle typographique ramenée de 12 à 8 tailles, 3 rayons et 2 ombres tokenisés, labels associés, toasts annoncés, lien d'évitement, cibles tactiles à 36 px, capacité de salle lue dans le référentiel |
 
 ## Vérification
 
 Build de production et parcours testés automatiquement (esbuild + jsdom) :
-dashboard, check-in, housekeeping, envoi en chambre, confirmation de séminaire,
-encaissement, palette ⌘K, clôture de journée — **0 erreur console**.
+11 écrans, check-in, housekeeping, envoi en chambre, confirmation de séminaire,
+encaissement, palette ⌘K, clôture de journée, répartition société / client,
+émission de deux factures, aperçu et impression d'un document, clôture de shift,
+enregistrement de la matrice des rôles — **0 erreur console**.

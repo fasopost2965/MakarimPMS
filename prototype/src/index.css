@@ -135,3 +135,42 @@
     animation: none;
   }
 }
+
+/* ------------------------------------------------------------------
+   Impression : les documents (factures, fiches de police, rapports de
+   tournée) sortent seuls sur une feuille A4, sans la coquille de
+   l'application. `ApercuDocument` marque la zone à imprimer.
+   ------------------------------------------------------------------ */
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .zone-impression,
+  .zone-impression * {
+    visibility: visible;
+  }
+
+  .zone-impression {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 210mm;
+    max-width: none !important;
+    box-shadow: none !important;
+    padding: 14mm 16mm !important;
+  }
+}

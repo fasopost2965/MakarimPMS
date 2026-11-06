@@ -5,21 +5,94 @@
 //    `PAY_FOLIO`, `CLOSE_DAY`…) — même discipline qu'un service backend ;
 //  - état dérivé calculé par des sélecteurs purs (`kpiDuJour`,
 //    `chambresDisponibles`, `arriveesDuJour`…) et non stocké ;
-//  - persistance sous la clé `makarim-prototype-v3` : la démonstration survit au
+//  - persistance sous la clé `makarim-prototype-v4` : la démonstration survit au
 //    rechargement, le bouton ↺ la remet dans son état initial.
 //
 // Règles métier portées par le réducteur : BR-SEJ-002/004/005 (check-in, solde,
 // libération), BR-CHA-002/003 (états chambre), BR-FAC-003 (annulation logique),
-// BR-HK-001/003 (ménage), BR-RST-002 (envoi en chambre), BR-RES-007 (no-show).
+// BR-HK-001/003 (ménage), BR-RST-002 (envoi en chambre), BR-RES-007 (no-show),
+// BR-FAC-001 (répartition société / client et factures séparées), BR-SEJ-007
+// (prolongation), BR-RH-003/004 (tours de quart), BR-TR-004 (rôles).
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
 import { buildInitialState } from './seed';
-import { CARTE, PARAMS, TYPES_CHAMBRE } from './data';
-import { montantHebergement, montantTaxeSejour, soldeFolio, totalCommande } from './lib/pricing';
+import { CARTE, PARAMS, PROFILS, SHIFTS, TYPES_CHAMBRE } from './data';
+import {
+  montantHebergement, montantTaxeSejour, prixNuit, soldeFolio, totalCommande,
+} from './lib/pricing';
 import { fmtHeure, isoAdd, nuits as nbNuits } from './lib/date';
 
-const STORAGE_KEY = 'makarim-prototype-v3';
+// v4 : ajout des clients, fiches de police, tours de quart, rôles
+// paramétrables et de la répartition de facturation (payeur par ligne).
+const STORAGE_KEY = 'makarim-prototype-v4';
+const ANCIENNE_CLE = 'makarim-prototype-v3';
 const StoreContext = createContext(null);
+
+// Taux de TVA appliqué à une ligne de folio. La taxe de séjour n'est pas
+// soumise à TVA (elle est reversée au Trésor), l'hébergement et les pensions
+// sont à 10 %, les prestations annexes et la restauration à 20 %.
+export function tvaDeLigne(ligne) {
+  if (ligne.type === 'taxe') return 0;
+  if (ligne.type === 'hebergement') return PARAMS.tvaHebergement;
+  return PARAMS.tvaAnnexe;
+}
+
+// Découpe un folio par payeur. Un même séjour peut mêler une part entreprise
+// (les nuits commandées par la société) et une part client (prolongation,
+// extras, restaurant). Cette fonction est la source unique de la répartition.
+export function repartirFolio(state, folio) {
+  const societe = state.clients?.find((c) => c.id === folio.societeId)
+    ?? state.clients?.find((c) => c.societeId === folio.societeId);
+  const nomSociete = societe?.nom ?? 'Entreprise';
+  const groupes = {
+    societe: { payeur: 'societe', libelle: nomSociete, lignes: [], total: 0 },
+    client: { payeur: 'client', libelle: folio.client, lignes: [], total: 0 },
+  };
+  for (const ligne of folio.lignes) {
+    const cle = ligne.payeur === 'societe' ? 'societe' : 'client';
+    groupes[cle].lignes.push(ligne);
+    groupes[cle].total += ligne.montant;
+  }
+  return [groupes.societe, groupes.client];
+}
+
+// Régie restaurant : le restaurant a sa propre caisse, mais l'hôtel encaisse
+// pour son compte les notes portées en chambre et les paiements pris à la
+// réception. Le relevé dit ce que l'hôtel doit reverser au restaurant.
+export function regieRestaurant(state) {
+  const duJour = state.commandes;
+  const directes = duJour.filter((c) => c.statut === 'reglee' && !c.folioId);
+  const enChambre = duJour.filter((c) => (c.statut === 'envoyee' || c.folioId) && c.statut !== 'reglee');
+  const totalDirect = directes.reduce((s, c) => s + totalCommande(c), 0);
+  const totalChambre = enChambre.reduce((s, c) => s + totalCommande(c), 0);
+  const encaisseParHotel = totalDirect + totalChambre;
+
+  // Détail des moyens de paiement, pour le contrôle de caisse du soir.
+  const parMoyen = directes.reduce((acc, c) => {
+    const cle = c.moyen ?? 'Non précisé';
+    acc[cle] = (acc[cle] ?? 0) + totalCommande(c);
+    return acc;
+  }, {});
+
+  return {
+    directes,
+    enChambre,
+    totalDirect,
+    totalChambre,
+    encaisseParHotel,
+    aReverser: encaisseParHotel,
+    parMoyen,
+    couverts: duJour.reduce((s, c) => s + c.couverts, 0),
+    commandes: duJour.length,
+  };
+}
+
+// Écrans réellement ouverts à un profil : les droits paramétrés par la
+// Direction priment sur la matrice documentée, qui sert de valeur par défaut.
+export function ecransDuRole(state, profil) {
+  const roles = state.roles?.[profil];
+  return roles?.ecrans ?? (PROFILS[profil] ?? PROFILS.direction).ecrans;
+}
 
 function journal(state, texte, ton = 'maj') {
   return [{ id: `J-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`, heure: fmtHeure(), texte, ton }, ...state.journal].slice(0, 40);
@@ -44,12 +117,17 @@ function reducer(state, action) {
           libelle: `Hébergement ${nb} nuit${nb > 1 ? 's' : ''} — ${resa.formule}`,
           montant: montantHebergement(chambre.type, resa.formule, resa.occupants, nb),
           type: 'hebergement',
+          // Le payeur par défaut suit la nature du client : une entreprise
+          // règle l'hébergement, un particulier se règle lui-même. La ligne
+          // reste modifiable une par une dans la Caisse.
+          payeur: resa.societeId ? 'societe' : 'client',
         },
         {
           id: `${folioId}-2`,
           libelle: `Taxe de séjour (${resa.occupants} pers. × ${nb} nuit${nb > 1 ? 's' : ''})`,
           montant: montantTaxeSejour(resa.occupants, nb),
           type: 'taxe',
+          payeur: resa.societeId ? 'societe' : 'client',
         },
       ];
 
@@ -74,11 +152,23 @@ function reducer(state, action) {
             occupants: resa.occupants,
             folioId,
             statut: 'en_cours',
+            clientId: resa.clientId ?? null,
+            societeId: resa.societeId ?? null,
           },
         ],
         folios: [
           ...state.folios,
-          { id: folioId, chambre: resa.chambre, client: resa.client, sejourId, statut: 'ouvert', lignes, paiements: [] },
+          {
+            id: folioId,
+            chambre: resa.chambre,
+            client: resa.client,
+            sejourId,
+            clientId: resa.clientId ?? null,
+            societeId: resa.societeId ?? null,
+            statut: 'ouvert',
+            lignes,
+            paiements: [],
+          },
         ],
       };
       return { ...next, journal: journal(next, `Check-in — ${resa.client}, chambre ${resa.chambre}`, 'jade') };
@@ -137,6 +227,8 @@ function reducer(state, action) {
             heure: '',
             statut: 'confirmee',
             sejourId: null,
+            clientId: action.payload.clientId ?? null,
+            societeId: action.payload.societeId ?? null,
           },
         ],
       };
@@ -339,6 +431,227 @@ function reducer(state, action) {
       };
     }
 
+    // ---------------------------------------------------------------
+    // Facturation : un même folio peut être payé par deux personnes
+    // différentes (société + client). Le payeur se choisit ligne à ligne.
+    // ---------------------------------------------------------------
+    case 'SET_PAYEUR': {
+      const next = {
+        ...state,
+        folios: state.folios.map((f) =>
+          f.id !== action.folioId
+            ? f
+            : {
+                ...f,
+                lignes: f.lignes.map((l) =>
+                  l.id === action.ligneId ? { ...l, payeur: action.payeur } : l,
+                ),
+              },
+        ),
+      };
+      return {
+        ...next,
+        journal: journal(
+          next,
+          `Répartition de facturation — folio ${action.folioId} : ligne affectée au ${action.payeur}`,
+          'neutral',
+        ),
+      };
+    }
+
+    case 'PROLONGER_SEJOUR': {
+      const sejour = state.sejours.find((s) => s.id === action.sejourId);
+      if (!sejour) return state;
+      const chambre = state.chambres.find((c) => c.numero === sejour.chambre);
+      const folio = state.folios.find((f) => f.id === sejour.folioId);
+      if (!chambre || !folio) return state;
+
+      const prix = prixNuit(chambre.type, sejour.formule, sejour.occupants);
+      const taxe = PARAMS.taxeSejour * sejour.occupants;
+      const nouveauDepart = isoAdd(sejour.depart, 1);
+      const lignes = [
+        ...folio.lignes,
+        {
+          id: `${folio.id}-n${folio.lignes.length + 1}`,
+          libelle: 'Nuit supplémentaire demandée par le client',
+          montant: prix,
+          type: 'hebergement',
+          // Une prolongation décidée par le client sur son propre compte ne
+          // se refacture pas à l'entreprise : la ligne naît « client ».
+          payeur: 'client',
+          prolongation: true,
+        },
+        {
+          id: `${folio.id}-t${folio.lignes.length + 2}`,
+          libelle: 'Taxe de séjour (1 nuit, prolongation)',
+          montant: taxe,
+          type: 'taxe',
+          payeur: 'client',
+          prolongation: true,
+        },
+      ];
+
+      const next = {
+        ...state,
+        sejours: state.sejours.map((s) =>
+          s.id === sejour.id ? { ...s, depart: nouveauDepart } : s,
+        ),
+        chambres: state.chambres.map((c) =>
+          c.numero === sejour.chambre ? { ...c, depart: nouveauDepart } : c,
+        ),
+        reservations: state.reservations.map((r) =>
+          r.sejourId === sejour.id ? { ...r, depart: nouveauDepart } : r,
+        ),
+        folios: state.folios.map((f) => (f.id === folio.id ? { ...f, lignes } : f)),
+      };
+      return {
+        ...next,
+        journal: journal(
+          next,
+          `Prolongation d’une nuit — ${sejour.client}, chambre ${sejour.chambre} (${prix} MAD facturés au client)`,
+          'maj',
+        ),
+      };
+    }
+
+    case 'EMETTRE_FACTURES': {
+      const folio = state.folios.find((f) => f.id === action.folioId);
+      if (!folio) return state;
+
+      const repartition = repartirFolio(state, folio);
+      const payeurs = repartition.filter((r) => r.lignes.length > 0);
+      if (payeurs.length === 0) return state;
+
+      let seq = state.seq.facture;
+      const emises = payeurs.map((r) => {
+        seq += 1;
+        const numero = `FA-2026-0${String(seq).padStart(3, '0')}`;
+        return {
+          id: numero,
+          client: r.libelle,
+          type: r.payeur === 'societe' ? 'societe' : 'hotel',
+          payeur: r.payeur,
+          societe: r.payeur === 'societe' ? r.libelle : null,
+          folioId: folio.id,
+          chambre: folio.chambre,
+          montant: r.total,
+          statut: 'emise',
+          date: state.date,
+          lignes: r.lignes.map((l) => ({ libelle: l.libelle, montant: l.montant, tva: tvaDeLigne(l) })),
+        };
+      });
+
+      const next = {
+        ...state,
+        seq: { ...state.seq, facture: seq },
+        folios: state.folios.map((f) => (f.id === folio.id ? { ...f, statut: 'facture' } : f)),
+        factures: [...emises, ...state.factures],
+      };
+      return {
+        ...next,
+        journal: journal(
+          next,
+          `Facturation ${folio.chambre} — ${emises.map((f) => `${f.id} (${f.client})`).join(' + ')}`,
+          'neutral',
+        ),
+      };
+    }
+
+    // ---------------------------------------------------------------
+    // Tours de quart : checklist, main courante, clôture signée.
+    // ---------------------------------------------------------------
+    case 'TOGGLE_TACHE_TOURNEE': {
+      const next = {
+        ...state,
+        tournees: state.tournees.map((t) =>
+          t.id !== action.tourneeId
+            ? t
+            : {
+                ...t,
+                statut: t.statut === 'a_venir' ? 'en_cours' : t.statut,
+                taches: t.taches.map((x) => (x.id === action.tacheId ? { ...x, fait: !x.fait } : x)),
+              },
+        ),
+      };
+      return next;
+    }
+
+    case 'AJOUTER_EVENEMENT_TOURNEE': {
+      if (!action.texte.trim()) return state;
+      const next = {
+        ...state,
+        tournees: state.tournees.map((t) =>
+          t.id !== action.tourneeId
+            ? t
+            : {
+                ...t,
+                evenements: [...t.evenements, { heure: fmtHeure(), texte: action.texte.trim() }],
+              },
+        ),
+      };
+      return next;
+    }
+
+    case 'CLOTURER_TOURNEE': {
+      const tournee = state.tournees.find((t) => t.id === action.tourneeId);
+      if (!tournee) return state;
+      const suivante = SHIFTS[(SHIFTS.findIndex((s) => s.cle === tournee.shift) + 1) % SHIFTS.length];
+      const next = {
+        ...state,
+        tournees: state.tournees.map((t) =>
+          t.id !== tournee.id
+            ? t
+            : {
+                ...t,
+                statut: 'clos',
+                fin: fmtHeure(),
+                closLe: fmtHeure(),
+                signe: true,
+                remarques: action.remarques ?? t.remarques,
+                consignes: action.consignes ?? t.consignes,
+                caisse: { ...t.caisse, comptage: action.comptage ?? t.caisse.comptage },
+              },
+        ),
+      };
+      return {
+        ...next,
+        journal: journal(
+          next,
+          `Shift ${tournee.shift} clôturé par ${tournee.agent} — rapport disponible pour ${suivante.label}`,
+          'jade',
+        ),
+      };
+    }
+
+    // ---------------------------------------------------------------
+    // Direction : paramétrage des rôles (écrans + visibilité montants).
+    // ---------------------------------------------------------------
+    case 'SET_ROLES': {
+      const next = { ...state, roles: action.roles };
+      return { ...next, journal: journal(next, 'Matrice des rôles mise à jour par la Direction', 'neutral') };
+    }
+
+    case 'UPDATE_FICHE_POLICE': {
+      const next = {
+        ...state,
+        fichesPolice: state.fichesPolice.map((f) => {
+          if (f.id !== action.ficheId) return f;
+          const maj = { ...f, ...action.patch };
+          const complete = Boolean(
+            (maj.nom ?? '').trim() &&
+              (maj.pieceNumero ?? '').trim() &&
+              (maj.dateNaissance ?? '').trim() &&
+              (maj.nationalite ?? '').trim(),
+          );
+          return { ...maj, statut: complete ? 'complete' : 'a_completer', signee: complete };
+        }),
+      };
+      return {
+        ...next,
+        journal: journal(next, `Fiche de police ${action.ficheId} mise à jour`, 'neutral'),
+      };
+    }
+
     case 'SET_PROFIL':
       return { ...state, profil: action.payload };
 
@@ -377,12 +690,23 @@ function initialise() {
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, undefined, () => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(ANCIENNE_CLE);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && parsed.chambres) {
-          // État antérieur sans profil : on retombe sur la Direction.
-          return { ...parsed, profil: parsed.profil ?? 'direction' };
+          // Fusion avec le seed : un état enregistré par une version
+          // antérieure (sans clients, fiches de police, tournées ni rôles)
+          // reste utilisable au lieu de casser l'écran au premier accès.
+          const defauts = initialise();
+          return {
+            ...defauts,
+            ...parsed,
+            profil: parsed.profil ?? 'direction',
+            roles: parsed.roles ?? defauts.roles,
+            clients: parsed.clients ?? defauts.clients,
+            fichesPolice: parsed.fichesPolice ?? defauts.fichesPolice,
+            tournees: parsed.tournees ?? defauts.tournees,
+          };
         }
       }
     } catch {
@@ -421,6 +745,19 @@ export function AppProvider({ children }) {
       commitOrder: (payload) => dispatch({ type: 'COMMIT_ORDER', payload }),
       closeDay: () => dispatch({ type: 'CLOSE_DAY' }),
       setProfil: (profil) => dispatch({ type: 'SET_PROFIL', payload: profil }),
+      setPayeur: (folioId, ligneId, payeur) =>
+        dispatch({ type: 'SET_PAYEUR', folioId, ligneId, payeur }),
+      prolongerSejour: (sejourId) => dispatch({ type: 'PROLONGER_SEJOUR', sejourId }),
+      emettreFactures: (folioId) => dispatch({ type: 'EMETTRE_FACTURES', folioId }),
+      toggleTacheTournee: (tourneeId, tacheId) =>
+        dispatch({ type: 'TOGGLE_TACHE_TOURNEE', tourneeId, tacheId }),
+      ajouterEvenementTournee: (tourneeId, texte) =>
+        dispatch({ type: 'AJOUTER_EVENEMENT_TOURNEE', tourneeId, texte }),
+      cloturerTournee: (tourneeId, payload) =>
+        dispatch({ type: 'CLOTURER_TOURNEE', tourneeId, ...payload }),
+      setRoles: (roles) => dispatch({ type: 'SET_ROLES', roles }),
+      updateFichePolice: (ficheId, patch) =>
+        dispatch({ type: 'UPDATE_FICHE_POLICE', ficheId, patch }),
       reset: () => {
         localStorage.removeItem(STORAGE_KEY);
         dispatch({ type: 'RESET' });
