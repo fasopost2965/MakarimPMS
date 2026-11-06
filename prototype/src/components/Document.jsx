@@ -17,6 +17,7 @@
 
 import { Printer, X } from 'lucide-react';
 import { HOTEL } from '../data';
+import { useApp } from '../store';
 import { fmtCourt, fmtLong, money } from '../lib/date';
 import { Button, cx } from './ui';
 
@@ -53,21 +54,57 @@ export function Feuille({ children, className }) {
   );
 }
 
+// Identité imprimée : le papier reprend exactement ce que la Direction a
+// saisi dans « Tarifs & paramètres » (nom, logo, coordonnées, identifiants
+// fiscaux), à défaut les mentions de démonstration. Un document sans logo ni
+// adresse correcte n'a aucune valeur pour la police ou la comptabilité.
+export function identiteDocument(state) {
+  const p = state?.parametres ?? {};
+  const h = p.hotel ?? {};
+  const f = p.fiscalite ?? {};
+  return {
+    nom: h.nom || HOTEL.nom,
+    logo: h.logo || null,
+    ville: h.ville || HOTEL.ville,
+    categorie: h.categorie || HOTEL.categorie,
+    adresse: h.adresse || MENTIONS.adresse,
+    telephone: h.telephone || MENTIONS.telephone,
+    email: h.email || MENTIONS.email,
+    ice: f.ice || MENTIONS.ice,
+    rc: f.rc || MENTIONS.rc,
+    if: f.identifiantFiscal || MENTIONS.if,
+    patente: MENTIONS.patente,
+    banque: MENTIONS.banque,
+  };
+}
+
 function Entete({ titre, numero, date, sousTitre }) {
+  const { state } = useApp();
+  const id = identiteDocument(state);
   return (
     <header className="mb-6 border-b-2 border-ink pb-4">
       <div className="flex items-start justify-between gap-6">
-        <div>
-          <p className="font-display text-[22px] leading-none text-ink">{HOTEL.nom}</p>
-          <p className="mt-1 text-[11px] text-ink-2">
-            {HOTEL.categorie} · {HOTEL.adresse}
-          </p>
-          <p className="text-[11px] text-ink-3">
-            ICE {MENTIONS.ice} · RC {MENTIONS.rc} · IF {MENTIONS.if} · Patente {MENTIONS.patente}
-          </p>
-          <p className="text-[11px] text-ink-3">
-            Tél. {MENTIONS.telephone} · {MENTIONS.email}
-          </p>
+        <div className="flex items-start gap-3.5">
+          {id.logo && (
+            <img
+              src={id.logo}
+              alt=""
+              className="mt-0.5 size-14 shrink-0 object-contain"
+            />
+          )}
+          <div>
+            <p className="font-display text-[22px] leading-none text-ink">{id.nom}</p>
+            <p className="mt-1 text-[11px] text-ink-2">
+              {id.categorie} · {id.adresse}
+            </p>
+            <p className="text-[11px] text-ink-3">
+              ICE {id.ice} · {id.rc} · IF {id.if} · Patente {id.patente}
+            </p>
+            <p className="text-[11px] text-ink-3">
+              Tél. {id.telephone}
+              {id.email ? ` · ${id.email}` : ''}
+            </p>
+          </div>
         </div>
         <div className="text-right">
           <p className="text-[11px] font-semibold tracking-[0.14em] text-ink-3 uppercase">{titre}</p>
@@ -81,13 +118,18 @@ function Entete({ titre, numero, date, sousTitre }) {
 }
 
 function Pied() {
+  const { state } = useApp();
+  const id = identiteDocument(state);
+  const plafond = state?.parametres?.fiscalite?.plafondEspeces;
   return (
     <footer className="mt-8 border-t border-line pt-3 text-[11px] leading-4 text-ink-3">
       <p>
-        {MENTIONS.raison} · {MENTIONS.adresse} · Tél. {MENTIONS.telephone} · ICE {MENTIONS.ice} · RC{' '}
-        {MENTIONS.rc} · IF {MENTIONS.if} · CNSS {MENTIONS.cnss}
+        {id.nom} · {id.adresse} · Tél. {id.telephone} · ICE {id.ice} · {id.rc} · IF {id.if}
       </p>
-      <p className="mt-1">{MENTIONS.banque} · Paiement par virement, chèque ou espèces (plafond légal 10 000 MAD).</p>
+      <p className="mt-1">
+        {id.banque} · Paiement par virement, chèque ou espèces
+        {plafond ? ` (plafond légal ${money(plafond)} MAD)` : ''}.
+      </p>
       <p className="mt-1">
         Document édité le {fmtCourt(new Date().toISOString().slice(0, 10))} · démonstration, mentions légales fictives.
       </p>
@@ -228,6 +270,8 @@ function Ligne({ label, valeur, large }) {
 }
 
 export function FichePoliceDoc({ fiche }) {
+  const { state } = useApp();
+  const id = identiteDocument(state);
   const manquants = [
     !fiche.dateNaissance && 'date de naissance',
     !fiche.lieuNaissance && 'lieu de naissance',
@@ -297,8 +341,12 @@ export function FichePoliceDoc({ fiche }) {
       <div className="mb-4 flex items-start justify-between gap-4 border border-line px-3 py-2">
         <div>
           <p className="text-[9px] tracking-[0.12em] text-ink-3 uppercase">Établissement</p>
-          <p className="text-[11px] font-semibold text-ink">Hôtel Makarim · Tétouan</p>
-          <p className="text-[9.5px] text-ink-2">Avenue Mohammed V, Tétouan 93000 · 3 étoiles</p>
+          <p className="text-[11px] font-semibold text-ink">
+            {id.nom} · {id.ville}
+          </p>
+          <p className="text-[9.5px] text-ink-2">
+            {id.adresse} · {id.categorie}
+          </p>
         </div>
         <div className="text-right">
           <p className="text-[9px] tracking-[0.12em] text-ink-3 uppercase">Séjour</p>
@@ -344,7 +392,7 @@ export function FichePoliceDoc({ fiche }) {
       </div>
 
       <p className="mt-3 text-[8.5px] leading-3 text-ink-3">
-        Document produit par le PMS Makarim · toute rature invalide la fiche. Conservation :
+        Document produit par {id.nom} · toute rature invalide la fiche. Conservation :
         six mois. Communication : autorités de police et de gendarmerie sur réquisition.
       </p>
 

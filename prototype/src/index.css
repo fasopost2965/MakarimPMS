@@ -35,7 +35,13 @@
   --color-mist-200: #e8e8ed;     /* pistes, pastilles neutres */
   --color-mist-300: #d2d2d7;     /* scrollbar, séparateurs appuyés */
   --color-surface: #ffffff;
-  --color-nav: #000000;          /* barre de navigation, seul noir pur */
+  --color-nav: #000000;          /* barre de navigation, noir pur */
+  /* Variantes de barre latérale, au choix de l'utilisateur (v7.1). Le noir
+     reste le défaut ; ces teintes sont volontairement peu saturées pour ne
+     pas concurrencer l'accent unique. */
+  --color-nav-graphite: #272729;
+  --color-nav-nuit: #0b2a4a;
+  --color-nav-ocean: #123b3c;
 
   /* Encre */
   --color-ink: #1d1d1f;

@@ -28,7 +28,7 @@ import {
   Users,
 } from 'lucide-react';
 import { HOTEL, PROFILS } from '../data';
-import { kpiDuJour, useApp } from '../store';
+import { kpiDuJour, navApparence, useApp } from '../store';
 import { fmtLong } from '../lib/date';
 import { Button, Card, Kbd, Pill, Ring, cx } from './ui';
 
@@ -83,25 +83,141 @@ export function navFiltree(profil, roles, options) {
   })).filter((section) => section.items.length > 0);
 }
 
-function Mark({ logo }) {
+// Quatre couleurs de barre latérale, au choix de l'utilisateur (v7.1).
+// Chaque thème fournit un jeu complet de classes : fond, textes, survols,
+// item actif, tuile de pied et bouton. Les classes sont écrites en clair ici
+// pour que Tailwind les génère ; aucun écran ne doit en inventer d'autres.
+export const NAV_THEMES = {
+  noir: {
+    label: 'Noir',
+    fond: 'bg-nav',
+    bordure: 'border-white/10',
+    titre: 'text-white',
+    sous: 'text-white/55',
+    groupe: 'text-white/40',
+    item: 'text-white/65 hover:bg-white/[0.06] hover:text-white',
+    actif: 'bg-white/[0.12] font-semibold text-white',
+    icone: 'text-white/45 group-hover:text-white/80',
+    iconeActive: 'text-white',
+    badge: 'bg-white/15 text-white',
+    tuile: 'bg-white/[0.06]',
+    tuileLabel: 'text-white/50',
+    tuileValeur: 'text-white',
+    pied: 'text-white/35',
+    bouton: 'bg-white text-ink',
+    anneau: '#2997ff',
+    marque: 'bg-white text-maj',
+  },
+  graphite: {
+    label: 'Graphite',
+    fond: 'bg-nav-graphite',
+    bordure: 'border-white/10',
+    titre: 'text-white',
+    sous: 'text-white/55',
+    groupe: 'text-white/40',
+    item: 'text-white/65 hover:bg-white/[0.06] hover:text-white',
+    actif: 'bg-white/[0.12] font-semibold text-white',
+    icone: 'text-white/45 group-hover:text-white/80',
+    iconeActive: 'text-white',
+    badge: 'bg-white/15 text-white',
+    tuile: 'bg-white/[0.06]',
+    tuileLabel: 'text-white/50',
+    tuileValeur: 'text-white',
+    pied: 'text-white/35',
+    bouton: 'bg-white text-ink',
+    anneau: '#2997ff',
+    marque: 'bg-white text-maj',
+  },
+  nuit: {
+    label: 'Bleu nuit',
+    fond: 'bg-nav-nuit',
+    bordure: 'border-white/10',
+    titre: 'text-white',
+    sous: 'text-white/55',
+    groupe: 'text-white/40',
+    item: 'text-white/65 hover:bg-white/[0.06] hover:text-white',
+    actif: 'bg-white/[0.12] font-semibold text-white',
+    icone: 'text-white/45 group-hover:text-white/80',
+    iconeActive: 'text-white',
+    badge: 'bg-white/15 text-white',
+    tuile: 'bg-white/[0.06]',
+    tuileLabel: 'text-white/50',
+    tuileValeur: 'text-white',
+    pied: 'text-white/35',
+    bouton: 'bg-white text-ink',
+    anneau: '#2997ff',
+    marque: 'bg-white text-maj',
+  },
+  ocean: {
+    label: 'Vert océan',
+    fond: 'bg-nav-ocean',
+    bordure: 'border-white/10',
+    titre: 'text-white',
+    sous: 'text-white/55',
+    groupe: 'text-white/40',
+    item: 'text-white/65 hover:bg-white/[0.06] hover:text-white',
+    actif: 'bg-white/[0.12] font-semibold text-white',
+    icone: 'text-white/45 group-hover:text-white/80',
+    iconeActive: 'text-white',
+    badge: 'bg-white/15 text-white',
+    tuile: 'bg-white/[0.06]',
+    tuileLabel: 'text-white/50',
+    tuileValeur: 'text-white',
+    pied: 'text-white/35',
+    bouton: 'bg-white text-ink',
+    anneau: '#5ac8fa',
+    marque: 'bg-white text-maj',
+  },
+  clair: {
+    label: 'Clair',
+    fond: 'bg-surface',
+    bordure: 'border-line',
+    titre: 'text-ink',
+    sous: 'text-ink-3',
+    groupe: 'text-ink-3',
+    item: 'text-ink-2 hover:bg-mist-100 hover:text-ink',
+    actif: 'bg-mist-100 font-semibold text-ink',
+    icone: 'text-ink-3 group-hover:text-ink-2',
+    iconeActive: 'text-maj',
+    badge: 'bg-mist-200 text-ink-2',
+    tuile: 'border border-line bg-mist-50',
+    tuileLabel: 'text-ink-3',
+    tuileValeur: 'text-ink',
+    pied: 'text-ink-3',
+    bouton: 'bg-ink text-white',
+    anneau: 'var(--color-maj)',
+    marque: 'border border-line bg-mist-100 text-maj',
+  },
+};
+
+export const NAV_APERCU = {
+  noir: '#000000',
+  graphite: '#272729',
+  nuit: '#0b2a4a',
+  ocean: '#123b3c',
+  clair: '#ffffff',
+};
+
+function Mark({ logo, theme }) {
   // Le logo est téléversé depuis « Tarifs & paramètres » ; sans logo, on
-  // retombe sur la marque géométrique par défaut.
+  // retombe sur la marque géométrique par défaut. La pastille s'adapte au
+  // thème : blanche sur fond sombre, cerclée sur fond clair.
   if (logo) {
     return (
-      <div className="grid size-9 place-items-center overflow-hidden rounded-[11px] bg-white">
+      <div className={cx('grid size-9 place-items-center overflow-hidden rounded-[11px] p-px', theme?.marque ?? 'bg-white')}>
         <img src={logo} alt="" className="size-full object-contain" />
       </div>
     );
   }
   return (
-    <div className="relative grid size-9 place-items-center overflow-hidden rounded-[11px] bg-white text-maj">
+    <div className={cx('relative grid size-9 place-items-center overflow-hidden rounded-[11px]', theme?.marque ?? 'bg-white text-maj')}>
       <svg viewBox="0 0 32 32" className="size-6" aria-hidden>
         <path
           fill="currentColor"
           opacity="0.95"
           d="M16 2l3.2 6.6L26 6.6l-2 6.5 6.6 3.2-6.6 3.2 2 6.5-6.8-2L16 31l-3.2-6.9-6.8 2 2-6.5L1.4 16.6l6.6-3.2-2-6.5 6.8 2z"
         />
-        <circle cx="16" cy="16.5" r="3.4" fill="#ffffff" />
+        <circle cx="16" cy="16.5" r="3.4" fill="currentColor" />
       </svg>
     </div>
   );
@@ -111,16 +227,28 @@ export function Sidebar({ active, onNavigate, onNightAudit }) {
   const { state } = useApp();
   const kpi = kpiDuJour(state);
   const aTraiter = state.chambres.filter((c) => c.statut === 'a_nettoyer').length;
+  const theme = NAV_THEMES[navApparence(state)] ?? NAV_THEMES.noir;
+  const hotel = state.parametres?.hotel ?? {};
+  const nom = hotel.nom ?? HOTEL.nom;
 
   return (
-    <aside className="hidden w-[248px] shrink-0 flex-col bg-nav text-white lg:flex">
+    <aside
+      className={cx(
+        'hidden w-[248px] shrink-0 flex-col border-r lg:flex',
+        theme.fond,
+        theme.bordure,
+      )}
+    >
       <div className="px-5 pt-6 pb-4">
         <div className="flex items-center gap-3">
-          <Mark logo={state.parametres?.hotel?.logo} />
+          <Mark logo={hotel.logo} theme={theme} />
           <div className="min-w-0">
-            <p className="font-display truncate text-[17px] leading-tight text-white">Makarim</p>
-            <p className="mt-0.5 truncate text-[12px] leading-none text-white/55">
-              3★ · {HOTEL.ville} · {state.chambres.length} ch.
+            <p className={cx('font-display truncate text-[17px] leading-tight', theme.titre)}>
+              {nom}
+            </p>
+            <p className={cx('mt-0.5 truncate text-[12px] leading-none', theme.sous)}>
+              {hotel.categorie ?? HOTEL.categorie} · {hotel.ville ?? HOTEL.ville} ·{' '}
+              {state.chambres.length} ch.
             </p>
           </div>
         </div>
@@ -129,7 +257,7 @@ export function Sidebar({ active, onNavigate, onNightAudit }) {
       <nav className="flex-1 overflow-y-auto px-3 pt-2 pb-4">
         {navFiltree(state.profil, state.roles, state.parametres?.options).map((section) => (
           <div key={section.groupe} className="mb-5">
-            <p className="mb-1 px-3 text-[11px] font-normal tracking-[0.04em] text-white/40 uppercase">
+            <p className={cx('mb-1 px-3 text-[11px] font-normal tracking-[0.04em] uppercase', theme.groupe)}>
               {section.groupe}
             </p>
             <ul className="space-y-0.5">
@@ -146,18 +274,16 @@ export function Sidebar({ active, onNavigate, onNightAudit }) {
                       aria-current={isActive ? 'page' : undefined}
                       className={cx(
                         'group flex w-full items-center gap-2.5 rounded-[8px] px-3 py-2 text-left text-[13px] tracking-[-0.12px] transition-colors',
-                        isActive
-                          ? 'bg-white/12 font-semibold text-white'
-                          : 'font-normal text-white/65 hover:bg-white/6 hover:text-white',
+                        isActive ? theme.actif : `font-normal ${theme.item}`,
                       )}
                     >
                       <Icon
-                        className={cx('size-4 shrink-0', isActive ? 'text-white' : 'text-white/45 group-hover:text-white/80')}
+                        className={cx('size-4 shrink-0', isActive ? theme.iconeActive : theme.icone)}
                         strokeWidth={1.6}
                       />
                       <span className="min-w-0 flex-1 truncate">{item.label}</span>
                       {badge && (
-                        <span className="tnum rounded-full bg-white/15 px-1.5 py-0.5 text-[11px] font-semibold text-white">
+                        <span className={cx('tnum rounded-full px-1.5 py-0.5 text-[11px] font-semibold', theme.badge)}>
                           {badge}
                         </span>
                       )}

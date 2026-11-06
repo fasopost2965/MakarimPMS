@@ -49,6 +49,22 @@ function Logo({ src, nom, grand = false }) {
 export function Login({ onConnecte }) {
   const { state, actions } = useApp();
   const hotel = state.parametres?.hotel ?? { nom: HOTEL.nom, logo: null };
+  // Identité affichée à gauche : rien n'est écrit en dur, tout vient des
+  // paramètres (« Tarifs & paramètres » > Identité de l'établissement).
+  const fiche = {
+    nom: hotel.nom ?? HOTEL.nom,
+    categorie: hotel.categorie ?? HOTEL.categorie,
+    ville: hotel.ville ?? HOTEL.ville,
+    adresse: hotel.adresse ?? HOTEL.adresse,
+    telephone: hotel.telephone ?? '',
+    email: hotel.email ?? '',
+  };
+  const salle = (state.parametres?.salles ?? []).find((x) => x.active !== false);
+  const lignes = [
+    fiche.adresse && { cle: 'adresse', label: 'Adresse', valeur: fiche.adresse },
+    fiche.telephone && { cle: 'telephone', label: 'Téléphone', valeur: fiche.telephone },
+    fiche.email && { cle: 'email', label: 'Courriel', valeur: fiche.email },
+  ].filter(Boolean);
   // La liste vient de l'état : un compte créé dans « Rôles & permissions »
   // est immédiatement utilisable ici, un compte désactivé disparaît.
   const comptes = (state.comptes ?? []).filter((c) => c.actif !== false);
@@ -79,33 +95,46 @@ export function Login({ onConnecte }) {
 
   return (
     <div className="grid min-h-screen bg-mist-100 lg:grid-cols-[1.1fr_1fr]">
-      {/* Colonne gauche : identité de l'établissement */}
+      {/* Colonne gauche : carte d'identité de l'établissement, alimentée par
+          les paramètres. Aucun argument commercial : nom, coordonnées et
+          capacité réelle, comme sur la façade. */}
       <div className="relative hidden overflow-hidden bg-nav px-12 py-10 text-white lg:flex lg:flex-col lg:justify-between">
-
         <div className="relative flex items-center gap-3">
-          <Logo src={hotel.logo} nom={hotel.nom} />
+          <Logo src={hotel.logo} nom={fiche.nom} />
           <div>
-            <p className="font-display text-[17px] leading-tight text-white">{hotel.nom}</p>
-            <p className="text-[12px] text-white/55">{HOTEL.categorie} · {HOTEL.ville} · Maroc</p>
+            <p className="font-display text-[17px] leading-tight text-white">{fiche.nom}</p>
+            <p className="text-[12px] text-white/55">
+              {fiche.categorie} · {fiche.ville} · Maroc
+            </p>
           </div>
         </div>
 
         <div className="relative max-w-md">
-          <h1 className="font-display text-[40px] leading-[1.1] tracking-[-0.5px] text-white">
-            30 chambres. Un restaurant. Une salle.
-            <br />
-            Un seul poste de travail.
-          </h1>
-          <p className="mt-4 max-w-md text-[17px] leading-[1.47] tracking-[-0.374px] text-white/70">
-            Réception, housekeeping, restauration, caisse et direction partagent la
-            même journée d’exploitation. Chaque geste est tracé, chaque note se
-            retrouve dans le folio du client.
+          <p className="font-display text-[40px] leading-[1.1] tracking-[-0.5px] text-white">
+            {fiche.nom}
           </p>
-          <ul className="mt-8 space-y-3 text-[14px] text-white/60">
-            <li>Arrivées et départs en un clic, folio toujours à jour</li>
-            <li>Note restaurant portée en chambre, régie reversée au restaurant</li>
-            <li>Fiche de police, tours de quart et rapports exportables</li>
-          </ul>
+          <p className="mt-2 text-[19px] leading-[1.4] text-white/70">
+            {fiche.categorie} · {fiche.ville}
+          </p>
+          <dl className="mt-8 space-y-3 border-t border-white/10 pt-6">
+            {lignes.map((l) => (
+              <div key={l.cle} className="flex gap-4">
+                <dt className="w-24 shrink-0 text-[12px] tracking-[0.02em] text-white/40 uppercase">
+                  {l.label}
+                </dt>
+                <dd className="min-w-0 flex-1 text-[14px] text-white/85">{l.valeur}</dd>
+              </div>
+            ))}
+            <div className="flex gap-4">
+              <dt className="w-24 shrink-0 text-[12px] tracking-[0.02em] text-white/40 uppercase">
+                Capacité
+              </dt>
+              <dd className="min-w-0 flex-1 text-[14px] text-white/85">
+                {state.chambres.length} chambres
+                {salle ? ` · ${salle.nom} (${salle.capacite} places)` : ''}
+              </dd>
+            </div>
+          </dl>
         </div>
 
         <p className="relative text-[12px] text-white/35">

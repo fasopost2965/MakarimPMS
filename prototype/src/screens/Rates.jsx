@@ -20,6 +20,7 @@ import { FORMULES, HOTEL, PARAMS, POLITIQUE, TYPES_CHAMBRE } from '../data';
 import { useApp } from '../store';
 import { fmtLong, money } from '../lib/date';
 import { Button, Card, CardHeader, Modal, Pill, cx, useToast } from '../components/ui';
+import { NAV_APERCU, NAV_THEMES } from '../components/Shell';
 import { InfoBulle } from '../components/InfoBulle';
 
 const OPTIONS = [
@@ -56,6 +57,13 @@ export function Rates() {
   const [saisons, setSaisons] = useState(() => structuredClone(params.saisons));
   const [demiJournee, setDemiJournee] = useState(params.demiJournee);
   const [nomHotel, setNomHotel] = useState(params.hotel.nom);
+  const [identite, setIdentite] = useState({
+    ville: params.hotel.ville ?? HOTEL.ville,
+    categorie: params.hotel.categorie ?? HOTEL.categorie,
+    adresse: params.hotel.adresse ?? HOTEL.adresse,
+    telephone: params.hotel.telephone ?? '',
+    email: params.hotel.email ?? '',
+  });
   const [fiscalite, setFiscalite] = useState(() => ({ ...params.fiscalite }));
   const [deverrouille, setDeverrouille] = useState(false);
   const [demandeCode, setDemandeCode] = useState(false);
@@ -401,7 +409,10 @@ export function Rates() {
 
         <div className="space-y-4">
           <Card>
-            <CardHeader titre="Identité de l’établissement" sousTitre="Nom et logo affichés à la connexion et dans l’application" />
+            <CardHeader
+              titre="Identité de l’établissement"
+              sousTitre="Reprise à la connexion, dans la barre latérale et sur tous les documents imprimés"
+            />
             <div className="space-y-3 px-5 py-4">
               <div>
                 <label htmlFor="rt-nom" className="text-[12px] font-semibold text-ink-2">Nom commercial</label>
@@ -446,10 +457,88 @@ export function Rates() {
                   </div>
                 </div>
                 <p className="mt-1.5 text-[11px] leading-4 text-ink-3">
-                  PNG, JPG ou SVG, 400 Ko maximum. Le logo remplace la marque par défaut sur la page
-                  de connexion et dans la barre latérale.
+                  PNG, JPG ou SVG, 400 Ko maximum. Le logo remplace la marque par défaut à la
+                  connexion, dans la barre latérale et en tête des documents imprimés.
                 </p>
               </div>
+
+              {/* Ces informations ne sont pas décoratives : elles composent la
+                  carte d'identité de l'écran de connexion et l'en-tête des
+                  factures et fiches de police. Les laisser vides retire la
+                  ligne correspondante. */}
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[
+                  { cle: 'categorie', label: 'Catégorie', exemple: '3 étoiles' },
+                  { cle: 'ville', label: 'Ville', exemple: 'Tétouan' },
+                  { cle: 'adresse', label: 'Adresse', exemple: 'Avenue Mohammed V' },
+                  { cle: 'telephone', label: 'Téléphone', exemple: '+212 5 39 00 00 00' },
+                  { cle: 'email', label: 'Courriel', exemple: 'reception@…' },
+                ].map((champ) => (
+                  <div key={champ.cle} className={champ.cle === 'adresse' ? 'sm:col-span-2' : ''}>
+                    <label htmlFor={`id-${champ.cle}`} className="text-[12px] font-medium text-ink-2">
+                      {champ.label}
+                    </label>
+                    <input
+                      id={`id-${champ.cle}`}
+                      value={identite[champ.cle]}
+                      placeholder={champ.exemple}
+                      onChange={(e) => setIdentite((v) => ({ ...v, [champ.cle]: e.target.value }))}
+                      onBlur={() =>
+                        actions.setHotel({ [champ.cle]: identite[champ.cle].trim() })
+                      }
+                      className="mt-1.5 h-9 w-full rounded-lg border border-line-strong bg-surface px-2.5 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/20"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader
+              titre="Apparence"
+              sousTitre="Couleur de la barre latérale. Le fond de page reste clair ; seule la navigation change."
+            />
+            <div className="px-5 py-4">
+              <fieldset>
+                <legend className="sr-only">Couleur de la barre latérale</legend>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                  {Object.entries(NAV_THEMES).map(([cle, t]) => {
+                    const actif = (params.apparence?.nav ?? 'noir') === cle;
+                    return (
+                      <button
+                        key={cle}
+                        type="button"
+                        onClick={() => {
+                          actions.setApparence({ nav: cle });
+                          push(`Barre latérale : ${t.label.toLowerCase()}.`, 'success');
+                        }}
+                        aria-pressed={actif}
+                        className={cx(
+                          'flex items-center gap-2 rounded-[11px] border px-2.5 py-2 text-left transition-colors',
+                          actif ? 'border-maj bg-maj-50' : 'border-line hover:bg-mist-50',
+                        )}
+                      >
+                        <span
+                          className={cx(
+                            'size-6 shrink-0 rounded-full border',
+                            cle === 'clair' ? 'border-line-strong' : 'border-transparent',
+                          )}
+                          style={{ backgroundColor: NAV_APERCU[cle] }}
+                          aria-hidden
+                        />
+                        <span className="min-w-0 truncate text-[12px] font-medium text-ink">
+                          {t.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
+              <p className="mt-2 text-[11px] leading-4 text-ink-3">
+                Cinq teintes, dont une claire pour les postes très éclairés. Le choix est
+                enregistré sur le poste et s’applique à toute la session.
+              </p>
             </div>
           </Card>
 

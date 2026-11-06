@@ -161,6 +161,9 @@ Direction peut l'ajuster (le serveur reste seul juge en production, BR-TR-004).
 | **Check-in / check-out visibles** | bloc « Réception du jour » (arrivées et départs), check-out bloqué si folio non soldé |
 | **Exports PDF / CSV / Excel** | un composant unique pour tous les rapports : aperçu A4, CSV point-virgule UTF-8, classeur Excel (.xls) |
 | **Routes** | l'écran courant est dans l'URL (`#/stock`), lien direct, rafraîchissement et retour navigateur — audit dans `docs/audits/ROUTES_2026-11.md` |
+| **Apparence réglable** | cinq couleurs de barre latérale (noir, graphite, bleu nuit, vert océan, clair) enregistrées avec la session (RD-035) |
+| **Identité imprimée** | logo + nom + adresse + téléphone + identifiants fiscaux repris des paramètres sur tous les documents, y compris la fiche de police |
+| **Connexion épurée** | plus de texte commercial : carte d'identité de l'établissement alimentée par les paramètres |
 | **Design system Apple** (v7, `docs/audits/DESIGN_SYSTEM_APPLE_2026-11.md`) | palette sable supprimée, accent unique `#0066cc`, navigation noire, typographie SF Pro, trois rayons, une seule ombre, `scale(0.95)` au press, tirets cadratins bannis |
 | **Audit de design** (voir `docs/audits/AUDIT_DESIGN_PROTOTYPE_2026-11.md`) | contrastes WCAG corrigés (6 paires), échelle typographique ramenée de 12 à 8 tailles, 3 rayons et 2 ombres tokenisés, labels associés, toasts annoncés, lien d'évitement, cibles tactiles à 36 px, capacité de salle lue dans le référentiel |
 

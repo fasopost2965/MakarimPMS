@@ -307,6 +307,16 @@ Décisions structurantes prises **pendant ou après l'audit** (distinct des ADR 
 - **Date** : 2026-11-06.
 - **Décideur** : Claude, sur mandat explicite.
 
+### RD-035 — L'apparence de la barre latérale est un choix d'utilisateur, l'identité imprimée vient des paramètres
+
+- **Décision** : la couleur de la barre latérale devient un **réglage** (noir par défaut, graphite, bleu nuit, vert océan, clair), enregistré avec la session et modifiable dans « Tarifs & paramètres > Apparence ». Par ailleurs l'écran de connexion n'affiche plus de discours commercial : il présente une **carte d'identité** (nom, catégorie, ville, adresse, téléphone, courriel, capacité) dont chaque ligne provient des paramètres. Le **logo et ces coordonnées** remontent aussi dans l'en-tête et le pied de tous les documents imprimés, ainsi que dans l'en-tête de la fiche de police.
+- **Raison** : « le design système est beau mais la barre latérale doit pouvoir changer de couleur pour les utilisateurs qui ne veulent pas le noir » et « enlever le titre, simplifier : Hôtel Makarim Tétouan, ou des informations complémentaires tirées des paramètres ». Le fond noir plein écran fatigue certains postes (réception très éclairée, écran partagé) ; un slogan de trois paragraphes n'apporte rien à un agent qui se connecte huit fois par jour. Enfin, une facture sans logo ni coordonnées exactes n'a aucune valeur légale ou commerciale.
+- **Alternatives considérées** : (a) thème sombre global — écarté, le tableau de bord doit rester clair pour les documents et la lecture des chiffres ; (b) couleur libre au sélecteur — écarté, une charte d'exploitation ne doit pas produire de combinaisons illisibles ; **retenue** : cinq teintes contrôlées, chacune avec ses classes de texte et de survol, la variante claire réservant l'accent bleu à l'item actif.
+- **Conséquence** : `parametres.apparence.nav` et `parametres.hotel` sont la source unique de l'apparence et de l'identité. Un poste qui change de couleur la conserve au rechargement. Les documents déjà imprimés ne changent pas rétroactivement.
+- **Décisions liées** : RD-034 (système visuel Apple), RD-032 (paramétrage), **BR-CLI-006**, **BR-FAC-007**.
+- **Date** : 2026-11-06.
+- **Décideur** : Claude, sur demande explicite du commanditaire.
+
 ---
 
 ## Décisions en attente (questions ouvertes de l'audit nécessitant un arbitrage humain)

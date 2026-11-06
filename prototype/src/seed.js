@@ -459,7 +459,20 @@ export function buildInitialState(carte = []) {
     ),
     saisons: SAISONS.map((s) => ({ ...s })),
     demiJournee: FORFAIT_DEMI_JOURNEE,
-    hotel: { nom: HOTEL.nom, logo: null, ville: HOTEL.ville },
+    // Identité de l'établissement : sert la connexion, la barre latérale et
+    // l'en-tête de tous les documents imprimés (logo compris).
+    hotel: {
+      nom: HOTEL.nom,
+      logo: null,
+      ville: HOTEL.ville,
+      categorie: HOTEL.categorie,
+      adresse: HOTEL.adresse,
+      telephone: '+212 5 39 96 44 10',
+      email: 'reception@hotel-makarim.ma',
+    },
+    // Apparence : chacun choisit la couleur de sa barre latérale. Le fond de
+    // page reste blanc/parchemin, seul le chrome de navigation change.
+    apparence: { nav: 'noir' },
     options: {
       dayUse: true,
       minibar: true,

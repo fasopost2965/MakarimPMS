@@ -60,3 +60,38 @@ les folios et la caisse. Trois écarts assumés, tous documentés :
 - Les documents imprimés (factures, fiches de police, rapports) gardent une typographie sérif ? **Non** : ils utilisent la même pile, en noir sur blanc, sans couleur d'accent. La question d'une refonte des formulaires légaux pré-imprimés reste hors périmètre.
 - `@fontsource/marcellus` reste déclaré dans `package.json` mais n'est plus importé : à retirer lors de la prochaine mise à jour des dépendances.
 - Le mode sombre n'est pas implémenté : le système Apple en prévoit un, mais un PMS de réception fonctionne en plein jour et l'ajouter doublerait la surface de test visuel.
+
+## 7. v7.1 · apparence réglable et identité imprimée (RD-035)
+
+### Barre latérale au choix
+
+Cinq teintes, chacune livrant un jeu complet de classes (fond, textes, survols, item
+actif, tuile de pied, bouton) : **Noir** (défaut), **Graphite** `#272729`, **Bleu nuit** `#0b2a4a`, **Vert océan** `#123b3c` et **Clair** (surface blanche, bord droit,
+item actif en parchemin, icône active en Action Blue). Le réglage vit dans
+`parametres.apparence.nav` et se pilote depuis « Tarifs & paramètres > Apparence ».
+Le fond de page ne change jamais : seul le chrome de navigation est concerné.
+
+### Écran de connexion
+
+Le titre de trois lignes, le paragraphe et la liste à puces sont supprimés. La colonne
+gauche redevient une carte d'identité : nom, catégorie, ville, adresse, téléphone,
+courriel, capacité (nombre de chambres actives, nom et capacité de la salle). Toutes
+ces valeurs viennent de « Tarifs & paramètres > Identité de l'établissement » ; une
+valeur vidée supprime la ligne au lieu d'afficher un champ vide.
+
+### Documents imprimés
+
+- Logo de l'établissement en tête de chaque document (`size-14`, object-contain).
+- Nom, catégorie, adresse, identifiants fiscaux (ICE, RC, IF, patente) et coordonnées
+  repris de `parametres.hotel` et `parametres.fiscalite`, avec repli sur les mentions
+  de démonstration.
+- Pied de page : plafond d'espèces lu dans la fiscalité paramétrée.
+- Fiche de police : bloc « Établissement » alimenté par les mêmes paramètres.
+
+### Vérifications (smoke jsdom, 0 erreur applicative)
+
+Logo téléversé visible dans la barre latérale et dans l'en-tête du document imprimé ;
+téléphone saisi dans les paramètres repris sur la facture ; nom commercial modifié
+répercuté dans la navigation et les documents ; les cinq thèmes basculent et
+persistent ; slogan absent du portail de connexion.
+

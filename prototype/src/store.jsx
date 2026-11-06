@@ -946,6 +946,17 @@ function reducer(state, action) {
       };
     }
 
+    // Apparence : choix personnel de la couleur de la barre latérale.
+    // Stocké dans les paramètres pour survivre au rechargement et rester
+    // partagé par tous les comptes du poste.
+    case 'SET_APPARENCE': {
+      const parametres = {
+        ...state.parametres,
+        apparence: { ...state.parametres.apparence, ...action.patch },
+      };
+      return { ...state, parametres };
+    }
+
     case 'SET_HOTEL': {
       const parametres = {
         ...state.parametres,
@@ -1476,6 +1487,12 @@ export function AppProvider({ children }) {
             // v7 : un état enregistré avant le registre des non-présentations
             // reçoit les dossiers de démonstration au lieu d'un écran vide.
             noShows: parsed.noShows ?? defauts.noShows,
+            parametres: {
+              ...defauts.parametres,
+              ...(parsed.parametres ?? {}),
+              hotel: { ...defauts.parametres.hotel, ...(parsed.parametres?.hotel ?? {}) },
+              apparence: { ...defauts.parametres.apparence, ...(parsed.parametres?.apparence ?? {}) },
+            },
           };
         }
       }
@@ -1533,6 +1550,7 @@ export function AppProvider({ children }) {
       majChambre: (numero, patch) => dispatch({ type: 'MAJ_CHAMBRE', numero, patch }),
       setOption: (cle, valeur) => dispatch({ type: 'SET_OPTION', cle, valeur }),
       setHotel: (patch) => dispatch({ type: 'SET_HOTEL', patch }),
+      setApparence: (patch) => dispatch({ type: 'SET_APPARENCE', patch }),
       mouvementStock: (articleId, type, qte, motif, chambre) =>
         dispatch({ type: 'MOUVEMENT_STOCK', articleId, type, qte, motif, chambre }),
       consommerMinibar: (numero, dotations) =>
@@ -1704,4 +1722,9 @@ export function noShowsASuivre(state) {
 
 export function montantNoShows(state) {
   return (state.noShows ?? []).reduce((s, n) => s + (n.montant ?? 0), 0);
+}
+
+// Couleur de barre latérale choisie par l'utilisateur (défaut : noir).
+export function navApparence(state) {
+  return state?.parametres?.apparence?.nav ?? 'noir';
 }
