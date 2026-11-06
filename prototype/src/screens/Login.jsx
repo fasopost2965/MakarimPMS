@@ -13,7 +13,7 @@
 
 import { useState } from 'react';
 import { Eye, EyeOff, KeyRound, Loader2, ShieldCheck } from 'lucide-react';
-import { COMPTES, HOTEL, MOT_DE_PASSE_DEMO, PROFILS } from '../data';
+import { HOTEL, MOT_DE_PASSE_DEMO, PROFILS } from '../data';
 import { useApp } from '../store';
 import { Button, cx } from '../components/ui';
 
@@ -49,14 +49,17 @@ function Logo({ src, nom, grand = false }) {
 export function Login({ onConnecte }) {
   const { state, actions } = useApp();
   const hotel = state.parametres?.hotel ?? { nom: HOTEL.nom, logo: null };
-  const [compte, setCompte] = useState(COMPTES[1].identifiant); // la réception par défaut
+  // La liste vient de l'état : un compte créé dans « Rôles & permissions »
+  // est immédiatement utilisable ici, un compte désactivé disparaît.
+  const comptes = (state.comptes ?? []).filter((c) => c.actif !== false);
+  const [compte, setCompte] = useState(comptes[1]?.identifiant ?? comptes[0]?.identifiant ?? '');
   const [motDePasse, setMotDePasse] = useState('');
   const [voir, setVoir] = useState(false);
   const [erreur, setErreur] = useState('');
   const [enCours, setEnCours] = useState(false);
 
   const connexion = () => {
-    const c = COMPTES.find((x) => x.identifiant === compte);
+    const c = comptes.find((x) => x.identifiant === compte);
     if (!c) {
       setErreur('Compte inconnu.');
       return;
@@ -157,7 +160,7 @@ export function Login({ onConnecte }) {
                 }}
                 className="mt-1.5 w-full rounded-xl border border-line-strong bg-surface px-3 py-2.5 text-[13px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
               >
-                {COMPTES.map((c) => (
+                {comptes.map((c) => (
                   <option key={c.id} value={c.identifiant}>
                     {c.nom} — {PROFILS[c.profil].label}
                   </option>

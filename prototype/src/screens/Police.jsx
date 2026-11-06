@@ -16,11 +16,96 @@ import { useMemo, useState } from 'react';
 import {
   CheckCircle2, IdCard, PencilLine, Printer, Search, TriangleAlert,
 } from 'lucide-react';
-import { TYPES_CLIENT } from '../data';
+import { PAYS, TYPES_CLIENT, villesDe } from '../data';
 import { useApp } from '../store';
 import { fmtCourt } from '../lib/date';
-import { ApercuDocument, FichePoliceDoc } from '../components/Document';
+import { ApercuDocument, FichePoliceDoc, RegistrePoliceDoc } from '../components/Document';
+import { Exports } from '../components/Exports';
 import { Button, Card, CardHeader, Modal, Pill, Stat, cx, useToast } from '../components/ui';
+
+// Sélecteur pays / ville de la fiche de police.
+// Le pays se cherche par saisie, puis la liste des villes se réduit à ce pays ;
+// les villes sont elles-mêmes filtrables. Une ville hors référentiel reste
+// saisissable : l'obligation de déclaration prime sur la liste.
+function PaysVille({ pays, ville, onChange }) {
+  const [filtrePays, setFiltrePays] = useState('');
+  const [filtreVille, setFiltreVille] = useState('');
+  const [villeLibre, setVilleLibre] = useState(false);
+
+  const paysFiltres = PAYS.filter((p) =>
+    p.nom.toLowerCase().includes(filtrePays.trim().toLowerCase()),
+  );
+  const villes = villesDe(pays).filter((v) =>
+    v.toLowerCase().includes(filtreVille.trim().toLowerCase()),
+  );
+
+  return (
+    <>
+      <div>
+        <label htmlFor="fp-pays" className="text-[12px] font-semibold text-ink-2">Pays d’origine</label>
+        <input
+          aria-label="Filtrer la liste des pays"
+          value={filtrePays}
+          onChange={(e) => setFiltrePays(e.target.value)}
+          placeholder="Filtrer les pays…"
+          className="mt-1.5 w-full rounded-lg border border-line bg-sand-50 px-2.5 py-1.5 text-[11px] outline-none focus:border-maj"
+        />
+        <select
+          id="fp-pays"
+          value={pays}
+          onChange={(e) => {
+            onChange({ pays: e.target.value, ville: '' });
+            setVilleLibre(false);
+            setFiltreVille('');
+          }}
+          className="mt-1 w-full rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+        >
+          <option value="">— Choisir un pays —</option>
+          {paysFiltres.map((p) => (
+            <option key={p.code} value={p.nom}>{p.nom}</option>
+          ))}
+          {paysFiltres.length === 0 && <option value="">Aucun pays ne correspond</option>}
+        </select>
+      </div>
+
+      <div>
+        <label htmlFor="fp-ville-select" className="text-[12px] font-semibold text-ink-2">Ville</label>
+        {villes.length > 0 && !villeLibre ? (
+          <>
+            <input
+              aria-label="Filtrer la liste des villes"
+              value={filtreVille}
+              onChange={(e) => setFiltreVille(e.target.value)}
+              placeholder="Filtrer les villes…"
+              className="mt-1.5 w-full rounded-lg border border-line bg-sand-50 px-2.5 py-1.5 text-[11px] outline-none focus:border-maj"
+            />
+            <select
+              id="fp-ville-select"
+              value={ville}
+              onChange={(e) => {
+                if (e.target.value === '__libre') setVilleLibre(true);
+                else onChange({ pays, ville: e.target.value });
+              }}
+              className="mt-1 w-full rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+            >
+              <option value="">— Choisir une ville —</option>
+              {villes.map((v) => <option key={v} value={v}>{v}</option>)}
+              <option value="__libre">Autre ville…</option>
+            </select>
+          </>
+        ) : (
+          <input
+            id="fp-ville-select"
+            value={ville}
+            onChange={(e) => onChange({ pays, ville: e.target.value })}
+            placeholder={pays ? 'Saisir la ville' : 'Choisir d’abord le pays'}
+            className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+          />
+        )}
+      </div>
+    </>
+  );
+}
 
 function ChipType({ type }) {
   const t = TYPES_CLIENT[type] ?? TYPES_CLIENT.particulier;
@@ -36,18 +121,23 @@ export function Police() {
   const [filtre, setFiltre] = useState('toutes');
   const [aCompleter, setACompleter] = useState(null);
   const [apercu, setApercu] = useState(null);
+  const [registre, setRegistre] = useState(false);
   const [brouillon, setBrouillon] = useState({});
+  const [filtrePays, setFiltrePays] = useState('tous');
 
   const fiches = useMemo(() => {
     const q = recherche.trim().toLowerCase();
     return state.fichesPolice
       .filter((f) => (filtre === 'toutes' ? true : f.statut === filtre))
+      .filter((f) => filtrePays === 'tous' || f.pays === filtrePays)
       .filter((f) =>
         q
-          ? `${f.nom} ${f.prenom} ${f.chambre} ${f.id} ${f.pieceNumero}`.toLowerCase().includes(q)
+          ? `${f.nom} ${f.prenom} ${f.chambre} ${f.id} ${f.pieceNumero} ${f.pays ?? ''} ${f.ville ?? ''}`
+              .toLowerCase()
+              .includes(q)
           : true,
       );
-  }, [state.fichesPolice, recherche, filtre]);
+  }, [state.fichesPolice, recherche, filtre, filtrePays]);
 
   const completes = state.fichesPolice.filter((f) => f.statut === 'complete').length;
   const manquantes = state.fichesPolice.length - completes;
@@ -66,6 +156,7 @@ export function Police() {
       nationalite: brouillon.nationalite,
       profession: brouillon.profession,
       domicile: brouillon.domicile,
+      pays: brouillon.pays,
       ville: brouillon.ville,
       telephone: brouillon.telephone,
       pieceType: brouillon.pieceType,
@@ -129,6 +220,17 @@ export function Police() {
                   className="w-40 bg-transparent text-[12px] outline-none placeholder:text-ink-3"
                 />
               </div>
+              <select
+                aria-label="Filtrer par pays d’origine"
+                value={filtrePays}
+                onChange={(e) => setFiltrePays(e.target.value)}
+                className="rounded-lg border border-line-strong bg-surface px-2 py-1.5 text-[11px] text-ink-2 outline-none focus:border-maj"
+              >
+                <option value="tous">Tous les pays</option>
+                {[...new Set(state.fichesPolice.map((f) => f.pays).filter(Boolean))].sort().map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
               {[
                 { cle: 'toutes', label: 'Toutes' },
                 { cle: 'complete', label: 'Complètes' },
@@ -148,6 +250,28 @@ export function Police() {
                   {f.label}
                 </button>
               ))}
+              <Exports
+                nom={`fiches-police-${state.date}`}
+                titre="Fiches de police"
+                colonnes={[
+                  { cle: 'id', label: 'Fiche' },
+                  { cle: 'chambre', label: 'Chambre' },
+                  { cle: 'nom', label: 'Nom' },
+                  { cle: 'prenom', label: 'Prénom' },
+                  { cle: 'pays', label: 'Pays' },
+                  { cle: 'ville', label: 'Ville' },
+                  { cle: 'pieceType', label: 'Pièce' },
+                  { cle: 'pieceNumero', label: 'Numéro' },
+                  { cle: 'arrivee', label: 'Arrivée' },
+                  { cle: 'depart', label: 'Départ' },
+                  { cle: 'statut', label: 'État' },
+                ]}
+                lignes={fiches.map((f) => ({
+                  ...f,
+                  statut: f.statut === 'complete' ? 'Complète' : 'À compléter',
+                }))}
+                onPdf={() => setRegistre(true)}
+              />
             </div>
           }
         />
@@ -160,6 +284,7 @@ export function Police() {
                 <th className="px-3 py-2 font-semibold">Chambre</th>
                 <th className="px-3 py-2 font-semibold">Client</th>
                 <th className="px-3 py-2 font-semibold">Type</th>
+                <th className="px-3 py-2 font-semibold">Origine</th>
                 <th className="px-3 py-2 font-semibold">Pièce</th>
                 <th className="px-3 py-2 font-semibold">Séjour</th>
                 <th className="px-3 py-2 font-semibold">État</th>
@@ -176,6 +301,9 @@ export function Police() {
                     <p className="text-[11px] text-ink-3">{f.prenom || 'prénom manquant'}</p>
                   </td>
                   <td className="px-3 py-2.5"><ChipType type={f.type} /></td>
+                  <td className="px-3 py-2.5 text-ink-2">
+                    {f.pays ? `${f.pays}${f.ville ? ` · ${f.ville}` : ''}` : <span className="text-ink-3">—</span>}
+                  </td>
                   <td className="px-3 py-2.5">
                     {f.pieceNumero ? (
                       <span className="text-ink-2">{f.pieceType} {f.pieceNumero}</span>
@@ -249,10 +377,27 @@ export function Police() {
           {champ('prenom', 'Prénom')}
           {champ('dateNaissance', 'Date de naissance', 'date')}
           {champ('lieuNaissance', 'Lieu de naissance')}
-          {champ('nationalite', 'Nationalité')}
+          <div>
+            <label htmlFor="fp-nationalite" className="text-[12px] font-semibold text-ink-2">Nationalité</label>
+            <input
+              id="fp-nationalite"
+              value={brouillon.nationalite ?? ''}
+              onChange={(e) => setBrouillon((b) => ({ ...b, nationalite: e.target.value }))}
+              placeholder="Française, marocaine…"
+              className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+            />
+          </div>
           {champ('profession', 'Profession')}
-          {champ('domicile', 'Domicile habituel', 'text', true)}
-          {champ('ville', 'Ville')}
+          <div className="sm:col-span-2">
+            {champ('domicile', 'Domicile habituel', 'text', true)}
+          </div>
+          <div className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
+            <PaysVille
+              pays={brouillon.pays ?? ''}
+              ville={brouillon.ville ?? ''}
+              onChange={(patch) => setBrouillon((b) => ({ ...b, ...patch }))}
+            />
+          </div>
           {champ('telephone', 'Téléphone')}
           <div>
             <label htmlFor="fp-pieceType" className="text-[12px] font-semibold text-ink-2">
@@ -277,6 +422,12 @@ export function Police() {
       {apercu && (
         <ApercuDocument titre={`Fiche de police ${apercu.id}`} onClose={() => setApercu(null)}>
           <FichePoliceDoc fiche={apercu} />
+        </ApercuDocument>
+      )}
+
+      {registre && (
+        <ApercuDocument titre="Registre d’hébergement" onClose={() => setRegistre(false)}>
+          <RegistrePoliceDoc fiches={fiches} date={state.date} />
         </ApercuDocument>
       )}
     </div>

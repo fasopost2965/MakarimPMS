@@ -461,3 +461,77 @@ export const COMPTES = [
   { id: 'U-6', identifiant: 'r.amrani', profil: 'maintenance', nom: 'Rachid Amrani', email: 'r.amrani@hotel-makarim.ma' },
 ];
 export const MOT_DE_PASSE_DEMO = 'makarim2026';
+
+// ------------------------------------------------------------------
+// Référentiels de saisie — ajoutés avec le paramétrage (novembre 2026)
+// ------------------------------------------------------------------
+
+// Pays d'origine pour la fiche de police, avec les villes rattachées. Le
+// formulaire filtre d'abord les pays, puis les villes du pays choisi ; une
+// ville absente de la liste reste saisissable librement (l'obligation légale
+// prime sur la richesse du référentiel).
+export const PAYS = [
+  { code: 'MA', nom: 'Maroc', villes: ['Tétouan', 'Tanger', 'Casablanca', 'Rabat', 'Marrakech', 'Fès', 'Meknès', 'Agadir', 'Oujda', 'Kénitra', 'Larache', 'Chefchaouen', 'Al Hoceïma', 'Nador', 'Salé', 'Mohammedia', 'El Jadida', 'Safi', 'Beni Mellal', 'Errachidia'] },
+  { code: 'FR', nom: 'France', villes: ['Paris', 'Marseille', 'Lyon', 'Toulouse', 'Bordeaux', 'Lille', 'Nantes', 'Strasbourg', 'Nice', 'Montpellier', 'Rennes', 'Grenoble'] },
+  { code: 'ES', nom: 'Espagne', villes: ['Madrid', 'Barcelone', 'Séville', 'Valence', 'Malaga', 'Bilbao', 'Grenade', 'Algésiras', 'Ceuta', 'Melilla'] },
+  { code: 'BE', nom: 'Belgique', villes: ['Bruxelles', 'Anvers', 'Liège', 'Gand', 'Charleroi', 'Namur'] },
+  { code: 'NL', nom: 'Pays-Bas', villes: ['Amsterdam', 'Rotterdam', 'La Haye', 'Utrecht', 'Eindhoven'] },
+  { code: 'DE', nom: 'Allemagne', villes: ['Berlin', 'Munich', 'Hambourg', 'Cologne', 'Francfort', 'Stuttgart'] },
+  { code: 'GB', nom: 'Royaume-Uni', villes: ['Londres', 'Manchester', 'Birmingham', 'Édimbourg', 'Bristol', 'Leeds'] },
+  { code: 'IT', nom: 'Italie', villes: ['Rome', 'Milan', 'Naples', 'Turin', 'Florence', 'Venise', 'Bologne'] },
+  { code: 'PT', nom: 'Portugal', villes: ['Lisbonne', 'Porto', 'Faro', 'Braga', 'Coimbra'] },
+  { code: 'CH', nom: 'Suisse', villes: ['Genève', 'Zurich', 'Lausanne', 'Berne', 'Bâle'] },
+  { code: 'US', nom: 'États-Unis', villes: ['New York', 'Washington', 'Los Angeles', 'Chicago', 'Miami', 'Boston', 'San Francisco'] },
+  { code: 'CA', nom: 'Canada', villes: ['Montréal', 'Québec', 'Toronto', 'Ottawa', 'Vancouver'] },
+  { code: 'AE', nom: 'Émirats arabes unis', villes: ['Dubaï', 'Abou Dabi', 'Charjah'] },
+  { code: 'SA', nom: 'Arabie saoudite', villes: ['Riyad', 'Djeddah', 'La Mecque', 'Médine', 'Dammam'] },
+  { code: 'QA', nom: 'Qatar', villes: ['Doha'] },
+  { code: 'KW', nom: 'Koweït', villes: ['Koweït City'] },
+  { code: 'DZ', nom: 'Algérie', villes: ['Alger', 'Oran', 'Constantine', 'Annaba', 'Tlemcen'] },
+  { code: 'TN', nom: 'Tunisie', villes: ['Tunis', 'Sfax', 'Sousse', 'Bizerte', 'Djerba'] },
+  { code: 'SN', nom: 'Sénégal', villes: ['Dakar', 'Thiès', 'Saint-Louis'] },
+  { code: 'CI', nom: "Côte d'Ivoire", villes: ['Abidjan', 'Bouaké', 'Yamoussoukro'] },
+  { code: 'ML', nom: 'Mali', villes: ['Bamako', 'Ségou', 'Mopti'] },
+  { code: 'MR', nom: 'Mauritanie', villes: ['Nouakchott', 'Nouadhibou'] },
+  { code: 'TR', nom: 'Turquie', villes: ['Istanbul', 'Ankara', 'Izmir', 'Antalya'] },
+  { code: 'CN', nom: 'Chine', villes: ['Pékin', 'Shanghai', 'Canton', 'Shenzhen'] },
+  { code: 'JP', nom: 'Japon', villes: ['Tokyo', 'Osaka', 'Kyoto', 'Nagoya'] },
+  { code: 'KR', nom: 'Corée du Sud', villes: ['Séoul', 'Busan', 'Incheon'] },
+  { code: 'BR', nom: 'Brésil', villes: ['São Paulo', 'Rio de Janeiro', 'Brasilia'] },
+  { code: 'AU', nom: 'Australie', villes: ['Sydney', 'Melbourne', 'Brisbane', 'Perth'] },
+  { code: 'ZZ', nom: 'Autre pays', villes: [] },
+];
+
+export function villesDe(nomPays) {
+  return PAYS.find((p) => p.nom === nomPays)?.villes ?? [];
+}
+
+// Motifs de changement de chambre. L'origine (client / hôtel) n'est pas
+// décorative : elle décide qui supporte la différence de tarif et ce qui est
+// écrit dans l'historique du client.
+export const MOTIFS_CHANGEMENT = [
+  { cle: 'maintenance', label: 'Chambre hors service (hôtel)', origine: 'hotel', tarif: 'hotel' },
+  { cle: 'erreur_affectation', label: 'Erreur d’affectation (hôtel)', origine: 'hotel', tarif: 'hotel' },
+  { cle: 'surclassement', label: 'Surclassement commercial (hôtel)', origine: 'hotel', tarif: 'hotel' },
+  { cle: 'nuisance', label: 'Nuisance sonore constatée (client)', origine: 'client', tarif: 'hotel' },
+  { cle: 'confort', label: 'Demande de confort (client)', origine: 'client', tarif: 'client' },
+  { cle: 'preference', label: 'Préférence d’étage ou de vue (client)', origine: 'client', tarif: 'gratuit' },
+  { cle: 'autre', label: 'Autre motif (à préciser)', origine: 'client', tarif: 'client' },
+];
+
+// Standing des types de chambre : un changement ne peut aller que vers un
+// standing égal ou supérieur, sauf décision de la Direction (BR-SEJ-008).
+export const RANG_STANDING = { double: 1, twin: 1, triple: 2, suite: 3 };
+
+// Fiscalité éditable par la Direction. Valeurs de départ alignées sur le
+// cahier des charges (TVA 10 % hébergement, 20 % annexes, taxe 3 MAD).
+export const FISCALITE_DEFAUT = {
+  tvaHebergement: 10,
+  tvaAnnexe: 20,
+  tvaSalle: 20,
+  taxeSejour: 3,
+  plafondEspeces: 10000,
+  identifiantFiscal: '40215678',
+  ice: '001987654000073',
+  rc: 'Tétouan 2187',
+};

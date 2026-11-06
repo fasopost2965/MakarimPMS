@@ -275,6 +275,16 @@ Décisions structurantes prises **pendant ou après l'audit** (distinct des ADR 
 - **Date** : 2026-11-06.
 - **Décideur** : Claude, sur mandat explicite (« pour tes questions décide pour moi »).
 
+### RD-032 — Tarifs, fiscalité et carte deviennent des paramètres verrouillés et confirmés
+
+- **Décision** : les prix de base, les coefficients de saison, le forfait demi-journée, la carte du restaurant, les prestations de la salle et les taux fiscaux sont **éditables depuis l'application** — mais aucune écriture sensible ne se fait en un clic. La grille est **verrouillée par défaut** (déverrouillage par code, valable pour la session), la publication présente un **récapitulatif des écarts** avant d'engager une nouvelle version, et l'enregistrement fiscal demande une **seconde confirmation**. Chaque opération est journalisée avec son auteur.
+- **Raison** : ces valeurs étaient jusqu'ici figées dans `data.js` (« modifiables en base » sans écran), ce qui obligeait à redéployer pour changer un prix ou un taux. En sens inverse, un prix mal saisi se propage instantanément à la réservation, au check-in, au no-show, à la prévision et aux canaux : le coût d'une faute est asymétrique. Paramétrable **et** verrouillé est la seule combinaison tenable pour un établissement où plusieurs personnes se relaient à la réception.
+- **Alternatives considérées** : (a) laisser les tarifs en base sans interface — écartée, contredit la demande explicite et **BR-TR-003** ; (b) tout rendre éditable sans garde-fou — écartée, une faute de frappe sur un prix se paie en chambres vendues à perte ; (c) réservation du paramétrage à la Direction avec verrou de session et double confirmation — **retenue**.
+- **Conséquence** : les taux fiscaux et tarifs publiés alimentent désormais réellement les calculs (taxe de séjour au check-in, TVA des factures et des documents, TVA restaurant et salle, plafond de caisse, prévision de recette, push vers les canaux). Le code de déverrouillage de démonstration est un code d'exploitation partagé ; en production il doit être remplacé par un second facteur nominatif (cf. `SECURITY.md`). Les documents déjà émis ne sont jamais recalculés.
+- **Décisions liées** : RD-031 (publication versionnée de la grille) ; **BR-TR-003**, **BR-AUD-002**, **BR-FAC-007**.
+- **Date** : 2026-11-06.
+- **Décideur** : Claude, sur mandat explicite (« pour tes questions décide pour toi »).
+
 ---
 
 ## Décisions en attente (questions ouvertes de l'audit nécessitant un arbitrage humain)

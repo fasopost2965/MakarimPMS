@@ -149,14 +149,26 @@ Direction peut l'ajuster (le serveur reste seul juge en production, BR-TR-004).
 | **Chambres paramétrables** | création de chambre (numéro, étage, type, minibar) avec contrôle d'unicité |
 | **Identité & connexion** | logo et nom de l'hôtel paramétrables, portail de connexion, **un compte par agent** |
 | **Bulles d'aide** | composant accessible posé sur les notions non évidentes (no-show, régie, répartition, publication…) |
+| **Carte du restaurant** | ajout, modification de prix, changement de catégorie et retrait d'un plat par la Direction ; les notes passées gardent leur libellé (journalisé) |
+| **Prestations de la salle** | libellé, prix, unité et activation ; devis et formulaire de créneau se recalculent |
+| **Planning de salle cliquable** | créneau libre → prise de réservation pré-remplie ; créneau occupé → confirmer ou annuler (créneau libéré) |
+| **Fiche de police** | pays d'origine et ville, listes **filtrées en cascade**, risque de saisie libre ; fiche et **registre imprimables** refaits |
+| **Comptes agents** | création d'un utilisateur avec rôle, activation/désactivation, changement de rôle — utilisable au portail immédiatement |
+| **Prix de base verrouillés** | grille verrouillée par défaut, déverrouillage par code, **récapitulatif des écarts** avant publication |
+| **Fiscalité paramétrable** | TVA hébergement / annexes / salle, taxe de séjour, plafond espèces — avec double confirmation et journalisation |
+| **Changement de chambre** | motif et origine (client / hôtel), standing égal ou supérieur, chambre vérifiée libre, supplément imputé, trace complète |
+| **Historique client** | dossier client : séjours, réservations, factures, changements de chambre |
+| **Check-in / check-out visibles** | bloc « Réception du jour » (arrivées et départs), check-out bloqué si folio non soldé |
+| **Exports PDF / CSV / Excel** | un composant unique pour tous les rapports : aperçu A4, CSV point-virgule UTF-8, classeur Excel (.xls) |
+| **Routes** | l'écran courant est dans l'URL (`#/stock`), lien direct, rafraîchissement et retour navigateur — audit dans `docs/audits/ROUTES_2026-11.md` |
 | **Audit de design** (voir `docs/audits/AUDIT_DESIGN_PROTOTYPE_2026-11.md`) | contrastes WCAG corrigés (6 paires), échelle typographique ramenée de 12 à 8 tailles, 3 rayons et 2 ombres tokenisés, labels associés, toasts annoncés, lien d'évitement, cibles tactiles à 36 px, capacité de salle lue dans le référentiel |
 
 ## Vérification
 
 Build de production et parcours testés automatiquement (esbuild + jsdom) :
-13 écrans + portail de connexion : connexion/déconnexion, check-in, housekeeping,
-envoi en chambre, confirmation de séminaire, encaissement, palette ⌘K, clôture de
-journée, répartition société / client, émission de deux factures, aperçu et
-impression d'un document, clôture de shift, chronomètre, publication de la grille,
-création de chambre, mouvement de stock, synchronisation d'un canal,
-enregistrement de la matrice des rôles — **0 erreur console**.
+13 routes + portail de connexion, testées en jsdom : connexion/déconnexion, lien
+profond (`#/stock`), check-in et check-out depuis la réception du jour, changement
+de chambre motivé, ajout d'un plat à la carte, exports CSV et Excel, PDF du rapport
+restaurant, créneau de salle réservé au clic, filtre pays → villes de la fiche de
+police, déverrouillage tarifaire, publication confirmée, fiscalité enregistrée,
+création d'un compte agent — **0 erreur applicative**.

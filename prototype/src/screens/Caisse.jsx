@@ -27,8 +27,11 @@ import {
 import { PARAMS } from '../data';
 import { regieRestaurant, repartirFolio, soldeDuFolio, useApp } from '../store';
 import { fmtCourt, fmtLong, money } from '../lib/date';
+import { Exports } from '../components/Exports';
 import { Bar, Button, Card, CardHeader, Drawer, Modal, Pill, cx, useToast } from '../components/ui';
-import { ApercuDocument, FactureDoc, ReleveRegieDoc } from '../components/Document';
+import {
+  ApercuDocument, FactureDoc, JournalCaisseDoc, ReleveRegieDoc,
+} from '../components/Document';
 
 const MOYENS = [
   { label: 'Espèces', icone: Banknote },
@@ -130,6 +133,35 @@ export function Caisse() {
             titre="Folios"
             sousTitre={`${liste.length} dossier(s) · ${money(totalSoldes)} MAD de soldes ouverts`}
             action={
+              <div className="flex flex-wrap items-center gap-2">
+              <Exports
+                nom={`folios-${state.date}`}
+                titre="Folios et soldes"
+                compact
+                colonnes={[
+                  { cle: 'id', label: 'Folio' },
+                  { cle: 'client', label: 'Client' },
+                  { cle: 'chambre', label: 'Chambre' },
+                  { cle: 'charges', label: 'Charges (MAD)' },
+                  { cle: 'regle', label: 'Réglé (MAD)' },
+                  { cle: 'solde', label: 'Solde (MAD)' },
+                  { cle: 'statut', label: 'Statut' },
+                ]}
+                lignes={liste.map((f) => {
+                  const charges = f.lignes.reduce((a, l) => a + l.montant, 0);
+                  const regle = f.paiements.reduce((a, p) => a + p.montant, 0);
+                  return {
+                    id: f.id,
+                    client: f.client,
+                    chambre: f.chambre,
+                    charges,
+                    regle,
+                    solde: Math.max(0, charges - regle),
+                    statut: charges - regle > 0 ? 'À encaisser' : 'Soldé',
+                  };
+                })}
+                onPdf={() => setApercu({ titre: 'Journal de caisse', rendu: <JournalCaisseDoc liste={liste} date={state.date} /> })}
+              />
               <div className="flex items-center gap-2 rounded-lg border border-line-strong bg-surface px-2.5 py-1.5">
                 <Search className="size-3.5 text-ink-3" />
                 <input
@@ -139,6 +171,7 @@ export function Caisse() {
                   placeholder="Folio, chambre, client"
                   className="w-32 bg-transparent text-[11px] outline-none placeholder:text-ink-3"
                 />
+              </div>
               </div>
             }
           />
@@ -227,7 +260,7 @@ export function Caisse() {
             </div>
             <div className="border-t border-line-soft px-5 py-3">
               <p className="flex items-center gap-1.5 text-[12px] text-ink-3">
-                <Receipt className="size-3" /> Plafond espèces : {money(PARAMS.plafondEspeces)} MAD / opération
+                <Receipt className="size-3" /> Plafond espèces : {money(state.parametres?.fiscalite?.plafondEspeces ?? PARAMS.plafondEspeces)} MAD / opération
               </p>
             </div>
           </Card>

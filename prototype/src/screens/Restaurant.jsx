@@ -10,6 +10,8 @@ import {
   BadgeCheck,
   BedDouble,
   ChefHat,
+  PencilLine,
+  Trash2,
   Coffee,
   CreditCard,
   Minus,
@@ -20,9 +22,11 @@ import {
   Utensils,
 } from 'lucide-react';
 import { CATEGORIES_RESTO, TABLES } from '../data';
-import { useApp } from '../store';
+import { articlesCarte, useApp } from '../store';
 import { money } from '../lib/date';
 import { totalCommande } from '../lib/pricing';
+import { ApercuDocument, RapportRestoDoc } from '../components/Document';
+import { Exports } from '../components/Exports';
 import { Bar, Button, Card, CardHeader, Modal, Pill, cx, useToast } from '../components/ui';
 
 const ONGLETS = [
@@ -55,7 +59,7 @@ function PanneauCommande({ table, onClose }) {
   }, [table.id]);
 
   const total = lignes.reduce((s, l) => s + l.prix * l.qte, 0);
-  const articles = state.carte.filter((a) => a.cat === cat);
+  const articles = state.carte.filter((a) => a.cat === cat && !a.supprime);
 
   function ajouter(article) {
     if (!article.dispo) return;
@@ -244,6 +248,12 @@ export function Restaurant() {
   const [onglet, setOnglet] = useState('service');
   const [table, setTable] = useState(null);
   const [recherche, setRecherche] = useState('');
+  const [edition, setEdition] = useState(null); // article en cours d'édition
+  const [apercuRapport, setApercuRapport] = useState(false);
+
+  // Carte effective : les articles retirés restent en base pour l'historique
+  // des notes mais ne sont plus vendus.
+  const carte = articlesCarte(state);
 
   const ouvertes = state.commandes.filter((c) => c.statut === 'ouverte');
   const servies = state.commandes.filter((c) => c.statut === 'envoyee');
@@ -277,6 +287,53 @@ export function Restaurant() {
   }, [state]);
 
   const maxCat = Math.max(1, ...caParCategorie.map((c) => c.montant));
+
+  // Détail par article : c'est la maille exportée en CSV / Excel et imprimée
+  // dans le rapport du jour. Aucun article codé en dur : la carte est éditable.
+  const ventesParArticle = useMemo(() => {
+    const map = {};
+    for (const c of [...reglees, ...servies]) {
+      for (const l of c.lignes) {
+        const article = state.carte.find((a) => a.id === l.articleId);
+        const cle = `${l.articleId}`;
+        map[cle] = map[cle] ?? {
+          article: article?.nom ?? l.nom,
+          categorie: article?.cat ?? 'Autres',
+          quantite: 0,
+          montant: 0,
+        };
+        map[cle].quantite += l.qte;
+        map[cle].montant += l.prix * l.qte;
+      }
+    }
+    return Object.values(map).sort((a, b) => b.montant - a.montant);
+  }, [state]);
+
+  const lignesExport = ventesParArticle.map((v) => ({
+    Article: v.article,
+    Catégorie: v.categorie,
+    Quantité: v.quantite,
+    'Montant TTC (MAD)': v.montant,
+  }));
+
+  const colonnesExport = [
+    { cle: 'Article', label: 'Article' },
+    { cle: 'Catégorie', label: 'Catégorie' },
+    { cle: 'Quantité', label: 'Quantité' },
+    { cle: 'Montant TTC (MAD)', label: 'Montant TTC (MAD)' },
+  ];
+
+  const donneesRapport = {
+    date: state.date,
+    caJour,
+    caChambre,
+    couverts: couvertsServis,
+    categories: caParCategorie,
+    articles: ventesParArticle,
+    reglees,
+    servies,
+    tva: state.parametres?.fiscalite?.tvaAnnexe ?? 20,
+  };
 
   return (
     <div className="space-y-4 p-4 md:p-6">
@@ -433,21 +490,32 @@ export function Restaurant() {
         <Card>
           <CardHeader
             titre="Carte & disponibilités"
-            sousTitre={`${state.carte.length} articles · TVA 20 % (prestations annexes)`}
+            sousTitre={`${carte.length} articles · TVA ${state.parametres?.fiscalite?.tvaAnnexe ?? 20} % (prestations annexes)`}
             action={
-              <div className="flex items-center gap-2 rounded-lg border border-line-strong bg-surface px-2.5 py-1.5">
-                <Search className="size-3.5 text-ink-3" />
-                <input
-                  value={recherche}
-                  onChange={(e) => setRecherche(e.target.value)}
-                  placeholder="Rechercher un plat"
-                  className="w-32 bg-transparent text-[11px] outline-none placeholder:text-ink-3"
-                />
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-2 rounded-lg border border-line-strong bg-surface px-2.5 py-1.5">
+                  <Search className="size-3.5 text-ink-3" />
+                  <input
+                    aria-label="Rechercher un plat dans la carte"
+                    value={recherche}
+                    onChange={(e) => setRecherche(e.target.value)}
+                    placeholder="Rechercher un plat"
+                    className="w-32 bg-transparent text-[11px] outline-none placeholder:text-ink-3"
+                  />
+                </div>
+                {state.profil === 'direction' && (
+                  <Button
+                    size="sm"
+                    onClick={() => setEdition({ nouveau: true, nom: '', cat: 'Plats', prix: '', desc: '' })}
+                  >
+                    <Plus className="size-3.5" /> Ajouter un plat
+                  </Button>
+                )}
               </div>
             }
           />
           <div className="divide-y divide-line-soft">
-            {state.carte
+            {carte
               .filter((p) => !recherche || p.nom.toLowerCase().includes(recherche.toLowerCase()) || p.cat.toLowerCase().includes(recherche.toLowerCase()))
               .map((p) => (
                 <div key={p.id} className="flex items-center gap-3 px-5 py-2.5">
@@ -473,6 +541,29 @@ export function Restaurant() {
                     <BadgeCheck className="size-3" />
                     {p.dispo ? 'Disponible' : 'Rupture'}
                   </button>
+                  {state.profil === 'direction' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setEdition(p)}
+                        aria-label={`Modifier ${p.nom}`}
+                        className="grid size-7 place-items-center rounded-lg border border-line-strong text-ink-2 hover:bg-sand-50"
+                      >
+                        <PencilLine className="size-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          actions.supprimerArticleCarte(p.id);
+                          push(`${p.nom} retiré de la carte (notes passées conservées).`, 'info');
+                        }}
+                        aria-label={`Retirer ${p.nom}`}
+                        className="grid size-7 place-items-center rounded-lg border border-line-strong text-crimson hover:bg-crimson-100"
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    </>
+                  )}
                 </div>
               ))}
           </div>
@@ -540,10 +631,115 @@ export function Restaurant() {
         </div>
       )}
 
+      {edition && (
+        <Modal
+          open
+          onClose={() => setEdition(null)}
+          title={edition.nouveau ? 'Nouvel article' : 'Modifier l’article'}
+          subtitle="La carte est un paramètre : prix, catégorie et disponibilité sont libres"
+          footer={
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEdition(null)}>Annuler</Button>
+              <Button
+                disabled={!edition.nom?.trim() || !(Number(edition.prix) > 0)}
+                onClick={() => {
+                  const prix = Number(edition.prix);
+                  if (edition.nouveau) {
+                    actions.ajouterArticleCarte({
+                      id: Math.max(0, ...state.carte.map((a) => a.id)) + 1,
+                      cat: edition.cat,
+                      nom: edition.nom.trim(),
+                      prix,
+                      desc: edition.desc?.trim() ?? '',
+                      dispo: true,
+                    });
+                    push(`« ${edition.nom.trim()} » ajouté à la carte.`, 'success');
+                  } else {
+                    actions.majArticleCarte(edition.id, {
+                      nom: edition.nom.trim(),
+                      cat: edition.cat,
+                      prix,
+                      desc: edition.desc?.trim() ?? '',
+                    });
+                    push(`« ${edition.nom.trim()} » mis à jour.`, 'success');
+                  }
+                  setEdition(null);
+                }}
+              >
+                Enregistrer
+              </Button>
+            </div>
+          }
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label htmlFor="art-nom" className="text-[12px] font-semibold text-ink-2">Nom du plat</label>
+              <input
+                id="art-nom"
+                autoFocus
+                value={edition.nom}
+                onChange={(e) => setEdition((x) => ({ ...x, nom: e.target.value }))}
+                className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+              />
+            </div>
+            <div>
+              <label htmlFor="art-cat" className="text-[12px] font-semibold text-ink-2">Catégorie</label>
+              <select
+                id="art-cat"
+                value={edition.cat}
+                onChange={(e) => setEdition((x) => ({ ...x, cat: e.target.value }))}
+                className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+              >
+                {CATEGORIES_RESTO.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="art-prix" className="text-[12px] font-semibold text-ink-2">Prix TTC (MAD)</label>
+              <input
+                id="art-prix"
+                type="number"
+                min="1"
+                value={edition.prix}
+                onChange={(e) => setEdition((x) => ({ ...x, prix: e.target.value }))}
+                className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label htmlFor="art-desc" className="text-[12px] font-semibold text-ink-2">Description</label>
+              <input
+                id="art-desc"
+                value={edition.desc ?? ''}
+                onChange={(e) => setEdition((x) => ({ ...x, desc: e.target.value }))}
+                placeholder="Ingrédients, accompagnement…"
+                className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+              />
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {apercuRapport && (
+        <ApercuDocument titre="Rapport restaurant du jour" onClose={() => setApercuRapport(false)}>
+          <RapportRestoDoc donnees={donneesRapport} />
+        </ApercuDocument>
+      )}
+
       {onglet === 'rapport' && (
         <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
           <Card>
-            <CardHeader titre="Chiffre d’affaires par famille" sousTitre={`Aujourd’hui · ${money(caJour + caChambre)} MAD TTC`} />
+            <CardHeader
+              titre="Chiffre d’affaires par famille"
+              sousTitre={`Aujourd’hui · ${money(caJour + caChambre)} MAD TTC`}
+              action={
+                <Exports
+                  nom={`rapport-restaurant-${state.date}`}
+                  titre="Rapport restaurant"
+                  colonnes={colonnesExport}
+                  lignes={lignesExport}
+                  onPdf={() => setApercuRapport(true)}
+                />
+              }
+            />
             <div className="space-y-3 px-5 py-4">
               {caParCategorie.length === 0 && <p className="text-[12px] text-ink-3">Aucune vente enregistrée aujourd’hui.</p>}
               {caParCategorie.map((c, i) => (

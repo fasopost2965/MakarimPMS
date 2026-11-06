@@ -20,6 +20,7 @@ import { fmtCourt, fmtLong, money } from '../lib/date';
 import {
   ApercuDocument, FactureDoc, FichePoliceDoc, RapportTourneeDoc, ReleveRegieDoc,
 } from '../components/Document';
+import { Exports } from '../components/Exports';
 import { Button, Card, CardHeader, Pill, Stat, cx } from '../components/ui';
 
 const FAMILLES = [
@@ -139,6 +140,23 @@ export function Documents() {
                   className="w-40 bg-transparent text-[12px] outline-none placeholder:text-ink-3"
                 />
               </div>
+              <Exports
+                nom={`documents-${famille}-${state.date}`}
+                titre={`Documents — ${famille}`}
+                compact
+                colonnes={[
+                  { cle: 'titre', label: 'Pièce' },
+                  { cle: 'sous', label: 'Détail' },
+                  { cle: 'meta', label: 'Montant' },
+                  { cle: 'badge', label: 'Type' },
+                ]}
+                lignes={documents.map((d) => ({
+                  titre: d.titre,
+                  sous: d.sous,
+                  meta: d.meta ?? '',
+                  badge: d.badge ?? '',
+                }))}
+              />
             </div>
           }
         />

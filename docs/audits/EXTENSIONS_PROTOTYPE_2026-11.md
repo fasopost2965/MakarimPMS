@@ -296,3 +296,117 @@ Déconnexion depuis le menu de profil ; la session est journalisée.
 | Création de chambre | pas de suppression (volontaire : soft delete, BR-AUD-001) | statut « inactive » à la place |
 | Logo | stocké en `localStorage` (démonstration) | stockage objet côté serveur |
 | Connexion | comptes de démonstration en dur | table utilisateurs, hachage, MFA direction |
+
+---
+
+## 7. Passe 3 — paramétrage fin, rapports exportables et réception
+
+Troisième série de demandes. Le prototype reste à **13 écrans**, mais presque tout ce qui
+était figé dans le code devient un paramètre, et chaque rapport sort en PDF, CSV et Excel.
+
+### 7.1 Carte du restaurant paramétrable
+
+La carte n'est plus une constante : la Direction ajoute un plat, change son prix, le déplace
+de catégorie, le retire. Les articles retirés restent en base (les notes déjà émises gardent
+leur libellé et leur prix) mais disparaissent de la vente. Chaque modification est journalisée.
+
+### 7.2 Prestations de la salle paramétrables
+
+Libellé, prix, unité (par personne / forfait) et activation se règlent dans « Gérer ».
+Le devis séminaire et le formulaire de créneau se recalculent immédiatement. Une prestation
+désactivée disparaît des nouveaux devis sans réécrire les anciens.
+
+### 7.3 Planning de la salle cliquable
+
+Un clic sur un **créneau libre** ouvre une prise de réservation pré-remplie (date, créneau,
+location, prestations, TTC). Un clic sur un **créneau occupé** ouvre le dossier de l'événement
+avec deux actions : confirmer (acompte calculé) ou annuler (créneau libéré, historique
+conservé).
+
+### 7.4 Fiche de police : pays, ville et registre imprimable
+
+- **Pays d'origine** et **ville** deviennent des données déclarées ;
+- la liste des pays est **filtrable par saisie**, puis la liste des villes se réduit au pays
+  choisi et reste **filtrable** elle aussi ;
+- une ville hors référentiel reste saisissable (l'obligation légale prime sur la liste) ;
+- le **PDF de la fiche** est refait : blocs identité / origine / pièce / séjour, mentions
+  légales, trois zones de signature (client, cachet, visa réception) ;
+- un **registre imprimable** (toutes les fiches du jour) accompagne la fiche individuelle,
+  c'est souvent le registre que demande le contrôle.
+
+### 7.5 Création d'utilisateurs et de rôles
+
+« Rôles & permissions » gère désormais les **comptes nominatifs** : nom, identifiant, e-mail,
+rôle, activation. Un compte créé est immédiatement utilisable au portail de connexion ; un
+compte désactivé en disparaît. Le rôle porté par le compte reste modifiable et s'applique à la
+connexion suivante.
+
+### 7.6 Prix de base, verrou tarifaire et confirmation
+
+Le prix de base par type est éditable, mais la grille est **verrouillée par défaut** :
+déverrouillage par code pour la session, puis **récapitulatif des écarts** (avant → après) avant
+publication. Rien ne s'écrit en un seul clic.
+
+### 7.7 Fiscalité paramétrable
+
+TVA hébergement, TVA annexes, TVA salle, taxe de séjour et plafond d'espèces sont éditables,
+avec confirmation obligatoire et journalisation. Les taux alimentent désormais réellement :
+taxe de séjour au check-in, TVA des factures, ventilation TVA des documents, plafond de caisse,
+TVA affichée au restaurant et dans le devis séminaire.
+
+### 7.8 Changement de chambre motivé et historisé
+
+Le changement de chambre est un **événement de séjour**, pas une correction de saisie :
+
+- motif obligatoire, avec **origine** (client ou hôtel) ;
+- commentaire obligatoire dès que l'origine est le client ;
+- destination limitée au **standing égal ou supérieur** (BR-SEJ-008) ;
+- chambre d'accueil vérifiée libre sur les mêmes dates ;
+- supplément imputé selon l'origine du motif (hôtel / gratuit / client) ;
+- trace complète : de → vers, date, heure, agent, motif, commentaire.
+
+### 7.9 Historique client
+
+Un panneau « dossier client » rassemble séjours, réservations, factures et changements de
+chambre sous le même nom — la mémoire que la réception perd aujourd'hui entre deux saisons.
+
+### 7.10 Check-in et check-out visibles
+
+Un bloc « Réception du jour » affiche en permanence les arrivées à enregistrer et les départs
+à libérer, avec le bouton d'action dans la ligne. Le check-out est bloqué si le folio n'est pas
+soldé, avec le montant dû affiché. Les mêmes actions restent disponibles dans le détail d'un
+séjour.
+
+### 7.11 Exports PDF, CSV et Excel sur tous les rapports
+
+Un composant unique (`Exports`) reçoit **une seule fois** les colonnes et les lignes, et les
+distribue aux trois formats :
+
+| Format | Mise en œuvre |
+|---|---|
+| PDF | aperçu A4 (`ApercuDocument`) + impression navigateur |
+| CSV | séparateur `;`, BOM UTF-8, guillemets échappés |
+| Excel | classeur SpreadsheetML 2003 (`.xls`), en-tête coloré, nombres typés |
+
+Écrans couverts : restaurant (par article), caisse (folios et soldes), fiches de police
+(+ registre), tours de quart, stock, événements de la salle, réception du jour, bibliothèque de
+documents.
+
+### 7.12 Routes
+
+Audit exécuté et documenté dans `docs/audits/ROUTES_2026-11.md` : 13 routes, 13 entrées de
+menu, 13 permissions, aucune orpheline. L'écran courant est désormais dans l'URL (`#/stock`) —
+lien direct, rafraîchissement et bouton retour fonctionnent.
+
+---
+
+## 8. Limites ajoutées par cette passe
+
+| Sujet | Limite | Suite |
+|---|---|---|
+| Exports | `.xls` en SpreadsheetML (pas `.xlsx` OOXML) | passer à une vraie librairie serveur pour les gros volumes |
+| Carte restaurant | pas de gestion des allergènes ni des menus enfants | hors périmètre 3★ |
+| Changement de chambre | le supplément est calculé et tracé, pas encore répercuté sur le folio | écriture de ligne folio à brancher |
+| Comptes | pas de réinitialisation de mot de passe en libre-service | parcours RH / IT |
+| Référentiel pays/villes | 29 pays, villes principales seulement | référentiel complet si l'activité internationale se développe |
+| Verrou tarifaire | code d'exploitation partagé en démonstration | second facteur nominatif en production |

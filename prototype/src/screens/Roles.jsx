@@ -15,10 +15,10 @@
 // ------------------------------------------------------------------
 
 import { Fragment, useMemo, useState } from 'react';
-import { Lock, RotateCcw, Save, ShieldCheck, TriangleAlert } from 'lucide-react';
+import { KeyRound, Lock, Plus, RotateCcw, Save, ShieldCheck, TriangleAlert, UserPlus } from 'lucide-react';
 import { PERMISSIONS, PROFILS } from '../data';
 import { useApp } from '../store';
-import { Button, Card, CardHeader, Pill, cx, useToast } from '../components/ui';
+import { Button, Card, CardHeader, Modal, Pill, cx, useToast } from '../components/ui';
 
 export function Roles() {
   const { state, actions } = useApp();
@@ -26,6 +26,8 @@ export function Roles() {
 
   const [brouillon, setBrouillon] = useState(() => structuredClone(state.roles));
   const [modifie, setModifie] = useState(false);
+  const [creationCompte, setCreationCompte] = useState(false);
+  const [nouveauCompte, setNouveauCompte] = useState({ nom: '', identifiant: '', email: '', profil: 'reception' });
 
   const roles = useMemo(() => Object.keys(PROFILS), []);
   const groupes = useMemo(() => {
@@ -220,6 +222,81 @@ export function Roles() {
         </div>
       </Card>
 
+      {/* Comptes nominatifs : le rôle est porté par le compte, pas choisi à la
+          connexion. Créer un agent ici le rend immédiatement connectable. */}
+      <Card>
+        <CardHeader
+          titre="Comptes agents"
+          sousTitre={`${(state.comptes ?? []).filter((c) => c.actif !== false).length} compte(s) actif(s) · un compte par agent, un rôle par compte`}
+          action={
+            <Button size="sm" onClick={() => setCreationCompte(true)}>
+              <UserPlus className="size-3.5" /> Nouvel utilisateur
+            </Button>
+          }
+        />
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-[12px]">
+            <thead>
+              <tr className="border-b border-line-soft text-[10px] tracking-[0.08em] text-ink-3 uppercase">
+                <th className="px-5 py-2 font-semibold">Agent</th>
+                <th className="px-3 py-2 font-semibold">Identifiant</th>
+                <th className="px-3 py-2 font-semibold">Rôle</th>
+                <th className="px-3 py-2 font-semibold">Session</th>
+                <th className="px-5 py-2 text-right font-semibold">Statut</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line-soft">
+              {(state.comptes ?? []).map((c) => (
+                <tr key={c.id} className="hover:bg-sand-50/60">
+                  <td className="px-5 py-2.5">
+                    <p className="font-medium text-ink">{c.nom}</p>
+                    <p className="text-[11px] text-ink-3">{c.email || 'sans adresse'}</p>
+                  </td>
+                  <td className="px-3 py-2.5 text-ink-2">{c.identifiant}</td>
+                  <td className="px-3 py-2.5">
+                    <select
+                      aria-label={`Rôle de ${c.nom}`}
+                      value={c.profil}
+                      onChange={(e) => actions.majCompte(c.id, { profil: e.target.value })}
+                      className="rounded-lg border border-line-strong bg-surface px-2 py-1 text-[11px] text-ink-2 outline-none focus:border-maj"
+                    >
+                      {Object.entries(PROFILS).map(([cle, p]) => (
+                        <option key={cle} value={cle}>{p.label}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-3 py-2.5 text-[11px] text-ink-3">
+                    {state.session?.compteId === c.id ? 'ouverture en cours' : '—'}
+                  </td>
+                  <td className="px-5 py-2.5 text-right">
+                    <button
+                      type="button"
+                      onClick={() => actions.majCompte(c.id, { actif: c.actif === false })}
+                      className={cx(
+                        'rounded-full border px-2.5 py-1 text-[10px] font-medium',
+                        c.actif === false
+                          ? 'border-crimson/30 bg-crimson-100 text-crimson'
+                          : 'border-jade/30 bg-jade-100 text-jade',
+                      )}
+                    >
+                      {c.actif === false ? 'Désactivé' : 'Actif'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="border-t border-line-soft px-5 py-3">
+          <p className="flex items-start gap-2 text-[11px] leading-4 text-ink-3">
+            <KeyRound className="mt-0.5 size-3.5 shrink-0" />
+            Démonstration : mot de passe commun <code className="rounded bg-sand-100 px-1">makarim2026</code>.
+            En production : mot de passe individuel haché, verrouillage après échecs et second facteur
+            pour la Direction.
+          </p>
+        </div>
+      </Card>
+
       <div className="flex items-start gap-2 rounded-xl border border-line bg-sand-50 p-3">
         <ShieldCheck className="mt-0.5 size-4 shrink-0 text-ink-3" />
         <p className="text-[12px] leading-5 text-ink-2">
@@ -237,6 +314,95 @@ export function Roles() {
           compte restreint.
         </p>
       </div>
+
+      <Modal
+        open={creationCompte}
+        onClose={() => setCreationCompte(false)}
+        title="Nouvel utilisateur"
+        subtitle="Le rôle détermine les écrans accessibles dès la première connexion"
+        width="max-w-md"
+        footer={
+          <div className="flex justify-between gap-2">
+            <Button variant="outline" onClick={() => setCreationCompte(false)}>Annuler</Button>
+            <Button
+              disabled={
+                !nouveauCompte.nom.trim() ||
+                !nouveauCompte.identifiant.trim() ||
+                (state.comptes ?? []).some(
+                  (c) => c.identifiant.toLowerCase() === nouveauCompte.identifiant.trim().toLowerCase(),
+                )
+              }
+              onClick={() => {
+                actions.creerCompte({
+                  nom: nouveauCompte.nom.trim(),
+                  identifiant: nouveauCompte.identifiant.trim(),
+                  email: nouveauCompte.email.trim(),
+                  profil: nouveauCompte.profil,
+                });
+                push(`Compte créé — ${nouveauCompte.nom.trim()} (${PROFILS[nouveauCompte.profil].label}).`, 'success');
+                setNouveauCompte({ nom: '', identifiant: '', email: '', profil: 'reception' });
+                setCreationCompte(false);
+              }}
+            >
+              <Plus className="size-3.5" /> Créer le compte
+            </Button>
+          </div>
+        }
+      >
+        <div className="grid gap-3">
+          <div>
+            <label htmlFor="u-nom" className="text-[12px] font-semibold text-ink-2">Nom et prénom</label>
+            <input
+              id="u-nom"
+              autoFocus
+              value={nouveauCompte.nom}
+              onChange={(e) => setNouveauCompte((c) => ({ ...c, nom: e.target.value }))}
+              className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+            />
+          </div>
+          <div>
+            <label htmlFor="u-ident" className="text-[12px] font-semibold text-ink-2">Identifiant de connexion</label>
+            <input
+              id="u-ident"
+              value={nouveauCompte.identifiant}
+              onChange={(e) => setNouveauCompte((c) => ({ ...c, identifiant: e.target.value }))}
+              placeholder="prenom.nom"
+              className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+            />
+            {(state.comptes ?? []).some(
+              (c) => c.identifiant.toLowerCase() === nouveauCompte.identifiant.trim().toLowerCase(),
+            ) && <p className="mt-1 text-[11px] text-crimson">Cet identifiant est déjà pris.</p>}
+          </div>
+          <div>
+            <label htmlFor="u-email" className="text-[12px] font-semibold text-ink-2">Adresse e-mail</label>
+            <input
+              id="u-email"
+              type="email"
+              value={nouveauCompte.email}
+              onChange={(e) => setNouveauCompte((c) => ({ ...c, email: e.target.value }))}
+              placeholder="prenom.nom@hotel-makarim.ma"
+              className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+            />
+          </div>
+          <div>
+            <label htmlFor="u-role" className="text-[12px] font-semibold text-ink-2">Rôle</label>
+            <select
+              id="u-role"
+              value={nouveauCompte.profil}
+              onChange={(e) => setNouveauCompte((c) => ({ ...c, profil: e.target.value }))}
+              className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+            >
+              {Object.entries(PROFILS).map(([cle, p]) => (
+                <option key={cle} value={cle}>{p.label}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-ink-3">
+              Écrans ouverts par défaut : {(PROFILS[nouveauCompte.profil]?.ecrans ?? []).length} —
+              ajustables dans la matrice ci-dessous.
+            </p>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

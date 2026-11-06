@@ -21,6 +21,7 @@ import { useApp } from '../store';
 import { fmtLong, money } from '../lib/date';
 import { ApercuDocument, RapportTourneeDoc } from '../components/Document';
 import { DureeShift } from '../components/Chrono';
+import { Exports } from '../components/Exports';
 import { Button, Card, CardHeader, Pill, cx, useToast } from '../components/ui';
 
 // Libellé lisible d'un shift à partir de sa clé (`matin`, `apres-midi`, `nuit`).
@@ -295,7 +296,35 @@ export function Tournees() {
             </Card>
 
             <Card>
-              <CardHeader titre="Relève" sousTitre={fmtLong(state.date)} />
+              <CardHeader
+                titre="Relève"
+                sousTitre={fmtLong(state.date)}
+                action={
+                  <Exports
+                    nom={`tournees-${state.date}`}
+                    titre="Tours de quart"
+                    compact
+                    colonnes={[
+                      { cle: 'agent', label: 'Agent' },
+                      { cle: 'shift', label: 'Shift' },
+                      { cle: 'plage', label: 'Plage' },
+                      { cle: 'statut', label: 'Statut' },
+                      { cle: 'taches', label: 'Tâches faites' },
+                      { cle: 'total', label: 'Tâches' },
+                    ]}
+                    lignes={state.tournees.map((t) => ({
+                      agent: t.agent,
+                      shift: labelShift(t.shift),
+                      plage: t.plage,
+                      statut: t.statut === 'clos' ? 'Clôturé' : t.statut === 'en_cours' ? 'En cours' : 'À venir',
+                      taches: (t.taches ?? []).filter((x) => x.fait).length,
+                      total: (t.taches ?? []).length,
+                    }))}
+                    onPdf={() => setApercu(state.tournees.find((t) => t.statut === 'en_cours') ?? state.tournees[0])}
+                    pdfLibelle="Rapport imprimable"
+                  />
+                }
+              />
               <div className="space-y-2 px-5 py-4">
                 {state.tournees.map((t) => (
                   <div key={t.id} className="flex items-center justify-between gap-2">

@@ -15,17 +15,19 @@ import {
   Monitor,
   Plus,
   Presentation,
+  Trash2,
   Users,
   Wifi,
 } from 'lucide-react';
-import { CRENEAUX, PARAMS, PRESTATIONS_EVENEMENT, SALLE } from '../data';
+import { CRENEAUX, PARAMS, SALLE } from '../data';
 
 // Capacité de sécurité de la salle, lue dans le référentiel (BR-EVT-006).
 // Constante de module : partagée par l'écran et par le constructeur de devis.
 const CAPACITE_SALLE = SALLE.capacites[0].places;
-import { useApp } from '../store';
+import { prestationsSalle, useApp } from '../store';
 import { fmtCourt, isoAdd, money } from '../lib/date';
-import { Button, Card, CardHeader, Pill, cx, useToast } from '../components/ui';
+import { Exports } from '../components/Exports';
+import { Button, Card, CardHeader, Modal, Pill, cx, useToast } from '../components/ui';
 
 const STATUT_EVT = {
   confirme: { label: 'Confirmé', tone: 'jade' },
@@ -45,18 +47,21 @@ function ConstructeurDevis({ dateParDefaut }) {
   const [options, setOptions] = useState({ pauseCafe: true, dejeuner: true, projecteur: true });
 
   const location = formule === 'journee' ? SALLE.tarifs.locationJour : SALLE.tarifs.demiJournee;
+  // Prestations et TVA sont des paramètres : le devis suit les tarifs publiés.
+  const prestations = prestationsSalle(state);
+  const tvaSalle = state.parametres?.fiscalite?.tvaSalle ?? PARAMS.tvaSalle;
 
   const lignes = useMemo(() => {
     const l = [{ label: formule === 'journee' ? 'Location journée' : 'Location demi-journée', montant: location }];
-    for (const o of PRESTATIONS_EVENEMENT) {
+    for (const o of prestations) {
       if (!options[o.cle]) continue;
       l.push({ label: o.label, montant: o.type === 'pers' ? o.prix * participants : o.prix });
     }
     return l;
-  }, [options, participants, location, formule]);
+  }, [options, participants, location, formule, prestations]);
 
   const ht = lignes.reduce((s, l) => s + l.montant, 0);
-  const tva = Math.round(ht * (PARAMS.tvaSalle / 100));
+  const tva = Math.round(ht * (tvaSalle / 100));
   const ttc = ht + tva;
   const acompte = Math.round(ttc * (PARAMS.acompteEvenement / 100));
   // Capacité de sécurité = configuration théâtre de la salle (référentiel SALLE).
@@ -79,7 +84,7 @@ function ConstructeurDevis({ dateParDefaut }) {
 
   return (
     <Card>
-      <CardHeader titre="Construire un devis séminaire" sousTitre="Location + prestations traiteur · TVA 20 %" action={<Pill tone="maj">Devis instantané</Pill>} />
+      <CardHeader titre="Construire un devis séminaire" sousTitre={`Location + prestations traiteur · TVA ${state.parametres?.fiscalite?.tvaSalle ?? PARAMS.tvaSalle} %`} action={<Pill tone="maj">Devis instantané</Pill>} />
       <div className="space-y-4 p-5">
         <div className="grid gap-2 sm:grid-cols-2">
           <div>
@@ -177,7 +182,7 @@ function ConstructeurDevis({ dateParDefaut }) {
             Prestations
           </span>
           <ul role="group" aria-labelledby="evt-prestations" className="mt-1.5 space-y-0.5">
-            {PRESTATIONS_EVENEMENT.map((o) => (
+            {prestations.map((o) => (
               <li key={o.cle}>
                 <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-sand-50">
                   <span className={cx('grid size-4 place-items-center rounded border transition-colors', options[o.cle] ? 'border-maj bg-maj text-white' : 'border-line bg-surface')}>
@@ -208,7 +213,7 @@ function ConstructeurDevis({ dateParDefaut }) {
           </ul>
           <div className="mt-2 space-y-1 border-t border-line pt-2 text-[11px]">
             <div className="flex justify-between text-ink-2"><span>Total HT</span><span className="tnum">{money(ht)} MAD</span></div>
-            <div className="flex justify-between text-ink-2"><span>TVA 20 %</span><span className="tnum">{money(tva)} MAD</span></div>
+            <div className="flex justify-between text-ink-2"><span>TVA {tvaSalle} %</span><span className="tnum">{money(tva)} MAD</span></div>
             <div className="flex justify-between text-[14px] font-semibold text-ink"><span>Total TTC</span><span className="tnum">{money(ttc)} MAD</span></div>
           </div>
           <p className="mt-2 text-[12px] text-ink-3">Acompte de 30 % à la confirmation : {money(acompte)} MAD</p>
@@ -227,10 +232,122 @@ function ConstructeurDevis({ dateParDefaut }) {
   );
 }
 
+// Créneau libre cliqué dans le planning : on ouvre une prise de réservation
+// courte plutôt qu'un formulaire vide ailleurs dans la page. Le créneau, la
+// date et le montant sont déjà connus — il ne reste que le client.
+function FormCreneau({ creneau, onClose }) {
+  const { state, actions } = useApp();
+  const { push } = useToast();
+  const prestations = prestationsSalle(state);
+  const [entreprise, setEntreprise] = useState('');
+  const [participants, setParticipants] = useState(20);
+  const [choix, setChoix] = useState({ pauseCafe: true, projecteur: true });
+
+  const montant = useMemo(() => {
+    let total = SALLE.tarifs.locationJour;
+    for (const o of prestations) {
+      if (!choix[o.cle]) continue;
+      total += o.type === 'pers' ? o.prix * participants : o.prix;
+    }
+    return total;
+  }, [choix, participants, prestations]);
+
+  const tvaSalle = state.parametres?.fiscalite?.tvaSalle ?? PARAMS.tvaSalle;
+  const ttc = Math.round(montant * (1 + tvaSalle / 100));
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Créneau libre — ${CRENEAUX[creneau.creneau]}`}
+      subtitle={`${fmtCourt(creneau.date)} · Salle Martil`}
+      footer={
+        <div className="flex items-center justify-between gap-3">
+          <p className="tnum text-[13px] font-semibold text-ink">{money(ttc)} MAD TTC</p>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose}>Annuler</Button>
+            <Button
+              disabled={!entreprise.trim()}
+              onClick={() => {
+                actions.confirmEvent({
+                  titre: `Séminaire — ${entreprise.trim()}`,
+                  entreprise: entreprise.trim(),
+                  date: creneau.date,
+                  creneau: creneau.creneau,
+                  participants,
+                  montant: ttc,
+                });
+                push(`Créneau réservé — ${entreprise.trim()} · acompte de ${money(Math.round(ttc * 0.3))} MAD.`);
+                onClose();
+              }}
+            >
+              <CalendarCheck2 className="size-3.5" /> Réserver ce créneau
+            </Button>
+          </div>
+        </div>
+      }
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <label htmlFor="cre-client" className="text-[12px] font-semibold text-ink-2">Client / entreprise</label>
+          <input
+            id="cre-client"
+            autoFocus
+            value={entreprise}
+            onChange={(e) => setEntreprise(e.target.value)}
+            placeholder="Nom du client"
+            className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+          />
+        </div>
+        <div>
+          <label htmlFor="cre-participants" className="text-[12px] font-semibold text-ink-2">Participants</label>
+          <input
+            id="cre-participants"
+            type="number"
+            min="1"
+            max={CAPACITE_SALLE}
+            value={participants}
+            onChange={(e) => setParticipants(Math.min(CAPACITE_SALLE, Math.max(1, Number(e.target.value))))}
+            className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+          />
+        </div>
+        <div>
+          <p className="text-[12px] font-semibold text-ink-2">Location journée</p>
+          <p className="tnum mt-1.5 text-[12px] text-ink-2">{money(SALLE.tarifs.locationJour)} MAD</p>
+        </div>
+        <div className="sm:col-span-2">
+          <p className="mb-1 text-[12px] font-semibold text-ink-2">Prestations</p>
+          <ul className="space-y-0.5">
+            {prestations.map((o) => (
+              <li key={o.cle}>
+                <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 hover:bg-sand-50">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(choix[o.cle])}
+                    onChange={(e) => setChoix((prev) => ({ ...prev, [o.cle]: e.target.checked }))}
+                    className="size-3.5 rounded border-line-strong"
+                  />
+                  <span className="flex-1 text-[12px] text-ink-2">{o.label}</span>
+                  <span className="tnum text-[11px] text-ink-3">
+                    {money(o.prix)} MAD{o.type === 'pers' ? ' / pers.' : ''}
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export function Conference() {
   const { state, actions } = useApp();
   const { push } = useToast();
   const [ouvert, setOuvert] = useState(null);
+  const [creneauLibre, setCreneauLibre] = useState(null); // { date, creneau }
+  const [evenement, setEvenement] = useState(null); // détail d'un créneau occupé
+  const [paramPrestations, setParamPrestations] = useState(false);
 
   const jours = Array.from({ length: 7 }, (_, i) => isoAdd(state.date, i));
   const evt = (jour, creneau) => state.evenements.find((e) => e.date === jour && e.creneau === creneau && e.statut !== 'annule');
@@ -298,7 +415,7 @@ export function Conference() {
                           <button
                             key={jour + creneau}
                             type="button"
-                            onClick={() => e && push(`${e.titre} — ${e.participants} participants (${fmtCourt(jour)})`, 'info')}
+                            onClick={() => (e ? setEvenement(e) : setCreneauLibre({ date: jour, creneau }))}
                             className={cx(
                               'min-h-[46px] rounded-lg border px-1.5 py-1 text-left text-[10px] leading-3 transition-colors',
                               statut === 'confirme' && 'border-jade/30 bg-jade-100 text-jade hover:brightness-95',
@@ -326,7 +443,57 @@ export function Conference() {
           </Card>
 
           <Card>
-            <CardHeader titre="Événements" sousTitre="Confirmés, options et devis en cours" />
+            <CardHeader
+              titre="Prestations de la salle"
+              sousTitre="Tarifs, unité et disponibilité — le devis et le planning suivent"
+              action={
+                state.profil === 'direction' ? (
+                  <Button size="sm" variant="outline" onClick={() => setParamPrestations(true)}>
+                    <Plus className="size-3.5" /> Gérer
+                  </Button>
+                ) : null
+              }
+            />
+            <ul className="divide-y divide-line-soft">
+              {prestationsSalle(state).map((o) => (
+                <li key={o.cle} className="flex items-center gap-3 px-5 py-2">
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-ink">{o.label}</span>
+                  <span className="text-[11px] text-ink-3">{o.type === 'pers' ? 'par personne' : 'forfait'}</span>
+                  <span className="tnum w-20 text-right text-[12px] font-semibold text-ink">{money(o.prix)} MAD</span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+
+          <Card>
+            <CardHeader
+              titre="Événements"
+              sousTitre="Confirmés, options et devis en cours"
+              action={
+                <Exports
+                  nom={`evenements-salle-${state.date}`}
+                  titre="Événements salle"
+                  colonnes={[
+                    { cle: 'entreprise', label: 'Client' },
+                    { cle: 'date', label: 'Date' },
+                    { cle: 'creneau', label: 'Créneau' },
+                    { cle: 'participants', label: 'Participants' },
+                    { cle: 'montant', label: 'Montant TTC (MAD)' },
+                    { cle: 'acompte', label: 'Acompte (MAD)' },
+                    { cle: 'statut', label: 'Statut' },
+                  ]}
+                  lignes={aVenir.map((e) => ({
+                    entreprise: e.entreprise,
+                    date: e.date,
+                    creneau: CRENEAUX[e.creneau]?.split(' ')[0] ?? e.creneau,
+                    participants: e.participants,
+                    montant: e.montant,
+                    acompte: e.acompte ?? 0,
+                    statut: STATUT_EVT[e.statut]?.label ?? e.statut,
+                  }))}
+                />
+              }
+            />
             <ul className="divide-y divide-line-soft">
               {aVenir.map((e) => {
                 const s = STATUT_EVT[e.statut] ?? STATUT_EVT.devis;
@@ -432,6 +599,119 @@ export function Conference() {
           </Card>
         </div>
       </div>
+
+      {creneauLibre && <FormCreneau creneau={creneauLibre} onClose={() => setCreneauLibre(null)} />}
+
+      {evenement && (
+        <Modal
+          open
+          onClose={() => setEvenement(null)}
+          title={evenement.entreprise}
+          subtitle={`${CRENEAUX[evenement.creneau]} · ${fmtCourt(evenement.date)} · ${evenement.participants} participants`}
+          width="max-w-md"
+          footer={
+            <div className="flex flex-wrap justify-between gap-2">
+              {evenement.statut !== 'confirme' ? (
+                <Button
+                  onClick={() => {
+                    actions.majEvenement(evenement.id, { statut: 'confirme' });
+                    push(`${evenement.entreprise} confirmé — acompte facturé.`, 'success');
+                    setEvenement(null);
+                  }}
+                >
+                  <CalendarCheck2 className="size-3.5" /> Confirmer
+                </Button>
+              ) : (
+                <Pill tone="jade">Confirmé</Pill>
+              )}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    actions.majEvenement(evenement.id, { statut: 'annule' });
+                    push(`Événement annulé — créneau libéré.`, 'info');
+                    setEvenement(null);
+                  }}
+                >
+                  <Trash2 className="size-3.5" /> Annuler
+                </Button>
+                <Button variant="outline" onClick={() => setEvenement(null)}>Fermer</Button>
+              </div>
+            </div>
+          }
+        >
+          <dl className="space-y-2 text-[12px]">
+            {[
+              ['Statut', STATUT_EVT[evenement.statut]?.label ?? evenement.statut],
+              ['Montant TTC', `${money(evenement.montant)} MAD`],
+              ['Acompte (30 %)', `${money(evenement.acompte ?? 0)} MAD`],
+              ['Créneau', CRENEAUX[evenement.creneau]],
+              ['Participants', `${evenement.participants} / ${CAPACITE_SALLE}`],
+            ].map(([k, v]) => (
+              <div key={k} className="flex justify-between">
+                <dt className="text-ink-3">{k}</dt>
+                <dd className="font-medium text-ink">{v}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-3 rounded-lg bg-sand-100 px-3 py-2 text-[11px] text-ink-2">
+            Un événement confirmé bloque la salle sur ce créneau. L’annulation libère
+            immédiatement la disponibilité et reste tracée dans le journal.
+          </p>
+        </Modal>
+      )}
+
+      {paramPrestations && (
+        <Modal
+          open
+          onClose={() => setParamPrestations(false)}
+          title="Prestations de la salle"
+          subtitle="Renommer, tarifer, désactiver — le devis se recalcule"
+          width="max-w-2xl"
+          footer={<div className="flex justify-end"><Button onClick={() => setParamPrestations(false)}>Terminé</Button></div>}
+        >
+          <ul className="divide-y divide-line-soft">
+            {(state.parametres?.prestationsSalle ?? []).map((o) => (
+              <li key={o.cle} className="flex flex-wrap items-center gap-2 py-2">
+                <input
+                  aria-label={`Libellé ${o.label}`}
+                  value={o.label}
+                  onChange={(e) => actions.majPrestationSalle(o.cle, { label: e.target.value })}
+                  className="min-w-0 flex-1 rounded-lg border border-line-strong bg-surface px-2 py-1.5 text-[12px] outline-none focus:border-maj"
+                />
+                <input
+                  aria-label={`Prix ${o.label}`}
+                  type="number"
+                  min="0"
+                  value={o.prix}
+                  onChange={(e) => actions.majPrestationSalle(o.cle, { prix: Number(e.target.value) })}
+                  className="tnum w-20 rounded-lg border border-line-strong bg-surface px-2 py-1.5 text-[12px] outline-none focus:border-maj"
+                />
+                <select
+                  aria-label={`Unité ${o.label}`}
+                  value={o.type}
+                  onChange={(e) => actions.majPrestationSalle(o.cle, { type: e.target.value })}
+                  className="rounded-lg border border-line-strong bg-surface px-2 py-1.5 text-[11px] outline-none focus:border-maj"
+                >
+                  <option value="pers">par personne</option>
+                  <option value="forfait">forfait</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => actions.majPrestationSalle(o.cle, { active: false })}
+                  className="rounded-lg border border-line-strong px-2 py-1.5 text-[11px] text-crimson hover:bg-crimson-100"
+                >
+                  Désactiver
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-[11px] text-ink-3">
+            Les prestations désactivées disparaissent du devis et du formulaire de créneau, mais
+            restent dans les devis déjà émis.
+          </p>
+        </Modal>
+      )}
     </div>
   );
 }

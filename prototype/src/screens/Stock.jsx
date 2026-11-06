@@ -15,6 +15,7 @@ import { ArrowDownCircle, ArrowUpCircle, PackageSearch, TriangleAlert } from 'lu
 import { CATEGORIES_STOCK } from '../data';
 import { articlesEnAlerte, useApp } from '../store';
 import { fmtCourt, money } from '../lib/date';
+import { Exports } from '../components/Exports';
 import { Button, Card, CardHeader, Modal, Pill, Stat, cx, useToast } from '../components/ui';
 import { InfoBulle } from '../components/InfoBulle';
 
@@ -77,6 +78,23 @@ export function Stock() {
           sousTitre="Entrées fournisseurs, sorties d’exploitation et dotation minibar"
           action={
             <div className="flex flex-wrap items-center gap-1.5">
+              <Exports
+                nom={`stock-${state.date}`}
+                titre="Inventaire"
+                compact
+                colonnes={[
+                  { cle: 'nom', label: 'Article' },
+                  { cle: 'categorie', label: 'Catégorie' },
+                  { cle: 'unite', label: 'Unité' },
+                  { cle: 'stock', label: 'Stock' },
+                  { cle: 'seuil', label: 'Seuil' },
+                  { cle: 'alerte', label: 'Alerte' },
+                ]}
+                lignes={(state.stock ?? []).map((a) => ({
+                  ...a,
+                  alerte: a.stock <= a.seuil ? 'Seuil critique' : 'OK',
+                }))}
+              />
               {['toutes', ...CATEGORIES_STOCK].map((c) => (
                 <button
                   key={c}

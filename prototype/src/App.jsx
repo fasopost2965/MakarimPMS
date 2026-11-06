@@ -9,7 +9,7 @@
 //    (folios non soldés, départs restants, chambres à nettoyer, arrivées non
 //    enregistrées) avant le passage à J+1.
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Moon, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { BottomNav, MobileNav, Sidebar, Topbar, ecransAutorises } from './components/Shell';
 import { CommandPalette } from './components/CommandPalette';
@@ -145,9 +145,18 @@ export function NightAudit({ open, onClose }) {
   );
 }
 
+// Routes : l'écran courant est aussi porté par l'URL (#/stock, #/tarifs…).
+// Un lien direct ouvre le bon écran après connexion, et le rafraîchissement
+// ne renvoie plus systématiquement au tableau de bord.
+function ecranDepuisHash() {
+  if (typeof window === 'undefined') return 'dashboard';
+  const cle = window.location.hash.replace(/^#\/?/, '');
+  return PAGES[cle] ? cle : 'dashboard';
+}
+
 function Contenu() {
   const { state, actions } = useApp();
-  const [page, setPage] = useState('dashboard');
+  const [page, setPage] = useState(ecranDepuisHash);
   const [navMobile, setNavMobile] = useState(false);
   const [palette, setPalette] = useState(false);
   const [nightAudit, setNightAudit] = useState(false);
@@ -157,11 +166,35 @@ function Contenu() {
   const kpi = kpiDuJour(state);
   const profil = PROFILS[state.profil] ?? PROFILS.direction;
 
+  // Navigation unique : valide la clé, met à jour l'état et l'URL. Un écran
+  // inconnu (#/nimporte-quoi) retombe sur le tableau de bord.
+  const naviguer = useCallback((cle) => {
+    if (!PAGES[cle]) return;
+    setPage(cle);
+    if (window.location.hash !== `#/${cle}`) {
+      window.history.replaceState(null, '', `#/${cle}`);
+    }
+  }, []);
+
+  // À l'ouverture d'une session, l'URL reflète l'écran affiché : un lien
+  // copié depuis la barre d'adresse rouvre le même écran.
+  useEffect(() => {
+    if (state.session && window.location.hash !== `#/${page}`) {
+      window.history.replaceState(null, '', `#/${page}`);
+    }
+  }, [state.session, page]);
+
+  useEffect(() => {
+    const onHash = () => setPage(ecranDepuisHash());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
   // Un changement de profil peut retirer l'écran courant : on retombe sur
   // l'écran d'accueil du profil (comme le ferait un 403 côté serveur).
   useEffect(() => {
-    if (!ecransAutorises(state.profil, state.roles).includes(page)) setPage(profil.accueil);
-  }, [page, profil.accueil, state.profil, state.roles]);
+    if (!ecransAutorises(state.profil, state.roles).includes(page)) naviguer(profil.accueil);
+  }, [page, profil.accueil, state.profil, state.roles, naviguer]);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -197,8 +230,8 @@ function Contenu() {
       >
         Aller au contenu principal
       </a>
-      <Sidebar active={page} onNavigate={setPage} onNightAudit={() => setNightAudit(true)} />
-      <MobileNav open={navMobile} onClose={() => setNavMobile(false)} active={page} onNavigate={setPage} />
+      <Sidebar active={page} onNavigate={naviguer} onNightAudit={() => setNightAudit(true)} />
+      <MobileNav open={navMobile} onClose={() => setNavMobile(false)} active={page} onNavigate={naviguer} />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
@@ -208,13 +241,13 @@ function Contenu() {
           onOpenPalette={() => setPalette(true)}
           onChangerProfil={(cle) => {
             actions.setProfil(cle);
-            setPage(PROFILS[cle].accueil);
+            naviguer(PROFILS[cle].accueil);
             push(`Profil « ${PROFILS[cle].label} » activé — navigation et droits recalculés.`, 'info');
           }}
         />
         <main id="contenu" tabIndex={-1} className="flex-1 overflow-y-auto pb-16 outline-none lg:pb-0">
           <div key={page} className="animate-fade-up">
-            <Composant onNavigate={setPage} kpi={kpi} />
+            <Composant onNavigate={naviguer} kpi={kpi} />
           </div>
           <div className="hidden justify-center pb-6 lg:flex">
             <Pill tone="neutral">
@@ -225,11 +258,11 @@ function Contenu() {
         </main>
       </div>
 
-      <BottomNav active={page} onNavigate={setPage} />
+      <BottomNav active={page} onNavigate={naviguer} />
       <CommandPalette
         open={palette}
         onClose={() => setPalette(false)}
-        onNavigate={setPage}
+        onNavigate={naviguer}
         onNightAudit={() => setNightAudit(true)}
       />
       <NightAudit open={nightAudit} onClose={() => setNightAudit(false)} />

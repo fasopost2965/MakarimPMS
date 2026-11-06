@@ -16,7 +16,9 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
 import { buildInitialState } from './seed';
-import { CARTE, PARAMS, PROFILS, SHIFTS, TYPES_CHAMBRE } from './data';
+import {
+  CARTE, MOTIFS_CHANGEMENT, PARAMS, PROFILS, RANG_STANDING, SHIFTS, TYPES_CHAMBRE,
+} from './data';
 import {
   montantHebergement, montantTaxeSejour, prixNuit, soldeFolio, totalCommande,
 } from './lib/pricing';
@@ -31,10 +33,24 @@ const StoreContext = createContext(null);
 // Taux de TVA appliqué à une ligne de folio. La taxe de séjour n'est pas
 // soumise à TVA (elle est reversée au Trésor), l'hébergement et les pensions
 // sont à 10 %, les prestations annexes et la restauration à 20 %.
-export function tvaDeLigne(ligne) {
+// Les taux viennent de `parametres.fiscalite` (éditable par la Direction) ;
+// à défaut, des constantes du cahier des charges. Un changement de taux se
+// répercute sur tous les calculs suivants sans toucher au code.
+export function fiscaliteDe(state) {
+  return state?.parametres?.fiscalite ?? {
+    tvaHebergement: PARAMS.tvaHebergement,
+    tvaAnnexe: PARAMS.tvaAnnexe,
+    tvaSalle: PARAMS.tvaSalle,
+    taxeSejour: PARAMS.taxeSejour,
+    plafondEspeces: PARAMS.plafondEspeces,
+  };
+}
+
+export function tvaDeLigne(ligne, fiscalite) {
   if (ligne.type === 'taxe') return 0;
-  if (ligne.type === 'hebergement') return PARAMS.tvaHebergement;
-  return PARAMS.tvaAnnexe;
+  const f = fiscalite ?? { tvaHebergement: PARAMS.tvaHebergement, tvaAnnexe: PARAMS.tvaAnnexe };
+  if (ligne.type === 'hebergement') return f.tvaHebergement ?? PARAMS.tvaHebergement;
+  return f.tvaAnnexe ?? PARAMS.tvaAnnexe;
 }
 
 // Découpe un folio par payeur. Un même séjour peut mêler une part entreprise
@@ -211,7 +227,7 @@ function reducer(state, action) {
         {
           id: `${folioId}-2`,
           libelle: `Taxe de séjour (${resa.occupants} pers. × ${nb} nuit${nb > 1 ? 's' : ''})`,
-          montant: montantTaxeSejour(resa.occupants, nb),
+          montant: montantTaxeSejour(resa.occupants, nb, fiscaliteDe(state).taxeSejour),
           type: 'taxe',
           payeur: resa.societeId ? 'societe' : 'client',
         },
@@ -468,6 +484,28 @@ function reducer(state, action) {
     // Action unique du POS : crée ou met à jour la commande d'une table puis
     // l'envoie en chambre (écriture folio) ou l'encaisse. Un seul point
     // d'écriture = pas de commande orpheline entre deux dispatchs.
+    // Cycle de vie d'un événement de la salle : un devis se confirme, une
+    // option se lève. L'annulation libère le créneau (BR-EVT-001) sans
+    // effacer l'historique commercial (BR-AUD-001).
+    case 'MAJ_EVENEMENT': {
+      const evt = state.evenements.find((e) => e.id === action.id);
+      if (!evt) return state;
+      const patch = action.patch ?? {};
+      const acompte = patch.statut === 'confirme'
+        ? Math.round((patch.montant ?? evt.montant) * (PARAMS.acompteEvenement / 100))
+        : evt.acompte;
+      const next = {
+        ...state,
+        evenements: state.evenements.map((e) =>
+          e.id === action.id ? { ...e, ...patch, acompte } : e,
+        ),
+      };
+      const libelle = patch.statut === 'confirme'
+        ? `confirmé — acompte de ${acompte} MAD`
+        : patch.statut === 'annule' ? 'annulé, créneau libéré' : 'modifié';
+      return { ...next, journal: journal(next, `Salle — ${evt.entreprise} ${libelle}`, patch.statut === 'annule' ? 'crimson' : 'jade') };
+    }
+
     case 'COMMIT_ORDER': {
       const { table, couverts, lignes, mode, chambre: chambreNumero, moyen } = action.payload;
       if (!lignes?.length) return state;
@@ -633,7 +671,12 @@ function reducer(state, action) {
           montant: r.total,
           statut: 'emise',
           date: state.date,
-          lignes: r.lignes.map((l) => ({ libelle: l.libelle, montant: l.montant, tva: tvaDeLigne(l) })),
+          lignes: r.lignes.map((l) => ({
+            libelle: l.libelle,
+            montant: l.montant,
+            // Taux issu du paramétrage fiscal en vigueur, pas d'une constante.
+            tva: tvaDeLigne(l, fiscaliteDe(state)),
+          })),
         };
       });
 
@@ -1025,7 +1068,7 @@ function reducer(state, action) {
               {
                 libelle: `No-show ${resa.client} — 1 nuit retenue (${nb} nuit(s) réservée(s))`,
                 montant: prix,
-                tva: PARAMS.tvaHebergement,
+                tva: fiscaliteDe(state).tvaHebergement,
               },
             ],
           },
@@ -1043,6 +1086,236 @@ function reducer(state, action) {
     }
 
     // ---------------------------------------------------------------
+    // Paramétrage : carte du restaurant, prestations de la salle, fiscalité,
+    // verrou tarifaire et comptes agents. Tout passe par le même réducteur
+    // pour que chaque modification soit journalisée (BR-AUD-002).
+    // ---------------------------------------------------------------
+    case 'AJOUTER_ARTICLE_CARTE': {
+      const next = {
+        ...state,
+        carte: [...state.carte, { ...action.article, dispo: action.article.dispo ?? true }],
+      };
+      return {
+        ...next,
+        journal: journal(next, `Carte restaurant — « ${action.article.nom} » ajouté (${action.article.cat})`, 'jade'),
+      };
+    }
+
+    case 'MAJ_ARTICLE_CARTE': {
+      const article = state.carte.find((a) => a.id === action.id);
+      if (!article) return state;
+      const next = {
+        ...state,
+        carte: state.carte.map((a) => (a.id === action.id ? { ...a, ...action.patch } : a)),
+      };
+      const p = action.patch;
+      const texte = p.prix !== undefined && p.prix !== article.prix
+        ? `prix ${article.prix} → ${p.prix} MAD`
+        : p.dispo !== undefined
+          ? (p.dispo ? 'remis à la carte' : 'marqué en rupture')
+          : 'modifié';
+      return { ...next, journal: journal(next, `Carte restaurant — « ${article.nom} » ${texte}`, 'maj') };
+    }
+
+    case 'SUPPRIMER_ARTICLE_CARTE': {
+      const article = state.carte.find((a) => a.id === action.id);
+      if (!article) return state;
+      // Suppression logique : les notes déjà émises gardent leur libellé et
+      // leur prix, l'article disparaît seulement de la carte (BR-AUD-001).
+      const next = {
+        ...state,
+        carte: state.carte.map((a) => (a.id === action.id ? { ...a, supprime: true, dispo: false } : a)),
+      };
+      return {
+        ...next,
+        journal: journal(next, `Carte restaurant — « ${article.nom} » retiré de la carte`, 'crimson'),
+      };
+    }
+
+    case 'AJOUTER_PRESTATION_SALLE': {
+      const liste = state.parametres?.prestationsSalle ?? [];
+      const next = {
+        ...state,
+        parametres: {
+          ...state.parametres,
+          prestationsSalle: [...liste, { ...action.prestation, active: true }],
+        },
+      };
+      return {
+        ...next,
+        journal: journal(next, `Salle — prestation « ${action.prestation.label} » ajoutée`, 'jade'),
+      };
+    }
+
+    case 'MAJ_PRESTATION_SALLE': {
+      const liste = state.parametres?.prestationsSalle ?? [];
+      const presta = liste.find((p) => p.cle === action.cle);
+      if (!presta) return state;
+      const next = {
+        ...state,
+        parametres: {
+          ...state.parametres,
+          prestationsSalle: liste.map((p) => (p.cle === action.cle ? { ...p, ...action.patch } : p)),
+        },
+      };
+      const texte = action.patch.prix !== undefined && action.patch.prix !== presta.prix
+        ? `prix ${presta.prix} → ${action.patch.prix} MAD`
+        : action.patch.active === false ? 'désactivée' : action.patch.active === true ? 'réactivée' : 'modifiée';
+      return { ...next, journal: journal(next, `Salle — « ${presta.label} » ${texte}`, 'maj') };
+    }
+
+    // La fiscalité est sensible : tout changement est tracé avec l'ancienne
+    // et la nouvelle valeur, et ne s'applique qu'aux écritures suivantes.
+    case 'SET_FISCALITE': {
+      const avant = state.parametres?.fiscalite ?? {};
+      const apres = { ...avant, ...action.patch };
+      const next = { ...state, parametres: { ...state.parametres, fiscalite: apres } };
+      const changements = Object.keys(action.patch)
+        .filter((k) => avant[k] !== apres[k])
+        .map((k) => `${k} ${avant[k] ?? '—'} → ${apres[k]}`);
+      return {
+        ...next,
+        journal: journal(next, `Fiscalité mise à jour — ${changements.join(', ') || 'aucun écart'}`, 'crimson'),
+      };
+    }
+
+    case 'SET_VERROU_TARIFS': {
+      const next = { ...state, parametres: { ...state.parametres, verrouTarifs: action.actif } };
+      return {
+        ...next,
+        journal: journal(
+          next,
+          action.actif ? 'Grille tarifaire verrouillée' : 'Grille tarifaire déverrouillée (session courante)',
+          action.actif ? 'jade' : 'saffron',
+        ),
+      };
+    }
+
+    case 'CREER_COMPTE': {
+      const { compte } = action;
+      if (!compte?.identifiant) return state;
+      const existe = (state.comptes ?? []).some(
+        (c) => c.identifiant.toLowerCase() === compte.identifiant.toLowerCase(),
+      );
+      if (existe) return state;
+      const seq = (state.comptes?.length ?? 0) + 1;
+      const next = {
+        ...state,
+        comptes: [
+          ...(state.comptes ?? []),
+          {
+            id: `U-${seq}`,
+            nom: compte.nom,
+            identifiant: compte.identifiant.toLowerCase(),
+            email: compte.email ?? '',
+            profil: compte.profil,
+            actif: true,
+            creeLe: state.date,
+          },
+        ],
+      };
+      return {
+        ...next,
+        journal: journal(next, `Compte créé — ${compte.nom} (${PROFILS[compte.profil]?.label ?? compte.profil})`, 'jade'),
+      };
+    }
+
+    case 'MAJ_COMPTE': {
+      const compte = (state.comptes ?? []).find((c) => c.id === action.id);
+      if (!compte) return state;
+      const next = {
+        ...state,
+        comptes: state.comptes.map((c) => (c.id === action.id ? { ...c, ...action.patch } : c)),
+      };
+      const texte = action.patch.actif === false
+        ? 'désactivé'
+        : action.patch.actif === true
+          ? 'réactivé'
+          : 'modifié';
+      return { ...next, journal: journal(next, `Compte ${compte.nom} ${texte}`, 'maj') };
+    }
+
+    // Changement de chambre : jamais une simple réécriture du numéro.
+    //  - la chambre d'accueil doit être libre sur les mêmes dates ;
+    //  - le standing doit être égal ou supérieur, sauf surclassement assumé ;
+    //  - le motif et son origine (client / hôtel) sont obligatoires ;
+    //  - l'opération est historisée et rattachée au client.
+    case 'CHANGER_CHAMBRE': {
+      const { refType, refId, chambre: numeroCible, motif, commentaire, par } = action;
+      const cible = state.chambres.find((c) => c.numero === numeroCible);
+      const source = refType === 'sejour'
+        ? state.sejours.find((x) => x.id === refId)
+        : state.reservations.find((x) => x.id === refId);
+      if (!cible || !source) return state;
+      if (source.chambre === numeroCible) return state;
+
+      const chambreSource = state.chambres.find((c) => c.numero === source.chambre);
+      if (!chambreSource) return state;
+      if (RANG_STANDING[cible.type] < RANG_STANDING[chambreSource.type]) return state;
+
+      const occupee = [...state.reservations, ...state.sejours].some(
+        (x) =>
+          x.chambre === numeroCible &&
+          x.id !== refId &&
+          (x.statut === 'confirmee' || x.statut === 'en_sejour' || !x.statut) &&
+          x.arrivee < source.depart &&
+          x.depart > source.arrivee,
+      );
+      if (occupee || cible.statut === 'hors_service') return state;
+
+      const motifRef = MOTIFS_CHANGEMENT.find((m) => m.cle === motif) ?? MOTIFS_CHANGEMENT[0];
+      const supplement = prixDuJour(state, cible.type) - prixDuJour(state, chambreSource.type);
+
+      const changement = {
+        id: `CC-${(state.changementsChambre?.length ?? 0) + 1}`,
+        date: state.date,
+        heure: fmtHeure(),
+        refType,
+        refId,
+        client: source.client,
+        de: source.chambre,
+        vers: numeroCible,
+        standing: `${TYPES_CHAMBRE[chambreSource.type].court} → ${TYPES_CHAMBRE[cible.type].court}`,
+        motif: motifRef.cle,
+        motifLabel: motifRef.label,
+        origine: motifRef.origine,
+        tarif: motifRef.tarif,
+        supplement: motifRef.tarif === 'gratuit' ? 0 : supplement,
+        commentaire: commentaire?.trim() ?? '',
+        par: par ?? state.session?.nom ?? 'Réception',
+      };
+
+      const next = {
+        ...state,
+        changementsChambre: [...(state.changementsChambre ?? []), changement],
+        chambres: state.chambres.map((c) => {
+          if (c.numero === numeroCible) return { ...c, minibar: c.minibar ?? false };
+          return c;
+        }),
+        sejours: refType === 'sejour'
+          ? state.sejours.map((x) => (x.id === refId ? { ...x, chambre: numeroCible } : x))
+          : state.sejours,
+        reservations: refType === 'resa'
+          ? state.reservations.map((x) => (x.id === refId ? { ...x, chambre: numeroCible, changeLe: state.date } : x))
+          : state.reservations,
+        folios: refType === 'sejour'
+          ? state.folios.map((f) =>
+              f.id === source.folioId ? { ...f, chambre: numeroCible, lignes: f.lignes } : f,
+            )
+          : state.folios,
+      };
+
+      return {
+        ...next,
+        journal: journal(
+          next,
+          `Changement de chambre — ${source.client} : ${source.chambre} → ${numeroCible} (${motifRef.label})`,
+          'maj',
+        ),
+      };
+    }
+
+    // ---------------------------------------------------------------
     // Session : chaque agent se connecte avec son propre compte.
     // ---------------------------------------------------------------
     case 'LOGIN': {
@@ -1050,7 +1323,13 @@ function reducer(state, action) {
       if (!compte) return state;
       return {
         ...state,
-        session: { compteId: compte.id, profil: compte.profil, nom: compte.nom, ouverture: fmtHeure() },
+        session: {
+          compteId: compte.id,
+          identifiant: compte.identifiant,
+          profil: compte.profil,
+          nom: compte.nom,
+          ouverture: fmtHeure(),
+        },
         profil: compte.profil,
       };
     }
@@ -1156,6 +1435,7 @@ export function AppProvider({ children }) {
       payFolio: (folioId, moyen, montant) => dispatch({ type: 'PAY_FOLIO', folioId, moyen, montant }),
       invoiceFolio: (folioId) => dispatch({ type: 'INVOICE_FOLIO', folioId }),
       confirmEvent: (evenement) => dispatch({ type: 'CONFIRM_EVENT', evenement }),
+      majEvenement: (id, patch) => dispatch({ type: 'MAJ_EVENEMENT', id, patch }),
       toggleArticle: (id) => dispatch({ type: 'TOGGLE_ARTICLE', id }),
       commitOrder: (payload) => dispatch({ type: 'COMMIT_ORDER', payload }),
       closeDay: () => dispatch({ type: 'CLOSE_DAY' }),
@@ -1185,6 +1465,16 @@ export function AppProvider({ children }) {
       syncCanal: (id) => dispatch({ type: 'SYNC_CANAL', id }),
       pousserTarifs: () => dispatch({ type: 'POUSSER_TARIFS' }),
       marquerNoShow: (id) => dispatch({ type: 'MARQUER_NO_SHOW', id }),
+      ajouterArticleCarte: (article) => dispatch({ type: 'AJOUTER_ARTICLE_CARTE', article }),
+      majArticleCarte: (id, patch) => dispatch({ type: 'MAJ_ARTICLE_CARTE', id, patch }),
+      supprimerArticleCarte: (id) => dispatch({ type: 'SUPPRIMER_ARTICLE_CARTE', id }),
+      ajouterPrestationSalle: (prestation) => dispatch({ type: 'AJOUTER_PRESTATION_SALLE', prestation }),
+      majPrestationSalle: (cle, patch) => dispatch({ type: 'MAJ_PRESTATION_SALLE', cle, patch }),
+      setFiscalite: (patch) => dispatch({ type: 'SET_FISCALITE', patch }),
+      setVerrouTarifs: (actif) => dispatch({ type: 'SET_VERROU_TARIFS', actif }),
+      creerCompte: (compte) => dispatch({ type: 'CREER_COMPTE', compte }),
+      majCompte: (id, patch) => dispatch({ type: 'MAJ_COMPTE', id, patch }),
+      changerChambre: (payload) => dispatch({ type: 'CHANGER_CHAMBRE', ...payload }),
       login: (compte) => dispatch({ type: 'LOGIN', compte }),
       logout: () => dispatch({ type: 'LOGOUT' }),
       updateFichePolice: (ficheId, patch) =>
@@ -1238,7 +1528,7 @@ export function kpiDuJour(state) {
 
   const prix = (s) => {
     const chambre = state.chambres.find((c) => c.numero === s.chambre);
-    return TYPES_CHAMBRE[chambre?.type]?.prix ?? 0;
+    return prixDuJour(state, chambre?.type);
   };
   const totalNuit = [...restants, ...arrivees].reduce((sum, s) => sum + prix(s), 0);
   const adr = Math.round(totalNuit / Math.max(1, vendues));
@@ -1246,7 +1536,7 @@ export function kpiDuJour(state) {
 
   const caHebergement = [...restants, ...arrivees].reduce((sum, s) => {
     const ch = state.chambres.find((c) => c.numero === s.chambre);
-    return sum + montantHebergement(ch?.type, s.formule, s.occupants, 1);
+    return sum + montantHebergement(ch?.type, s.formule, s.occupants, 1, state.parametres?.grille);
   }, 0);
 
   const caRestauration =
@@ -1296,4 +1586,34 @@ export function chambresDisponibles(state, arrivee, depart) {
 
 export function soldeDuFolio(folio) {
   return soldeFolio(folio);
+}
+
+/* ---------------------- Sélecteurs de paramétrage ---------------------- */
+
+// Carte effective : les articles retirés restent en base (historique des notes)
+// mais ne sont plus proposés à la vente.
+export function articlesCarte(state) {
+  return (state.carte ?? []).filter((a) => !a.supprime);
+}
+
+export function prestationsSalle(state) {
+  return (state.parametres?.prestationsSalle ?? []).filter((p) => p.active !== false);
+}
+
+// Historique d'un client : séjours, réservations, factures et changements de
+// chambre regroupés sous le même nom. Sert au panneau « dossier client ».
+export function historiqueClient(state, nom) {
+  if (!nom) return { sejours: [], reservations: [], factures: [], changements: [] };
+  const cle = nom.trim().toLowerCase();
+  const meme = (x) => (x ?? '').trim().toLowerCase() === cle;
+  return {
+    sejours: (state.sejours ?? []).filter((s) => meme(s.client)),
+    reservations: (state.reservations ?? []).filter((r) => meme(r.client)),
+    factures: (state.factures ?? []).filter((f) => meme(f.client)),
+    changements: (state.changementsChambre ?? []).filter((c) => meme(c.client)),
+  };
+}
+
+export function changementsDe(state, refType, refId) {
+  return (state.changementsChambre ?? []).filter((c) => c.refType === refType && c.refId === refId);
 }

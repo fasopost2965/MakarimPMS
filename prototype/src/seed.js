@@ -2,8 +2,9 @@ import {
   BASE_DATE, isoAdd, isoDiff, nuits as nbNuits,
 } from './lib/date';
 import {
-  ARTICLES_STOCK, CANAUX_DISTRIBUTION, CLIENTS, FORFAIT_DEMI_JOURNEE, HOTEL,
-  PROFILS, SAISONS, SHIFTS, TACHES_TOURNEE, TYPES_CHAMBRE,
+  ARTICLES_STOCK, CANAUX_DISTRIBUTION, CLIENTS, COMPTES, FISCALITE_DEFAUT,
+  FORFAIT_DEMI_JOURNEE, HOTEL, PRESTATIONS_EVENEMENT, PROFILS, SAISONS, SHIFTS,
+  TACHES_TOURNEE, TYPES_CHAMBRE,
 } from './data';
 import { montantHebergement, montantTaxeSejour } from './lib/pricing';
 
@@ -470,6 +471,15 @@ export function buildInitialState(carte = []) {
     version: 12,
     publieeLe: date,
     publieePar: 'Youssef Benali',
+    // Fiscalité éditable : la Direction change un taux, tout le calcul suit
+    // (folio, facture, ventilation TVA). Le verrou tarifaire oblige à
+    // confirmer avant d'enregistrer une modification de prix.
+    fiscalite: { ...FISCALITE_DEFAUT },
+    verrouTarifs: true,
+    // Prestations de la salle : la Direction ajoute, renomme ou retire une
+    // prestation et fixe son prix ; le devis séminaire se recalcule.
+    prestationsSalle: PRESTATIONS_EVENEMENT.map((p) => ({ ...p })),
+    salles: [{ id: 'S-1', nom: 'Salle Martil', capacite: 60, superficie: 90, active: true }],
   };
 
   // 12. Stock et mouvements
@@ -512,6 +522,8 @@ export function buildInitialState(carte = []) {
     stock,
     mouvementsStock,
     canauxDistribution,
+    comptes: COMPTES.map((c) => ({ ...c, actif: true })),
+    changementsChambre: [],
     session: null,
     journal,
     seq: { sejour: seqSejour, folio: seqFolio, resa: seqResa, commande: 205, evenement: 5, facture: 185, fiche: fichesPolice.length },

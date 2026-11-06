@@ -17,8 +17,11 @@ export function montantHebergement(type, formule, occupants, nbNuits, grille) {
   return prixNuit(type, formule, occupants, grille) * nbNuits;
 }
 
-export function montantTaxeSejour(occupants, nbNuits) {
-  return PARAMS.taxeSejour * occupants * nbNuits;
+// Barème paramétré par la Direction (parametres.fiscalite.taxeSejour) ; le
+// repli sur PARAMS ne sert qu'aux états antérieurs au paramétrage.
+export function montantTaxeSejour(occupants, nbNuits, bareme) {
+  const tarif = bareme ?? PARAMS.taxeSejour;
+  return tarif * occupants * nbNuits;
 }
 
 export function soldeFolio(folio) {

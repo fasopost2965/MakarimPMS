@@ -13,12 +13,13 @@
 
 import { useMemo, useRef, useState } from 'react';
 import {
-  Building2, CheckCircle2, ImagePlus, Percent, Receipt, Save, ShieldCheck, Sun, Trash2,
+  Building2, CheckCircle2, ImagePlus, KeyRound, Lock, Percent, Receipt, Save,
+  ShieldAlert, ShieldCheck, Sun, Trash2, Unlock,
 } from 'lucide-react';
 import { FORMULES, HOTEL, PARAMS, POLITIQUE, TYPES_CHAMBRE } from '../data';
 import { useApp } from '../store';
 import { fmtLong, money } from '../lib/date';
-import { Button, Card, CardHeader, Pill, cx, useToast } from '../components/ui';
+import { Button, Card, CardHeader, Modal, Pill, cx, useToast } from '../components/ui';
 import { InfoBulle } from '../components/InfoBulle';
 
 const OPTIONS = [
@@ -30,6 +31,21 @@ const OPTIONS = [
   { cle: 'tournees', label: 'Tours de quart', detail: 'Relève des trois shifts et cahier de transmission.' },
 ];
 
+// Code de déverrouillage de la grille. En production, il s'agit du second
+// facteur du directeur (mot de passe + OTP) ; ici, un code d'exploitation
+// annoncé à l'écran pour que la démonstration reste praticable.
+const CODE_VERROU = 'MAKARIM';
+
+// Champs fiscaux éditables. Les taux sont des pourcentages, la taxe de séjour
+// et le plafond d'espèces sont en dirhams.
+const CHAMPS_FISCAUX = {
+  tvaHebergement: { label: 'TVA hébergement & pensions', suffixe: '%' },
+  tvaAnnexe: { label: 'TVA restauration & annexes', suffixe: '%' },
+  tvaSalle: { label: 'TVA salle de conférence', suffixe: '%' },
+  taxeSejour: { label: 'Taxe de séjour / nuit / adulte', suffixe: 'MAD' },
+  plafondEspeces: { label: 'Plafond espèces', suffixe: 'MAD' },
+};
+
 export function Rates() {
   const { state, actions } = useApp();
   const { push } = useToast();
@@ -40,6 +56,16 @@ export function Rates() {
   const [saisons, setSaisons] = useState(() => structuredClone(params.saisons));
   const [demiJournee, setDemiJournee] = useState(params.demiJournee);
   const [nomHotel, setNomHotel] = useState(params.hotel.nom);
+  const [fiscalite, setFiscalite] = useState(() => ({ ...params.fiscalite }));
+  const [deverrouille, setDeverrouille] = useState(false);
+  const [demandeCode, setDemandeCode] = useState(false);
+  const [codeSaisi, setCodeSaisi] = useState('');
+  const [confirmation, setConfirmation] = useState(false); // publication de la grille
+  const [confirmationFiscale, setConfirmationFiscale] = useState(false);
+
+  // Tant que la grille est verrouillée, les prix ne sont pas éditables : une
+  // erreur de tarif se paie en chambres vendues à perte.
+  const verrouille = Boolean(params.verrouTarifs) && !deverrouille;
 
   const modifie = useMemo(
     () => JSON.stringify({ grille, saisons, demiJournee }) !== JSON.stringify({
@@ -71,11 +97,28 @@ export function Rates() {
       push(`Publication impossible : ${erreurs[0]}.`, 'info');
       return;
     }
+    // Rien ne s'écrit sans une seconde validation explicite : le récapitulatif
+    // des écarts est présenté avant d'engager la version suivante.
+    setConfirmation(true);
+  };
+
+  const appliquerGrille = () => {
     actions.publierGrille(grille, saisons, Number(demiJournee), state.session?.nom ?? 'Direction');
     push(
       `Grille publiée — version ${params.version + 1}. Les nouveaux prix s’appliquent dès la prochaine réservation.`,
       'success',
     );
+    setConfirmation(false);
+  };
+
+  const enregistrerFiscalite = () => {
+    actions.setFiscalite(
+      Object.fromEntries(
+        Object.keys(CHAMPS_FISCAUX).map((cle) => [cle, Number(fiscalite[cle])]),
+      ),
+    );
+    push('Fiscalité enregistrée — les prochaines écritures utilisent les nouveaux taux.', 'success');
+    setConfirmationFiscale(false);
   };
 
   const chargerLogo = (fichier) => {
@@ -91,6 +134,44 @@ export function Rates() {
     };
     lecteur.readAsDataURL(fichier);
   };
+
+  const ecarts = useMemo(() => {
+    const liste = [];
+    for (const [cle, g] of Object.entries(grille)) {
+      const avant = Number(params.grille[cle]?.prix);
+      const apres = Number(g.prix);
+      if (avant !== apres) {
+        liste.push({ label: TYPES_CHAMBRE[cle].label, avant: `${money(avant)} MAD`, apres: `${money(apres)} MAD` });
+      }
+    }
+    saisons.forEach((s, i) => {
+      const avant = params.saisons[i];
+      if (!avant) return;
+      if (Number(avant.coef) !== Number(s.coef)) {
+        liste.push({ label: `Coefficient ${s.nom}`, avant: `× ${avant.coef}`, apres: `× ${s.coef}` });
+      }
+    });
+    if (Number(params.demiJournee) !== Number(demiJournee)) {
+      liste.push({
+        label: 'Forfait demi-journée',
+        avant: `${money(params.demiJournee)} MAD`,
+        apres: `${money(Number(demiJournee))} MAD`,
+      });
+    }
+    return liste;
+  }, [grille, saisons, demiJournee, params]);
+
+  const ecartsFiscaux = useMemo(() => {
+    const liste = [];
+    for (const [cle, meta] of Object.entries(CHAMPS_FISCAUX)) {
+      const avant = params.fiscalite?.[cle];
+      const apres = fiscalite[cle];
+      if (String(avant) !== String(apres)) {
+        liste.push({ label: meta.label, avant: `${meta.suffixe === '%' ? `${avant} %` : `${money(avant)} MAD`}`, apres: `${meta.suffixe === '%' ? `${apres} %` : `${money(apres)} MAD`}` });
+      }
+    }
+    return liste;
+  }, [fiscalite, params]);
 
   const totalChambres = state.chambres.filter((c) => c.active !== false).length;
 
@@ -117,6 +198,43 @@ export function Rates() {
         </div>
       </div>
 
+      {params.verrouTarifs && !deverrouille ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-saffron/40 bg-saffron-100/50 px-4 py-3">
+          <div className="flex items-start gap-2.5">
+            <Lock className="mt-0.5 size-4 shrink-0 text-saffron" />
+            <div>
+              <p className="text-[12px] font-semibold text-ink">Grille verrouillée</p>
+              <p className="text-[11px] leading-4 text-ink-2">
+                Les prix ne sont pas modifiables sans déverrouillage. Chaque publication engage
+                l’hôtel sur ses tarifs : elle reste confirmée et journalisée.
+              </p>
+            </div>
+          </div>
+          <Button variant="outline" onClick={() => { setCodeSaisi(''); setDemandeCode(true); }}>
+            <KeyRound className="size-3.5" /> Déverrouiller
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-jade/40 bg-jade-100/40 px-4 py-2.5">
+          <p className="flex items-center gap-2 text-[12px] text-ink-2">
+            <Unlock className="size-3.5 text-jade" /> Grille déverrouillée pour cette session.
+          </p>
+          {params.verrouTarifs && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                actions.setVerrouTarifs(true);
+                setDeverrouille(false);
+                push('Grille reverrouillée.', 'info');
+              }}
+            >
+              <Lock className="size-3.5" /> Reverrouiller
+            </Button>
+          )}
+        </div>
+      )}
+
       {erreurs.length > 0 && (
         <div className="rounded-xl border border-crimson/40 bg-crimson-100/50 p-3">
           <p className="text-[12px] font-medium text-crimson">Publication bloquée :</p>
@@ -131,7 +249,7 @@ export function Rates() {
           <Card>
             <CardHeader
               titre="Grille tarifaire"
-              sousTitre="Prix par nuit et par type, en MAD TTC (TVA 10 %)"
+              sousTitre={`Prix de base par nuit et par type, en MAD TTC (TVA ${state.parametres?.fiscalite?.tvaHebergement ?? PARAMS.tvaHebergement} %)`}
               action={
                 <div className="flex items-center gap-2">
                   <InfoBulle titre="Publication de la grille" cote="gauche">
@@ -173,6 +291,7 @@ export function Rates() {
                             aria-label={`Nouveau prix ${t.label}`}
                             type="number"
                             min="1"
+                            disabled={verrouille}
                             value={grille[cle]?.prix ?? publie}
                             onChange={(e) =>
                               setGrille((g) => ({ ...g, [cle]: { ...g[cle], prix: e.target.value } }))
@@ -180,6 +299,7 @@ export function Rates() {
                             className={cx(
                               'tnum w-24 rounded-lg border bg-surface px-2 py-1.5 text-right text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25',
                               nouveau !== publie ? 'border-saffron text-ink' : 'border-line-strong',
+                              verrouille && 'cursor-not-allowed bg-sand-50 text-ink-3',
                             )}
                           />
                         </td>
@@ -224,12 +344,16 @@ export function Rates() {
                       min="0.5"
                       max="3"
                       value={s.coef}
+                      disabled={verrouille}
                       onChange={(e) =>
                         setSaisons((liste) =>
                           liste.map((x, j) => (j === i ? { ...x, coef: e.target.value } : x)),
                         )
                       }
-                      className="tnum w-16 rounded-lg border border-line-strong bg-surface px-2 py-1 text-right text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+                      className={cx(
+                        'tnum w-16 rounded-lg border border-line-strong bg-surface px-2 py-1 text-right text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25',
+                        verrouille && 'cursor-not-allowed bg-sand-50 text-ink-3',
+                      )}
                     />
                   </li>
                 ))}
@@ -264,6 +388,7 @@ export function Rates() {
                     type="number"
                     min="1"
                     value={demiJournee}
+                    disabled={verrouille}
                     onChange={(e) => setDemiJournee(e.target.value)}
                     className="tnum w-24 rounded-lg border border-line-strong bg-surface px-2 py-1.5 text-right text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
                   />
@@ -370,29 +495,74 @@ export function Rates() {
           </Card>
 
           <Card>
-            <CardHeader titre="Fiscalité" sousTitre="Paramètres appliqués aux factures" />
-            <ul className="divide-y divide-line-soft">
-              {[
-                ['Taxe de séjour', `${PARAMS.taxeSejour} MAD / nuit / adulte`],
-                ['TVA hébergement & pensions', `${PARAMS.tvaHebergement} %`],
-                ['TVA restauration & annexes', `${PARAMS.tvaAnnexe} %`],
-                ['Acompte événement', `${PARAMS.acompteEvenement} %`],
-                ['Plafond espèces', `${money(PARAMS.plafondEspeces)} MAD`],
-              ].map(([l, v]) => (
-                <li key={l} className="flex items-center justify-between px-5 py-2.5 text-[12px]">
-                  <span className="flex items-center gap-2 text-ink-2">
-                    <Percent className="size-3.5 text-ink-3" /> {l}
+            <CardHeader
+              titre="Fiscalité"
+              sousTitre="Taux appliqués aux factures et aux encaissements"
+              action={<Pill tone={ecartsFiscaux.length ? 'saffron' : 'neutral'}>{ecartsFiscaux.length ? 'Non enregistré' : 'À jour'}</Pill>}
+            />
+            <div className="divide-y divide-line-soft">
+              {Object.entries(CHAMPS_FISCAUX).map(([cle, meta]) => (
+                <label key={cle} htmlFor={`fisc-${cle}`} className="flex items-center justify-between gap-3 px-5 py-2.5">
+                  <span className="flex items-center gap-2 text-[12px] text-ink-2">
+                    <Percent className="size-3.5 text-ink-3" /> {meta.label}
                   </span>
-                  <span className="tnum font-medium text-ink">{v}</span>
-                </li>
+                  <span className="flex items-center gap-1.5">
+                    <input
+                      id={`fisc-${cle}`}
+                      type="number"
+                      min="0"
+                      step={meta.suffixe === '%' ? '0.5' : '1'}
+                      value={fiscalite[cle] ?? ''}
+                      disabled={state.profil !== 'direction'}
+                      onChange={(e) => setFiscalite((f) => ({ ...f, [cle]: e.target.value }))}
+                      className={cx(
+                        'tnum w-24 rounded-lg border bg-surface px-2 py-1 text-right text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25',
+                        String(params.fiscalite?.[cle]) !== String(fiscalite[cle])
+                          ? 'border-saffron text-ink'
+                          : 'border-line-strong',
+                      )}
+                    />
+                    <span className="w-10 text-[11px] text-ink-3">{meta.suffixe}</span>
+                  </span>
+                </label>
               ))}
-            </ul>
-            <div className="border-t border-line-soft px-5 py-3">
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line-soft px-5 py-3">
               <p className="flex items-start gap-2 text-[11px] leading-4 text-ink-3">
-                <Receipt className="mt-0.5 size-3.5 shrink-0" />
-                Modifiables en base (BR-TR-003) — non éditables ici pour éviter une erreur fiscale en
-                démonstration.
+                <ShieldAlert className="mt-0.5 size-3.5 shrink-0" />
+                Un taux erroné fausse toutes les factures : l’enregistrement demande une
+                confirmation, et l’écart est journalisé.
               </p>
+              <Button
+                size="sm"
+                disabled={!ecartsFiscaux.length || state.profil !== 'direction'}
+                onClick={() => setConfirmationFiscale(true)}
+              >
+                <Save className="size-3.5" /> Enregistrer
+              </Button>
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader titre="Mentions légales" sousTitre="Reprises sur les factures et documents" />
+            <div className="grid gap-3 px-5 py-4 sm:grid-cols-2">
+              {[
+                ['identifiantFiscal', 'Identifiant fiscal'],
+                ['ice', 'ICE'],
+                ['rc', 'Registre de commerce'],
+                ['acompteEvenement', 'Acompte événement (%)'],
+              ].map(([cle, label]) => (
+                <div key={cle}>
+                  <label htmlFor={`leg-${cle}`} className="text-[11px] font-semibold text-ink-2">{label}</label>
+                  <input
+                    id={`leg-${cle}`}
+                    value={cle === 'acompteEvenement' ? (params.acompteEvenement ?? '') : (fiscalite[cle] ?? '')}
+                    disabled={cle === 'acompteEvenement' || state.profil !== 'direction'}
+                    onChange={(e) => setFiscalite((f) => ({ ...f, [cle]: e.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-line-strong bg-surface px-2 py-1.5 text-[12px] outline-none focus:border-maj disabled:bg-sand-50 disabled:text-ink-3"
+                  />
+                </div>
+              ))}
             </div>
           </Card>
         </div>
@@ -415,6 +585,112 @@ export function Rates() {
           </p>
         </div>
       </Card>
+
+      {/* Déverrouillage de la grille : le code est demandé à chaque session. */}
+      <Modal
+        open={demandeCode}
+        onClose={() => setDemandeCode(false)}
+        title="Déverrouiller la grille tarifaire"
+        subtitle={`Code d’exploitation (démonstration : ${CODE_VERROU})`}
+        width="max-w-sm"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setDemandeCode(false)}>Annuler</Button>
+            <Button
+              disabled={codeSaisi.trim().toUpperCase() !== CODE_VERROU}
+              onClick={() => {
+                setDeverrouille(true);
+                setDemandeCode(false);
+                push('Grille déverrouillée pour cette session.', 'success');
+              }}
+            >
+              <Unlock className="size-3.5" /> Déverrouiller
+            </Button>
+          </div>
+        }
+      >
+        <label htmlFor="rt-code" className="text-[12px] font-semibold text-ink-2">Code</label>
+        <input
+          id="rt-code"
+          autoFocus
+          value={codeSaisi}
+          onChange={(e) => setCodeSaisi(e.target.value)}
+          placeholder="MAKARIM"
+          className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-[13px] tracking-[0.15em] uppercase outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+        />
+        <p className="mt-2 text-[11px] text-ink-3">
+          En production, ce contrôle est le second facteur du directeur. Le déverrouillage ne
+          vaut que pour la session en cours.
+        </p>
+      </Modal>
+
+      {/* Confirmation de publication : récapitulatif des écarts. */}
+      <Modal
+        open={confirmation}
+        onClose={() => setConfirmation(false)}
+        title="Confirmer la publication de la grille"
+        subtitle={`Version ${params.version} → ${params.version + 1} · ${ecarts.length} changement(s)`}
+        width="max-w-md"
+        footer={
+          <div className="flex justify-between gap-2">
+            <Button variant="outline" onClick={() => setConfirmation(false)}>Revenir</Button>
+            <Button onClick={appliquerGrille}>
+              <Save className="size-3.5" /> Publier la version {params.version + 1}
+            </Button>
+          </div>
+        }
+      >
+        <ul className="space-y-1.5 text-[12px]">
+          {ecarts.length === 0 && (
+            <li className="text-ink-3">Aucun écart de prix : seule une nouvelle version sera créée.</li>
+          )}
+          {ecarts.map((e) => (
+            <li key={e.label} className="flex items-center justify-between rounded-lg bg-sand-50 px-3 py-2">
+              <span className="text-ink-2">{e.label}</span>
+              <span className="tnum text-ink-3">
+                {e.avant} <span className="text-ink-3">→</span>{' '}
+                <span className="font-semibold text-ink">{e.apres}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 rounded-lg bg-maj-50 px-3 py-2 text-[11px] leading-4 text-maj">
+          La publication est immédiate : les nouvelles réservations, le check-in, la prolongation et
+          les canaux utilisent ces prix. L’opération est journalisée à votre nom.
+        </p>
+      </Modal>
+
+      {/* Confirmation fiscale : deux clics, jamais un seul. */}
+      <Modal
+        open={confirmationFiscale}
+        onClose={() => setConfirmationFiscale(false)}
+        title="Confirmer la modification fiscale"
+        subtitle={`${ecartsFiscaux.length} taux concerné(s)`}
+        width="max-w-md"
+        footer={
+          <div className="flex justify-between gap-2">
+            <Button variant="outline" onClick={() => setConfirmationFiscale(false)}>Revenir</Button>
+            <Button onClick={enregistrerFiscalite}>
+              <Save className="size-3.5" /> Enregistrer
+            </Button>
+          </div>
+        }
+      >
+        <ul className="space-y-1.5 text-[12px]">
+          {ecartsFiscaux.map((e) => (
+            <li key={e.label} className="flex items-center justify-between rounded-lg bg-sand-50 px-3 py-2">
+              <span className="text-ink-2">{e.label}</span>
+              <span className="tnum text-ink-3">
+                {e.avant} → <span className="font-semibold text-ink">{e.apres}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 rounded-lg bg-crimson-100/60 px-3 py-2 text-[11px] leading-4 text-crimson">
+          Les factures déjà émises ne sont pas recalculées. Seules les écritures suivantes
+          appliquent les nouveaux taux.
+        </p>
+      </Modal>
     </div>
   );
 }
