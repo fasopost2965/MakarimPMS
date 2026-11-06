@@ -117,7 +117,7 @@ export function CommandPalette({ open, onClose, onNavigate, onNightAudit }) {
         role="dialog"
         aria-modal="true"
         aria-label="Palette de commandes"
-        className="animate-fade-up relative w-full max-w-lg overflow-hidden rounded-xl border border-line bg-surface shadow-pop"
+        className="animate-fade-up relative w-full max-w-lg overflow-hidden rounded-lg border border-line bg-surface shadow-pop"
       >
         <div className="flex items-center gap-2.5 border-b border-line-soft px-4 py-3">
           <Search className="size-4 text-ink-3" />
@@ -131,7 +131,7 @@ export function CommandPalette({ open, onClose, onNavigate, onNightAudit }) {
             placeholder="Aller à un écran, lancer une action…"
             className="flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-3"
           />
-          <kbd className="rounded border border-line px-1.5 py-0.5 text-[10px] text-ink-3">Échap</kbd>
+          <kbd className="rounded border border-line px-1.5 py-0.5 text-[11px] text-ink-3">Échap</kbd>
         </div>
         <ul className="max-h-80 overflow-y-auto p-1.5">
           {filtrees.length === 0 && (
@@ -152,13 +152,13 @@ export function CommandPalette({ open, onClose, onNavigate, onNightAudit }) {
                 >
                   <Icone className="size-4 shrink-0" />
                   <span className="flex-1 truncate">{c.label}</span>
-                  <span className="text-[10px] tracking-[0.06em] text-ink-3 uppercase">{c.groupe}</span>
+                  <span className="text-[11px] tracking-[0.06em] text-ink-3 uppercase">{c.groupe}</span>
                 </button>
               </li>
             );
           })}
         </ul>
-        <div className="flex items-center gap-3 border-t border-line-soft bg-sand-50 px-4 py-2 text-[10px] text-ink-3">
+        <div className="flex items-center gap-3 border-t border-line-soft bg-mist-50 px-4 py-2 text-[11px] text-ink-3">
           <span>↑ ↓ naviguer</span>
           <span>⏎ ouvrir</span>
           <span className="ml-auto">⌘K à tout moment</span>

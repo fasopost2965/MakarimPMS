@@ -1,4 +1,4 @@
-// Plan des chambres — vue par étage, filtres d'état, recherche et panneau de
+// Plan des chambres · vue par étage, filtres d'état, recherche et panneau de
 // chambre (séjour en cours, arrivée attendue, actions housekeeping).
 //
 // Règles métier : BR-CHA-002/003 (états et vendabilité), BR-HK-001/003
@@ -36,7 +36,7 @@ const TONE = { occupee: 'maj', propre: 'jade', a_nettoyer: 'saffron', hors_servi
 export function Rooms() {
   const { state, actions } = useApp();
   // BR-HK-004 : le rôle Gouvernante (et la Maintenance) n'a accès à aucune
-  // donnée de facturation — les montants sont masqués, pas seulement cachés.
+  // donnée de facturation · les montants sont masqués, pas seulement cachés.
   const montants = (PROFILS[state.profil] ?? PROFILS.direction).montants !== false;
   const { push } = useToast();
   const [filtre, setFiltre] = useState('toutes');
@@ -87,7 +87,7 @@ export function Rooms() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 rounded-xl border border-line-strong bg-surface px-3 py-2">
+          <div className="flex items-center gap-2 rounded-lg border border-line-strong bg-surface px-3 py-2">
             <Search className="size-3.5 text-ink-3" />
             <input
               aria-label="Rechercher une chambre par numéro, type ou client"
@@ -116,7 +116,7 @@ export function Rooms() {
             onClick={() => setFiltre(f.cle)}
             className={cx(
               'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors',
-              filtre === f.cle ? 'border-maj/30 bg-maj-100 text-maj' : 'border-line bg-surface text-ink-2 hover:bg-sand-50',
+              filtre === f.cle ? 'border-maj/30 bg-maj-100 text-maj' : 'border-line bg-surface text-ink-2 hover:bg-mist-50',
             )}
           >
             {f.cle !== 'toutes' && <span className={cx('size-2 rounded-full', STATUTS_CHAMBRE[f.cle].dot)} />}
@@ -132,7 +132,7 @@ export function Rooms() {
             onClick={() => setEtageActif(e)}
             className={cx(
               'rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors',
-              etageActif === e ? 'bg-ink text-white' : 'border border-line bg-surface text-ink-2 hover:bg-sand-50',
+              etageActif === e ? 'bg-ink text-white' : 'border border-line bg-surface text-ink-2 hover:bg-mist-50',
             )}
           >
             {e === 'tous' ? 'Tous les étages' : `Étage ${e}`}
@@ -166,7 +166,7 @@ export function Rooms() {
                         key={c.numero}
                         type="button"
                         onClick={() => setSelection(c.numero)}
-                        className="group rounded-xl border border-line bg-surface p-3 text-left transition-all hover:-translate-y-0.5 hover:border-maj/30 hover:shadow-card"
+                        className="group rounded-[14px] border border-line bg-surface p-3 text-left transition-colors hover:border-line-strong hover:bg-mist-50 active:scale-[0.99]"
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-2">
@@ -234,7 +234,7 @@ export function Rooms() {
                   className="w-full"
                   onClick={() => {
                     actions.consommerMinibar(chambre.numero, DOTATION_MINIBAR);
-                    push(`Minibar chambre ${chambre.numero} déclaré — montant porté au folio.`, 'success');
+                    push(`Minibar chambre ${chambre.numero} déclaré · montant porté au folio.`, 'success');
                   }}
                 >
                   <Wine className="size-3.5" /> Déclarer la consommation minibar
@@ -242,7 +242,7 @@ export function Rooms() {
               )}
               <div className="flex gap-2">
               {chambre.statut === 'hors_service' ? (
-                <Button className="flex-1" onClick={() => changer('a_nettoyer', `Chambre ${chambre.numero} remise en service — à nettoyer`)}>
+                <Button className="flex-1" onClick={() => changer('a_nettoyer', `Chambre ${chambre.numero} remise en service · à nettoyer`)}>
                   <CheckCircle2 className="size-3.5" /> Remettre en service
                 </Button>
               ) : (
@@ -269,7 +269,7 @@ export function Rooms() {
         {chambre && (
           <div className="space-y-4">
             {state.parametres?.options?.minibar && (
-              <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-sand-50 px-3 py-2">
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-line bg-mist-50 px-3 py-2">
                 <div>
                   <p className="text-[12px] font-medium text-ink">Minibar lié à la chambre</p>
                   <p className="text-[11px] text-ink-3">
@@ -284,13 +284,13 @@ export function Rooms() {
                   onClick={() => {
                     actions.majChambre(chambre.numero, { minibar: !chambre.minibar });
                     push(
-                      `Minibar ${chambre.minibar ? 'désactivé' : 'activé'} — chambre ${chambre.numero}.`,
+                      `Minibar ${chambre.minibar ? 'désactivé' : 'activé'} · chambre ${chambre.numero}.`,
                       'info',
                     );
                   }}
                   className={cx(
                     'h-5 w-9 shrink-0 rounded-full border transition-colors',
-                    chambre.minibar ? 'border-maj bg-maj' : 'border-line-strong bg-sand-200',
+                    chambre.minibar ? 'border-maj bg-maj' : 'border-line-strong bg-mist-200',
                   )}
                 >
                   <span
@@ -314,11 +314,11 @@ export function Rooms() {
                   ) : (
                     <>
                       <p className="mt-2 font-display text-2xl">{TYPES_CHAMBRE[chambre.type].label}</p>
-                      <p className="text-[12px] text-ink-3">Vue housekeeping — données de facturation masquées</p>
+                      <p className="text-[12px] text-ink-3">Vue housekeeping · données de facturation masquées</p>
                     </>
                   )}
                 </div>
-                <div className="grid size-12 place-items-center rounded-xl bg-maj-50 text-maj">
+                <div className="grid size-12 place-items-center rounded-lg bg-maj-50 text-maj">
                   <BedDouble className="size-6" />
                 </div>
               </div>
@@ -334,7 +334,7 @@ export function Rooms() {
 
             {sejour ? (
               <Card className="p-4">
-                <p className="text-[10px] font-semibold tracking-[0.09em] text-ink-3 uppercase">Séjour en cours</p>
+                <p className="text-[11px] font-semibold tracking-[0.09em] text-ink-3 uppercase">Séjour en cours</p>
                 <p className="mt-2 text-[14px] font-semibold text-ink">{sejour.client}</p>
                 <dl className="mt-3 space-y-2 text-[12px]">
                   {[
@@ -342,7 +342,7 @@ export function Rooms() {
                     ['Occupants', `${sejour.occupants} personne(s)`],
                     ['Arrivée', fmtCourt(sejour.arrivee)],
                     ['Départ prévu', fmtCourt(sejour.depart)],
-                    ...(montants ? [['Folio', folio ? `Solde ${money(soldeDuFolio(folio))} MAD` : '—']] : []),
+                    ...(montants ? [['Folio', folio ? `Solde ${money(soldeDuFolio(folio))} MAD` : 'nc']] : []),
                   ].map(([k, v]) => (
                     <div key={k} className="flex justify-between">
                       <dt className="text-ink-3">{k}</dt>
@@ -350,7 +350,7 @@ export function Rooms() {
                     </div>
                   ))}
                 </dl>
-                <p className="mt-3 rounded-lg bg-sand-100 px-3 py-2 text-[12px] leading-4 text-ink-2">
+                <p className="mt-3 rounded-lg bg-mist-100 px-3 py-2 text-[12px] leading-4 text-ink-2">
                   Le check-out se fait depuis la caisse : il exige un solde nul et génère
                   automatiquement la facture.
                 </p>
@@ -360,7 +360,7 @@ export function Rooms() {
                 <div className="flex gap-2">
                   <DoorOpen className="mt-0.5 size-4 shrink-0 text-maj" />
                   <div>
-                    <p className="text-[12px] font-medium text-ink">Arrivée attendue — {resaAttendue.client}</p>
+                    <p className="text-[12px] font-medium text-ink">Arrivée attendue · {resaAttendue.client}</p>
                     <p className="mt-0.5 text-[12px] leading-4 text-ink-2">
                       {resaAttendue.occupants} personne(s) · {fmtCourt(resaAttendue.arrivee)} → {fmtCourt(resaAttendue.depart)}
                       {chambre.statut !== 'propre' && ' · chambre à valider avant check-in'}
@@ -371,7 +371,7 @@ export function Rooms() {
                       disabled={chambre.statut !== 'propre'}
                       onClick={() => {
                         actions.checkIn(resaAttendue.id);
-                        push(`Check-in effectué — chambre ${chambre.numero}.`);
+                        push(`Check-in effectué · chambre ${chambre.numero}.`);
                         setSelection(null);
                       }}
                     >
@@ -392,7 +392,7 @@ export function Rooms() {
             )}
 
             <Card className="p-4">
-              <p className="text-[10px] font-semibold tracking-[0.09em] text-ink-3 uppercase">Housekeeping</p>
+              <p className="text-[11px] font-semibold tracking-[0.09em] text-ink-3 uppercase">Housekeeping</p>
               <ul className="mt-2 space-y-2 text-[12px] text-ink-2">
                 <li className="flex justify-between">
                   <span>Type de service</span>
@@ -412,7 +412,7 @@ export function Rooms() {
         )}
       </Drawer>
 
-      {/* Création d'une chambre — ouverte à la Direction */}
+      {/* Création d'une chambre · ouverte à la Direction */}
       <Modal
         open={creation}
         onClose={() => setCreation(false)}
@@ -475,7 +475,7 @@ export function Rooms() {
             >
               {Object.entries(TYPES_CHAMBRE).map(([cle, t]) => (
                 <option key={cle} value={cle}>
-                  {t.label} — {prixDuJour(state, cle)} MAD / nuit
+                  {t.label} · {prixDuJour(state, cle)} MAD / nuit
                 </option>
               ))}
             </select>

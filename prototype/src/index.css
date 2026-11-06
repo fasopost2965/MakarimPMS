@@ -1,60 +1,76 @@
 /* Design tokens du prototype (Tailwind 4 `@theme`).
-   Palette « 3★ marocain » : sable (fond), bleu majorelle (action), terre cuite
-   (restauration), safran (événementiel), jade (succès), rouge brique (alerte).
-   Toute couleur utilisée par un écran doit exister ici — aucune valeur brute
+   Système visuel Apple : surfaces neutres (blanc, parchemin #f5f5f7), encre
+   #1d1d1f, un seul accent bleu (#0066cc), états sémantiques désaturés.
+   Plus aucun beige : la palette sable a été retirée en v7.
+   Toute couleur utilisée par un écran doit exister ici, aucune valeur brute
    dans les composants. */
 @import 'tailwindcss';
 @import '@fontsource-variable/geist';
-@import '@fontsource/marcellus';
 
 /* ------------------------------------------------------------------
- * Identité « Makarim 3★ » — relecture du Design System 2026 pour un hôtel
- * 3 étoiles de 30 chambres à Tétouan : fond sable chaud, encre vert-noir,
- * bleu majorelle comme couleur d'action (héritage du DS), terre cuite et
- * safran comme accents d'exploitation (restaurant, conférence).
- * Aucune couleur brute Tailwind n'est utilisée dans les écrans : tout passe
- * par ces tokens, comme l'exige docs/MAKARIM_DESIGN_SYSTEM_2026.md §1.
+ * Application du design system Apple à l'exploitation hôtelière.
+ *
+ * Principes retenus :
+ * - chrome effacé (blanc et parchemin), le noir est réservé à la navigation ;
+ * - un seul accent, Action Blue, pour toutes les actions ;
+ * - trois rayons seulement : 8 px (contrôles), 18 px (cartes), pilule
+ *   (boutons) ; aucune ombre, sauf la modale qui doit se détacher ;
+ * - typographie SF Pro (system-ui hors Apple), tracking négatif sur les
+ *   titres, densité conservée pour les tableaux d'exploitation ;
+ * - pas de dégradé décoratif ni de motif de fond (l'ancien zellige est retiré).
  * ------------------------------------------------------------------ */
 @theme {
-  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
-  --font-display: 'Marcellus', Georgia, 'Times New Roman', serif;
+  /* Polices : pile SF Pro. Sur macOS/iOS, `-apple-system` résout SF ; ailleurs,
+     le navigateur retombe sur system-ui puis Geist, plus proche équivalent
+     libre (tracking resserré aux tailles d'affichage). */
+  --font-sans: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui,
+    'Segoe UI', 'Geist Variable', sans-serif;
+  --font-display: 'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui,
+    'Segoe UI', 'Geist Variable', sans-serif;
 
-  --color-sand-50: #fcfaf5;
-  --color-sand-100: #f7f2e8;
-  --color-sand-200: #f0e8d9;
-  --color-sand-300: #e4d8c3;
-
-  --color-ink: #16211f;
-  --color-ink-2: #4b5a55;
-  --color-ink-3: #647069;   /* 4.63:1 sur sable, 5.17:1 sur blanc — AA */
-
-  --color-line: #e7ddcd;        /* séparateurs décoratifs (cartes, listes) */
-  --color-line-soft: #f0e9dd;
-  /* Bordure de composant interactif : 3.3:1 sur blanc (WCAG 1.4.11) —
-     réservée aux champs de formulaire et aux zones cliquables bordées. */
-  --color-line-strong: #a08a68;
+  /* Surfaces · blanc, parchemin, noir de navigation. Plus aucun beige :
+     la hiérarchie vient du contraste des surfaces, pas d'un fond chaud. */
+  --color-mist-50: #fafafc;      /* surface-pearl : boutons secondaires, survols */
+  --color-mist-100: #f5f5f7;     /* parchemin : fond de page */
+  --color-mist-200: #e8e8ed;     /* pistes, pastilles neutres */
+  --color-mist-300: #d2d2d7;     /* scrollbar, séparateurs appuyés */
   --color-surface: #ffffff;
+  --color-nav: #000000;          /* barre de navigation, seul noir pur */
 
-  --color-maj: #2f4090;
-  --color-maj-700: #26357a;
-  --color-maj-100: #e6e9f8;
-  --color-maj-50: #f1f3fc;
+  /* Encre */
+  --color-ink: #1d1d1f;
+  --color-ink-2: #333333;
+  --color-ink-3: #6e6e73;        /* 4.6:1 sur parchemin · AA */
 
-  --color-terra: #ab5135;   /* 4.53:1 sur terra-100, 5.30:1 en texte blanc */
-  --color-terra-100: #faeae3;
+  /* Filets */
+  --color-line: #e0e0e0;
+  --color-line-soft: #f0f0f0;
+  --color-line-strong: #86868b;  /* 3.5:1 sur blanc (WCAG 1.4.11) */
 
-  --color-saffron: #92640d; /* 4.58:1 sur saffron-100, 5.18:1 en texte blanc */
-  --color-saffron-100: #fbf0d8;
+  /* Accent unique : Action Blue */
+  --color-maj: #0066cc;
+  --color-maj-700: #0055a5;
+  --color-maj-100: #e6f0fb;
+  --color-maj-50: #f3f8fe;
 
-  --color-jade: #17795e;
-  --color-jade-100: #dff1e9;
+  /* États sémantiques, désaturés pour cohabiter avec le bleu */
+  --color-jade: #0f6b3f;
+  --color-jade-100: #e7f4ec;
 
-  --color-crimson: #b4332a;
-  --color-crimson-100: #fae3e0;
+  --color-saffron: #8a5300;
+  --color-saffron-100: #fff4e0;
 
-  --shadow-card:
-    0 1px 2px rgb(22 33 31 / 0.04), 0 12px 28px -20px rgb(22 33 31 / 0.28);
-  --shadow-pop: 0 24px 64px -24px rgb(22 33 31 / 0.35);
+  --color-crimson: #c42120;
+  --color-crimson-100: #fdeceb;
+
+  /* Plus d'accent chaud : « terra » devient graphite, le mobilier s'efface. */
+  --color-terra: #424245;
+  --color-terra-100: #f0f0f2;
+
+  /* Élévation : aucune ombre sur le mobilier. Seule la modale s'en détache,
+     très légèrement, pour se lire au-dessus du fond flouté. */
+  --shadow-card: 0 0 0 0 transparent;
+  --shadow-pop: 0 24px 80px -28px rgb(0 0 0 / 0.32);
 }
 
 @layer base {
@@ -64,8 +80,18 @@
   }
 
   body {
-    @apply bg-sand-100 text-ink font-sans;
+    @apply bg-mist-100 text-ink font-sans;
+    font-size: 15px;
+    line-height: 1.47;
+    letter-spacing: -0.16px;
     font-feature-settings: 'cv11', 'ss01';
+  }
+
+  /* Titres : SF Pro Display 600, tracking négatif. C'est la signature du
+     système ; sans elle, la pile SF ressemble à n'importe quel sans-serif. */
+  .font-display {
+    font-weight: 600;
+    letter-spacing: -0.28px;
   }
 
   ::selection {
@@ -73,13 +99,13 @@
   }
 
   /* Chiffres alignés dans toutes les colonnes de données (ADR/RevPAR,
-     montants, compteurs) — lisibilité opérationnelle. */
+     montants, compteurs) · lisibilité opérationnelle. */
   .tnum {
     font-variant-numeric: tabular-nums;
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-maj);
+    outline: 2px solid #0071e3; /* Focus Blue */
     outline-offset: 2px;
   }
 
@@ -88,17 +114,17 @@
     height: 10px;
   }
   ::-webkit-scrollbar-thumb {
-    background: var(--color-sand-300);
+    background: var(--color-mist-300);
     border-radius: 999px;
     border: 3px solid transparent;
     background-clip: content-box;
   }
 }
 
-/* Motif zellige (étoile à huit branches) — décor discret de la marque,
-   jamais porteur d'information. */
+/* L'ancien motif zellige est retiré : le système interdit les fonds
+   décoratifs. La classe subsiste, vide, pour ne pas casser les écrans. */
 .zellige {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Cg fill='none' stroke='%232f4090' stroke-opacity='0.13' stroke-width='1'%3E%3Cpath d='M28 4l7 10h12l-6 10 6 10H35l-7 10-7-10H9l6-10-6-10h12z'/%3E%3C/g%3E%3C/svg%3E");
+  background-image: none;
 }
 
 @keyframes slide-in {

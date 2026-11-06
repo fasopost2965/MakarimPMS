@@ -1,10 +1,10 @@
 // ------------------------------------------------------------------
-// Rôles & permissions — paramétrage par la Direction.
+// Rôles & permissions · paramétrage par la Direction.
 //
 // La matrice RBAC n'est pas figée dans le code : la Direction ouvre ou ferme
 // chaque écran pour chaque rôle, et la navigation se recalcule immédiatement
 // pour les profils concernés. C'est un miroir de démonstration : en production
-// le serveur reste seul juge (BR-TR-004) — l'écran ne fait que préparer la
+// le serveur reste seul juge (BR-TR-004) · l'écran ne fait que préparer la
 // décision, il ne la remplace pas. Toute modification est journalisée
 // (BR-AUD-002).
 //
@@ -66,7 +66,7 @@ export function Roles() {
     }
     actions.setRoles(brouillon);
     setModifie(false);
-    push('Matrice des rôles enregistrée — navigation recalculée pour chaque profil.', 'success');
+    push('Matrice des rôles enregistrée · navigation recalculée pour chaque profil.', 'success');
   };
 
   const reinitialiser = () => {
@@ -100,11 +100,11 @@ export function Roles() {
           <table className="w-full border-collapse text-[12px]">
             <thead>
               <tr>
-                <th className="sticky left-0 z-10 bg-surface px-5 py-3 text-left text-[10px] font-semibold tracking-[0.08em] text-ink-3 uppercase">
+                <th className="sticky left-0 z-10 bg-surface px-5 py-3 text-left text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">
                   Écran
                 </th>
                 {roles.map((r) => (
-                  <th key={r} className="px-2 py-3 text-center text-[10px] font-semibold tracking-[0.06em] text-ink-3 uppercase">
+                  <th key={r} className="px-2 py-3 text-center text-[11px] font-semibold tracking-[0.06em] text-ink-3 uppercase">
                     {PROFILS[r].label}
                   </th>
                 ))}
@@ -116,7 +116,7 @@ export function Roles() {
                   <tr>
                     <td
                       colSpan={roles.length + 1}
-                      className="sticky left-0 bg-sand-50 px-5 py-1.5 text-[10px] font-semibold tracking-[0.1em] text-ink-3 uppercase"
+                      className="sticky left-0 bg-mist-50 px-5 py-1.5 text-[11px] font-semibold tracking-[0.1em] text-ink-3 uppercase"
                     >
                       {groupe}
                     </td>
@@ -141,7 +141,7 @@ export function Roles() {
                                 verrou && 'cursor-not-allowed opacity-70',
                               )}
                             >
-                              <span className="text-[10px] leading-none">✓</span>
+                              <span className="text-[11px] leading-none">✓</span>
                             </button>
                           </td>
                         );
@@ -168,7 +168,7 @@ export function Roles() {
                           : 'border-line-strong bg-surface text-transparent',
                       )}
                     >
-                      <span className="text-[10px] leading-none">✓</span>
+                      <span className="text-[11px] leading-none">✓</span>
                     </button>
                   </td>
                 ))}
@@ -179,7 +179,7 @@ export function Roles() {
       </Card>
 
       {(rolesVides.length > 0 || directionSansRoles) && (
-        <div className="flex items-start gap-2 rounded-xl border border-crimson/40 bg-crimson-100/50 p-3">
+        <div className="flex items-start gap-2 rounded-lg border border-crimson/40 bg-crimson-100/50 p-3">
           <TriangleAlert className="mt-0.5 size-4 shrink-0 text-crimson" />
           <p className="text-[12px] leading-5 text-ink">
             {rolesVides.length > 0 && (
@@ -199,7 +199,7 @@ export function Roles() {
         />
         <div className="grid gap-3 px-5 py-4 sm:grid-cols-2 xl:grid-cols-3">
           {roles.map((r) => (
-            <div key={r} className="rounded-lg border border-line bg-sand-50 p-3">
+            <div key={r} className="rounded-lg border border-line bg-mist-50 p-3">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-[12px] font-semibold text-ink">{PROFILS[r].label}</p>
                 <Pill tone={brouillon[r].montants ? 'maj' : 'neutral'}>
@@ -212,7 +212,7 @@ export function Roles() {
                   <span className="text-[11px] text-crimson">aucun écran</span>
                 )}
                 {brouillon[r].ecrans.map((e) => (
-                  <span key={e} className="rounded-full bg-surface px-2 py-0.5 text-[10px] text-ink-2">
+                  <span key={e} className="rounded-full bg-surface px-2 py-0.5 text-[11px] text-ink-2">
                     {PERMISSIONS.find((p) => p.cle === e)?.label ?? e}
                   </span>
                 ))}
@@ -237,7 +237,7 @@ export function Roles() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-[12px]">
             <thead>
-              <tr className="border-b border-line-soft text-[10px] tracking-[0.08em] text-ink-3 uppercase">
+              <tr className="border-b border-line-soft text-[11px] tracking-[0.08em] text-ink-3 uppercase">
                 <th className="px-5 py-2 font-semibold">Agent</th>
                 <th className="px-3 py-2 font-semibold">Identifiant</th>
                 <th className="px-3 py-2 font-semibold">Rôle</th>
@@ -247,7 +247,7 @@ export function Roles() {
             </thead>
             <tbody className="divide-y divide-line-soft">
               {(state.comptes ?? []).map((c) => (
-                <tr key={c.id} className="hover:bg-sand-50/60">
+                <tr key={c.id} className="hover:bg-mist-50/60">
                   <td className="px-5 py-2.5">
                     <p className="font-medium text-ink">{c.nom}</p>
                     <p className="text-[11px] text-ink-3">{c.email || 'sans adresse'}</p>
@@ -266,14 +266,14 @@ export function Roles() {
                     </select>
                   </td>
                   <td className="px-3 py-2.5 text-[11px] text-ink-3">
-                    {state.session?.compteId === c.id ? 'ouverture en cours' : '—'}
+                    {state.session?.compteId === c.id ? 'ouverture en cours' : 'nc'}
                   </td>
                   <td className="px-5 py-2.5 text-right">
                     <button
                       type="button"
                       onClick={() => actions.majCompte(c.id, { actif: c.actif === false })}
                       className={cx(
-                        'rounded-full border px-2.5 py-1 text-[10px] font-medium',
+                        'rounded-full border px-2.5 py-1 text-[11px] font-medium',
                         c.actif === false
                           ? 'border-crimson/30 bg-crimson-100 text-crimson'
                           : 'border-jade/30 bg-jade-100 text-jade',
@@ -290,14 +290,14 @@ export function Roles() {
         <div className="border-t border-line-soft px-5 py-3">
           <p className="flex items-start gap-2 text-[11px] leading-4 text-ink-3">
             <KeyRound className="mt-0.5 size-3.5 shrink-0" />
-            Démonstration : mot de passe commun <code className="rounded bg-sand-100 px-1">makarim2026</code>.
+            Démonstration : mot de passe commun <code className="rounded bg-mist-100 px-1">makarim2026</code>.
             En production : mot de passe individuel haché, verrouillage après échecs et second facteur
             pour la Direction.
           </p>
         </div>
       </Card>
 
-      <div className="flex items-start gap-2 rounded-xl border border-line bg-sand-50 p-3">
+      <div className="flex items-start gap-2 rounded-lg border border-line bg-mist-50 p-3">
         <ShieldCheck className="mt-0.5 size-4 shrink-0 text-ink-3" />
         <p className="text-[12px] leading-5 text-ink-2">
           Le paramétrage est enregistré avec l’état de la démonstration et se répercute immédiatement
@@ -306,11 +306,11 @@ export function Roles() {
         </p>
       </div>
 
-      <div className="flex items-start gap-2 rounded-xl border border-line bg-surface p-3">
+      <div className="flex items-start gap-2 rounded-lg border border-line bg-surface p-3">
         <Lock className="mt-0.5 size-4 shrink-0 text-ink-3" />
         <p className="text-[12px] leading-5 text-ink-2">
           Verrou anti-lockout : la Direction conserve toujours l’accès à cet écran. Aucun rôle ne peut
-          être enregistré sans au moins un écran — un rôle vide serait un compte inutilisable, pas un
+          être enregistré sans au moins un écran · un rôle vide serait un compte inutilisable, pas un
           compte restreint.
         </p>
       </div>
@@ -339,7 +339,7 @@ export function Roles() {
                   email: nouveauCompte.email.trim(),
                   profil: nouveauCompte.profil,
                 });
-                push(`Compte créé — ${nouveauCompte.nom.trim()} (${PROFILS[nouveauCompte.profil].label}).`, 'success');
+                push(`Compte créé · ${nouveauCompte.nom.trim()} (${PROFILS[nouveauCompte.profil].label}).`, 'success');
                 setNouveauCompte({ nom: '', identifiant: '', email: '', profil: 'reception' });
                 setCreationCompte(false);
               }}
@@ -397,7 +397,7 @@ export function Roles() {
               ))}
             </select>
             <p className="mt-1 text-[11px] text-ink-3">
-              Écrans ouverts par défaut : {(PROFILS[nouveauCompte.profil]?.ecrans ?? []).length} —
+              Écrans ouverts par défaut : {(PROFILS[nouveauCompte.profil]?.ecrans ?? []).length}  · 
               ajustables dans la matrice ci-dessous.
             </p>
           </div>

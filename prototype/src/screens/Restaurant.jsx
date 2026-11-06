@@ -1,4 +1,4 @@
-// Restaurant Le Marsa — quatre onglets : service du jour (plan de salle et
+// Restaurant Le Marsa · quatre onglets : service du jour (plan de salle et
 // prise de commande), carte & ruptures, petit-déjeuner, rapport du jour.
 //
 // Règles métier : BR-RST-001 (une note par table et par service), BR-RST-002
@@ -85,13 +85,13 @@ function PanneauCommande({ table, onClose }) {
 
   function encaisser() {
     actions.commitOrder({ table: table.id, couverts: table.couverts, lignes, mode: 'cash', moyen });
-    push(`Table ${table.id} encaissée — ${money(total)} MAD (${moyen.toLowerCase()}).`);
+    push(`Table ${table.id} encaissée · ${money(total)} MAD (${moyen.toLowerCase()}).`);
     onClose();
   }
 
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border border-line bg-surface p-3">
+      <div className="rounded-lg border border-line bg-surface p-3">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-[13px] font-semibold text-ink">Table {table.id}</p>
@@ -109,7 +109,7 @@ function PanneauCommande({ table, onClose }) {
             onClick={() => setCat(c)}
             className={cx(
               'rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors',
-              cat === c ? 'bg-ink text-white' : 'border border-line bg-surface text-ink-2 hover:bg-sand-50',
+              cat === c ? 'bg-ink text-white' : 'border border-line bg-surface text-ink-2 hover:bg-mist-50',
             )}
           >
             {c}
@@ -117,7 +117,7 @@ function PanneauCommande({ table, onClose }) {
         ))}
       </div>
 
-      <div className="max-h-56 space-y-0.5 overflow-y-auto rounded-xl border border-line bg-surface p-1.5">
+      <div className="max-h-56 space-y-0.5 overflow-y-auto rounded-lg border border-line bg-surface p-1.5">
         {articles.map((a) => (
           <button
             key={a.id}
@@ -131,7 +131,7 @@ function PanneauCommande({ table, onClose }) {
           >
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[12px] font-medium text-ink">{a.nom}</span>
-              <span className="block truncate text-[10px] text-ink-3">{a.desc}</span>
+              <span className="block truncate text-[11px] text-ink-3">{a.desc}</span>
             </span>
             <span className="tnum text-[12px] font-semibold text-ink-2">{a.prix}</span>
             <Plus className="size-3.5 text-maj" />
@@ -139,24 +139,24 @@ function PanneauCommande({ table, onClose }) {
         ))}
       </div>
 
-      <div className="rounded-xl border border-line bg-surface">
+      <div className="rounded-lg border border-line bg-surface">
         <div className="flex items-center justify-between border-b border-line-soft px-3 py-2">
           <p className="text-[11px] font-semibold tracking-[0.05em] text-ink-3 uppercase">Commande en cours</p>
           <span className="tnum text-[12px] text-ink-3">{lignes.reduce((s, l) => s + l.qte, 0)} article(s)</span>
         </div>
         <div className="max-h-40 overflow-y-auto">
           {lignes.length === 0 && (
-            <p className="px-3 py-6 text-center text-[12px] text-ink-3">Aucun article — sélectionnez un plat dans la carte.</p>
+            <p className="px-3 py-6 text-center text-[12px] text-ink-3">Aucun article · sélectionnez un plat dans la carte.</p>
           )}
           {lignes.map((l) => (
             <div key={l.articleId} className="flex items-center gap-2 border-b border-line-soft px-3 py-1.5 last:border-b-0">
               <span className="min-w-0 flex-1 truncate text-[12px] text-ink">{l.nom}</span>
               <div className="flex items-center gap-1.5">
-                <button type="button" onClick={() => retirer(l.articleId)} className="grid size-5 place-items-center rounded border border-line text-ink-3 hover:bg-sand-100" aria-label={`Retirer ${l.nom}`}>
+                <button type="button" onClick={() => retirer(l.articleId)} className="grid size-5 place-items-center rounded border border-line text-ink-3 hover:bg-mist-100" aria-label={`Retirer ${l.nom}`}>
                   <Minus className="size-3" />
                 </button>
                 <span className="tnum w-4 text-center text-[12px] font-medium">{l.qte}</span>
-                <button type="button" onClick={() => ajouter({ ...l, id: l.articleId, dispo: true })} className="grid size-5 place-items-center rounded border border-line text-ink-3 hover:bg-sand-100" aria-label={`Ajouter ${l.nom}`}>
+                <button type="button" onClick={() => ajouter({ ...l, id: l.articleId, dispo: true })} className="grid size-5 place-items-center rounded border border-line text-ink-3 hover:bg-mist-100" aria-label={`Ajouter ${l.nom}`}>
                   <Plus className="size-3" />
                 </button>
               </div>
@@ -181,7 +181,7 @@ function PanneauCommande({ table, onClose }) {
         </div>
         <div className="border-t border-line-soft px-3 py-2">
           <span id="resto-moyen" className="text-[12px] font-medium text-ink-2">
-            Encaissé sur place — reste au restaurant
+            Encaissé sur place · reste au restaurant
           </span>
           <div role="group" aria-labelledby="resto-moyen" className="mt-1 flex gap-1.5">
             {MOYENS.map((m) => (
@@ -224,11 +224,11 @@ function PanneauCommande({ table, onClose }) {
           id="resto-chambre"
           value={chambreChoisie}
           onChange={(e) => setChambreChoisie(e.target.value)}
-          className="mt-1.5 w-full rounded-xl border border-line-strong bg-surface px-3 py-2.5 text-[13px]"
+          className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-3 py-2.5 text-[13px]"
         >
           {state.sejours.map((s) => (
             <option key={s.id} value={s.chambre}>
-              Chambre {s.chambre} — {s.client}
+              Chambre {s.chambre} · {s.client}
             </option>
           ))}
         </select>
@@ -383,7 +383,7 @@ export function Restaurant() {
                 ['CA encaissé', `${money(caJour)} MAD`, `dont ${money(caChambre)} en chambre`],
               ].map(([l, v, h]) => (
                 <Card key={l} className="p-4">
-                  <p className="text-[10px] font-medium tracking-[0.06em] text-ink-3 uppercase">{l}</p>
+                  <p className="text-[11px] font-medium tracking-[0.06em] text-ink-3 uppercase">{l}</p>
                   <p className="tnum mt-1 text-xl font-semibold text-ink">{v}</p>
                   <p className="mt-0.5 text-[12px] text-ink-3">{h}</p>
                 </Card>
@@ -405,8 +405,8 @@ export function Restaurant() {
                 {['Salle', 'Terrasse', 'Bar'].map((zone) => (
                   <div key={zone}>
                     <div className="mb-2 flex items-center justify-between">
-                      <p className="text-[10px] font-semibold tracking-[0.09em] text-ink-3 uppercase">{zone}</p>
-                      <span className="text-[10px] text-ink-3">{TABLES.filter((t) => t.zone === zone).length} tables</span>
+                      <p className="text-[11px] font-semibold tracking-[0.09em] text-ink-3 uppercase">{zone}</p>
+                      <span className="text-[11px] text-ink-3">{TABLES.filter((t) => t.zone === zone).length} tables</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                       {TABLES.filter((t) => t.zone === zone).map((t) => {
@@ -418,9 +418,9 @@ export function Restaurant() {
                             type="button"
                             onClick={() => setTable(t)}
                             className={cx(
-                              'rounded-xl border p-2.5 text-left transition-all hover:-translate-y-0.5',
+                              'rounded-lg border p-2.5 text-left transition-colors active:scale-[0.99]',
                               table?.id === t.id
-                                ? 'border-maj bg-maj text-white shadow-card'
+                                ? 'border-maj bg-maj text-white'
                                 : occupee
                                   ? 'border-maj/30 bg-maj-50 text-maj'
                                   : 'border-jade/30 bg-surface text-jade',
@@ -428,7 +428,7 @@ export function Restaurant() {
                           >
                             <div className="flex items-center justify-between">
                               <span className="text-[13px] font-semibold">{t.id}</span>
-                              <span className="flex items-center gap-1 text-[10px] opacity-80">
+                              <span className="flex items-center gap-1 text-[11px] opacity-80">
                                 <Users className="size-3" /> {t.couverts}
                               </span>
                             </div>
@@ -456,7 +456,7 @@ export function Restaurant() {
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[12px] font-medium text-ink">
-                        Chambre {c.folioChambre} — table {c.table}
+                        Chambre {c.folioChambre} · table {c.table}
                       </p>
                       <p className="truncate text-[12px] text-ink-3">
                         {c.lignes.map((l) => `${l.qte} × ${l.nom}`).join(', ')}
@@ -519,7 +519,7 @@ export function Restaurant() {
               .filter((p) => !recherche || p.nom.toLowerCase().includes(recherche.toLowerCase()) || p.cat.toLowerCase().includes(recherche.toLowerCase()))
               .map((p) => (
                 <div key={p.id} className="flex items-center gap-3 px-5 py-2.5">
-                  <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-sand-100 text-ink-2">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-mist-100 text-ink-2">
                     <ChefHat className="size-3.5" />
                   </span>
                   <div className="min-w-0 flex-1">
@@ -531,10 +531,10 @@ export function Restaurant() {
                     type="button"
                     onClick={() => {
                       actions.toggleArticle(p.id);
-                      push(`${p.nom} — ${p.dispo ? 'marqué en rupture' : 'remis à la carte'}`, 'info');
+                      push(`${p.nom} · ${p.dispo ? 'marqué en rupture' : 'remis à la carte'}`, 'info');
                     }}
                     className={cx(
-                      'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium',
+                      'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium',
                       p.dispo ? 'border-jade/30 bg-jade-100 text-jade' : 'border-crimson/30 bg-crimson-100 text-crimson',
                     )}
                   >
@@ -547,7 +547,7 @@ export function Restaurant() {
                         type="button"
                         onClick={() => setEdition(p)}
                         aria-label={`Modifier ${p.nom}`}
-                        className="grid size-7 place-items-center rounded-lg border border-line-strong text-ink-2 hover:bg-sand-50"
+                        className="grid size-7 place-items-center rounded-lg border border-line-strong text-ink-2 hover:bg-mist-50"
                       >
                         <PencilLine className="size-3" />
                       </button>
@@ -574,7 +574,7 @@ export function Restaurant() {
         <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
           <Card>
             <CardHeader
-              titre="Petit-déjeuner — demain"
+              titre="Petit-déjeuner · demain"
               sousTitre={`${couvertsDemain} couverts prévus · service 6:30 → 10:00`}
               action={<Pill tone="terra">Commande boulangerie à valider</Pill>}
             />
@@ -616,14 +616,14 @@ export function Restaurant() {
             <Card className="p-4">
               <p className="text-[11px] font-semibold tracking-[0.06em] text-ink-3 uppercase">À commander avant 18:00</p>
               <ul className="mt-2 space-y-1.5 text-[12px] text-ink-2">
-                {['Msemen — 120 pièces', 'Beghrir — 80 pièces', 'Œufs — 4 plateaux', 'Oranges — 15 kg', 'Lait — 20 L'].map((x) => (
+                {['Msemen · 120 pièces', 'Beghrir · 80 pièces', 'Œufs · 4 plateaux', 'Oranges · 15 kg', 'Lait · 20 L'].map((x) => (
                   <li key={x} className="flex items-center gap-2">
                     <span className="size-1.5 rounded-full bg-terra" />
                     {x}
                   </li>
                 ))}
               </ul>
-              <Button size="sm" variant="soft" className="mt-3 w-full" onClick={() => push('Bon de commande fournisseur créé — à valider par l’économat', 'info')}>
+              <Button size="sm" variant="soft" className="mt-3 w-full" onClick={() => push('Bon de commande fournisseur créé · à valider par l’économat', 'info')}>
                 Générer le bon de commande
               </Button>
             </Card>
@@ -782,7 +782,7 @@ export function Restaurant() {
                 </li>
               ))}
             </ul>
-            <div className="mt-4 rounded-lg bg-sand-100 p-3 text-[11px] leading-4 text-ink-2">
+            <div className="mt-4 rounded-lg bg-mist-100 p-3 text-[11px] leading-4 text-ink-2">
               Les notes en chambre remontent automatiquement au folio et sont
               contrôlées au check-out (garde-fou du module billing).
             </div>

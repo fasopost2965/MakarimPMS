@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------
- * Exports de rapports — CSV et Excel, en plus du PDF.
+ * Exports de rapports · CSV et Excel, en plus du PDF.
  *
  * Aucune dépendance externe (l'aperçu tourne sans CDN) :
  *  - CSV   : séparateur « ; » et BOM UTF-8, ouverture directe dans Excel FR ;

@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-// Prévision d'occupation — 14 jours, calculée sur les données réelles.
+// Prévision d'occupation · 14 jours, calculée sur les données réelles.
 //
 // Aucune valeur n'est décorative : chaque jour est recalculé à partir des
 // séjours en cours, des réservations fermes (jour par jour, chevauchement
@@ -8,7 +8,7 @@
 // constaté, pas de la prévision.
 //
 // En production, la même série sortira d'une vue SQL (occupancy par date)
-// rafraîchie à chaque mouvement de réservation — le sélecteur est identique.
+// rafraîchie à chaque mouvement de réservation · le sélecteur est identique.
 // ------------------------------------------------------------------
 
 import { useMemo, useState } from 'react';
@@ -76,7 +76,7 @@ export function PrevisionOccupation({ hauteur = 128 }) {
           className="pointer-events-none absolute inset-x-0 border-t border-dashed border-saffron/60"
           style={{ bottom: `${(TO_CIBLE / maxTaux) * (hauteur - 18)}px` }}
         >
-          <span className="absolute -top-4 right-0 text-[10px] text-saffron">
+          <span className="absolute -top-4 right-0 text-[11px] text-saffron">
             objectif {TO_CIBLE} %
           </span>
         </div>
@@ -117,7 +117,7 @@ export function PrevisionOccupation({ hauteur = 128 }) {
           <span
             key={p.jour}
             className={cx(
-              'flex-1 text-center text-[10px]',
+              'flex-1 text-center text-[11px]',
               p.aujourdhui ? 'font-semibold text-maj' : 'text-ink-3',
             )}
           >
@@ -127,7 +127,7 @@ export function PrevisionOccupation({ hauteur = 128 }) {
       </div>
 
       {/* Détail au survol : le chiffre qu'un directeur demande toujours */}
-      <div className="mt-2 min-h-[46px] rounded-lg bg-sand-50 px-3 py-2">
+      <div className="mt-2 min-h-[46px] rounded-lg bg-mist-50 px-3 py-2">
         {survol === null ? (
           <p className="text-[11px] leading-4 text-ink-3">
             Survolez une colonne : chambres vendues, arrivées, départs et recette estimée du jour.
@@ -157,7 +157,7 @@ export function LegendePrevision() {
       Chaque colonne recompte les chambres réellement occupées ce jour-là : séjours en cours
       chevauchants, plus réservations fermes, sur les chambres actives uniquement. La recette
       estimée utilise la grille publiée et le coefficient de saison. En production, la série est
-      servie par une vue d’occupation par date, recalculée à chaque mouvement — pas un cache figé.
+      servie par une vue d’occupation par date, recalculée à chaque mouvement · pas un cache figé.
     </InfoBulle>
   );
 }

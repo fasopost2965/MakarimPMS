@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-// Fiches de police — registre d'hébergement.
+// Fiches de police · registre d'hébergement.
 //
 // Obligation légale : toute personne logée doit être déclarée, avec son
 // identité complète et sa pièce d'identité. L'écran ne sert donc pas à
@@ -48,7 +48,7 @@ function PaysVille({ pays, ville, onChange }) {
           value={filtrePays}
           onChange={(e) => setFiltrePays(e.target.value)}
           placeholder="Filtrer les pays…"
-          className="mt-1.5 w-full rounded-lg border border-line bg-sand-50 px-2.5 py-1.5 text-[11px] outline-none focus:border-maj"
+          className="mt-1.5 w-full rounded-lg border border-line bg-mist-50 px-2.5 py-1.5 text-[11px] outline-none focus:border-maj"
         />
         <select
           id="fp-pays"
@@ -60,7 +60,7 @@ function PaysVille({ pays, ville, onChange }) {
           }}
           className="mt-1 w-full rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
         >
-          <option value="">— Choisir un pays —</option>
+          <option value=""> ·  Choisir un pays  · </option>
           {paysFiltres.map((p) => (
             <option key={p.code} value={p.nom}>{p.nom}</option>
           ))}
@@ -77,7 +77,7 @@ function PaysVille({ pays, ville, onChange }) {
               value={filtreVille}
               onChange={(e) => setFiltreVille(e.target.value)}
               placeholder="Filtrer les villes…"
-              className="mt-1.5 w-full rounded-lg border border-line bg-sand-50 px-2.5 py-1.5 text-[11px] outline-none focus:border-maj"
+              className="mt-1.5 w-full rounded-lg border border-line bg-mist-50 px-2.5 py-1.5 text-[11px] outline-none focus:border-maj"
             />
             <select
               id="fp-ville-select"
@@ -88,7 +88,7 @@ function PaysVille({ pays, ville, onChange }) {
               }}
               className="mt-1 w-full rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
             >
-              <option value="">— Choisir une ville —</option>
+              <option value=""> ·  Choisir une ville  · </option>
               {villes.map((v) => <option key={v} value={v}>{v}</option>)}
               <option value="__libre">Autre ville…</option>
             </select>
@@ -170,7 +170,7 @@ export function Police() {
     setACompleter(null);
     push(
       complete
-        ? `Fiche ${aCompleter.id} complétée — chambre ${aCompleter.chambre}.`
+        ? `Fiche ${aCompleter.id} complétée · chambre ${aCompleter.chambre}.`
         : `Fiche ${aCompleter.id} enregistrée, il reste des champs obligatoires.`,
       complete ? 'success' : 'info',
     );
@@ -244,7 +244,7 @@ export function Police() {
                     'rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
                     filtre === f.cle
                       ? 'border-maj bg-maj-50 text-maj'
-                      : 'border-line bg-surface text-ink-2 hover:bg-sand-50',
+                      : 'border-line bg-surface text-ink-2 hover:bg-mist-50',
                   )}
                 >
                   {f.label}
@@ -279,7 +279,7 @@ export function Police() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-[12px]">
             <thead>
-              <tr className="border-b border-line-soft text-[10px] tracking-[0.08em] text-ink-3 uppercase">
+              <tr className="border-b border-line-soft text-[11px] tracking-[0.08em] text-ink-3 uppercase">
                 <th className="px-5 py-2 font-semibold">Fiche</th>
                 <th className="px-3 py-2 font-semibold">Chambre</th>
                 <th className="px-3 py-2 font-semibold">Client</th>
@@ -293,7 +293,7 @@ export function Police() {
             </thead>
             <tbody>
               {fiches.map((f) => (
-                <tr key={f.id} className="border-b border-line-soft last:border-0 hover:bg-sand-50/60">
+                <tr key={f.id} className="border-b border-line-soft last:border-0 hover:bg-mist-50/60">
                   <td className="px-5 py-2.5 font-medium text-ink">{f.id}</td>
                   <td className="px-3 py-2.5 tnum">{f.chambre}</td>
                   <td className="px-3 py-2.5">
@@ -302,7 +302,7 @@ export function Police() {
                   </td>
                   <td className="px-3 py-2.5"><ChipType type={f.type} /></td>
                   <td className="px-3 py-2.5 text-ink-2">
-                    {f.pays ? `${f.pays}${f.ville ? ` · ${f.ville}` : ''}` : <span className="text-ink-3">—</span>}
+                    {f.pays ? `${f.pays}${f.ville ? ` · ${f.ville}` : ''}` : <span className="text-ink-3">nc</span>}
                   </td>
                   <td className="px-3 py-2.5">
                     {f.pieceNumero ? (
@@ -347,7 +347,7 @@ export function Police() {
         </div>
       </Card>
 
-      <div className="flex items-start gap-2 rounded-xl border border-line bg-sand-50 p-3">
+      <div className="flex items-start gap-2 rounded-lg border border-line bg-mist-50 p-3">
         <IdCard className="mt-0.5 size-4 shrink-0 text-ink-3" />
         <p className="text-[12px] leading-5 text-ink-2">
           Une fiche sans numéro de pièce d’identité n’est pas valable : elle est signalée en rouge et

@@ -9,7 +9,7 @@ import {
 import { montantHebergement, montantTaxeSejour } from './lib/pricing';
 
 // ------------------------------------------------------------------
-// État initial de la démonstration — cohérent avec la cible :
+// État initial de la démonstration · cohérent avec la cible :
 // 30 chambres, 3 étages, 4 types. L'état est ensuite persisté et modifié
 // par les parcours réels du prototype (check-in, commande, encaissement…).
 // ------------------------------------------------------------------
@@ -49,7 +49,7 @@ export const CLIENT_PAR_CHAMBRE = {
 
 // Rattachement des séjours de démonstration aux fiches clients : seuls
 // quelques noms sont connus, les autres afficheront une fiche « à compléter »
-// — c'est exactement ce que la réception doit voir (obligation légale).
+// · c'est exactement ce que la réception doit voir (obligation légale).
 export const CLIENT_PAR_NOM = {
   'S. Bennani': 'CL-5',
   'L. Moreau': 'CL-6',
@@ -135,7 +135,7 @@ export function buildInitialState(carte = []) {
     const lignes = [
       {
         id: `${folioId}-1`,
-        libelle: `Hébergement ${nb} nuit${nb > 1 ? 's' : ''} — ${info.formule}`,
+        libelle: `Hébergement ${nb} nuit${nb > 1 ? 's' : ''} · ${info.formule}`,
         montant: montantHebergement(chambre.type, info.formule, info.occupants, nb),
         type: 'hebergement',
         payeur: payeurDefaut,
@@ -243,7 +243,7 @@ export function buildInitialState(carte = []) {
   }
   const hs = chambreParNumero('203');
   hs.statut = 'hors_service';
-  hs.note = 'Climatisation — pièce commandée';
+  hs.note = 'Climatisation · pièce commandée';
 
   // 5. Commandes restaurant (2 ouvertes, 3 réglées)
   const commandes = [
@@ -288,7 +288,7 @@ export function buildInitialState(carte = []) {
   // 6. Événementiel
   const evenements = [
     {
-      id: 'E-1', titre: 'Séminaire Attijari — formation crédit', entreprise: 'Attijariwafa Bank',
+      id: 'E-1', titre: 'Séminaire Attijari · formation crédit', entreprise: 'Attijariwafa Bank',
       date: isoAdd(date, 1), creneau: 'matin', participants: 22, statut: 'confirme',
       montant: 14_240, acompte: 4_272, devis: null,
     },
@@ -314,7 +314,7 @@ export function buildInitialState(carte = []) {
     },
   ];
 
-  // 7. Factures déjà émises (historique de la journée) — avec le détail des
+  // 7. Factures déjà émises (historique de la journée) · avec le détail des
   //    lignes : sans lui, un PDF de facture n'est pas conforme (mention des
   //    prestations et ventilation de TVA obligatoires).
   const factures = [
@@ -322,16 +322,16 @@ export function buildInitialState(carte = []) {
       id: 'FA-2026-0184', client: 'Al Omrane Nord', type: 'societe', payeur: 'societe',
       societe: 'Al Omrane Nord', chambre: '105', statut: 'payee', date,
       lignes: [
-        { libelle: 'Hébergement 3 nuits — Demi-pension (2 pers.)', montant: 8_580, tva: 10 },
+        { libelle: 'Hébergement 3 nuits · Demi-pension (2 pers.)', montant: 8_580, tva: 10 },
         { libelle: 'Taxe de séjour (2 pers. × 3 nuits)', montant: 18, tva: 0 },
-        { libelle: 'Restaurant — 2 dîners', montant: 822, tva: 20 },
+        { libelle: 'Restaurant · 2 dîners', montant: 822, tva: 20 },
       ],
     },
     {
       id: 'FA-2026-0185', client: 'Attijariwafa Bank', type: 'societe', payeur: 'societe',
-      societe: 'Attijariwafa Bank', chambre: '—', statut: 'emise', date,
+      societe: 'Attijariwafa Bank', chambre: 'nc', statut: 'emise', date,
       lignes: [
-        { libelle: 'Location salle Martil — matinée', montant: 1_500, tva: 20 },
+        { libelle: 'Location salle Martil · matinée', montant: 1_500, tva: 20 },
         { libelle: 'Pause-café 2 services (22 pers.)', montant: 770, tva: 20 },
         { libelle: 'Vidéoprojecteur + sonorisation', montant: 500, tva: 20 },
         { libelle: 'Déjeuner 3 plats (12 pers.)', montant: 1_440, tva: 20 },
@@ -340,7 +340,7 @@ export function buildInitialState(carte = []) {
   ];
   for (const f of factures) f.montant = f.lignes.reduce((t, l) => t + l.montant, 0);
 
-  // 8. Fiches de police — établies à l'arrivée pour chaque séjour en cours.
+  // 8. Fiches de police · établies à l'arrivée pour chaque séjour en cours.
   //    `complete` exige la pièce d'identité : une fiche sans CIN ou passeport
   //    est signalée en rouge à la réception.
   const fichesPolice = sejours.map((sj, i) => {
@@ -391,7 +391,7 @@ export function buildInitialState(carte = []) {
       })),
       evenements: [
         { heure: '06:40', texte: 'Chambre 203 hors service : climatisation, pièce commandée chez le frigoriste.' },
-        { heure: '09:15', texte: 'Famille El Amrani (101) demande un lit d’appoint — installé, 0 MAD.' },
+        { heure: '09:15', texte: 'Famille El Amrani (101) demande un lit d’appoint · installé, 0 MAD.' },
         { heure: '11:20', texte: 'Arrivée chambre 106 enregistrée, fiche de police à compléter (passeport non remis).' },
         { heure: '12:50', texte: 'Groupe Attijari : 2 chambres supplémentaires demandées pour demain.' },
       ],
@@ -414,7 +414,7 @@ export function buildInitialState(carte = []) {
         id: t.id, label: t.label, fait: i < 2,
       })),
       evenements: [
-        { heure: '14:30', texte: 'Passage de consignes avec Salma — 2 départs en retard signalés.' },
+        { heure: '14:30', texte: 'Passage de consignes avec Salma · 2 départs en retard signalés.' },
       ],
       remarques: '',
       consignes: '',
@@ -449,7 +449,7 @@ export function buildInitialState(carte = []) {
 
   const clients = CLIENTS.map((c) => ({ ...c }));
 
-  // 11. Paramétrage d'exploitation — tout ce qui doit être modifiable par la
+  // 11. Paramétrage d'exploitation · tout ce qui doit être modifiable par la
   //     Direction sans redéploiement (BR-TR-003) : grille tarifaire publiée,
   //     coefficients de saison, forfait demi-journée, identité de l'hôtel et
   //     fonctionnalités activables.
@@ -486,8 +486,8 @@ export function buildInitialState(carte = []) {
   const stock = ARTICLES_STOCK.map((a) => ({ ...a }));
   const mouvementsStock = [
     { id: 'M-1', date, heure: '07:20', articleId: 'ST-1', type: 'entree', qte: 48, motif: 'Livraison Sidi Ali' },
-    { id: 'M-2', date, heure: '09:05', articleId: 'ST-8', type: 'sortie', qte: 2, motif: 'Petit-déjeuner — service du matin' },
-    { id: 'M-3', date, heure: '11:30', articleId: 'ST-3', type: 'sortie', qte: 4, motif: 'Minibar — chambre 204' },
+    { id: 'M-2', date, heure: '09:05', articleId: 'ST-8', type: 'sortie', qte: 2, motif: 'Petit-déjeuner · service du matin' },
+    { id: 'M-3', date, heure: '11:30', articleId: 'ST-3', type: 'sortie', qte: 4, motif: 'Minibar · chambre 204' },
   ];
 
   // 13. Channel manager (simulation de connexion)
@@ -495,9 +495,9 @@ export function buildInitialState(carte = []) {
 
   const journal = [
     { id: 'J-1', heure: '13:42', texte: 'Note restaurant 230 MAD envoyée au folio de la chambre 204', ton: 'maj' },
-    { id: 'J-2', heure: '13:20', texte: 'Table T12 encaissée — 405 MAD (carte bancaire)', ton: 'jade' },
-    { id: 'J-3', heure: '12:55', texte: 'Table T7 encaissée — 230 MAD (espèces)', ton: 'jade' },
-    { id: 'J-4', heure: '11:20', texte: 'Arrivée enregistrée — chambre 106, B. El Khattabi', ton: 'maj' },
+    { id: 'J-2', heure: '13:20', texte: 'Table T12 encaissée · 405 MAD (carte bancaire)', ton: 'jade' },
+    { id: 'J-3', heure: '12:55', texte: 'Table T7 encaissée · 230 MAD (espèces)', ton: 'jade' },
+    { id: 'J-4', heure: '11:20', texte: 'Arrivée enregistrée · chambre 106, B. El Khattabi', ton: 'maj' },
   ];
 
   return {
@@ -524,6 +524,48 @@ export function buildInitialState(carte = []) {
     canauxDistribution,
     comptes: COMPTES.map((c) => ({ ...c, actif: true })),
     changementsChambre: [],
+    // Registre des non-présentations : deux antécédents pour que le suivi ne
+    // s'ouvre pas sur un écran vide.
+    noShows: [
+      {
+        id: 'NS-1',
+        date: isoAdd(date, -3),
+        heure: '23:40',
+        reservationId: 'R-NS-1',
+        client: 'T. Van Dijk',
+        chambre: '107',
+        canal: 'booking',
+        arrivee: isoAdd(date, -3),
+        depart: isoAdd(date, -1),
+        montant: 1200,
+        factureId: 'FA-2026-0178',
+        source: 'reception',
+        suivi: 'relance',
+        suiviNote: 'Carte refusée par Booking, relance envoyée le lendemain matin.',
+        suiviPar: 'Salma Idrissi',
+        suiviLe: isoAdd(date, -2),
+        relances: [{ le: isoAdd(date, -2), par: 'Salma Idrissi', texte: 'Relance e-mail + appel OTA' }],
+      },
+      {
+        id: 'NS-2',
+        date: isoAdd(date, -6),
+        heure: '02:10',
+        reservationId: 'R-NS-2',
+        client: 'Cabinet Haddad',
+        chambre: '205',
+        canal: 'direct',
+        arrivee: isoAdd(date, -6),
+        depart: isoAdd(date, -4),
+        montant: 1100,
+        factureId: 'FA-2026-0161',
+        source: 'cloture',
+        suivi: 'clos',
+        suiviNote: 'Annulation téléphonique arrivée après la clôture. Facture annulée par la Direction.',
+        suiviPar: 'Youssef Benali',
+        suiviLe: isoAdd(date, -5),
+        relances: [],
+      },
+    ],
     session: null,
     journal,
     seq: { sejour: seqSejour, folio: seqFolio, resa: seqResa, commande: 205, evenement: 5, facture: 185, fiche: fichesPolice.length },

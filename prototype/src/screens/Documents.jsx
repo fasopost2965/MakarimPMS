@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-// Documents & PDF — bibliothèque des pièces imprimables du jour.
+// Documents & PDF · bibliothèque des pièces imprimables du jour.
 //
 // Tout ce que l'hôtel remet en main propre doit sortir du PMS sans
 // retouche : note d'hôtel, facture société, fiche de police, rapport de
@@ -89,7 +89,7 @@ export function Documents() {
       if (filtre('régie restaurant marsa')) {
         liste.push({
           cle: 'regie',
-          titre: `Relevé de régie — ${fmtCourt(state.date)}`,
+          titre: `Relevé de régie · ${fmtCourt(state.date)}`,
           sous: `Restaurant Le Marsa · ${regie.commandes} commandes`,
           meta: `${money(regie.aReverser)} MAD à reverser`,
           badge: 'Régie',
@@ -142,7 +142,7 @@ export function Documents() {
               </div>
               <Exports
                 nom={`documents-${famille}-${state.date}`}
-                titre={`Documents — ${famille}`}
+                titre={`Documents · ${famille}`}
                 compact
                 colonnes={[
                   { cle: 'titre', label: 'Pièce' },
@@ -173,7 +173,7 @@ export function Documents() {
                   'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-medium transition-colors',
                   famille === f.cle
                     ? 'border-maj bg-maj-50 text-maj'
-                    : 'border-line bg-surface text-ink-2 hover:bg-sand-50',
+                    : 'border-line bg-surface text-ink-2 hover:bg-mist-50',
                 )}
               >
                 <Icon className="size-3.5" />
@@ -185,7 +185,7 @@ export function Documents() {
 
         <ul className="divide-y divide-line-soft">
           {documents.map((d) => (
-            <li key={d.cle} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 hover:bg-sand-50/60">
+            <li key={d.cle} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 hover:bg-mist-50/60">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <p className="text-[13px] font-medium text-ink">{d.titre}</p>
@@ -210,7 +210,7 @@ export function Documents() {
         </ul>
       </Card>
 
-      <div className="flex items-start gap-2 rounded-xl border border-line bg-sand-50 p-3">
+      <div className="flex items-start gap-2 rounded-lg border border-line bg-mist-50 p-3">
         <FileText className="mt-0.5 size-4 shrink-0 text-ink-3" />
         <p className="text-[12px] leading-5 text-ink-2">
           Les documents reprennent les mentions légales de l’établissement (ICE, RC, IF, patente,
@@ -221,7 +221,7 @@ export function Documents() {
       </div>
 
       {apercu && (
-        <ApercuDocument titre={`${apercu.badge} — ${apercu.titre}`} onClose={() => setApercu(null)}>
+        <ApercuDocument titre={`${apercu.badge} · ${apercu.titre}`} onClose={() => setApercu(null)}>
           {apercu.rendu}
         </ApercuDocument>
       )}

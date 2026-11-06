@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-// Stock — consommables, linge et dotation minibar des chambres.
+// Stock · consommables, linge et dotation minibar des chambres.
 //
 // Le stock n'est pas un module comptable isolé : il est branché sur
 // l'exploitation. Le minibar se consomme depuis la chambre, la ligne part
@@ -63,7 +63,7 @@ export function Stock() {
       </div>
 
       {alertes.length > 0 && (
-        <div className="flex items-start gap-2 rounded-xl border border-saffron/40 bg-saffron-100/40 p-3">
+        <div className="flex items-start gap-2 rounded-lg border border-saffron/40 bg-saffron-100/40 p-3">
           <TriangleAlert className="mt-0.5 size-4 shrink-0 text-saffron" />
           <p className="text-[12px] leading-5 text-ink">
             <strong className="font-semibold">Seuil critique :</strong>{' '}
@@ -104,7 +104,7 @@ export function Stock() {
                     'rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
                     categorie === c
                       ? 'border-maj bg-maj-50 text-maj'
-                      : 'border-line bg-surface text-ink-2 hover:bg-sand-50',
+                      : 'border-line bg-surface text-ink-2 hover:bg-mist-50',
                   )}
                 >
                   {c === 'toutes' ? 'Tout' : c}
@@ -117,7 +117,7 @@ export function Stock() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-[12px]">
             <thead>
-              <tr className="border-b border-line-soft text-[10px] tracking-[0.06em] text-ink-3 uppercase">
+              <tr className="border-b border-line-soft text-[11px] tracking-[0.06em] text-ink-3 uppercase">
                 <th className="px-5 py-2 font-semibold">Article</th>
                 <th className="px-3 py-2 font-semibold">Catégorie</th>
                 <th className="px-3 py-2 text-right font-semibold">Stock</th>
@@ -130,7 +130,7 @@ export function Stock() {
               {articles.map((a) => {
                 const alerte = a.stock <= a.seuil;
                 return (
-                  <tr key={a.id} className="border-b border-line-soft last:border-0 hover:bg-sand-50/60">
+                  <tr key={a.id} className="border-b border-line-soft last:border-0 hover:bg-mist-50/60">
                     <td className="px-5 py-2.5">
                       <p className="flex items-center gap-1.5 font-medium text-ink">
                         {a.nom}
@@ -200,7 +200,7 @@ export function Stock() {
                   <p className="truncate text-[12px] font-medium text-ink">
                     {article?.nom ?? m.articleId} · {m.qte} {article?.unite ?? ''}
                   </p>
-                  <p className="truncate text-[11px] text-ink-3">{m.motif || '—'}</p>
+                  <p className="truncate text-[11px] text-ink-3">{m.motif || 'nc'}</p>
                 </div>
                 <span className="shrink-0 text-[11px] text-ink-3">{fmtCourt(m.date)} {m.heure}</span>
               </li>
@@ -212,7 +212,7 @@ export function Stock() {
         </ul>
       </Card>
 
-      <div className="flex items-start gap-2 rounded-xl border border-line bg-sand-50 p-3">
+      <div className="flex items-start gap-2 rounded-lg border border-line bg-mist-50 p-3">
         <PackageSearch className="mt-0.5 size-4 shrink-0 text-ink-3" />
         <p className="text-[12px] leading-5 text-ink-2">
           Le stock minibar est <strong className="font-medium text-ink">lié aux chambres</strong> : sur

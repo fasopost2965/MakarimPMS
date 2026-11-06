@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-// Référentiels statiques du prototype — alignés sur la documentation :
+// Référentiels statiques du prototype · alignés sur la documentation :
 // - Hôtel 3★, Tétouan, usage interne (docs/Cahier des charges final, §1)
 // - ADR 3★ retenu 600 MAD (docs/modelisation_revenus_pms_makarim.xlsx)
 // - TVA 10 % hébergement & pensions, 20 % prestations annexes / restauration
@@ -25,7 +25,7 @@ export const UTILISATEUR = {
 };
 
 export const PARAMS = {
-  taxeSejour: 3, // MAD / nuit / adulte — barème dépendant de la catégorie et de la commune
+  taxeSejour: 3, // MAD / nuit / adulte · barème dépendant de la catégorie et de la commune
   tvaHebergement: 10,
   tvaAnnexe: 20,
   tvaSalle: 20,
@@ -62,7 +62,7 @@ export const CANAUX = {
   booking: { label: 'Booking.com', classe: 'bg-maj-100 text-maj border-maj/25', dot: 'bg-maj' },
 };
 
-// Profils RBAC du prototype — miroir de la matrice corrigée (voir
+// Profils RBAC du prototype · miroir de la matrice corrigée (voir
 // docs/RBAC_MATRIX.md et la revue de cohérence des règles).
 // `ecrans` = écrans accessibles, `montants` = autorisation de voir les montants.
 export const PROFILS = {
@@ -131,7 +131,7 @@ export const PROFILS = {
 // dans l'écran Caisse).
 // ------------------------------------------------------------------
 export const TYPES_CLIENT = {
-  particulier: { label: 'Particulier', chip: 'bg-sand-200 text-ink-2', dot: 'bg-ink-3' },
+  particulier: { label: 'Particulier', chip: 'bg-mist-200 text-ink-2', dot: 'bg-ink-3' },
   entreprise: { label: 'Entreprise', chip: 'bg-maj-100 text-maj', dot: 'bg-maj' },
 };
 
@@ -141,7 +141,7 @@ export const ENTREPRISES = [
     raison: 'Attijariwafa Bank',
     ice: '001648392000047',
     adresse: '2 boulevard Al Massira, Tétouan',
-    contact: 'Mme Fadwa Rami — achats',
+    contact: 'Mme Fadwa Rami · achats',
     conditions: 'Facture mensuelle, 30 jours fin de mois',
   },
   {
@@ -165,7 +165,7 @@ export const ENTREPRISES = [
 // Fiches de police : les champs exigés par le registre d'hébergement
 // (nom, prénom, date et lieu de naissance, nationalité, profession,
 // domicile, pièce d'identité, dates de séjour). Une fiche incomplète doit
-// être signalée à la réception — c'est une obligation, pas une préférence.
+// être signalée à la réception · c'est une obligation, pas une préférence.
 export const CLIENT_VIDE = {
   type: 'particulier',
   societeId: null,
@@ -200,14 +200,14 @@ export const CLIENTS = [
     pieceType: 'Passeport', pieceNumero: 'C4K8L2P11', pieceDelivreeLe: '2022-02-17',
   },
   {
-    id: 'CL-3', type: 'entreprise', societeId: 'EN-1', nom: 'Attijariwafa Bank', prenom: '—',
+    id: 'CL-3', type: 'entreprise', societeId: 'EN-1', nom: 'Attijariwafa Bank', prenom: 'nc',
     dateNaissance: '', lieuNaissance: 'Casablanca', nationalite: 'Marocaine',
     profession: 'Établissement bancaire', domicile: '2 bd Al Massira', ville: 'Tétouan',
     telephone: '+212 5 39 96 12 00', email: 'achats.nord@example.ma',
     pieceType: 'RC', pieceNumero: 'RC 11245', pieceDelivreeLe: '',
   },
   {
-    id: 'CL-4', type: 'entreprise', societeId: 'EN-2', nom: 'Al Omrane Nord', prenom: '—',
+    id: 'CL-4', type: 'entreprise', societeId: 'EN-2', nom: 'Al Omrane Nord', prenom: 'nc',
     dateNaissance: '', lieuNaissance: 'Tétouan', nationalite: 'Marocaine',
     profession: 'Aménagement urbain', domicile: 'Avenue des FAR', ville: 'Tétouan',
     telephone: '+212 5 39 97 41 20', email: 'direction@example.ma',
@@ -237,7 +237,7 @@ export const CLIENTS = [
 ];
 
 // ------------------------------------------------------------------
-// Tours de quart — trois agents se relaient toutes les 8 heures. Le
+// Tours de quart · trois agents se relaient toutes les 8 heures. Le
 // rapport de fin de shift tient lieu de cahier de transmission : ce que
 // l'agent sortant signale doit être lu par l'agent entrant.
 // ------------------------------------------------------------------
@@ -286,7 +286,7 @@ export const CARTE = [
   { id: 2, cat: 'Entrées', nom: 'Harira maison', prix: 35, dispo: true, desc: 'Vermicelles, coriandre' },
   { id: 3, cat: 'Entrées', nom: 'Briouates aux crevettes', prix: 65, dispo: true, desc: '3 pièces, chermoula' },
   { id: 4, cat: 'Entrées', nom: 'Zaalouk', prix: 40, dispo: true, desc: 'Aubergines fumées' },
-  { id: 5, cat: 'Entrées', nom: 'Salade César', prix: 70, dispo: false, desc: 'Rupture — poulet attendu' },
+  { id: 5, cat: 'Entrées', nom: 'Salade César', prix: 70, dispo: false, desc: 'Rupture · poulet attendu' },
   { id: 6, cat: 'Plats', nom: 'Tajine poulet citron', prix: 95, dispo: true, desc: 'Semoule fine' },
   { id: 7, cat: 'Plats', nom: 'Tajine kefta œuf', prix: 85, dispo: true, desc: 'Bœuf, tomate fraîche' },
   { id: 8, cat: 'Plats', nom: 'Couscous royal', prix: 110, dispo: true, desc: 'Agneau, poulet, merguez' },
@@ -374,7 +374,7 @@ export const SAISONS = [
 
 export const POLITIQUE = [
   'Annulation gratuite jusqu’à 48 h avant l’arrivée',
-  'Hors délai : 1 nuit retenue (flexible) — 100 % (non remboursable)',
+  'Hors délai : 1 nuit retenue (flexible) · 100 % (non remboursable)',
   'Garantie par empreinte bancaire ou acompte de 30 %',
   'Taxe de séjour 3 MAD / nuit / adulte, reversée au Trésor',
 ];
@@ -394,7 +394,7 @@ export const TYPES_SEJOUR = {
 };
 
 // ------------------------------------------------------------------
-// Stock — articles consommables et équipements de chambre.
+// Stock · articles consommables et équipements de chambre.
 // Le stock « lié aux chambres » est le minibar : sa consommation se
 // déduit automatiquement quand l'option est active sur la chambre.
 // ------------------------------------------------------------------
@@ -423,7 +423,7 @@ export const DOTATION_MINIBAR = [
 ];
 
 // ------------------------------------------------------------------
-// Channel manager — connexion aux plateformes de distribution.
+// Channel manager · connexion aux plateformes de distribution.
 // Le prototype simule le sens de circulation : on pousse tarifs et
 // disponibilités, on récupère les réservations. Rien ne sort réellement.
 // ------------------------------------------------------------------
@@ -438,11 +438,11 @@ export const CANAUX_DISTRIBUTION = [
   },
   {
     id: 'CH-3', nom: 'Expedia Partner Central', type: 'OTA',
-    etat: 'deconnecte', dernierSync: '—', reservationsJour: 0, mapping: 0, erreurs: 0,
+    etat: 'deconnecte', dernierSync: 'nc', reservationsJour: 0, mapping: 0, erreurs: 0,
   },
   {
     id: 'CH-4', nom: 'Airbnb', type: 'OTA',
-    etat: 'deconnecte', dernierSync: '—', reservationsJour: 0, mapping: 0, erreurs: 0,
+    etat: 'deconnecte', dernierSync: 'nc', reservationsJour: 0, mapping: 0, erreurs: 0,
   },
 ];
 
@@ -450,7 +450,7 @@ export const CANAUX_DISTRIBUTION = [
 // Comptes de connexion (démonstration).
 // Chaque agent se connecte avec son propre compte ; le rôle est porté
 // par le compte, pas choisi à l'écran. Mot de passe identique pour tous
-// en démonstration — jamais en production.
+// en démonstration · jamais en production.
 // ------------------------------------------------------------------
 export const COMPTES = [
   { id: 'U-1', identifiant: 'y.benali', profil: 'direction', nom: 'Youssef Benali', email: 'y.benali@hotel-makarim.ma' },
@@ -463,7 +463,7 @@ export const COMPTES = [
 export const MOT_DE_PASSE_DEMO = 'makarim2026';
 
 // ------------------------------------------------------------------
-// Référentiels de saisie — ajoutés avec le paramétrage (novembre 2026)
+// Référentiels de saisie · ajoutés avec le paramétrage (novembre 2026)
 // ------------------------------------------------------------------
 
 // Pays d'origine pour la fiche de police, avec les villes rattachées. Le
@@ -535,3 +535,13 @@ export const FISCALITE_DEFAUT = {
   ice: '001987654000073',
   rc: 'Tétouan 2187',
 };
+
+// Suivi des non-présentations. Un no-show n'est pas un statut : c'est un
+// dossier à traiter (nuit facturée, client à rappeler, éventuelle contestation
+// de l'OTA). Le suivi se clôt explicitement, il ne s'efface jamais.
+export const SUIVI_NO_SHOW = [
+  { cle: 'a_traiter', label: 'À traiter', tone: 'crimson' },
+  { cle: 'relance', label: 'Client relancé', tone: 'saffron' },
+  { cle: 'regle', label: 'Nuit réglée', tone: 'jade' },
+  { cle: 'clos', label: 'Clos sans suite', tone: 'neutral' },
+];

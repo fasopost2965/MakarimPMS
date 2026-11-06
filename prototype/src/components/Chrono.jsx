@@ -7,7 +7,7 @@
 //
 // Le calcul part de l'heure de début réelle du shift et de l'horloge courante.
 // En production, l'heure de prise de poste est l'horodatage serveur de la
-// connexion (BR-RH-003) — jamais l'heure du poste de travail.
+// connexion (BR-RH-003) · jamais l'heure du poste de travail.
 // ------------------------------------------------------------------
 
 import { useEffect, useState } from 'react';
@@ -70,17 +70,17 @@ export function DureeShift({ tournee, compact = false }) {
     <div>
       <div className="flex items-end justify-between gap-3">
         <div>
-          <p className="text-[10px] font-semibold tracking-[0.1em] text-ink-3 uppercase">Temps de service</p>
+          <p className="text-[11px] font-semibold tracking-[0.1em] text-ink-3 uppercase">Temps de service</p>
           <p className="tnum mt-1 font-display text-[28px] leading-none text-ink">{hhmmss(ecoule)}</p>
         </div>
         <div className="text-right">
-          <p className="text-[10px] font-semibold tracking-[0.1em] text-ink-3 uppercase">Reste</p>
+          <p className="text-[11px] font-semibold tracking-[0.1em] text-ink-3 uppercase">Reste</p>
           <p className="tnum mt-1 text-[15px] font-semibold text-ink-2">
-            {tournee.statut === 'clos' ? '—' : hhmmss(reste)}
+            {tournee.statut === 'clos' ? 'nc' : hhmmss(reste)}
           </p>
         </div>
       </div>
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-sand-200">
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-mist-200">
         <div
           className={cx(
             'h-full rounded-full transition-all',
@@ -90,7 +90,7 @@ export function DureeShift({ tournee, compact = false }) {
         />
       </div>
       <p className="mt-1 text-[11px] text-ink-3">
-        Shift {tournee.debut} → {SHIFTS.find((s) => s.cle === tournee.shift)?.plage.split('→')[1]?.trim() ?? '—'} ·{' '}
+        Shift {tournee.debut} → {SHIFTS.find((s) => s.cle === tournee.shift)?.plage.split('→')[1]?.trim() ?? 'nc'} ·{' '}
         {pourcentage} % écoulé
       </p>
     </div>
@@ -115,7 +115,7 @@ export function ChronoGlobal({ tournees }) {
             <span
               className={cx(
                 'size-2 shrink-0 rounded-full',
-                t.statut === 'en_cours' ? 'bg-jade' : t.statut === 'clos' ? 'bg-ink-3/50' : 'bg-sand-200',
+                t.statut === 'en_cours' ? 'bg-jade' : t.statut === 'clos' ? 'bg-ink-3/50' : 'bg-mist-200',
               )}
             />
             <div className="min-w-0 flex-1">

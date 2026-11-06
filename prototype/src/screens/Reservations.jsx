@@ -1,4 +1,4 @@
-// Réservations — planning 14 jours × 30 chambres, filtres par canal, création
+// Réservations · planning 14 jours × 30 chambres, filtres par canal, création
 // avec contrôle de disponibilité et prix calculés en direct, détail et
 // annulation.
 //
@@ -11,16 +11,17 @@ import {
   MousePointerClick, UserCheck, Users, X,
 } from 'lucide-react';
 import {
-  CANAUX, FORMULES, MOTIFS_CHANGEMENT, RANG_STANDING, TYPES_CHAMBRE, TYPES_SEJOUR,
+  CANAUX, FORMULES, MOTIFS_CHANGEMENT, RANG_STANDING, SUIVI_NO_SHOW, TYPES_CHAMBRE,
+  TYPES_SEJOUR,
 } from '../data';
 import { InfoBulle } from '../components/InfoBulle';
 import {
-  chambresDisponibles, historiqueClient, prixDuJour, soldeDuFolio, useApp,
+  chambresDisponibles, historiqueClient, noShowsASuivre, prixDuJour, soldeDuFolio, useApp,
 } from '../store';
 import { fmtCourt, isoAdd, isoDiff, money, nuits } from '../lib/date';
 import { montantHebergement } from '../lib/pricing';
 import { Exports } from '../components/Exports';
-import { Button, Card, Modal, Pill, cx, useToast } from '../components/ui';
+import { Button, Card, CardHeader, Modal, Pill, cx, useToast } from '../components/ui';
 
 const JOURS_AFFICHES = 14;
 
@@ -68,7 +69,7 @@ function NouvelleReservation({ open, onClose }) {
       typeSejour,
     });
     push(
-      `Réservation créée — ${client.trim()}, chambre ${chambre.numero}, ${money(prix)} MAD${typeSejour !== 'nuit' ? ' (demi-journée)' : ''}.`,
+      `Réservation créée · ${client.trim()}, chambre ${chambre.numero}, ${money(prix)} MAD${typeSejour !== 'nuit' ? ' (demi-journée)' : ''}.`,
     );
     setClient('');
     setChambreChoisie(null);
@@ -122,7 +123,7 @@ function NouvelleReservation({ open, onClose }) {
                 'rounded-full border px-3 py-1.5 text-[11px] font-medium transition-colors',
                 typeSejour === cle
                   ? 'border-maj bg-maj-50 text-maj'
-                  : 'border-line bg-surface text-ink-2 hover:bg-sand-50',
+                  : 'border-line bg-surface text-ink-2 hover:bg-mist-50',
               )}
             >
               {t.label}
@@ -143,7 +144,7 @@ function NouvelleReservation({ open, onClose }) {
             value={client}
             onChange={(e) => setClient(e.target.value)}
             placeholder="Nom du client ou de l’entreprise"
-            className="mt-1.5 w-full rounded-xl border border-line-strong bg-surface px-3 py-2.5 text-[13px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+            className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-3 py-2.5 text-[13px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
           />
         </div>
 
@@ -159,7 +160,7 @@ function NouvelleReservation({ open, onClose }) {
                 onClick={() => setCanal(cle)}
                 className={cx(
                   'rounded-full border px-3 py-1.5 text-[11px] font-medium transition-colors',
-                  canal === cle ? c.classe : 'border-line bg-surface text-ink-2 hover:bg-sand-50',
+                  canal === cle ? c.classe : 'border-line bg-surface text-ink-2 hover:bg-mist-50',
                 )}
               >
                 {c.label}
@@ -178,7 +179,7 @@ function NouvelleReservation({ open, onClose }) {
             value={arrivee}
             min={state.date}
             onChange={(e) => setArrivee(e.target.value)}
-            className="mt-1.5 w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-[13px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+            className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-[13px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
           />
         </div>
 
@@ -217,7 +218,7 @@ function NouvelleReservation({ open, onClose }) {
             id="resa-formule"
             value={formule}
             onChange={(e) => setFormule(e.target.value)}
-            className="mt-1.5 w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-[13px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+            className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-[13px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
           >
             {FORMULES.map((f) => (
               <option key={f.code} value={f.code}>
@@ -237,7 +238,7 @@ function NouvelleReservation({ open, onClose }) {
           <div
             role="group"
             aria-labelledby="resa-chambres"
-            className="mt-1.5 grid max-h-44 grid-cols-[repeat(auto-fill,minmax(72px,1fr))] gap-1.5 overflow-y-auto rounded-xl border border-line bg-sand-50 p-2"
+            className="mt-1.5 grid max-h-44 grid-cols-[repeat(auto-fill,minmax(72px,1fr))] gap-1.5 overflow-y-auto rounded-lg border border-line bg-mist-50 p-2"
           >
             {dispo.length === 0 && <p className="col-span-full px-2 py-4 text-center text-[12px] text-ink-3">Aucune chambre disponible sur ces dates.</p>}
             {dispo.map((c) => (
@@ -256,7 +257,7 @@ function NouvelleReservation({ open, onClose }) {
                 )}
               >
                 <span className="tnum block text-[12px] font-semibold">{c.numero}</span>
-                <span className="block text-[10px] opacity-80">{TYPES_CHAMBRE[c.type].court}</span>
+                <span className="block text-[11px] opacity-80">{TYPES_CHAMBRE[c.type].court}</span>
               </button>
             ))}
           </div>
@@ -319,7 +320,7 @@ function ChangementChambre({ cible, onClose }) {
       open
       onClose={onClose}
       title="Changer de chambre"
-      subtitle={`${cible.client} · chambre ${cible.chambre} (${TYPES_CHAMBRE[source?.type]?.court ?? '—'})`}
+      subtitle={`${cible.client} · chambre ${cible.chambre} (${TYPES_CHAMBRE[source?.type]?.court ?? 'nc'})`}
       width="max-w-2xl"
       footer={
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -349,7 +350,7 @@ function ChangementChambre({ cible, onClose }) {
                   commentaire: commentaire.trim(),
                   par: state.session?.nom ?? 'Réception',
                 });
-                push(`${cible.client} déplacé en chambre ${numero} — motif tracé.`, 'success');
+                push(`${cible.client} déplacé en chambre ${numero} · motif tracé.`, 'success');
                 onClose();
               }}
             >
@@ -359,7 +360,7 @@ function ChangementChambre({ cible, onClose }) {
         </div>
       }
     >
-      <p className="mb-3 rounded-lg bg-sand-100 px-3 py-2 text-[11px] leading-4 text-ink-2">
+      <p className="mb-3 rounded-lg bg-mist-100 px-3 py-2 text-[11px] leading-4 text-ink-2">
         Seules les chambres de <strong>standing égal ou supérieur</strong> sont proposées. Un
         changement vers un standing inférieur exige une décision de la Direction (BR-SEJ-008).
       </p>
@@ -377,7 +378,7 @@ function ChangementChambre({ cible, onClose }) {
             onClick={() => setNumero(c.numero)}
             className={cx(
               'flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors',
-              numero === c.numero ? 'border-maj bg-maj-50' : 'border-line bg-surface hover:bg-sand-50',
+              numero === c.numero ? 'border-maj bg-maj-50' : 'border-line bg-surface hover:bg-mist-50',
             )}
           >
             <span className="tnum w-10 text-[13px] font-semibold text-ink">{c.numero}</span>
@@ -425,7 +426,7 @@ function ChangementChambre({ cible, onClose }) {
   );
 }
 
-// Dossier client : tout ce que l'hôtel sait du client en un écran — séjours
+// Dossier client : tout ce que l'hôtel sait du client en un écran · séjours
 // passés, réservations, factures et changements de chambre. C'est la mémoire
 // que la réception perd aujourd'hui entre deux saisons.
 function DossierClient({ nom, onClose }) {
@@ -437,7 +438,7 @@ function DossierClient({ nom, onClose }) {
     <Modal
       open
       onClose={onClose}
-      title={`Dossier client — ${nom}`}
+      title={`Dossier client · ${nom}`}
       subtitle={`${h.sejours.length + h.reservations.length} séjour(s) · ${money(total)} MAD facturés`}
       width="max-w-2xl"
       footer={<div className="flex justify-end"><Button variant="outline" onClick={onClose}>Fermer</Button></div>}
@@ -446,21 +447,21 @@ function DossierClient({ nom, onClose }) {
         {[
           ['Séjours', h.sejours.length],
           ['Réservations', h.reservations.length],
-          ['Chang. chambre', h.changements.length],
+          ['Non-présentations', h.noShows.length],
         ].map(([l, v]) => (
-          <div key={l} className="rounded-lg border border-line bg-sand-50 px-3 py-2">
-            <p className="text-[10px] uppercase tracking-[0.06em] text-ink-3">{l}</p>
+          <div key={l} className="rounded-lg border border-line bg-mist-50 px-3 py-2">
+            <p className="text-[11px] uppercase tracking-[0.06em] text-ink-3">{l}</p>
             <p className="tnum text-[16px] font-semibold text-ink">{v}</p>
           </div>
         ))}
       </div>
 
-      <h3 className="mt-4 mb-1.5 text-[10px] font-semibold tracking-[0.1em] text-ink-3 uppercase">
+      <h3 className="mt-4 mb-1.5 text-[11px] font-semibold tracking-[0.1em] text-ink-3 uppercase">
         Historique des séjours
       </h3>
       <ul className="divide-y divide-line-soft text-[12px]">
         {[...h.sejours, ...h.reservations].length === 0 && (
-          <li className="py-2 text-ink-3">Premier séjour — aucun historique.</li>
+          <li className="py-2 text-ink-3">Premier séjour · aucun historique.</li>
         )}
         {[...h.sejours, ...h.reservations]
           .sort((a, b) => b.arrivee.localeCompare(a.arrivee))
@@ -480,7 +481,7 @@ function DossierClient({ nom, onClose }) {
           ))}
       </ul>
 
-      <h3 className="mt-4 mb-1.5 text-[10px] font-semibold tracking-[0.1em] text-ink-3 uppercase">
+      <h3 className="mt-4 mb-1.5 text-[11px] font-semibold tracking-[0.1em] text-ink-3 uppercase">
         Changements de chambre
       </h3>
       <ul className="divide-y divide-line-soft text-[12px]">
@@ -492,13 +493,33 @@ function DossierClient({ nom, onClose }) {
             </p>
             <p className="text-[11px] text-ink-3">
               {c.motifLabel} · origine {c.origine} · par {c.par}
-              {c.commentaire ? ` — « ${c.commentaire} »` : ''}
+              {c.commentaire ? ` · « ${c.commentaire} »` : ''}
             </p>
           </li>
         ))}
       </ul>
 
-      <h3 className="mt-4 mb-1.5 text-[10px] font-semibold tracking-[0.1em] text-ink-3 uppercase">
+      {h.noShows.length > 0 && (
+        <>
+          <h3 className="mt-4 mb-1.5 text-[11px] font-semibold tracking-[0.1em] text-ink-3 uppercase">
+            Non-présentations
+          </h3>
+          <ul className="divide-y divide-line-soft text-[12px]">
+            {h.noShows.map((n) => (
+              <li key={n.id} className="py-1.5">
+                <p className="text-ink">
+                  {fmtCourt(n.arrivee)} · chambre {n.chambre} · {money(n.montant)} MAD
+                </p>
+                <p className="text-[11px] text-ink-3">
+                  {n.suiviNote || 'dossier de suivi ouvert'} · {n.factureId}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      <h3 className="mt-4 mb-1.5 text-[11px] font-semibold tracking-[0.1em] text-ink-3 uppercase">
         Factures
       </h3>
       <ul className="divide-y divide-line-soft text-[12px]">
@@ -511,6 +532,196 @@ function DossierClient({ nom, onClose }) {
         ))}
       </ul>
     </Modal>
+  );
+}
+
+// ------------------------------------------------------------------
+// Suivi des non-présentations.
+//
+// Un no-show n'est pas une ligne rayée : la nuit est facturée, le client peut
+// contester, l'OTA peut reprendre la main. Le dossier reste donc ouvert avec
+// un statut de suivi, une note et un historique d'étapes horodatées jusqu'à
+// clôture explicite.
+// ------------------------------------------------------------------
+function SuiviNoShows() {
+  const { state, actions } = useApp();
+  const { push } = useToast();
+  const [dossier, setDossier] = useState(null);
+  const [statut, setStatut] = useState('a_traiter');
+  const [note, setNote] = useState('');
+
+  const dossiers = state.noShows ?? [];
+  const ouverts = noShowsASuivre(state);
+  const montant = dossiers.reduce((s, n) => s + (n.montant ?? 0), 0);
+
+  const ouvrir = (n) => {
+    setDossier(n);
+    setStatut(n.suivi);
+    setNote('');
+  };
+
+  return (
+    <Card>
+      <CardHeader
+        titre="Non-présentations"
+        sousTitre={`${dossiers.length} enregistrée(s) · ${ouverts.length} à suivre · ${money(montant)} MAD facturés`}
+        action={
+          <Exports
+            nom={`no-shows-${state.date}`}
+            titre="Non-présentations"
+            compact
+            colonnes={[
+              { cle: 'id', label: 'Dossier' },
+              { cle: 'date', label: 'Date' },
+              { cle: 'client', label: 'Client' },
+              { cle: 'chambre', label: 'Chambre' },
+              { cle: 'canal', label: 'Canal' },
+              { cle: 'montant', label: 'Nuit facturée (MAD)' },
+              { cle: 'factureId', label: 'Facture' },
+              { cle: 'suivi', label: 'Suivi' },
+              { cle: 'suiviPar', label: 'Suivi par' },
+            ]}
+            lignes={dossiers.map((n) => ({
+              id: n.id,
+              date: fmtCourt(n.date),
+              client: n.client,
+              chambre: n.chambre,
+              canal: CANAUX[n.canal]?.label ?? n.canal,
+              montant: n.montant,
+              factureId: n.factureId,
+              suivi: SUIVI_NO_SHOW.find((x) => x.cle === n.suivi)?.label ?? n.suivi,
+              suiviPar: n.suiviPar ?? 'nc',
+            }))}
+          />
+        }
+      />
+      <ul className="divide-y divide-line-soft">
+        {dossiers.length === 0 && (
+          <li className="px-5 py-6 text-center text-[13px] text-ink-3">
+            Aucune non-présentation enregistrée. Elles apparaissent ici dès qu’une
+            réservation confirmée n’est pas honorée.
+          </li>
+        )}
+        {dossiers.map((n) => {
+          const etape = SUIVI_NO_SHOW.find((x) => x.cle === n.suivi) ?? SUIVI_NO_SHOW[0];
+          return (
+            <li key={n.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+              <span className="tnum grid size-9 place-items-center rounded-[8px] bg-mist-100 text-[11px] font-semibold text-ink-2">
+                {n.chambre}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-medium text-ink">
+                  {n.client}
+                  <span className="ml-2 font-normal text-ink-3">
+                    {fmtCourt(n.date)} · {n.heure} · {CANAUX[n.canal]?.label ?? n.canal}
+                  </span>
+                </p>
+                <p className="truncate text-[12px] text-ink-3">
+                  {n.factureId} · {money(n.montant)} MAD
+                  {n.suiviNote ? ` · ${n.suiviNote}` : ''}
+                </p>
+              </div>
+              <Pill tone={etape.tone}>{etape.label}</Pill>
+              <Button size="sm" variant="outline" onClick={() => ouvrir(n)}>
+                Suivre
+              </Button>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="border-t border-line-soft px-5 py-3">
+        <p className="text-[12px] leading-[1.5] text-ink-3">
+          Chaque non-présentation enregistre la nuit retenue, la facture émise et un dossier de
+          suivi. Le dossier ne se ferme que par une décision explicite (nuit réglée ou clos sans
+          suite), avec son auteur et sa date.
+        </p>
+      </div>
+
+      {dossier && (
+        <Modal
+          open
+          onClose={() => setDossier(null)}
+          title={`Suivi · ${dossier.client}`}
+          subtitle={`${dossier.id} · nuit ${dossier.chambre} du ${fmtCourt(dossier.arrivee)} · facture ${dossier.factureId}`}
+          width="max-w-md"
+          footer={
+            <div className="flex justify-between gap-2">
+              <Button variant="outline" onClick={() => setDossier(null)}>Fermer</Button>
+              <Button
+                onClick={() => {
+                  actions.suivreNoShow(dossier.id, { suivi: statut, note }, state.session?.nom);
+                  push(`Suivi mis à jour · ${dossier.client}.`, 'success');
+                  setDossier(null);
+                }}
+              >
+                Enregistrer le suivi
+              </Button>
+            </div>
+          }
+        >
+          <fieldset>
+            <legend className="text-[13px] font-medium text-ink-2">Étape du dossier</legend>
+            <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+              {SUIVI_NO_SHOW.map((x) => (
+                <label
+                  key={x.cle}
+                  className={cx(
+                    'flex cursor-pointer items-center gap-2 rounded-[11px] border px-3 py-2 text-[13px] transition-colors',
+                    statut === x.cle ? 'border-maj bg-maj-50 text-ink' : 'border-line text-ink-2 hover:bg-mist-50',
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="suivi-ns"
+                    checked={statut === x.cle}
+                    onChange={() => setStatut(x.cle)}
+                    className="size-3.5 accent-[var(--color-maj)]"
+                  />
+                  {x.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <div className="mt-4">
+            <label htmlFor="ns-note" className="text-[13px] font-medium text-ink-2">
+              Note de suivi
+            </label>
+            <textarea
+              id="ns-note"
+              rows={3}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Appel du client, réponse de l’OTA, accord de la Direction…"
+              className="mt-1.5 w-full resize-none rounded-[11px] border border-line-strong bg-surface px-3 py-2 text-[13px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/20"
+            />
+          </div>
+
+          <h3 className="mt-4 text-[12px] font-semibold tracking-[0.02em] text-ink-3 uppercase">
+            Historique
+          </h3>
+          <ul className="mt-2 space-y-2">
+            <li className="text-[12px] text-ink-2">
+              <span className="font-medium text-ink">{fmtCourt(dossier.date)}</span> · dossier ouvert
+              ({dossier.source === 'cloture' ? 'clôture de journée' : 'réception'})
+            </li>
+            {(dossier.relances ?? []).map((r, i) => (
+              <li key={`${r.le}-${i}`} className="text-[12px] text-ink-2">
+                <span className="font-medium text-ink">{fmtCourt(r.le)}</span> · {r.texte} ·{' '}
+                <span className="text-ink-3">{r.par}</span>
+              </li>
+            ))}
+            {dossier.suiviLe && (dossier.relances ?? []).length === 0 && (
+              <li className="text-[12px] text-ink-2">
+                <span className="font-medium text-ink">{fmtCourt(dossier.suiviLe)}</span> ·{' '}
+                {dossier.suiviNote || 'suivi enregistré'} ·{' '}
+                <span className="text-ink-3">{dossier.suiviPar}</span>
+              </li>
+            )}
+          </ul>
+        </Modal>
+      )}
+    </Card>
   );
 }
 
@@ -559,7 +770,7 @@ export function Reservations() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => push('Filtres avancés — second rideau', 'info')}>
+          <Button variant="outline" onClick={() => push('Filtres avancés · second rideau', 'info')}>
             <Filter className="size-3.5" /> Filtres
           </Button>
           <Button onClick={() => setCreation(true)}>
@@ -576,7 +787,7 @@ export function Reservations() {
           ['Séjours en cours', `${state.sejours.length}`, 'chambres occupées'],
         ].map(([l, v, h]) => (
           <Card key={l} className="p-4">
-            <p className="text-[10px] font-medium tracking-[0.06em] text-ink-3 uppercase">{l}</p>
+            <p className="text-[11px] font-medium tracking-[0.06em] text-ink-3 uppercase">{l}</p>
             <p className="tnum mt-1.5 text-xl font-semibold text-ink">{v}</p>
             <p className="mt-0.5 text-[12px] text-ink-3">{h}</p>
           </Card>
@@ -613,7 +824,7 @@ export function Reservations() {
         </div>
         <div className="grid divide-y divide-line-soft lg:grid-cols-2 lg:divide-x lg:divide-y-0">
           <div>
-            <p className="flex items-center gap-1.5 px-4 pt-3 text-[10px] font-semibold tracking-[0.08em] text-ink-3 uppercase">
+            <p className="flex items-center gap-1.5 px-4 pt-3 text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">
               <UserCheck className="size-3.5" /> Arrivées à enregistrer
             </p>
             <ul className="divide-y divide-line-soft">
@@ -635,7 +846,7 @@ export function Reservations() {
                     size="sm"
                     onClick={() => {
                       actions.checkIn(r.id);
-                      push(`Check-in — ${r.client}, chambre ${r.chambre}.`, 'success');
+                      push(`Check-in · ${r.client}, chambre ${r.chambre}.`, 'success');
                     }}
                   >
                     <Check className="size-3.5" /> Check-in
@@ -645,7 +856,7 @@ export function Reservations() {
             </ul>
           </div>
           <div>
-            <p className="flex items-center gap-1.5 px-4 pt-3 text-[10px] font-semibold tracking-[0.08em] text-ink-3 uppercase">
+            <p className="flex items-center gap-1.5 px-4 pt-3 text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">
               <LogOut className="size-3.5" /> Départs du jour
             </p>
             <ul className="divide-y divide-line-soft">
@@ -671,7 +882,7 @@ export function Reservations() {
                       variant={du > 0 ? 'outline' : 'primary'}
                       onClick={() => {
                         actions.checkOut(x.id);
-                        push(`Check-out — ${x.client}, chambre ${x.chambre} libérée.`, 'success');
+                        push(`Check-out · ${x.client}, chambre ${x.chambre} libérée.`, 'success');
                       }}
                     >
                       <DoorOpen className="size-3.5" /> Check-out
@@ -684,13 +895,15 @@ export function Reservations() {
         </div>
       </Card>
 
+      <SuiviNoShows />
+
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line-soft px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setFiltre('tous')}
-              className={cx('rounded-full px-2.5 py-1 text-[11px] font-medium', filtre === 'tous' ? 'bg-ink text-white' : 'bg-sand-100 text-ink-2')}
+              className={cx('rounded-full px-2.5 py-1 text-[11px] font-medium', filtre === 'tous' ? 'bg-ink text-white' : 'bg-mist-100 text-ink-2')}
             >
               Tous les canaux
             </button>
@@ -701,7 +914,7 @@ export function Reservations() {
                 onClick={() => setFiltre(cle)}
                 className={cx(
                   'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
-                  filtre === cle ? c.classe : 'border-line bg-surface text-ink-2 hover:bg-sand-50',
+                  filtre === cle ? c.classe : 'border-line bg-surface text-ink-2 hover:bg-mist-50',
                 )}
               >
                 <span className={cx('size-1.5 rounded-full', c.dot)} />
@@ -716,10 +929,10 @@ export function Reservations() {
 
         <div className="overflow-x-auto">
           <div className="min-w-[1020px]">
-            <div className="grid border-b border-line bg-sand-50" style={{ gridTemplateColumns: `116px repeat(${JOURS_AFFICHES}, minmax(62px, 1fr))` }}>
-              <div className="px-3 py-2 text-[10px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Chambre</div>
+            <div className="grid border-b border-line bg-mist-50" style={{ gridTemplateColumns: `116px repeat(${JOURS_AFFICHES}, minmax(62px, 1fr))` }}>
+              <div className="px-3 py-2 text-[11px] font-semibold tracking-[0.08em] text-ink-3 uppercase">Chambre</div>
               {jours.map((j, i) => (
-                <div key={j} className={cx('border-l border-line-soft px-2 py-2 text-center text-[10px] font-medium', i === 0 ? 'bg-maj-50 text-maj' : 'text-ink-2')}>
+                <div key={j} className={cx('border-l border-line-soft px-2 py-2 text-center text-[11px] font-medium', i === 0 ? 'bg-maj-50 text-maj' : 'text-ink-2')}>
                   {fmtCourt(j).slice(0, 7)}
                 </div>
               ))}
@@ -727,16 +940,16 @@ export function Reservations() {
 
             {[1, 2, 3].map((etage) => (
               <div key={etage}>
-                <div className="border-b border-line-soft bg-sand-50/60 px-3 py-1.5">
+                <div className="border-b border-line-soft bg-mist-50/60 px-3 py-1.5">
                   <span className="text-[12px] font-semibold text-ink-2">{etage}ᵉ étage</span>
                 </div>
                 {state.chambres.filter((c) => c.etage === etage).map((chambre) => {
                   const sejours = filtres.filter((b) => b.chambre === chambre.numero);
                   return (
-                    <div key={chambre.numero} className="grid border-b border-line-soft last:border-b-0 hover:bg-sand-50/40" style={{ gridTemplateColumns: `116px repeat(${JOURS_AFFICHES}, minmax(62px, 1fr))` }}>
+                    <div key={chambre.numero} className="grid border-b border-line-soft last:border-b-0 hover:bg-mist-50/40" style={{ gridTemplateColumns: `116px repeat(${JOURS_AFFICHES}, minmax(62px, 1fr))` }}>
                       <div className="flex items-center gap-2 px-3 py-1.5">
                         <span className="tnum text-[12px] font-semibold text-ink">{chambre.numero}</span>
-                        <span className="text-[10px] text-ink-3">{TYPES_CHAMBRE[chambre.type].court}</span>
+                        <span className="text-[11px] text-ink-3">{TYPES_CHAMBRE[chambre.type].court}</span>
                       </div>
                       <div className="relative" style={{ gridColumn: `2 / span ${JOURS_AFFICHES}` }}>
                         <div className="grid h-8" style={{ gridTemplateColumns: `repeat(${JOURS_AFFICHES}, minmax(62px, 1fr))` }}>
@@ -756,7 +969,7 @@ export function Reservations() {
                                 type="button"
                                 onClick={() => setDetail(b)}
                                 className={cx(
-                                  'pointer-events-auto mx-0.5 flex h-6 items-center gap-1 self-center overflow-hidden rounded-lg border px-1.5 text-left text-[10px] font-medium transition-transform hover:z-10 hover:scale-[1.02]',
+                                  'pointer-events-auto mx-0.5 flex h-6 items-center gap-1 self-center overflow-hidden rounded-lg border px-1.5 text-left text-[11px] font-medium transition-transform hover:z-10 hover:scale-[1.02]',
                                   canal.classe,
                                 )}
                                 style={{ gridColumn: `${debut + 1} / span ${span}`, gridRow: 1 }}
@@ -803,7 +1016,7 @@ export function Reservations() {
                   <Button
                     onClick={() => {
                       actions.checkIn(detail.id);
-                      push(`Check-in effectué — chambre ${detail.chambre}.`);
+                      push(`Check-in effectué · chambre ${detail.chambre}.`);
                       setDetail(null);
                     }}
                   >
@@ -813,7 +1026,7 @@ export function Reservations() {
                     variant="outline"
                     onClick={() => {
                       actions.marquerNoShow(detail.id);
-                      push(`No-show enregistré — ${detail.client} : première nuit facturée.`, 'info');
+                      push(`No-show enregistré · ${detail.client} : première nuit facturée.`, 'info');
                       setDetail(null);
                     }}
                   >
@@ -825,7 +1038,7 @@ export function Reservations() {
                   variant="outline"
                   onClick={() => {
                     actions.cancelReservation(detail.id, detail.client);
-                    push(`Réservation annulée — ${detail.client}`, 'info');
+                    push(`Réservation annulée · ${detail.client}`, 'info');
                     setDetail(null);
                   }}
                 >
@@ -836,7 +1049,7 @@ export function Reservations() {
                   <Button
                     onClick={() => {
                       actions.checkOut(detail.id);
-                      push(`Check-out — ${detail.client}, chambre ${detail.chambre} libérée.`, 'success');
+                      push(`Check-out · ${detail.client}, chambre ${detail.chambre} libérée.`, 'success');
                       setDetail(null);
                     }}
                     title={soldeDetail > 0 ? `Solde de ${money(soldeDetail)} MAD à régler en caisse` : 'Folio soldé'}
@@ -883,7 +1096,7 @@ export function Reservations() {
               </div>
             ))}
           </dl>
-          <div className="mt-3 flex items-center gap-2 rounded-lg bg-sand-100 px-3 py-2 text-[11px] text-ink-2">
+          <div className="mt-3 flex items-center gap-2 rounded-lg bg-mist-100 px-3 py-2 text-[11px] text-ink-2">
             <Users className="size-3.5 text-ink-3" />{' '}
             {detail.typeSejour && detail.typeSejour !== 'nuit'
               ? 'demi-journée'

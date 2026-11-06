@@ -1,12 +1,12 @@
 // ------------------------------------------------------------------
-// Tours de quart — cahier de transmission entre trois agents.
+// Tours de quart · cahier de transmission entre trois agents.
 //
 // Trois agents se relèvent toutes les 8 heures (06→14, 14→22, 22→06). Ce que
 // l'agent sortant constate doit être lu par l'agent entrant : ce n'est pas un
 // journal intime, c'est une passation signée. L'écran produit donc un rapport
 // imprimable, dans l'ordre : contrôles, main courante, remarques, consignes.
 //
-// Règles matérialisées : BR-RH-003 (horodatage serveur des présences — ici
+// Règles matérialisées : BR-RH-003 (horodatage serveur des présences · ici
 // l'heure de clôture), BR-RH-004 (pas de sortie de shift sans clôture),
 // BR-RH-005 (pas de pointage concurrent), BR-AUD-002 (journalisation des
 // opérations sensibles), BR-TR-005 (contrôle de fin de journée).
@@ -81,7 +81,7 @@ export function Tournees() {
       comptage: comptage === '' ? tournee.caisse.comptage : Number(comptage),
     });
     setComptage('');
-    push(`Shift ${tournee.shift} clôturé — rapport disponible pour ${suivante.label}.`, 'success');
+    push(`Shift ${tournee.shift} clôturé · rapport disponible pour ${suivante.label}.`, 'success');
   };
 
   return (
@@ -99,8 +99,8 @@ export function Tournees() {
               type="button"
               onClick={() => setSelection(t.id)}
               className={cx(
-                'rounded-xl border p-4 text-left transition-colors',
-                actif ? 'border-maj bg-maj-50/60 shadow-card' : 'border-line bg-surface hover:bg-sand-50',
+                'rounded-lg border p-4 text-left transition-colors',
+                actif ? 'border-maj bg-maj-50/60' : 'border-line bg-surface hover:bg-mist-50',
               )}
             >
               <div className="flex items-start justify-between gap-2">
@@ -126,8 +126,8 @@ export function Tournees() {
             {precedente && (
               <Card className="border-saffron/40 bg-saffron-100/30">
                 <div className="px-5 py-4">
-                  <p className="text-[10px] font-semibold tracking-[0.12em] text-ink-3 uppercase">
-                    Consignes reçues de {precedente.agent} — shift {labelShift(precedente.shift)}
+                  <p className="text-[11px] font-semibold tracking-[0.12em] text-ink-3 uppercase">
+                    Consignes reçues de {precedente.agent} · shift {labelShift(precedente.shift)}
                   </p>
                   <p className="mt-1.5 text-[13px] leading-5 text-ink">
                     {precedente.consignes || 'Aucune consigne particulière.'}
@@ -158,7 +158,7 @@ export function Tournees() {
               <ul className="divide-y divide-line-soft">
                 {tournee.taches.map((t) => (
                   <li key={t.id}>
-                    <label className="flex cursor-pointer items-center gap-3 px-5 py-2.5 hover:bg-sand-50/60">
+                    <label className="flex cursor-pointer items-center gap-3 px-5 py-2.5 hover:bg-mist-50/60">
                       <span
                         className={cx(
                           'grid size-4 shrink-0 place-items-center rounded border transition-colors',
@@ -194,7 +194,7 @@ export function Tournees() {
                 )}
                 <ul className="space-y-2">
                   {tournee.evenements.map((e, i) => (
-                    <li key={`${e.heure}-${i}`} className="flex gap-3 rounded-lg bg-sand-50 px-3 py-2">
+                    <li key={`${e.heure}-${i}`} className="flex gap-3 rounded-lg bg-mist-50 px-3 py-2">
                       <span className="tnum shrink-0 text-[11px] text-ink-3">{e.heure}</span>
                       <span className="text-[12px] leading-5 text-ink-2">{e.texte}</span>
                     </li>
@@ -345,7 +345,7 @@ export function Tournees() {
 
       {apercu && (
         <ApercuDocument
-          titre={`Rapport de tournée — shift ${apercu.shift}`}
+          titre={`Rapport de tournée · shift ${apercu.shift}`}
           onClose={() => setApercu(null)}
         >
           <RapportTourneeDoc tournee={apercu} suivante={suivanteDe(apercu.shift)} />

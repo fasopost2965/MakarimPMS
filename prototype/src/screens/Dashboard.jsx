@@ -1,4 +1,4 @@
-// Tableau de bord d'exploitation — écran de pilotage du directeur et de la
+// Tableau de bord d'exploitation · écran de pilotage du directeur et de la
 // réception. Tous les indicateurs sont calculés à partir de l'état réel
 // (séjours, réservations, commandes, événements), aucun chiffre n'est figé.
 //
@@ -26,6 +26,7 @@ import {
   arriveesDuJour,
   departsDuJour,
   kpiDuJour,
+  noShowsASuivre,
   prixDuJour,
   soldeDuFolio,
   useApp,
@@ -63,11 +64,12 @@ export function Dashboard({ onNavigate }) {
   const { push } = useToast();
   const [onglet, setOnglet] = useState('arrivees');
   const kpi = kpiDuJour(state);
+  const noShowsOuverts = noShowsASuivre(state).length;
 
   const arrivees = arriveesDuJour(state);
   const departs = departsDuJour(state);
 
-  // Mix par canal — attendu par le cahier des charges (walk-in 70 / direct 20 /
+  // Mix par canal · attendu par le cahier des charges (walk-in 70 / direct 20 /
   // Booking 10) et par la règle BR-REP-002. Calculé sur les réservations fermes.
   const parCanal = useMemo(() => {
     const base = { walkin: 0, direct: 0, booking: 0 };
@@ -114,7 +116,7 @@ export function Dashboard({ onNavigate }) {
     hs.length > 0 && {
       niveau: 'danger',
       titre: `${hs.length} chambre(s) hors service`,
-      detail: `${hs.map((c) => c.numero).join(', ')} — ${hs[0]?.note ?? 'maintenance en cours'}.`,
+      detail: `${hs.map((c) => c.numero).join(', ')} · ${hs[0]?.note ?? 'maintenance en cours'}.`,
     },
     sejoursNonSoldes.length > 0 && {
       niveau: 'warning',
@@ -144,11 +146,11 @@ export function Dashboard({ onNavigate }) {
   function checkIn(resa) {
     const chambre = state.chambres.find((c) => c.numero === resa.chambre);
     if (chambre?.statut !== 'propre') {
-      push(`Chambre ${resa.chambre} non prête — validez d’abord son nettoyage.`, 'info');
+      push(`Chambre ${resa.chambre} non prête · validez d’abord son nettoyage.`, 'info');
       return;
     }
     actions.checkIn(resa.id);
-    push(`Check-in effectué — ${resa.client}, chambre ${resa.chambre}.`);
+    push(`Check-in effectué · ${resa.client}, chambre ${resa.chambre}.`);
   }
 
   return (
@@ -185,12 +187,28 @@ export function Dashboard({ onNavigate }) {
         <Stat label="CA en cours" value={money(kpi.caTotal)} unit="MAD" hint="hébergement + resto + séminaire" />
       </div>
 
+      {noShowsOuverts > 0 && (
+        <Card className="flex flex-wrap items-center gap-3 border-crimson/20 bg-crimson-100/50 px-5 py-4">
+          <TriangleAlert className="size-4 shrink-0 text-crimson" />
+          <p className="min-w-0 flex-1 text-[13px] text-ink-2">
+            <span className="font-medium text-ink">
+              {noShowsOuverts} non-présentation{noShowsOuverts > 1 ? 's' : ''} à suivre.
+            </span>{' '}
+            Nuits facturées, relances client et clôtures de dossier se traitent dans
+            l’onglet Réservations.
+          </p>
+          <Button size="sm" variant="outline" onClick={() => onNavigate?.('reservations')}>
+            Ouvrir le suivi
+          </Button>
+        </Card>
+      )}
+
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="space-y-4 xl:col-span-2">
           <Card>
             <CardHeader
-              titre="Prévision d'occupation — 14 jours"
-              sousTitre="Recalculée à chaque mouvement — séjours en cours, réservations fermes, chambres actives"
+              titre="Prévision d'occupation · 14 jours"
+              sousTitre="Recalculée à chaque mouvement · séjours en cours, réservations fermes, chambres actives"
               action={
                 <div className="flex items-center gap-2">
                   <LegendePrevision />
@@ -220,7 +238,7 @@ export function Dashboard({ onNavigate }) {
           <Card>
             <CardHeader
               titre="Relève des shifts"
-              sousTitre="Trois agents de 8 h — temps restant en direct"
+              sousTitre="Trois agents de 8 h · temps restant en direct"
             />
             <ChronoGlobal tournees={state.tournees} />
           </Card>
@@ -230,7 +248,7 @@ export function Dashboard({ onNavigate }) {
               titre="Mouvements du jour"
               sousTitre="Check-in et check-out traités directement depuis cette liste"
               action={
-                <div className="flex rounded-lg bg-sand-100 p-0.5">
+                <div className="flex rounded-lg bg-mist-100 p-0.5">
                   {[
                     { cle: 'arrivees', label: `Arrivées ${arrivees.length}` },
                     { cle: 'departs', label: `Départs ${departs.length}` },
@@ -262,7 +280,7 @@ export function Dashboard({ onNavigate }) {
                     const prete = chambre?.statut === 'propre';
                     return (
                       <div key={a.id} className="flex items-center gap-3 px-5 py-2.5">
-                        <span className="tnum w-11 shrink-0 text-xs font-medium text-ink-3">{a.heure || '—'}</span>
+                        <span className="tnum w-11 shrink-0 text-xs font-medium text-ink-3">{a.heure || 'nc'}</span>
                         <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-maj-50 text-maj">
                           <LogIn className="size-3.5" />
                         </span>
@@ -295,7 +313,7 @@ export function Dashboard({ onNavigate }) {
                     return (
                       <div key={d.id} className="flex items-center gap-3 px-5 py-2.5">
                         <span className="tnum w-11 shrink-0 text-xs font-medium text-ink-3">12:00</span>
-                        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-sand-200 text-ink-2">
+                        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-mist-200 text-ink-2">
                           <LogOut className="size-3.5" />
                         </span>
                         <div className="min-w-0 flex-1">
@@ -316,7 +334,7 @@ export function Dashboard({ onNavigate }) {
                             size="sm"
                             onClick={() => {
                               actions.checkOut(d.id);
-                              push(`Check-out effectué — chambre ${d.chambre}, facture émise.`);
+                              push(`Check-out effectué · chambre ${d.chambre}, facture émise.`);
                             }}
                           >
                             Check-out
@@ -339,7 +357,7 @@ export function Dashboard({ onNavigate }) {
           <Card>
             <CardHeader
               titre="Plan des 30 chambres"
-              sousTitre="États temps réel — synchronisés avec le housekeeping"
+              sousTitre="États temps réel · synchronisés avec le housekeeping"
               action={
                 <Button size="sm" variant="outline" onClick={() => onNavigate('chambres')}>
                   Gérer
@@ -366,7 +384,7 @@ export function Dashboard({ onNavigate }) {
                       onClick={() => onNavigate('chambres')}
                       title={`${c.numero} · ${TYPES_CHAMBRE[c.type].label} · ${s.label}`}
                       className={cx(
-                        'tnum group relative grid h-11 place-items-center rounded-lg border text-[12px] font-semibold transition-transform hover:-translate-y-0.5',
+                        'tnum group relative grid h-11 place-items-center rounded-lg border text-[12px] font-semibold transition-colors active:scale-[0.96]',
                         c.statut === 'occupee' && 'border-maj/25 bg-maj-50 text-maj',
                         c.statut === 'propre' && 'border-jade/25 bg-jade-100 text-jade',
                         c.statut === 'a_nettoyer' && 'border-saffron/25 bg-saffron-100 text-saffron',
@@ -402,7 +420,7 @@ export function Dashboard({ onNavigate }) {
           <Card>
             <CardHeader titre="Répartition du CA" sousTitre={`En cours · ${money(kpi.caTotal)} MAD`} />
             <div className="px-5 py-4">
-              <div className="flex h-2 overflow-hidden rounded-full bg-sand-200">
+              <div className="flex h-2 overflow-hidden rounded-full bg-mist-200">
                 {parts.map((p) => (
                   <div key={p.label} className={p.tone} style={{ width: `${(p.valeur / Math.max(1, kpi.caTotal)) * 100}%` }} />
                 ))}
@@ -465,7 +483,7 @@ export function Dashboard({ onNavigate }) {
                 </span>
                 <div className="flex-1">
                   <p className="text-[12px] font-medium text-ink">
-                    {evenementDemain ? `${evenementDemain.entreprise} — ${evenementDemain.participants} pers.` : 'Salle libre demain'}
+                    {evenementDemain ? `${evenementDemain.entreprise} · ${evenementDemain.participants} pers.` : 'Salle libre demain'}
                   </p>
                   <p className="mt-0.5 text-[12px] text-ink-3">
                     {evenementDemain ? 'Mise en place à partir de 8:00' : 'Aucun événement confirmé'}
@@ -496,7 +514,7 @@ export function Dashboard({ onNavigate }) {
             <ul className="divide-y divide-line-soft">
               {state.journal.slice(0, 5).map((j) => (
                 <li key={j.id} className="flex gap-2.5 px-5 py-2.5">
-                  <span className="tnum text-[10px] text-ink-3">{j.heure}</span>
+                  <span className="tnum text-[11px] text-ink-3">{j.heure}</span>
                   <p className="flex-1 text-[12px] leading-4 text-ink-2">{j.texte}</p>
                 </li>
               ))}

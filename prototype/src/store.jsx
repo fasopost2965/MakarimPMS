@@ -2,7 +2,7 @@
 //
 // Principes :
 //  - un seul point d'écriture par action métier (`CHECK_IN`, `COMMIT_ORDER`,
-//    `PAY_FOLIO`, `CLOSE_DAY`…) — même discipline qu'un service backend ;
+//    `PAY_FOLIO`, `CLOSE_DAY`…) · même discipline qu'un service backend ;
 //  - état dérivé calculé par des sélecteurs purs (`kpiDuJour`,
 //    `chambresDisponibles`, `arriveesDuJour`…) et non stocké ;
 //  - persistance sous la clé `makarim-prototype-v4` : la démonstration survit au
@@ -17,7 +17,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
 import { buildInitialState } from './seed';
 import {
-  CARTE, MOTIFS_CHANGEMENT, PARAMS, PROFILS, RANG_STANDING, SHIFTS, TYPES_CHAMBRE,
+  CARTE, MOTIFS_CHANGEMENT, PARAMS, PROFILS, RANG_STANDING, SHIFTS, SUIVI_NO_SHOW,
+  TYPES_CHAMBRE,
 } from './data';
 import {
   montantHebergement, montantTaxeSejour, prixNuit, soldeFolio, totalCommande,
@@ -134,6 +135,71 @@ export function ecransDuRole(state, profil) {
   return roles?.ecrans ?? (PROFILS[profil] ?? PROFILS.direction).ecrans;
 }
 
+// Enregistrement d'une non-présentation · une seule implémentation, utilisée
+// par le bouton « Non présenté » et par la clôture de journée. Le no-show
+// produit trois effets indissociables : le statut de la réservation, une nuit
+// facturée, et une ligne dans le registre de suivi (ouverte jusqu'à traitement).
+function enregistrerNoShow(state, resa, source = 'reception') {
+  if (!resa || resa.statut !== 'confirmee') return null;
+  if ((state.noShows ?? []).some((n) => n.reservationId === resa.id)) return null;
+  const chambre = state.chambres.find((c) => c.numero === resa.chambre);
+  const nb = nbNuits(resa.arrivee, resa.depart);
+  const prix = prixNuit(chambre?.type, resa.formule, resa.occupants, state.parametres?.grille);
+  const seq = state.seq.facture + 1;
+  const numero = `FA-2026-0${String(seq).padStart(3, '0')}`;
+
+  return {
+    ...state,
+    seq: { ...state.seq, facture: seq },
+    reservations: state.reservations.map((r) =>
+      r.id === resa.id ? { ...r, statut: 'no_show', noShowLe: state.date } : r,
+    ),
+    factures: [
+      {
+        id: numero,
+        client: resa.client,
+        type: resa.societeId ? 'societe' : 'hotel',
+        payeur: resa.societeId ? 'societe' : 'client',
+        societe: null,
+        chambre: resa.chambre,
+        montant: prix,
+        statut: 'emise',
+        date: state.date,
+        lignes: [
+          {
+            libelle: `No-show ${resa.client} · 1 nuit retenue (${nb} nuit(s) réservée(s))`,
+            montant: prix,
+            tva: fiscaliteDe(state).tvaHebergement,
+          },
+        ],
+      },
+      ...state.factures,
+    ],
+    noShows: [
+      {
+        id: `NS-${(state.noShows?.length ?? 0) + 1}`,
+        date: state.date,
+        heure: fmtHeure(),
+        reservationId: resa.id,
+        client: resa.client,
+        chambre: resa.chambre,
+        canal: resa.canal ?? 'direct',
+        arrivee: resa.arrivee,
+        depart: resa.depart,
+        montant: prix,
+        factureId: numero,
+        source,
+        suivi: 'a_traiter',
+        suiviNote: '',
+        suiviPar: null,
+        suiviLe: null,
+        relances: [],
+      },
+      ...(state.noShows ?? []),
+    ],
+  };
+}
+
 function journal(state, texte, ton = 'maj') {
   return [{ id: `J-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`, heure: fmtHeure(), texte, ton }, ...state.journal].slice(0, 40);
 }
@@ -153,7 +219,7 @@ function reducer(state, action) {
       const nb = nbNuits(resa.arrivee, resa.depart);
 
       // Séjour à la demi-journée : forfait fixe, pas de nuit, donc pas de
-      // taxe de séjour (elle est due par nuit et par adulte — BR-FAC-007).
+      // taxe de séjour (elle est due par nuit et par adulte · BR-FAC-007).
       if (resa.typeSejour && resa.typeSejour !== 'nuit') {
         const folioIdDJ = `F-${1000 + state.seq.folio + 1}`;
         const sejourIdDJ = `S-${state.seq.sejour + 1}`;
@@ -209,14 +275,14 @@ function reducer(state, action) {
         };
         return {
           ...nextDJ,
-          journal: journal(nextDJ, `Check-in demi-journée — ${resa.client}, chambre ${resa.chambre}`, 'jade'),
+          journal: journal(nextDJ, `Check-in demi-journée · ${resa.client}, chambre ${resa.chambre}`, 'jade'),
         };
       }
 
       const lignes = [
         {
           id: `${folioId}-1`,
-          libelle: `Hébergement ${nb} nuit${nb > 1 ? 's' : ''} — ${resa.formule}`,
+          libelle: `Hébergement ${nb} nuit${nb > 1 ? 's' : ''} · ${resa.formule}`,
           montant: montantHebergement(chambre.type, resa.formule, resa.occupants, nb, state.parametres?.grille),
           type: 'hebergement',
           // Le payeur par défaut suit la nature du client : une entreprise
@@ -273,7 +339,7 @@ function reducer(state, action) {
           },
         ],
       };
-      return { ...next, journal: journal(next, `Check-in — ${resa.client}, chambre ${resa.chambre}`, 'jade') };
+      return { ...next, journal: journal(next, `Check-in · ${resa.client}, chambre ${resa.chambre}`, 'jade') };
     }
 
     case 'CHECK_OUT': {
@@ -297,7 +363,7 @@ function reducer(state, action) {
         folios: state.folios.map((f) => (f.id === folio.id ? { ...f, statut: 'facture' } : f)),
         factures: [{ id: factureId, client: sejour.client, montant: total, statut: 'emise', date: state.date, chambre: sejour.chambre }, ...state.factures],
       };
-      return { ...next, journal: journal(next, `Check-out — ${sejour.client}, chambre ${sejour.chambre} · facture ${factureId}`, 'neutral') };
+      return { ...next, journal: journal(next, `Check-out · ${sejour.client}, chambre ${sejour.chambre} · facture ${factureId}`, 'neutral') };
     }
 
     case 'SET_ROOM_STATUS': {
@@ -341,7 +407,7 @@ function reducer(state, action) {
         ...next,
         journal: journal(
           next,
-          `Réservation — ${action.payload.client}, chambre ${action.payload.chambre}${typeSejour !== 'nuit' ? ' (demi-journée)' : ''}`,
+          `Réservation · ${action.payload.client}, chambre ${action.payload.chambre}${typeSejour !== 'nuit' ? ' (demi-journée)' : ''}`,
           'maj',
         ),
       };
@@ -352,7 +418,7 @@ function reducer(state, action) {
         ...state,
         reservations: state.reservations.map((r) => (r.id === action.id ? { ...r, statut: 'annulee' } : r)),
       };
-      return { ...next, journal: journal(next, `Réservation annulée — ${action.client ?? action.id}`, 'crimson') };
+      return { ...next, journal: journal(next, `Réservation annulée · ${action.client ?? action.id}`, 'crimson') };
     }
 
     case 'CREATE_ORDER': {
@@ -419,7 +485,7 @@ function reducer(state, action) {
       };
       return {
         ...next,
-        journal: journal(next, `Table ${commande.table} encaissée — ${totalCommande(commande)} MAD (${action.moyen.toLowerCase()})`, 'jade'),
+        journal: journal(next, `Table ${commande.table} encaissée · ${totalCommande(commande)} MAD (${action.moyen.toLowerCase()})`, 'jade'),
       };
     }
 
@@ -438,7 +504,7 @@ function reducer(state, action) {
           f.id === folio.id ? { ...f, paiements, statut: reste <= 0 ? 'solde' : f.statut } : f,
         ),
       };
-      return { ...next, journal: journal(next, `Encaissement ${montant} MAD — folio ${folio.id} (${action.moyen.toLowerCase()})`, 'jade') };
+      return { ...next, journal: journal(next, `Encaissement ${montant} MAD · folio ${folio.id} (${action.moyen.toLowerCase()})`, 'jade') };
     }
 
     case 'INVOICE_FOLIO': {
@@ -453,7 +519,7 @@ function reducer(state, action) {
         folios: state.folios.map((f) => (f.id === folio.id ? { ...f, statut: 'facture' } : f)),
         factures: [{ id: numero, client: folio.client, montant: total, statut: 'emise', date: state.date, chambre: folio.chambre }, ...state.factures],
       };
-      return { ...next, journal: journal(next, `Facture ${numero} émise — ${folio.client}`, 'neutral') };
+      return { ...next, journal: journal(next, `Facture ${numero} émise · ${folio.client}`, 'neutral') };
     }
 
     case 'CONFIRM_EVENT': {
@@ -478,7 +544,7 @@ function reducer(state, action) {
           ...state.factures,
         ],
       };
-      return { ...next, journal: journal(next, `Séminaire confirmé — ${evt.entreprise} · acompte ${acompte} MAD (${numero})`, 'terra') };
+      return { ...next, journal: journal(next, `Séminaire confirmé · ${evt.entreprise} · acompte ${acompte} MAD (${numero})`, 'terra') };
     }
 
     // Action unique du POS : crée ou met à jour la commande d'une table puis
@@ -501,9 +567,9 @@ function reducer(state, action) {
         ),
       };
       const libelle = patch.statut === 'confirme'
-        ? `confirmé — acompte de ${acompte} MAD`
+        ? `confirmé · acompte de ${acompte} MAD`
         : patch.statut === 'annule' ? 'annulé, créneau libéré' : 'modifié';
-      return { ...next, journal: journal(next, `Salle — ${evt.entreprise} ${libelle}`, patch.statut === 'annule' ? 'crimson' : 'jade') };
+      return { ...next, journal: journal(next, `Salle · ${evt.entreprise} ${libelle}`, patch.statut === 'annule' ? 'crimson' : 'jade') };
     }
 
     case 'COMMIT_ORDER': {
@@ -532,7 +598,7 @@ function reducer(state, action) {
             : [...state.commandes, base],
         };
         const total = lignes.reduce((s2, l) => s2 + l.prix * l.qte, 0);
-        return { ...next, journal: journal(next, `Table ${table} encaissée — ${total} MAD (${String(moyen).toLowerCase()})`, 'jade') };
+        return { ...next, journal: journal(next, `Table ${table} encaissée · ${total} MAD (${String(moyen).toLowerCase()})`, 'jade') };
       }
 
       const chambre = state.chambres.find((c) => c.numero === chambreNumero);
@@ -587,7 +653,7 @@ function reducer(state, action) {
         ...next,
         journal: journal(
           next,
-          `Répartition de facturation — folio ${action.folioId} : ligne affectée au ${action.payeur}`,
+          `Répartition de facturation · folio ${action.folioId} : ligne affectée au ${action.payeur}`,
           'neutral',
         ),
       };
@@ -642,7 +708,7 @@ function reducer(state, action) {
         ...next,
         journal: journal(
           next,
-          `Prolongation d’une nuit — ${sejour.client}, chambre ${sejour.chambre} (${prix} MAD facturés au client)`,
+          `Prolongation d’une nuit · ${sejour.client}, chambre ${sejour.chambre} (${prix} MAD facturés au client)`,
           'maj',
         ),
       };
@@ -690,7 +756,7 @@ function reducer(state, action) {
         ...next,
         journal: journal(
           next,
-          `Facturation ${folio.chambre} — ${emises.map((f) => `${f.id} (${f.client})`).join(' + ')}`,
+          `Facturation ${folio.chambre} · ${emises.map((f) => `${f.id} (${f.client})`).join(' + ')}`,
           'neutral',
         ),
       };
@@ -756,7 +822,7 @@ function reducer(state, action) {
         ...next,
         journal: journal(
           next,
-          `Shift ${tournee.shift} clôturé par ${tournee.agent} — rapport disponible pour ${suivante.label}`,
+          `Shift ${tournee.shift} clôturé par ${tournee.agent} · rapport disponible pour ${suivante.label}`,
           'jade',
         ),
       };
@@ -822,7 +888,7 @@ function reducer(state, action) {
         ...next,
         journal: journal(
           next,
-          `Grille tarifaire publiée — version ${parametres.version} (${parametres.publieePar})`,
+          `Grille tarifaire publiée · version ${parametres.version} (${parametres.publieePar})`,
           'jade',
         ),
       };
@@ -918,7 +984,7 @@ function reducer(state, action) {
         ...next,
         journal: journal(
           next,
-          `${action.type === 'entree' ? 'Entrée' : 'Sortie'} de stock — ${qte} × ${article.nom}`,
+          `${action.type === 'entree' ? 'Entrée' : 'Sortie'} de stock · ${qte} × ${article.nom}`,
           'neutral',
         ),
       };
@@ -942,7 +1008,7 @@ function reducer(state, action) {
         index += 1;
         lignes.push({
           id: `${folio.id}-mb${folio.lignes.length + index}`,
-          libelle: `Minibar — ${dotation.qte} × ${article.nom}`,
+          libelle: `Minibar · ${dotation.qte} × ${article.nom}`,
           montant: article.prix * dotation.qte,
           type: 'restaurant',
           payeur: 'client',
@@ -964,7 +1030,7 @@ function reducer(state, action) {
         ...next,
         journal: journal(
           next,
-          `Minibar chambre ${chambre.numero} — ${lignes.length} ligne(s) portée(s) au folio`,
+          `Minibar chambre ${chambre.numero} · ${lignes.length} ligne(s) portée(s) au folio`,
           'maj',
         ),
       };
@@ -981,7 +1047,7 @@ function reducer(state, action) {
             ? {
                 ...c,
                 etat: c.etat === 'connecte' ? 'deconnecte' : 'connecte',
-                dernierSync: c.etat === 'connecte' ? '—' : fmtHeure(),
+                dernierSync: c.etat === 'connecte' ? 'nc' : fmtHeure(),
               }
             : c,
         ),
@@ -1007,7 +1073,7 @@ function reducer(state, action) {
       const canal = next.canauxDistribution.find((c) => c.id === action.id);
       return {
         ...next,
-        journal: journal(next, `Synchronisation ${canal.nom} — ${fmtHeure()}`, 'jade'),
+        journal: journal(next, `Synchronisation ${canal.nom} · ${fmtHeure()}`, 'jade'),
       };
     }
 
@@ -1024,7 +1090,7 @@ function reducer(state, action) {
         ...next,
         journal: journal(
           next,
-          `Tarifs et disponibilités poussés vers ${nb} canal(aux) — grille v${next.parametres.version}`,
+          `Tarifs et disponibilités poussés vers ${nb} canal(aux) · grille v${next.parametres.version}`,
           'jade',
         ),
       };
@@ -1037,51 +1103,51 @@ function reducer(state, action) {
     // ---------------------------------------------------------------
     case 'MARQUER_NO_SHOW': {
       const resa = state.reservations.find((r) => r.id === action.id);
-      if (!resa || resa.statut !== 'confirmee') return state;
-      const chambre = state.chambres.find((c) => c.numero === resa.chambre);
-      const nb = nbNuits(resa.arrivee, resa.depart);
-      const prix = prixNuit(chambre?.type, resa.formule, resa.occupants, state.parametres?.grille);
-      const seq = state.seq.facture + 1;
-      const numero = `FA-2026-0${String(seq).padStart(3, '0')}`;
-
-      const next = {
-        ...state,
-        seq: { ...state.seq, facture: seq },
-        chambres: state.chambres.map((c) =>
-          c.numero === resa.chambre && c.statut === 'propre' ? { ...c, statut: 'propre' } : c,
-        ),
-        reservations: state.reservations.map((r) =>
-          r.id === resa.id ? { ...r, statut: 'no_show', noShowLe: state.date } : r,
-        ),
-        factures: [
-          {
-            id: numero,
-            client: resa.client,
-            type: resa.societeId ? 'societe' : 'hotel',
-            payeur: resa.societeId ? 'societe' : 'client',
-            societe: null,
-            chambre: resa.chambre,
-            montant: prix,
-            statut: 'emise',
-            date: state.date,
-            lignes: [
-              {
-                libelle: `No-show ${resa.client} — 1 nuit retenue (${nb} nuit(s) réservée(s))`,
-                montant: prix,
-                tva: fiscaliteDe(state).tvaHebergement,
-              },
-            ],
-          },
-          ...state.factures,
-        ],
-      };
+      const next = enregistrerNoShow(state, resa, 'reception');
+      if (!next) return state;
       return {
         ...next,
         journal: journal(
           next,
-          `No-show — ${resa.client}, chambre ${resa.chambre} : 1 nuit facturée (${numero})`,
+          `No-show · ${resa.client}, chambre ${resa.chambre} : 1 nuit facturée, dossier de suivi ouvert`,
           'crimson',
         ),
+      };
+    }
+
+    // Suivi d'un no-show : on ne modifie pas le passé, on ajoute une étape.
+    // Chaque passage est horodaté et signé dans `relances`.
+    case 'SUIVRE_NO_SHOW': {
+      const dossier = (state.noShows ?? []).find((n) => n.id === action.id);
+      if (!dossier) return state;
+      const par = action.par ?? state.session?.nom ?? 'Réception';
+      const patch = action.patch ?? {};
+      const nouvelleEtape = patch.note && patch.note.trim()
+        ? {
+            le: state.date,
+            par,
+            texte: `${patch.suivi ? (SUIVI_NO_SHOW.find((x) => x.cle === patch.suivi)?.label ?? '') : ''} ${patch.note.trim()}`.trim(),
+          }
+        : null;
+      const next = {
+        ...state,
+        noShows: state.noShows.map((n) =>
+          n.id === action.id
+            ? {
+                ...n,
+                suivi: patch.suivi ?? n.suivi,
+                suiviNote: patch.note !== undefined ? patch.note.trim() : n.suiviNote,
+                suiviPar: par,
+                suiviLe: state.date,
+                relances: nouvelleEtape ? [...(n.relances ?? []), nouvelleEtape] : (n.relances ?? []),
+              }
+            : n,
+        ),
+      };
+      const libelle = SUIVI_NO_SHOW.find((x) => x.cle === (patch.suivi ?? dossier.suivi))?.label ?? 'suivi';
+      return {
+        ...next,
+        journal: journal(next, `No-show ${dossier.client} · suivi mis à jour : ${libelle}`, 'maj'),
       };
     }
 
@@ -1097,7 +1163,7 @@ function reducer(state, action) {
       };
       return {
         ...next,
-        journal: journal(next, `Carte restaurant — « ${action.article.nom} » ajouté (${action.article.cat})`, 'jade'),
+        journal: journal(next, `Carte restaurant · « ${action.article.nom} » ajouté (${action.article.cat})`, 'jade'),
       };
     }
 
@@ -1114,7 +1180,7 @@ function reducer(state, action) {
         : p.dispo !== undefined
           ? (p.dispo ? 'remis à la carte' : 'marqué en rupture')
           : 'modifié';
-      return { ...next, journal: journal(next, `Carte restaurant — « ${article.nom} » ${texte}`, 'maj') };
+      return { ...next, journal: journal(next, `Carte restaurant · « ${article.nom} » ${texte}`, 'maj') };
     }
 
     case 'SUPPRIMER_ARTICLE_CARTE': {
@@ -1128,7 +1194,7 @@ function reducer(state, action) {
       };
       return {
         ...next,
-        journal: journal(next, `Carte restaurant — « ${article.nom} » retiré de la carte`, 'crimson'),
+        journal: journal(next, `Carte restaurant · « ${article.nom} » retiré de la carte`, 'crimson'),
       };
     }
 
@@ -1143,7 +1209,7 @@ function reducer(state, action) {
       };
       return {
         ...next,
-        journal: journal(next, `Salle — prestation « ${action.prestation.label} » ajoutée`, 'jade'),
+        journal: journal(next, `Salle · prestation « ${action.prestation.label} » ajoutée`, 'jade'),
       };
     }
 
@@ -1161,7 +1227,7 @@ function reducer(state, action) {
       const texte = action.patch.prix !== undefined && action.patch.prix !== presta.prix
         ? `prix ${presta.prix} → ${action.patch.prix} MAD`
         : action.patch.active === false ? 'désactivée' : action.patch.active === true ? 'réactivée' : 'modifiée';
-      return { ...next, journal: journal(next, `Salle — « ${presta.label} » ${texte}`, 'maj') };
+      return { ...next, journal: journal(next, `Salle · « ${presta.label} » ${texte}`, 'maj') };
     }
 
     // La fiscalité est sensible : tout changement est tracé avec l'ancienne
@@ -1172,10 +1238,10 @@ function reducer(state, action) {
       const next = { ...state, parametres: { ...state.parametres, fiscalite: apres } };
       const changements = Object.keys(action.patch)
         .filter((k) => avant[k] !== apres[k])
-        .map((k) => `${k} ${avant[k] ?? '—'} → ${apres[k]}`);
+        .map((k) => `${k} ${avant[k] ?? 'nc'} → ${apres[k]}`);
       return {
         ...next,
-        journal: journal(next, `Fiscalité mise à jour — ${changements.join(', ') || 'aucun écart'}`, 'crimson'),
+        journal: journal(next, `Fiscalité mise à jour · ${changements.join(', ') || 'aucun écart'}`, 'crimson'),
       };
     }
 
@@ -1216,7 +1282,7 @@ function reducer(state, action) {
       };
       return {
         ...next,
-        journal: journal(next, `Compte créé — ${compte.nom} (${PROFILS[compte.profil]?.label ?? compte.profil})`, 'jade'),
+        journal: journal(next, `Compte créé · ${compte.nom} (${PROFILS[compte.profil]?.label ?? compte.profil})`, 'jade'),
       };
     }
 
@@ -1309,7 +1375,7 @@ function reducer(state, action) {
         ...next,
         journal: journal(
           next,
-          `Changement de chambre — ${source.client} : ${source.chambre} → ${numeroCible} (${motifRef.label})`,
+          `Changement de chambre · ${source.client} : ${source.chambre} → ${numeroCible} (${motifRef.label})`,
           'maj',
         ),
       };
@@ -1350,18 +1416,25 @@ function reducer(state, action) {
       return { ...state, profil: action.payload };
 
     case 'CLOSE_DAY': {
-      const noShows = state.reservations.filter((r) => r.arrivee === state.date && r.statut === 'confirmee');
+      // Les arrivées non enregistrées deviennent des non-présentations
+      // enregistrées : statut + nuit facturée + dossier de suivi.
+      const restantes = state.reservations.filter(
+        (r) => r.arrivee === state.date && r.statut === 'confirmee',
+      );
+      let courant = state;
+      for (const r of restantes) courant = enregistrerNoShow(courant, r, 'cloture') ?? courant;
+      const noShows = restantes;
       const next = {
-        ...state,
+        ...courant,
         date: isoAdd(state.date, 1),
-        reservations: state.reservations.map((r) =>
+        reservations: courant.reservations.map((r) =>
           r.arrivee === state.date && r.statut === 'confirmee' ? { ...r, statut: 'no_show' } : r,
         ),
         journal: [
           {
             id: `J-close-${state.date}`,
             heure: fmtHeure(),
-            texte: `Journée du ${state.date} clôturée — ${noShows.length} non-présentation(s) enregistrée(s)`,
+            texte: `Journée du ${state.date} clôturée · ${noShows.length} non-présentation(s) enregistrée(s)`,
             ton: 'neutral',
           },
         ],
@@ -1400,6 +1473,9 @@ export function AppProvider({ children }) {
             clients: parsed.clients ?? defauts.clients,
             fichesPolice: parsed.fichesPolice ?? defauts.fichesPolice,
             tournees: parsed.tournees ?? defauts.tournees,
+            // v7 : un état enregistré avant le registre des non-présentations
+            // reçoit les dossiers de démonstration au lieu d'un écran vide.
+            noShows: parsed.noShows ?? defauts.noShows,
           };
         }
       }
@@ -1465,6 +1541,7 @@ export function AppProvider({ children }) {
       syncCanal: (id) => dispatch({ type: 'SYNC_CANAL', id }),
       pousserTarifs: () => dispatch({ type: 'POUSSER_TARIFS' }),
       marquerNoShow: (id) => dispatch({ type: 'MARQUER_NO_SHOW', id }),
+      suivreNoShow: (id, patch, par) => dispatch({ type: 'SUIVRE_NO_SHOW', id, patch, par }),
       ajouterArticleCarte: (article) => dispatch({ type: 'AJOUTER_ARTICLE_CARTE', article }),
       majArticleCarte: (id, patch) => dispatch({ type: 'MAJ_ARTICLE_CARTE', id, patch }),
       supprimerArticleCarte: (id) => dispatch({ type: 'SUPPRIMER_ARTICLE_CARTE', id }),
@@ -1603,7 +1680,7 @@ export function prestationsSalle(state) {
 // Historique d'un client : séjours, réservations, factures et changements de
 // chambre regroupés sous le même nom. Sert au panneau « dossier client ».
 export function historiqueClient(state, nom) {
-  if (!nom) return { sejours: [], reservations: [], factures: [], changements: [] };
+  if (!nom) return { sejours: [], reservations: [], factures: [], changements: [], noShows: [] };
   const cle = nom.trim().toLowerCase();
   const meme = (x) => (x ?? '').trim().toLowerCase() === cle;
   return {
@@ -1611,9 +1688,20 @@ export function historiqueClient(state, nom) {
     reservations: (state.reservations ?? []).filter((r) => meme(r.client)),
     factures: (state.factures ?? []).filter((f) => meme(f.client)),
     changements: (state.changementsChambre ?? []).filter((c) => meme(c.client)),
+    // Un no-show est un antécédent commercial : il doit remonter au dossier.
+    noShows: (state.noShows ?? []).filter((n) => meme(n.client)),
   };
 }
 
 export function changementsDe(state, refType, refId) {
   return (state.changementsChambre ?? []).filter((c) => c.refType === refType && c.refId === refId);
+}
+
+// Dossiers de non-présentation encore ouverts, du plus récent au plus ancien.
+export function noShowsASuivre(state) {
+  return (state.noShows ?? []).filter((n) => n.suivi !== 'clos');
+}
+
+export function montantNoShows(state) {
+  return (state.noShows ?? []).reduce((s, n) => s + (n.montant ?? 0), 0);
 }

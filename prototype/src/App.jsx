@@ -34,7 +34,7 @@ import { Login } from './screens/Login';
 
 const PAGES = {
   dashboard: { titre: 'Tableau de bord', sousTitre: 'Pilotage de l’exploitation · Hôtel Makarim 3★', Composant: Dashboard },
-  chambres: { titre: 'Chambres', sousTitre: 'États, housekeeping et disponibilité — 30 chambres', Composant: Rooms },
+  chambres: { titre: 'Chambres', sousTitre: 'États, housekeeping et disponibilité · 30 chambres', Composant: Rooms },
   reservations: { titre: 'Réservations', sousTitre: 'Planning 14 jours · canaux et occupation', Composant: Reservations },
   restaurant: { titre: 'Restaurant Le Marsa', sousTitre: 'Service, carte et notes en chambre', Composant: Restaurant },
   conference: { titre: 'Salle de conférence', sousTitre: 'Planning, événements et devis séminaire', Composant: Conference },
@@ -63,7 +63,7 @@ export function NightAudit({ open, onClose }) {
       open={open}
       onClose={onClose}
       title="Clôture de la journée"
-      subtitle={`${fmtLong(state.date)} — contrôle avant passage à J+1`}
+      subtitle={`${fmtLong(state.date)} · contrôle avant passage à J+1`}
       footer={
         <div className="flex items-center justify-between gap-3">
           <p className="text-[12px] text-ink-3">
@@ -73,7 +73,7 @@ export function NightAudit({ open, onClose }) {
             onClick={() => {
               actions.closeDay();
               onClose();
-              push('Journée clôturée — passage à J+1 effectué.', 'info');
+              push('Journée clôturée · passage à J+1 effectué.', 'info');
             }}
           >
             <Moon className="size-3.5" /> Clôturer
@@ -89,7 +89,7 @@ export function NightAudit({ open, onClose }) {
             detail:
               foliosOuverts.length === 0
                 ? 'Tous les comptes clients sont à jour.'
-                : `${money(totalDu)} MAD en attente — chambres ${foliosOuverts.map((f) => f.chambre).join(', ')}.`,
+                : `${money(totalDu)} MAD en attente · chambres ${foliosOuverts.map((f) => f.chambre).join(', ')}.`,
             bloquant: false,
           },
           {
@@ -98,7 +98,7 @@ export function NightAudit({ open, onClose }) {
             detail:
               departs.length === 0
                 ? 'Aucun départ en retard.'
-                : `${departs.map((d) => d.chambre).join(', ')} — les séjours resteront ouverts après la clôture.`,
+                : `${departs.map((d) => d.chambre).join(', ')} · les séjours resteront ouverts après la clôture.`,
             bloquant: false,
           },
           {
@@ -117,7 +117,7 @@ export function NightAudit({ open, onClose }) {
           <li
             key={ligne.titre}
             className={cx(
-              'flex gap-3 rounded-xl border p-3',
+              'flex gap-3 rounded-lg border p-3',
               ligne.ok ? 'border-jade/30 bg-jade-100/40' : 'border-saffron/35 bg-saffron-100/40',
             )}
           >
@@ -133,7 +133,7 @@ export function NightAudit({ open, onClose }) {
           </li>
         ))}
       </ul>
-      <div className="mt-4 flex items-start gap-2 rounded-xl bg-sand-100 p-3">
+      <div className="mt-4 flex items-start gap-2 rounded-lg bg-mist-100 p-3">
         <ShieldCheck className="mt-0.5 size-4 shrink-0 text-ink-3" />
         <p className="text-[12px] leading-4 text-ink-2">
           La clôture est journalisée et figée : la date d’exploitation avance,
@@ -216,12 +216,12 @@ function Contenu() {
   }, [actions, push]);
 
   // Portail : sans session ouverte, aucun écran de l'application n'est rendu.
-  // Ce retour anticipé est placé après tous les hooks (règle des hooks) —
+  // Ce retour anticipé est placé après tous les hooks (règle des hooks)  · 
   // il ne doit jamais précéder un useEffect ou un useMemo.
   if (!state.session) return <Login />;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-sand-100">
+    <div className="flex h-screen overflow-hidden bg-mist-100">
       {/* Lien d'évitement : première cible du clavier, évite de retraverser
           la navigation à chaque changement d'écran. */}
       <a
@@ -242,7 +242,7 @@ function Contenu() {
           onChangerProfil={(cle) => {
             actions.setProfil(cle);
             naviguer(PROFILS[cle].accueil);
-            push(`Profil « ${PROFILS[cle].label} » activé — navigation et droits recalculés.`, 'info');
+            push(`Profil « ${PROFILS[cle].label} » activé · navigation et droits recalculés.`, 'info');
           }}
         />
         <main id="contenu" tabIndex={-1} className="flex-1 overflow-y-auto pb-16 outline-none lg:pb-0">

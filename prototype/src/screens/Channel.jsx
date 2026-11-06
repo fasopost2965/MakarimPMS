@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-// Channel manager — distribution en ligne.
+// Channel manager · distribution en ligne.
 //
 // Un hôtel 3★ vend surtout par les OTA, et une chambre vendue deux fois coûte
 // plus cher qu'une chambre vide (BR-RES-001). L'écran montre donc trois
@@ -28,14 +28,14 @@ export function Channel() {
 
   const connectes = state.canauxDistribution.filter((c) => c.etat === 'connecte');
   const saison = saisonActive(state);
-  const dernierSync = connectes.map((c) => c.dernierSync).filter((h) => h !== '—').sort().pop();
+  const dernierSync = connectes.map((c) => c.dernierSync).filter((h) => h !== 'nc').sort().pop();
 
   const synchroniser = (id) => {
     setEnCours(id);
     setTimeout(() => {
       actions.syncCanal(id);
       setEnCours(null);
-      push('Synchronisation terminée — disponibilités et tarifs à jour.', 'success');
+      push('Synchronisation terminée · disponibilités et tarifs à jour.', 'success');
     }, 600);
   };
 
@@ -48,7 +48,7 @@ export function Channel() {
     <div className="space-y-4 px-4 py-5 sm:px-6">
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat label="Canaux connectés" value={String(connectes.length)} unit={`sur ${state.canauxDistribution.length}`} />
-        <Stat label="Dernière synchronisation" value={dernierSync ?? '—'} unit="aujourd’hui" tone="jade" />
+        <Stat label="Dernière synchronisation" value={dernierSync ?? 'nc'} unit="aujourd’hui" tone="jade" />
         <Stat
           label="Grille publiée"
           value={`v${state.parametres.version}`}
@@ -64,7 +64,7 @@ export function Channel() {
             <div className="flex items-center gap-2">
               <InfoBulle titre="Ce que fait le channel manager" cote="gauche">
                 Il pousse vos tarifs et disponibilités vers les plateformes, et récupère leurs
-                réservations dans le planning — sans double saisie et sans risque de surréservation
+                réservations dans le planning · sans double saisie et sans risque de surréservation
                 (BR-RES-001). Les réservations importées arrivent en statut confirmé.
               </InfoBulle>
               <Button onClick={pousser} disabled={connectes.length === 0}>
@@ -81,8 +81,8 @@ export function Channel() {
               <li key={c.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
                 <span
                   className={cx(
-                    'grid size-9 shrink-0 place-items-center rounded-xl',
-                    connecte ? 'bg-jade-100 text-jade' : 'bg-sand-100 text-ink-3',
+                    'grid size-9 shrink-0 place-items-center rounded-lg',
+                    connecte ? 'bg-jade-100 text-jade' : 'bg-mist-100 text-ink-3',
                   )}
                 >
                   {connecte ? <Link2 className="size-4" /> : <WifiOff className="size-4" />}
@@ -118,8 +118,8 @@ export function Channel() {
                       actions.toggleCanal(c.id);
                       push(
                         connecte
-                          ? `${c.nom} déconnecté — les tarifs ne sont plus poussés.`
-                          : `${c.nom} connecté — mappage des 4 types de chambre.`,
+                          ? `${c.nom} déconnecté · les tarifs ne sont plus poussés.`
+                          : `${c.nom} connecté · mappage des 4 types de chambre.`,
                         connecte ? 'info' : 'success',
                       );
                     }}
@@ -162,7 +162,7 @@ export function Channel() {
           <div className="overflow-x-auto">
             <table className="w-full text-[12px]">
               <thead>
-                <tr className="border-b border-line-soft text-[10px] tracking-[0.06em] text-ink-3 uppercase">
+                <tr className="border-b border-line-soft text-[11px] tracking-[0.06em] text-ink-3 uppercase">
                   <th className="px-5 py-2 text-left font-semibold">Type</th>
                   {connectes.map((c) => (
                     <th key={c.id} className="px-3 py-2 text-center font-semibold">{c.nom.split(' ')[0]}</th>
@@ -192,7 +192,7 @@ export function Channel() {
         </Card>
       </div>
 
-      <div className="flex items-start gap-2 rounded-xl border border-saffron/40 bg-saffron-100/40 p-3">
+      <div className="flex items-start gap-2 rounded-lg border border-saffron/40 bg-saffron-100/40 p-3">
         <TriangleAlert className="mt-0.5 size-4 shrink-0 text-saffron" />
         <p className="text-[12px] leading-5 text-ink-2">
           <strong className="font-medium text-ink">Démonstration :</strong> aucune connexion réseau

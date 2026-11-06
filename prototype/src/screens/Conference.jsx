@@ -1,4 +1,4 @@
-// Salle de conférence — planning 7 jours × 3 créneaux, événements dépliables et
+// Salle de conférence · planning 7 jours × 3 créneaux, événements dépliables et
 // constructeur de devis (participants, format, prestations, HT / TVA 20 % / TTC
 // / acompte 30 %).
 //
@@ -71,14 +71,14 @@ function ConstructeurDevis({ dateParDefaut }) {
   function confirmer() {
     if (!entreprise.trim() || !capaciteOk) return;
     actions.confirmEvent({
-      titre: `${titre} — ${entreprise.trim()}`,
+      titre: `${titre} · ${entreprise.trim()}`,
       entreprise: entreprise.trim(),
       date,
       creneau,
       participants,
       montant: ttc,
     });
-    push(`Événement confirmé — ${entreprise.trim()} · acompte de ${money(acompte)} MAD facturé.`);
+    push(`Événement confirmé · ${entreprise.trim()} · acompte de ${money(acompte)} MAD facturé.`);
     setEntreprise('');
   }
 
@@ -126,7 +126,7 @@ function ConstructeurDevis({ dateParDefaut }) {
                 onClick={() => setCreneau(c)}
                 className={cx(
                   'rounded-lg border px-2 py-1.5 text-[11px] font-medium capitalize transition-colors',
-                  creneau === c ? 'border-maj bg-maj-50 text-maj' : 'border-line bg-surface text-ink-2 hover:bg-sand-50',
+                  creneau === c ? 'border-maj bg-maj-50 text-maj' : 'border-line bg-surface text-ink-2 hover:bg-mist-50',
                 )}
               >
                 {c.replace('-', ' ')}
@@ -168,7 +168,7 @@ function ConstructeurDevis({ dateParDefaut }) {
                 onClick={() => setFormule(f.cle)}
                 className={cx(
                   'rounded-lg border px-2 py-2 text-[11px] font-medium transition-colors',
-                  formule === f.cle ? 'border-maj bg-maj-50 text-maj' : 'border-line bg-surface text-ink-2 hover:bg-sand-50',
+                  formule === f.cle ? 'border-maj bg-maj-50 text-maj' : 'border-line bg-surface text-ink-2 hover:bg-mist-50',
                 )}
               >
                 {f.label}
@@ -184,7 +184,7 @@ function ConstructeurDevis({ dateParDefaut }) {
           <ul role="group" aria-labelledby="evt-prestations" className="mt-1.5 space-y-0.5">
             {prestations.map((o) => (
               <li key={o.cle}>
-                <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-sand-50">
+                <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-mist-50">
                   <span className={cx('grid size-4 place-items-center rounded border transition-colors', options[o.cle] ? 'border-maj bg-maj text-white' : 'border-line bg-surface')}>
                     {options[o.cle] && <Check className="size-3" />}
                   </span>
@@ -202,7 +202,7 @@ function ConstructeurDevis({ dateParDefaut }) {
           </ul>
         </div>
 
-        <div className="rounded-xl border border-line bg-sand-50 p-3">
+        <div className="rounded-lg border border-line bg-mist-50 p-3">
           <ul className="space-y-1 text-[11px]">
             {lignes.map((l) => (
               <li key={l.label} className="flex justify-between">
@@ -234,7 +234,7 @@ function ConstructeurDevis({ dateParDefaut }) {
 
 // Créneau libre cliqué dans le planning : on ouvre une prise de réservation
 // courte plutôt qu'un formulaire vide ailleurs dans la page. Le créneau, la
-// date et le montant sont déjà connus — il ne reste que le client.
+// date et le montant sont déjà connus · il ne reste que le client.
 function FormCreneau({ creneau, onClose }) {
   const { state, actions } = useApp();
   const { push } = useToast();
@@ -259,7 +259,7 @@ function FormCreneau({ creneau, onClose }) {
     <Modal
       open
       onClose={onClose}
-      title={`Créneau libre — ${CRENEAUX[creneau.creneau]}`}
+      title={`Créneau libre · ${CRENEAUX[creneau.creneau]}`}
       subtitle={`${fmtCourt(creneau.date)} · Salle Martil`}
       footer={
         <div className="flex items-center justify-between gap-3">
@@ -270,14 +270,14 @@ function FormCreneau({ creneau, onClose }) {
               disabled={!entreprise.trim()}
               onClick={() => {
                 actions.confirmEvent({
-                  titre: `Séminaire — ${entreprise.trim()}`,
+                  titre: `Séminaire · ${entreprise.trim()}`,
                   entreprise: entreprise.trim(),
                   date: creneau.date,
                   creneau: creneau.creneau,
                   participants,
                   montant: ttc,
                 });
-                push(`Créneau réservé — ${entreprise.trim()} · acompte de ${money(Math.round(ttc * 0.3))} MAD.`);
+                push(`Créneau réservé · ${entreprise.trim()} · acompte de ${money(Math.round(ttc * 0.3))} MAD.`);
                 onClose();
               }}
             >
@@ -320,7 +320,7 @@ function FormCreneau({ creneau, onClose }) {
           <ul className="space-y-0.5">
             {prestations.map((o) => (
               <li key={o.cle}>
-                <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 hover:bg-sand-50">
+                <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 hover:bg-mist-50">
                   <input
                     type="checkbox"
                     checked={Boolean(choix[o.cle])}
@@ -379,7 +379,7 @@ export function Conference() {
               ['Devis en attente', `${state.evenements.filter((e) => e.statut !== 'confirme').length}`, 'relance à faire'],
             ].map(([l, v, h]) => (
               <Card key={l} className="p-4">
-                <p className="text-[10px] font-medium tracking-[0.06em] text-ink-3 uppercase">{l}</p>
+                <p className="text-[11px] font-medium tracking-[0.06em] text-ink-3 uppercase">{l}</p>
                 <p className="tnum mt-1 text-lg font-semibold text-ink">{v}</p>
                 <p className="mt-0.5 text-[12px] text-ink-3">{h}</p>
               </Card>
@@ -388,7 +388,7 @@ export function Conference() {
 
           <Card>
             <CardHeader
-              titre="Planning de la salle — 7 jours"
+              titre="Planning de la salle · 7 jours"
               sousTitre="3 créneaux par jour · option bloquante 48 h"
               action={
                 <div className="flex gap-1.5">
@@ -403,11 +403,11 @@ export function Conference() {
                 <div className="grid grid-cols-[92px_repeat(7,1fr)] gap-1">
                   <div />
                   {jours.map((j) => (
-                    <div key={j} className="pb-1 text-center text-[10px] font-medium text-ink-3">{fmtCourt(j).slice(0, 7)}</div>
+                    <div key={j} className="pb-1 text-center text-[11px] font-medium text-ink-3">{fmtCourt(j).slice(0, 7)}</div>
                   ))}
                   {Object.keys(CRENEAUX).map((creneau) => (
                     <div key={creneau} className="contents">
-                      <div className="flex items-center pr-2 text-[10px] leading-3 text-ink-3">{CRENEAUX[creneau]}</div>
+                      <div className="flex items-center pr-2 text-[11px] leading-3 text-ink-3">{CRENEAUX[creneau]}</div>
                       {jours.map((jour) => {
                         const e = evt(jour, creneau);
                         const statut = e?.statut ?? 'libre';
@@ -417,7 +417,7 @@ export function Conference() {
                             type="button"
                             onClick={() => (e ? setEvenement(e) : setCreneauLibre({ date: jour, creneau }))}
                             className={cx(
-                              'min-h-[46px] rounded-lg border px-1.5 py-1 text-left text-[10px] leading-3 transition-colors',
+                              'min-h-[46px] rounded-lg border px-1.5 py-1 text-left text-[11px] leading-3 transition-colors',
                               statut === 'confirme' && 'border-jade/30 bg-jade-100 text-jade hover:brightness-95',
                               statut === 'option' && 'border-saffron/30 bg-saffron-100 text-saffron hover:brightness-95',
                               statut === 'devis' && 'border-maj/30 bg-maj-50 text-maj hover:brightness-95',
@@ -445,7 +445,7 @@ export function Conference() {
           <Card>
             <CardHeader
               titre="Prestations de la salle"
-              sousTitre="Tarifs, unité et disponibilité — le devis et le planning suivent"
+              sousTitre="Tarifs, unité et disponibilité · le devis et le planning suivent"
               action={
                 state.profil === 'direction' ? (
                   <Button size="sm" variant="outline" onClick={() => setParamPrestations(true)}>
@@ -503,9 +503,9 @@ export function Conference() {
                     <button
                       type="button"
                       onClick={() => setOuvert(open ? null : e.id)}
-                      className="flex w-full items-center gap-3 px-5 py-3 text-left hover:bg-sand-50/60"
+                      className="flex w-full items-center gap-3 px-5 py-3 text-left hover:bg-mist-50/60"
                     >
-                      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-sand-100 text-ink-2">
+                      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-mist-100 text-ink-2">
                         <Presentation className="size-4" />
                       </span>
                       <div className="min-w-0 flex-1">
@@ -519,13 +519,13 @@ export function Conference() {
                       <ChevronDown className={cx('size-4 text-ink-3 transition-transform', open && 'rotate-180')} />
                     </button>
                     {open && (
-                      <div className="animate-fade-up border-t border-line-soft bg-sand-50/60 px-5 py-3">
+                      <div className="animate-fade-up border-t border-line-soft bg-mist-50/60 px-5 py-3">
                         <div className="grid gap-2 text-[11px] sm:grid-cols-3">
                           {[
                             ['Créneau', CRENEAUX[e.creneau]],
                             ['Participants', `${e.participants} personnes`],
                             ['Montant TTC', `${money(e.montant)} MAD`],
-                            ['Salle', `${SALLE.nom} — ${SALLE.superficie} m²`],
+                            ['Salle', `${SALLE.nom} · ${SALLE.superficie} m²`],
                             ['Acompte', e.acompte ? `${money(e.acompte)} MAD reçus` : 'en attente'],
                             ['Facturation', 'Entreprise · ICE renseigné'],
                           ].map(([k, v]) => (
@@ -552,7 +552,7 @@ export function Conference() {
                                   participants: e.participants,
                                   montant: e.montant,
                                 });
-                                push(`${e.titre} confirmé — acompte facturé`);
+                                push(`${e.titre} confirmé · acompte facturé`);
                               }}
                             >
                               <Check className="size-3.5" /> Confirmer
@@ -615,7 +615,7 @@ export function Conference() {
                 <Button
                   onClick={() => {
                     actions.majEvenement(evenement.id, { statut: 'confirme' });
-                    push(`${evenement.entreprise} confirmé — acompte facturé.`, 'success');
+                    push(`${evenement.entreprise} confirmé · acompte facturé.`, 'success');
                     setEvenement(null);
                   }}
                 >
@@ -629,7 +629,7 @@ export function Conference() {
                   variant="outline"
                   onClick={() => {
                     actions.majEvenement(evenement.id, { statut: 'annule' });
-                    push(`Événement annulé — créneau libéré.`, 'info');
+                    push(`Événement annulé · créneau libéré.`, 'info');
                     setEvenement(null);
                   }}
                 >
@@ -654,7 +654,7 @@ export function Conference() {
               </div>
             ))}
           </dl>
-          <p className="mt-3 rounded-lg bg-sand-100 px-3 py-2 text-[11px] text-ink-2">
+          <p className="mt-3 rounded-lg bg-mist-100 px-3 py-2 text-[11px] text-ink-2">
             Un événement confirmé bloque la salle sur ce créneau. L’annulation libère
             immédiatement la disponibilité et reste tracée dans le journal.
           </p>
@@ -666,7 +666,7 @@ export function Conference() {
           open
           onClose={() => setParamPrestations(false)}
           title="Prestations de la salle"
-          subtitle="Renommer, tarifer, désactiver — le devis se recalcule"
+          subtitle="Renommer, tarifer, désactiver · le devis se recalcule"
           width="max-w-2xl"
           footer={<div className="flex justify-end"><Button onClick={() => setParamPrestations(false)}>Terminé</Button></div>}
         >

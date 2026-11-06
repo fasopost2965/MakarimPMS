@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-// Tarifs & paramètres — tout ce qui doit changer sans redéploiement.
+// Tarifs & paramètres · tout ce qui doit changer sans redéploiement.
 //
 // Grille tarifaire éditable puis **publiée** (c'est la publication qui rend
 // les prix effectifs), coefficients de saison, forfait demi-journée, identité
@@ -105,7 +105,7 @@ export function Rates() {
   const appliquerGrille = () => {
     actions.publierGrille(grille, saisons, Number(demiJournee), state.session?.nom ?? 'Direction');
     push(
-      `Grille publiée — version ${params.version + 1}. Les nouveaux prix s’appliquent dès la prochaine réservation.`,
+      `Grille publiée · version ${params.version + 1}. Les nouveaux prix s’appliquent dès la prochaine réservation.`,
       'success',
     );
     setConfirmation(false);
@@ -117,7 +117,7 @@ export function Rates() {
         Object.keys(CHAMPS_FISCAUX).map((cle) => [cle, Number(fiscalite[cle])]),
       ),
     );
-    push('Fiscalité enregistrée — les prochaines écritures utilisent les nouveaux taux.', 'success');
+    push('Fiscalité enregistrée · les prochaines écritures utilisent les nouveaux taux.', 'success');
     setConfirmationFiscale(false);
   };
 
@@ -199,7 +199,7 @@ export function Rates() {
       </div>
 
       {params.verrouTarifs && !deverrouille ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-saffron/40 bg-saffron-100/50 px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-saffron/40 bg-saffron-100/50 px-4 py-3">
           <div className="flex items-start gap-2.5">
             <Lock className="mt-0.5 size-4 shrink-0 text-saffron" />
             <div>
@@ -215,7 +215,7 @@ export function Rates() {
           </Button>
         </div>
       ) : (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-jade/40 bg-jade-100/40 px-4 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-jade/40 bg-jade-100/40 px-4 py-2.5">
           <p className="flex items-center gap-2 text-[12px] text-ink-2">
             <Unlock className="size-3.5 text-jade" /> Grille déverrouillée pour cette session.
           </p>
@@ -236,7 +236,7 @@ export function Rates() {
       )}
 
       {erreurs.length > 0 && (
-        <div className="rounded-xl border border-crimson/40 bg-crimson-100/50 p-3">
+        <div className="rounded-lg border border-crimson/40 bg-crimson-100/50 p-3">
           <p className="text-[12px] font-medium text-crimson">Publication bloquée :</p>
           <ul className="mt-1 list-inside list-disc text-[12px] leading-5 text-ink-2">
             {erreurs.map((e) => <li key={e}>{e}</li>)}
@@ -264,7 +264,7 @@ export function Rates() {
             <div className="overflow-x-auto">
               <table className="w-full text-[12px]">
                 <thead>
-                  <tr className="border-b border-line text-left text-[10px] tracking-[0.06em] text-ink-3 uppercase">
+                  <tr className="border-b border-line text-left text-[11px] tracking-[0.06em] text-ink-3 uppercase">
                     <th className="px-5 py-2.5 font-medium">Type</th>
                     <th className="px-3 py-2.5 text-center font-medium">Chambres</th>
                     <th className="px-3 py-2.5 text-center font-medium">Capacité</th>
@@ -279,7 +279,7 @@ export function Rates() {
                     const nouveau = Number(grille[cle]?.prix ?? publie);
                     const haute = Math.round(nouveau * (saisons.find((s) => s.nom === 'Haute saison')?.coef ?? 1.38));
                     return (
-                      <tr key={cle} className="hover:bg-sand-50/60">
+                      <tr key={cle} className="hover:bg-mist-50/60">
                         <td className="px-5 py-3 font-medium text-ink">{t.label}</td>
                         <td className="tnum px-3 py-3 text-center text-ink-2">
                           {state.chambres.filter((c) => c.type === cle && c.active !== false).length}
@@ -299,7 +299,7 @@ export function Rates() {
                             className={cx(
                               'tnum w-24 rounded-lg border bg-surface px-2 py-1.5 text-right text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25',
                               nouveau !== publie ? 'border-saffron text-ink' : 'border-line-strong',
-                              verrouille && 'cursor-not-allowed bg-sand-50 text-ink-3',
+                              verrouille && 'cursor-not-allowed bg-mist-50 text-ink-3',
                             )}
                           />
                         </td>
@@ -309,7 +309,7 @@ export function Rates() {
                   })}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t border-line bg-sand-50">
+                  <tr className="border-t border-line bg-mist-50">
                     <td className="px-5 py-2.5 text-[12px] font-semibold text-ink">Version publiée</td>
                     <td className="tnum px-3 py-2.5 text-center text-[12px] text-ink-2">{totalChambres}</td>
                     <td />
@@ -352,7 +352,7 @@ export function Rates() {
                       }
                       className={cx(
                         'tnum w-16 rounded-lg border border-line-strong bg-surface px-2 py-1 text-right text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25',
-                        verrouille && 'cursor-not-allowed bg-sand-50 text-ink-3',
+                        verrouille && 'cursor-not-allowed bg-mist-50 text-ink-3',
                       )}
                     />
                   </li>
@@ -416,7 +416,7 @@ export function Rates() {
               <div>
                 <p className="text-[12px] font-semibold text-ink-2">Logo</p>
                 <div className="mt-1.5 flex items-center gap-3">
-                  <div className="grid size-14 place-items-center overflow-hidden rounded-xl border border-line bg-sand-50">
+                  <div className="grid size-14 place-items-center overflow-hidden rounded-lg border border-line bg-mist-50">
                     {params.hotel.logo ? (
                       <img src={params.hotel.logo} alt="" className="size-full object-contain" />
                     ) : (
@@ -472,7 +472,7 @@ export function Rates() {
                       onClick={() => actions.setOption(o.cle, !actif)}
                       className={cx(
                         'mt-0.5 h-5 w-9 shrink-0 rounded-full border transition-colors',
-                        actif ? 'border-maj bg-maj' : 'border-line-strong bg-sand-200',
+                        actif ? 'border-maj bg-maj' : 'border-line-strong bg-mist-200',
                       )}
                     >
                       <span
@@ -559,7 +559,7 @@ export function Rates() {
                     value={cle === 'acompteEvenement' ? (params.acompteEvenement ?? '') : (fiscalite[cle] ?? '')}
                     disabled={cle === 'acompteEvenement' || state.profil !== 'direction'}
                     onChange={(e) => setFiscalite((f) => ({ ...f, [cle]: e.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-line-strong bg-surface px-2 py-1.5 text-[12px] outline-none focus:border-maj disabled:bg-sand-50 disabled:text-ink-3"
+                    className="mt-1 w-full rounded-lg border border-line-strong bg-surface px-2 py-1.5 text-[12px] outline-none focus:border-maj disabled:bg-mist-50 disabled:text-ink-3"
                   />
                 </div>
               ))}
@@ -580,7 +580,7 @@ export function Rates() {
         <div className="border-t border-line-soft px-5 py-3">
           <p className="flex items-start gap-2 text-[11px] leading-4 text-ink-3">
             <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
-            {HOTEL.nom} — {HOTEL.adresse}. Les mentions légales utilisées sur les documents se
+            {HOTEL.nom} · {HOTEL.adresse}. Les mentions légales utilisées sur les documents se
             règlent dans le module Documents.
           </p>
         </div>
@@ -645,7 +645,7 @@ export function Rates() {
             <li className="text-ink-3">Aucun écart de prix : seule une nouvelle version sera créée.</li>
           )}
           {ecarts.map((e) => (
-            <li key={e.label} className="flex items-center justify-between rounded-lg bg-sand-50 px-3 py-2">
+            <li key={e.label} className="flex items-center justify-between rounded-lg bg-mist-50 px-3 py-2">
               <span className="text-ink-2">{e.label}</span>
               <span className="tnum text-ink-3">
                 {e.avant} <span className="text-ink-3">→</span>{' '}
@@ -678,7 +678,7 @@ export function Rates() {
       >
         <ul className="space-y-1.5 text-[12px]">
           {ecartsFiscaux.map((e) => (
-            <li key={e.label} className="flex items-center justify-between rounded-lg bg-sand-50 px-3 py-2">
+            <li key={e.label} className="flex items-center justify-between rounded-lg bg-mist-50 px-3 py-2">
               <span className="text-ink-2">{e.label}</span>
               <span className="tnum text-ink-3">
                 {e.avant} → <span className="font-semibold text-ink">{e.apres}</span>

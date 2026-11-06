@@ -28,7 +28,9 @@ export function Card({ className, children, ...rest }) {
   return (
     <section
       className={cx(
-        'rounded-xl border border-line bg-surface shadow-card',
+        // Cartes : rayon 18 px, filet 1 px, aucune ombre. La profondeur vient
+        // du changement de surface, jamais d'une ombre portée.
+        'rounded-[18px] border border-line bg-surface',
         className,
       )}
       {...rest}
@@ -47,11 +49,11 @@ export function CardHeader({ titre, sousTitre, action, className }) {
       )}
     >
       <div className="min-w-0">
-        <h2 className="text-[15px] leading-5 font-semibold tracking-[-0.01em] text-ink">
+        <h2 className="text-[17px] leading-[1.24] font-semibold tracking-[-0.374px] text-ink">
           {titre}
         </h2>
         {sousTitre && (
-          <p className="mt-0.5 text-xs text-ink-3">{sousTitre}</p>
+          <p className="mt-1 text-[13px] leading-[1.4] text-ink-3">{sousTitre}</p>
         )}
       </div>
       {action}
@@ -61,13 +63,13 @@ export function CardHeader({ titre, sousTitre, action, className }) {
 
 export function Pill({ tone = 'neutral', children, className }) {
   const tones = {
-    neutral: 'bg-sand-200 text-ink-2',
+    neutral: 'bg-mist-200 text-ink-2',
     maj: 'bg-maj-100 text-maj',
     jade: 'bg-jade-100 text-jade',
     saffron: 'bg-saffron-100 text-saffron',
     crimson: 'bg-crimson-100 text-crimson',
     terra: 'bg-terra-100 text-terra',
-    outline: 'border border-line text-ink-2',
+    outline: 'border border-line-strong text-ink-2',
   };
   return (
     <span
@@ -89,25 +91,27 @@ export function Button({
   children,
   ...rest
 }) {
+  // Deux grammaires seulement : la pilule bleue (action) et l'utilitaire
+  // compact (rayon 8 px, encre pleine). L'état pressé est un scale(0.95),
+  // micro-interaction unique du système.
   const variants = {
-    primary:
-      'bg-maj text-white hover:bg-maj-700 active:translate-y-px shadow-card',
+    primary: 'bg-maj text-white hover:bg-maj-700',
     soft: 'bg-maj-50 text-maj hover:bg-maj-100',
-    outline: 'border border-line bg-surface text-ink hover:bg-sand-100',
-    ghost: 'text-ink-2 hover:bg-sand-200/70',
+    outline: 'border border-line-strong bg-surface text-ink hover:bg-mist-100',
+    ghost: 'text-ink-2 hover:bg-mist-200/70',
     danger: 'bg-crimson text-white hover:brightness-95',
-    terra: 'bg-terra text-white hover:brightness-95',
+    terra: 'bg-ink text-white hover:brightness-110',
   };
   const sizes = {
-    sm: 'h-8 px-3 text-xs rounded-lg',
-    md: 'h-9 px-4 text-[13px] rounded-xl',
-    lg: 'h-11 px-5 text-sm rounded-xl',
+    sm: 'h-8 px-4 text-[13px] rounded-full',
+    md: 'h-10 px-5 text-[14px] rounded-full',
+    lg: 'h-12 px-7 text-[17px] rounded-full',
   };
   return (
     <button
       type="button"
       className={cx(
-        'inline-flex items-center justify-center gap-1.5 font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-45',
+        'inline-flex items-center justify-center gap-1.5 font-normal tracking-[-0.224px] transition-[background-color,transform] duration-150 active:scale-[0.95] disabled:cursor-not-allowed disabled:opacity-40',
         variants[variant],
         sizes[size],
         className,
@@ -125,12 +129,12 @@ export function Button({
 
 export function Stat({ label, value, unit, delta, tone = 'neutral', hint }) {
   return (
-    <Card className="p-4">
-      <p className="text-[11px] font-medium tracking-[0.06em] text-ink-3 uppercase">
+    <Card className="p-5">
+      <p className="text-[13px] font-normal tracking-[-0.12px] text-ink-3">
         {label}
       </p>
       <div className="mt-2 flex items-baseline gap-1.5">
-        <span className="tnum text-[26px] leading-none font-semibold tracking-[-0.02em] text-ink">
+        <span className="tnum text-[32px] leading-none font-semibold tracking-[-0.374px] text-ink">
           {value}
         </span>
         {unit && <span className="text-xs font-medium text-ink-3">{unit}</span>}
@@ -149,7 +153,7 @@ export function Stat({ label, value, unit, delta, tone = 'neutral', hint }) {
 
 export function Bar({ value, max = 100, tone = 'bg-maj', className }) {
   return (
-    <div className={cx('h-1.5 w-full overflow-hidden rounded-full bg-sand-200', className)}>
+    <div className={cx('h-1 w-full overflow-hidden rounded-full bg-mist-200', className)}>
       <div
         className={cx('h-full rounded-full transition-[width] duration-500', tone)}
         style={{ width: `${Math.min(100, (value / max) * 100)}%` }}
@@ -163,7 +167,7 @@ export function Ring({ value, size = 56, stroke = 6, tone = 'var(--color-maj)' }
   const c = 2 * Math.PI * r;
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--color-sand-200)" strokeWidth={stroke} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--color-mist-200)" strokeWidth={stroke} />
       <circle
         cx={size / 2}
         cy={size / 2}
@@ -212,7 +216,7 @@ export function Sparkline({ points, tone = 'var(--color-maj)', width = 320, heig
 /* Panneau latéral & modale                                            */
 /* ------------------------------------------------------------------ */
 
-// Fermeture au clavier (Échap) — attendu par les utilisateurs de logiciels de
+// Fermeture au clavier (Échap) · attendu par les utilisateurs de logiciels de
 // réception qui travaillent au clavier. Branché avant le rendu conditionnel
 // pour respecter les règles des hooks.
 function useEchap(actif, onClose) {
@@ -226,7 +230,7 @@ function useEchap(actif, onClose) {
   }, [actif, onClose]);
 }
 
-// Piège de focus — indispensable sur un panneau modal : sans lui, Tab fait
+// Piège de focus · indispensable sur un panneau modal : sans lui, Tab fait
 // sortir le curseur derrière l'overlay, dans une interface que l'utilisateur ne
 // voit plus. On mémorise l'élément déclencheur pour lui rendre le focus à la
 // fermeture (WCAG 2.4.3 « ordre de tabulation »).
@@ -295,12 +299,12 @@ export function Drawer({ open, onClose, title, subtitle, children, footer }) {
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="animate-slide-in relative flex h-full w-full max-w-[440px] flex-col bg-sand-50 shadow-pop"
+        className="animate-slide-in relative flex h-full w-full max-w-[460px] flex-col border-l border-line bg-surface shadow-pop"
       >
-        <header className="flex items-start justify-between gap-4 border-b border-line bg-surface px-5 py-4">
+        <header className="flex items-start justify-between gap-4 border-b border-line bg-surface px-6 py-5">
           <div>
-            <h2 className="font-display text-xl text-ink">{title}</h2>
-            {subtitle && <p className="mt-1 text-xs text-ink-3">{subtitle}</p>}
+            <h2 className="font-display text-[21px] leading-[1.19] tracking-[0.231px] text-ink">{title}</h2>
+            {subtitle && <p className="mt-1 text-[13px] leading-[1.4] text-ink-3">{subtitle}</p>}
           </div>
           <Button variant="ghost" size="sm" onClick={onClose} aria-label="Fermer">
             <X className="size-4" />
@@ -334,21 +338,21 @@ export function Modal({ open, onClose, title, subtitle, children, footer, width 
         aria-modal="true"
         aria-label={title}
         className={cx(
-          'animate-fade-up relative flex max-h-[88vh] w-full flex-col overflow-hidden rounded-xl bg-surface shadow-pop',
+          'animate-fade-up relative flex max-h-[88vh] w-full flex-col overflow-hidden rounded-[18px] border border-line bg-surface shadow-pop',
           width,
         )}
       >
-        <header className="flex items-start justify-between gap-4 border-b border-line-soft px-5 py-4">
+        <header className="flex items-start justify-between gap-4 border-b border-line-soft px-6 py-5">
           <div>
-            <h2 className="font-display text-xl text-ink">{title}</h2>
-            {subtitle && <p className="mt-1 text-xs text-ink-3">{subtitle}</p>}
+            <h2 className="font-display text-[21px] leading-[1.19] tracking-[0.231px] text-ink">{title}</h2>
+            {subtitle && <p className="mt-1 text-[13px] leading-[1.4] text-ink-3">{subtitle}</p>}
           </div>
           <Button variant="ghost" size="sm" onClick={onClose} aria-label="Fermer">
             <X className="size-4" />
           </Button>
         </header>
-        <div className="flex-1 overflow-y-auto px-5 py-5">{children}</div>
-        {footer && <footer className="border-t border-line-soft bg-sand-50 px-5 py-4">{footer}</footer>}
+        <div className="flex-1 overflow-y-auto px-6 py-6">{children}</div>
+        {footer && <footer className="border-t border-line-soft bg-mist-50 px-6 py-4">{footer}</footer>}
       </div>
     </div>
   );
@@ -382,7 +386,7 @@ export function ToastProvider({ children }) {
         {items.map((t) => (
           <div
             key={t.id}
-            className="animate-fade-up pointer-events-auto flex items-start gap-2.5 rounded-xl border border-line bg-ink px-4 py-3 text-[13px] text-white shadow-pop"
+            className="animate-fade-up pointer-events-auto flex items-start gap-2.5 rounded-[14px] border border-white/10 bg-ink px-4 py-3 text-[13px] text-white shadow-pop"
           >
             {t.tone === 'info' ? (
               <Info className="mt-0.5 size-4 shrink-0 text-saffron" />
@@ -405,7 +409,7 @@ export function Divider({ label }) {
   return (
     <div className="flex items-center gap-3 py-1">
       <span className="h-px flex-1 bg-line-soft" />
-      {label && <span className="text-[10px] font-medium tracking-[0.1em] text-ink-3 uppercase">{label}</span>}
+      {label && <span className="text-[11px] font-medium tracking-[0.1em] text-ink-3 uppercase">{label}</span>}
       <span className="h-px flex-1 bg-line-soft" />
     </div>
   );
@@ -413,7 +417,7 @@ export function Divider({ label }) {
 
 export function Kbd({ children }) {
   return (
-    <kbd className="rounded-lg border border-line-strong bg-surface px-1.5 py-0.5 font-sans text-[10px] font-medium text-ink-3">
+    <kbd className="rounded-lg border border-line-strong bg-surface px-1.5 py-0.5 font-sans text-[11px] font-medium text-ink-3">
       {children}
     </kbd>
   );

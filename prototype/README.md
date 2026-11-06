@@ -141,7 +141,7 @@ Direction peut l'ajuster (le serveur reste seul juge en production, BR-TR-004).
 | **Publication de la grille** | prix éditables puis **publiés** (validation, version, journal) ; correction d'une publication qui ne s'appliquait pas (BR-TR-003) |
 | **Saisons & forfaits** | coefficients éditables par saison, forfait demi-journée paramétrable |
 | **Demi-journée** | matinée ou après-midi à 200 MAD, sans taxe de séjour, chambre revendable le soir |
-| **No-show** | bouton « Non présenté », statut conservé et première nuit facturée (BR-RES-007) |
+| **No-show suivi** | bouton « Non présenté » ou clôture de journée : statut, **nuit facturée**, et **dossier de suivi** (étape, note, auteur, historique) exportable et visible dans le dossier client (BR-RES-007, RD-033) |
 | **Prévision intelligente** | 14 jours recalculés sur les réservations réelles, objectif 63 %, recette estimée au survol |
 | **Chronomètre de shift** | temps écoulé/restant par agent, vue globale des trois shifts pour la Direction (BR-RH-003) |
 | **Stock & minibar** | inventaire, seuils, mouvements ; consommation minibar liée à la chambre et portée au folio (BR-STK-001/002) |
@@ -161,6 +161,7 @@ Direction peut l'ajuster (le serveur reste seul juge en production, BR-TR-004).
 | **Check-in / check-out visibles** | bloc « Réception du jour » (arrivées et départs), check-out bloqué si folio non soldé |
 | **Exports PDF / CSV / Excel** | un composant unique pour tous les rapports : aperçu A4, CSV point-virgule UTF-8, classeur Excel (.xls) |
 | **Routes** | l'écran courant est dans l'URL (`#/stock`), lien direct, rafraîchissement et retour navigateur — audit dans `docs/audits/ROUTES_2026-11.md` |
+| **Design system Apple** (v7, `docs/audits/DESIGN_SYSTEM_APPLE_2026-11.md`) | palette sable supprimée, accent unique `#0066cc`, navigation noire, typographie SF Pro, trois rayons, une seule ombre, `scale(0.95)` au press, tirets cadratins bannis |
 | **Audit de design** (voir `docs/audits/AUDIT_DESIGN_PROTOTYPE_2026-11.md`) | contrastes WCAG corrigés (6 paires), échelle typographique ramenée de 12 à 8 tailles, 3 rayons et 2 ombres tokenisés, labels associés, toasts annoncés, lien d'évitement, cibles tactiles à 36 px, capacité de salle lue dans le référentiel |
 
 ## Vérification

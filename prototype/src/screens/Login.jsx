@@ -3,7 +3,7 @@
 //
 // Chaque agent ouvre sa propre session : le rôle est porté par le compte,
 // pas choisi dans une liste au moment de l'utilisation. C'est la différence
-// entre une démonstration et un logiciel réel — et la condition pour que le
+// entre une démonstration et un logiciel réel · et la condition pour que le
 // journal d'audit (BR-AUD-002) désigne quelqu'un.
 //
 // Démonstration : un mot de passe commun est affiché à l'écran, et chaque
@@ -23,14 +23,14 @@ function Logo({ src, nom, grand = false }) {
       <img
         src={src}
         alt={nom}
-        className={cx('rounded-xl object-contain', grand ? 'size-16' : 'size-10')}
+        className={cx('rounded-lg object-contain', grand ? 'size-16' : 'size-10')}
       />
     );
   }
   return (
     <div
       className={cx(
-        'grid place-items-center rounded-xl bg-maj text-white shadow-card',
+        'grid place-items-center rounded-lg bg-maj text-white',
         grand ? 'size-16' : 'size-10',
       )}
     >
@@ -78,49 +78,38 @@ export function Login({ onConnecte }) {
   };
 
   return (
-    <div className="grid min-h-screen bg-sand-100 lg:grid-cols-[1.1fr_1fr]">
+    <div className="grid min-h-screen bg-mist-100 lg:grid-cols-[1.1fr_1fr]">
       {/* Colonne gauche : identité de l'établissement */}
-      <div className="relative hidden overflow-hidden bg-ink px-12 py-10 text-white lg:flex lg:flex-col lg:justify-between">
-        <div className="pointer-events-none absolute inset-0 opacity-[0.13]" aria-hidden>
-          <svg width="100%" height="100%">
-            <defs>
-              <pattern id="zellige-login" width="44" height="44" patternUnits="userSpaceOnUse">
-                <path d="M22 0l22 22-22 22L0 22z" fill="none" stroke="white" strokeWidth="0.6" />
-                <circle cx="22" cy="22" r="4" fill="none" stroke="white" strokeWidth="0.6" />
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#zellige-login)" />
-          </svg>
-        </div>
+      <div className="relative hidden overflow-hidden bg-nav px-12 py-10 text-white lg:flex lg:flex-col lg:justify-between">
 
         <div className="relative flex items-center gap-3">
           <Logo src={hotel.logo} nom={hotel.nom} />
           <div>
-            <p className="font-display text-[17px] leading-tight">{hotel.nom}</p>
-            <p className="text-[11px] text-white/60">{HOTEL.categorie} · {HOTEL.ville} · Maroc</p>
+            <p className="font-display text-[17px] leading-tight text-white">{hotel.nom}</p>
+            <p className="text-[12px] text-white/55">{HOTEL.categorie} · {HOTEL.ville} · Maroc</p>
           </div>
         </div>
 
         <div className="relative max-w-md">
-          <h1 className="font-display text-[34px] leading-tight">
-            30 chambres, un restaurant, une salle.
+          <h1 className="font-display text-[40px] leading-[1.1] tracking-[-0.5px] text-white">
+            30 chambres. Un restaurant. Une salle.
             <br />
             Un seul poste de travail.
           </h1>
-          <p className="mt-4 text-[14px] leading-6 text-white/70">
+          <p className="mt-4 max-w-md text-[17px] leading-[1.47] tracking-[-0.374px] text-white/70">
             Réception, housekeeping, restauration, caisse et direction partagent la
             même journée d’exploitation. Chaque geste est tracé, chaque note se
             retrouve dans le folio du client.
           </p>
-          <ul className="mt-6 space-y-2 text-[12px] text-white/60">
-            <li>· Arrivées et départs en un clic, folio toujours à jour</li>
-            <li>· Note restaurant portée en chambre, régie reversée au restaurant</li>
-            <li>· Fiche de police, tours de quart et rapports imprimables</li>
+          <ul className="mt-8 space-y-3 text-[14px] text-white/60">
+            <li>Arrivées et départs en un clic, folio toujours à jour</li>
+            <li>Note restaurant portée en chambre, régie reversée au restaurant</li>
+            <li>Fiche de police, tours de quart et rapports exportables</li>
           </ul>
         </div>
 
-        <p className="relative text-[11px] text-white/40">
-          Démonstration — données fictives, aucune information client réelle.
+        <p className="relative text-[12px] text-white/35">
+          Démonstration : données fictives, aucune information client réelle.
         </p>
       </div>
 
@@ -135,8 +124,8 @@ export function Login({ onConnecte }) {
             </div>
           </div>
 
-          <h2 className="font-display text-[26px] leading-tight text-ink">Connexion</h2>
-          <p className="mt-1 text-[13px] text-ink-2">
+          <h2 className="font-display text-[32px] leading-[1.1] tracking-[-0.374px] text-ink">Connexion</h2>
+          <p className="mt-2 text-[15px] text-ink-2">
             Identifiez-vous avec votre compte personnel.
           </p>
 
@@ -148,7 +137,7 @@ export function Login({ onConnecte }) {
             }}
           >
             <div>
-              <label htmlFor="login-compte" className="text-[12px] font-semibold text-ink-2">
+              <label htmlFor="login-compte" className="text-[13px] font-medium text-ink-2">
                 Compte
               </label>
               <select
@@ -158,20 +147,20 @@ export function Login({ onConnecte }) {
                   setCompte(e.target.value);
                   setErreur('');
                 }}
-                className="mt-1.5 w-full rounded-xl border border-line-strong bg-surface px-3 py-2.5 text-[13px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+                className="mt-2 h-11 w-full rounded-[11px] border border-line-strong bg-surface px-3 text-[15px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/20"
               >
                 {comptes.map((c) => (
                   <option key={c.id} value={c.identifiant}>
-                    {c.nom} — {PROFILS[c.profil].label}
+                    {c.nom} · {PROFILS[c.profil].label}
                   </option>
                 ))}
               </select>
             </div>
             <div>
-              <label htmlFor="login-mdp" className="text-[12px] font-semibold text-ink-2">
+              <label htmlFor="login-mdp" className="text-[13px] font-medium text-ink-2">
                 Mot de passe
               </label>
-              <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-line-strong bg-surface px-3 py-2.5 focus-within:border-maj focus-within:ring-2 focus-within:ring-maj/25">
+              <div className="mt-2 flex h-11 items-center gap-2 rounded-[11px] border border-line-strong bg-surface px-3 focus-within:border-maj focus-within:ring-2 focus-within:ring-maj/20">
                 <KeyRound className="size-4 text-ink-3" />
                 <input
                   id="login-mdp"
@@ -183,7 +172,7 @@ export function Login({ onConnecte }) {
                   }}
                   placeholder="••••••••"
                   autoComplete="current-password"
-                  className="w-full bg-transparent text-[13px] outline-none"
+                  className="w-full bg-transparent text-[15px] outline-none"
                 />
                 <button
                   type="button"
@@ -202,14 +191,14 @@ export function Login({ onConnecte }) {
               </p>
             )}
 
-            <Button type="submit" className="w-full justify-center" disabled={enCours}>
+            <Button type="submit" size="lg" className="w-full justify-center" disabled={enCours}>
               {enCours ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />}
               {enCours ? 'Connexion…' : 'Ouvrir ma session'}
             </Button>
           </form>
 
-          <div className="mt-6 rounded-xl border border-line bg-sand-50 px-3 py-2.5">
-            <p className="text-[11px] leading-4 text-ink-2">
+          <div className="mt-6 rounded-[11px] border border-line bg-mist-50 px-3 py-2.5">
+            <p className="text-[12px] leading-[1.5] text-ink-2">
               <strong className="font-semibold text-ink">Démonstration :</strong> mot de passe{' '}
               <code className="rounded bg-surface px-1 py-0.5 text-[11px]">{MOT_DE_PASSE_DEMO}</code>{' '}
               pour tous les comptes. En production chaque agent a son propre mot de passe et la

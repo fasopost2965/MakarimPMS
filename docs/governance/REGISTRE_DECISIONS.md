@@ -285,6 +285,28 @@ Décisions structurantes prises **pendant ou après l'audit** (distinct des ADR 
 - **Date** : 2026-11-06.
 - **Décideur** : Claude, sur mandat explicite (« pour tes questions décide pour toi »).
 
+### RD-033 — Le non-présenté devient un dossier de suivi, pas un statut
+
+- **Décision** : un no-show crée désormais **trois objets indissociables** : le statut de la réservation, une **facture d'une nuit** (taux de TVA hébergement paramétré) et une **entrée dans le registre `noShows`** avec étape de suivi (`À traiter`, `Client relancé`, `Nuit réglée`, `Clos sans suite`), note, auteur et date. Le dossier ne se ferme que par une décision explicite ; l'historique des étapes est conservé et repris dans le dossier client. Le même enregistrement est déclenché par le bouton « Non présenté » de la réception **et** par la clôture de journée, qui auparavant changeait le statut sans rien facturer ni tracer.
+- **Raison** : jusqu'ici la non-présentation n'existait que comme valeur d'énumération. Une nuit retenue sans facture est une perte sèche, et une nuit facturée sans dossier de suivi devient une créance que personne ne relance. Les deux doivent naître au même instant, avec un responsable nommé.
+- **Alternatives considérées** : (a) garder un simple statut et facturer « plus tard » — écartée, la facture n'arrivait jamais ; (b) ajouter un écran dédié dans la navigation — écartée, un quatorzième écran pour un objet consulté rarement ; le registre vit dans Réservations, là où le geste est posé, et une alerte du tableau de bord y renvoie ; (c) **retenue** : registre intégré, exportable (PDF, CSV, Excel) et visible dans l'historique client.
+- **Conséquence** : `state.noShows` est persistant et exportable ; la clôture de journée peut générer plusieurs dossiers d'un coup (toutes les arrivées confirmées non enregistrées). En production, la facturation automatique devra être soumise à la politique commerciale de l'établissement (certaines OTA interdisent la facturation sans accord préalable) : le champ `source` du dossier permet de distinguer un no-show de réception d'un no-show de clôture.
+- **Décisions liées** : RD-032 (taux de TVA paramétrés) ; **BR-REP-002**, **BR-SEJ-004**.
+- **Date** : 2026-11-06.
+- **Décideur** : Claude, sur mandat explicite (« le no-show doit être suivi et enregistré »).
+
+---
+
+### RD-034 — Le design system Apple remplace la palette sable et l'accent terrain
+
+- **Décision** : le prototype passe au système visuel Apple fourni par le commanditaire. Trois surfaces seulement (blanc, parchemin `#f5f5f7`, noir de navigation), encre `#1d1d1f`, **un seul accent** `#0066cc`, états sémantiques désaturés (jade `#0f6b3f`, safran `#8a5300`, rouge `#c42120`). La palette sable est **supprimée** (tokens `mist-*` neutres), le motif zellige et le titre serif Marcellus sont **retirés**, les rayons se limitent à trois valeurs (8 px contrôles, 14-18 px cartes, pilule boutons), aucune ombre hors modale, `scale(0.95)` au press, et les tirets cadratins sont bannis de l'interface.
+- **Raison** : la teinte crème dégradait le contraste des tableaux et donnait au logiciel une apparence de site vitrine ; le commanditaire a explicitement rejeté le sable et demandé ce système. Le bleu unique simplifie la lecture des actions dans une interface où quatre services se relaient.
+- **Alternatives considérées** : (a) conserver la palette et n'ajuster que la densité — écartée, refus explicite ; (b) appliquer le système à la lettre, y compris une échelle typographique de site marketing (17 px de corps, sections de 80 px) — écartée, incompatible avec un écran de réception qui affiche 30 chambres et 8 arrivées ; **retenue** : système appliqué au chrome (navigation, boutons, cartes, formulaires, documents) avec une densité d'exploitation conservée pour les tableaux.
+- **Conséquence** : `src/index.css` porte les tokens ; aucun écran n'utilise de couleur brute. Les documents imprimés restent en noir sur blanc. Si un futur écran a besoin d'un quatrième ton, il doit être ajouté comme token et justifié, pas improvisé.
+- **Décisions liées** : la demande « design system de Booking » de la v4 est **remplacée** par celle-ci.
+- **Date** : 2026-11-06.
+- **Décideur** : Claude, sur mandat explicite.
+
 ---
 
 ## Décisions en attente (questions ouvertes de l'audit nécessitant un arbitrage humain)

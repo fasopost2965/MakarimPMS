@@ -1,4 +1,4 @@
-// Utilitaires de date — tout est manipulé en ISO `YYYY-MM-DD`, jamais en
+// Utilitaires de date · tout est manipulé en ISO `YYYY-MM-DD`, jamais en
 // objet Date local, pour éviter les décalages de fuseau (même discipline que
 // `getTodayRange()` côté backend).
 

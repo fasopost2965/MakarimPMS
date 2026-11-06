@@ -17,10 +17,10 @@ export function Exports({ nom, titre, colonnes, lignes, onPdf, compact = false, 
 
   const base = cx(
     'inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-medium transition-colors',
-    compact ? 'text-[10px]' : '',
+    compact ? 'text-[11px]' : '',
   );
-  const actif = 'border-line-strong bg-surface text-ink-2 hover:bg-sand-50';
-  const inactif = 'border-line bg-sand-50 text-ink-3 cursor-not-allowed';
+  const actif = 'border-line-strong bg-surface text-ink-2 hover:bg-mist-50';
+  const inactif = 'border-line bg-mist-50 text-ink-3 cursor-not-allowed';
 
   const faire = (type) => {
     if (vide) {
@@ -29,11 +29,11 @@ export function Exports({ nom, titre, colonnes, lignes, onPdf, compact = false, 
     }
     if (type === 'csv') {
       exporterCsv(nom, colonnes, lignes);
-      push(`CSV généré — ${lignes.length} ligne(s).`, 'success');
+      push(`CSV généré · ${lignes.length} ligne(s).`, 'success');
     }
     if (type === 'excel') {
       exporterExcel(nom, titre ?? nom, colonnes, lignes);
-      push(`Classeur Excel généré — ${lignes.length} ligne(s).`, 'success');
+      push(`Classeur Excel généré · ${lignes.length} ligne(s).`, 'success');
     }
   };
 

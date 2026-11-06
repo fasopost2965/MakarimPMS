@@ -1,4 +1,4 @@
-// Caisse & factures — folios, détail des charges (hébergement / restaurant /
+// Caisse & factures · folios, détail des charges (hébergement / restaurant /
 // taxe), encaissements, émission de facture et check-out.
 //
 // Règles métier : BR-SEJ-004 (solde à 0), BR-TR-002 (facture immuable),
@@ -90,7 +90,7 @@ export function Caisse() {
 
   function encaisser() {
     actions.payFolio(folio.id, moyen);
-    push(`Encaissement enregistré — ${money(soldeDuFolio(folio))} MAD (${moyen.toLowerCase()}).`);
+    push(`Encaissement enregistré · ${money(soldeDuFolio(folio))} MAD (${moyen.toLowerCase()}).`);
     setPaiement(false);
   }
 
@@ -120,7 +120,7 @@ export function Caisse() {
           ['Taxe de séjour', `${money(taxeCollectee)} MAD`, `reversement Trésor · ${PARAMS.taxeSejour} MAD/nuit/adulte`, 'saffron'],
         ].map(([l, v, h, tone]) => (
           <Card key={l} className="p-4">
-            <p className="text-[10px] font-medium tracking-[0.06em] text-ink-3 uppercase">{l}</p>
+            <p className="text-[11px] font-medium tracking-[0.06em] text-ink-3 uppercase">{l}</p>
             <p className="tnum mt-1 text-xl font-semibold text-ink">{v}</p>
             <Pill tone={tone} className="mt-1.5">{h}</Pill>
           </Card>
@@ -188,7 +188,7 @@ export function Caisse() {
                 onClick={() => setFiltre(cle)}
                 className={cx(
                   'rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors',
-                  filtre === cle ? 'bg-ink text-white' : 'bg-sand-100 text-ink-2 hover:bg-sand-200',
+                  filtre === cle ? 'bg-ink text-white' : 'bg-mist-100 text-ink-2 hover:bg-mist-200',
                 )}
               >
                 {label}
@@ -198,7 +198,7 @@ export function Caisse() {
           <div className="overflow-x-auto">
             <table className="w-full text-[12px]">
               <thead>
-                <tr className="border-b border-line text-left text-[10px] tracking-[0.05em] text-ink-3 uppercase">
+                <tr className="border-b border-line text-left text-[11px] tracking-[0.05em] text-ink-3 uppercase">
                   <th className="px-5 py-2 font-medium">Folio</th>
                   <th className="px-2 py-2 font-medium">Client</th>
                   <th className="px-2 py-2 text-right font-medium">Charges</th>
@@ -213,10 +213,10 @@ export function Caisse() {
                   const regle = f.paiements.reduce((s, p) => s + p.montant, 0);
                   const solde = charges - regle;
                   return (
-                    <tr key={f.id} className={cx('cursor-pointer hover:bg-sand-50/60', folioId === f.id && 'bg-maj-50/60')} onClick={() => setFolioId(f.id)}>
+                    <tr key={f.id} className={cx('cursor-pointer hover:bg-mist-50/60', folioId === f.id && 'bg-maj-50/60')} onClick={() => setFolioId(f.id)}>
                       <td className="px-5 py-2.5">
                         <span className="block font-medium text-ink">{f.id}</span>
-                        <span className="text-[10px] text-ink-3">Ch. {f.chambre}</span>
+                        <span className="text-[11px] text-ink-3">Ch. {f.chambre}</span>
                       </td>
                       <td className="max-w-[150px] truncate px-2 py-2.5 text-ink-2">{f.client}</td>
                       <td className="tnum px-2 py-2.5 text-right text-ink-2">{money(charges)}</td>
@@ -275,7 +275,7 @@ export function Caisse() {
                   size="sm"
                   onClick={() =>
                     setApercu({
-                      titre: 'Relevé de régie — Restaurant Le Marsa',
+                      titre: 'Relevé de régie · Restaurant Le Marsa',
                       rendu: <ReleveRegieDoc regie={regie} date={state.date} />,
                     })
                   }
@@ -323,7 +323,7 @@ export function Caisse() {
                     type="button"
                     aria-label={`Imprimer la facture ${f.id}`}
                     onClick={() => setApercu({ titre: `Facture ${f.id}`, rendu: <FactureDoc facture={f} /> })}
-                    className="grid size-9 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-sand-50 hover:text-ink"
+                    className="grid size-9 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-mist-50 hover:text-ink"
                   >
                     <Printer className="size-3.5" />
                   </button>
@@ -353,7 +353,7 @@ export function Caisse() {
                   onClick={() => {
                     if (sejour) {
                       actions.checkOut(sejour.id);
-                      push(`Check-out — chambre ${folio.chambre}, facture émise.`);
+                      push(`Check-out · chambre ${folio.chambre}, facture émise.`);
                       setFolioId(null);
                     }
                   }}
@@ -369,7 +369,7 @@ export function Caisse() {
                   const nb = repartition.filter((r) => r.lignes.length > 0).length;
                   push(
                     nb > 1
-                      ? `Facturation séparée — ${nb} factures émises (société et client).`
+                      ? `Facturation séparée · ${nb} factures émises (société et client).`
                       : `Facture émise pour ${folio.client}.`,
                   );
                 }}
@@ -386,13 +386,13 @@ export function Caisse() {
             <Card className="p-4">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-[10px] tracking-[0.06em] text-ink-3 uppercase">Solde à régler</p>
+                  <p className="text-[11px] tracking-[0.06em] text-ink-3 uppercase">Solde à régler</p>
                   <p className="tnum mt-1 text-2xl font-semibold text-ink">{money(Math.max(0, soldeDuFolio(folio)))} MAD</p>
                   <p className="mt-0.5 text-[12px] text-ink-3">
                     {folio.statut === 'facture' ? 'Facture émise' : soldeDuFolio(folio) <= 0 ? 'Folio soldé' : 'En cours'}
                   </p>
                 </div>
-                <span className={cx('grid size-11 place-items-center rounded-xl', soldeDuFolio(folio) > 0 ? 'bg-crimson-100 text-crimson' : 'bg-jade-100 text-jade')}>
+                <span className={cx('grid size-11 place-items-center rounded-lg', soldeDuFolio(folio) > 0 ? 'bg-crimson-100 text-crimson' : 'bg-jade-100 text-jade')}>
                   {soldeDuFolio(folio) > 0 ? <Receipt className="size-5" /> : <CheckCircle2 className="size-5" />}
                 </span>
               </div>
@@ -421,9 +421,9 @@ export function Caisse() {
                           onClick={() => actions.setPayeur(folio.id, l.id, auClient ? 'societe' : 'client')}
                           disabled={!folio.societeId || folio.statut === 'facture'}
                           className={cx(
-                            'flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors',
+                            'flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors',
                             auClient
-                              ? 'border-line bg-sand-50 text-ink-2'
+                              ? 'border-line bg-mist-50 text-ink-2'
                               : 'border-maj/30 bg-maj-100 text-maj',
                             (!folio.societeId || folio.statut === 'facture') && 'cursor-default opacity-70',
                           )}
@@ -444,7 +444,7 @@ export function Caisse() {
 
               {/* Répartition et facturation séparée */}
               <div className="border-t border-line-soft px-4 py-3">
-                <p className="text-[10px] font-semibold tracking-[0.1em] text-ink-3 uppercase">
+                <p className="text-[11px] font-semibold tracking-[0.1em] text-ink-3 uppercase">
                   Répartition de la facturation
                 </p>
                 <div className="mt-2 space-y-1.5">
@@ -469,7 +469,7 @@ export function Caisse() {
                     className="mt-3 w-full"
                     onClick={() => {
                       actions.prolongerSejour(sejour.id);
-                      push('Nuit supplémentaire ajoutée — facturée au client, pas à l’entreprise.');
+                      push('Nuit supplémentaire ajoutée · facturée au client, pas à l’entreprise.');
                     }}
                     disabled={folio.statut === 'facture'}
                   >
@@ -529,8 +529,8 @@ export function Caisse() {
                     type="button"
                     onClick={() => setMoyen(m.label)}
                     className={cx(
-                      'flex w-full items-center gap-2.5 rounded-xl border px-3 py-2.5 text-[12px] transition-colors',
-                      moyen === m.label ? 'border-maj bg-maj-50 text-maj' : 'border-line bg-surface text-ink-2 hover:bg-sand-50',
+                      'flex w-full items-center gap-2.5 rounded-lg border px-3 py-2.5 text-[12px] transition-colors',
+                      moyen === m.label ? 'border-maj bg-maj-50 text-maj' : 'border-line bg-surface text-ink-2 hover:bg-mist-50',
                     )}
                   >
                     <Icone className="size-4" />
@@ -540,7 +540,7 @@ export function Caisse() {
                 );
               })}
             </div>
-            <p className="mt-3 rounded-lg bg-sand-100 px-3 py-2 text-[12px] leading-4 text-ink-2">
+            <p className="mt-3 rounded-lg bg-mist-100 px-3 py-2 text-[12px] leading-4 text-ink-2">
               Le règlement est idempotent : un double clic ne crée jamais deux
               encaissements. Plafond espèces {money(PARAMS.plafondEspeces)} MAD.
             </p>
