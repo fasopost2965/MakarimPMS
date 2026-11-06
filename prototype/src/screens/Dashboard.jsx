@@ -20,10 +20,13 @@ import {
   Users,
 } from 'lucide-react';
 import { CANAUX, STATUTS_CHAMBRE, TYPES_CHAMBRE } from '../data';
+import { LegendePrevision, PrevisionOccupation, serieOccupation } from '../components/Prevision';
+import { ChronoGlobal } from '../components/Chrono';
 import {
   arriveesDuJour,
   departsDuJour,
   kpiDuJour,
+  prixDuJour,
   soldeDuFolio,
   useApp,
 } from '../store';
@@ -72,7 +75,7 @@ export function Dashboard({ onNavigate }) {
       .filter((r) => ['confirmee', 'en_sejour'].includes(r.statut))
       .forEach((r) => {
         const ch = state.chambres.find((c) => c.numero === r.chambre);
-        const prix = TYPES_CHAMBRE[ch?.type]?.prix ?? 0;
+        const prix = prixDuJour(state, ch?.type) ?? 0;
         base[r.canal] = (base[r.canal] ?? 0) + prix * (r.nbNuits ?? 0);
       });
     const total = Object.values(base).reduce((a, b) => a + b, 0);
@@ -87,24 +90,9 @@ export function Dashboard({ onNavigate }) {
     };
   }, [state]);
 
-  // Prévision réelle : occupation jour par jour sur 14 jours, calculée sur les
-  // séjours en cours et les réservations fermes.
-  const prevision = useMemo(
-    () =>
-      Array.from({ length: 14 }, (_, i) => {
-        const jour = isoAdd(state.date, i);
-        const vendues = new Set([
-          ...state.sejours.filter((s) => s.arrivee <= jour && s.depart > jour).map((s) => s.chambre),
-          ...state.reservations
-            .filter((r) => ['confirmee', 'en_sejour'].includes(r.statut) && r.arrivee <= jour && r.depart > jour)
-            .map((r) => r.chambre),
-        ]);
-        return { jour, valeur: Math.round((vendues.size / state.chambres.length) * 100) };
-      }),
-    [state],
-  );
-
-  const pointe = prevision.reduce((max, p) => (p.valeur > max.valeur ? p : max), prevision[0]);
+  // Prévision : série partagée avec le composant graphique (source unique).
+  const serie = useMemo(() => serieOccupation(state), [state]);
+  const pointe = serie.reduce((max, p) => (p.taux > max.taux ? p : max), serie[0]);
 
   const parStatut = state.chambres.reduce((acc, c) => {
     acc[c.statut] = (acc[c.statut] ?? 0) + 1;
@@ -202,27 +190,23 @@ export function Dashboard({ onNavigate }) {
           <Card>
             <CardHeader
               titre="Prévision d'occupation — 14 jours"
-              sousTitre="Calculée sur les séjours en cours et les réservations fermes"
+              sousTitre="Recalculée à chaque mouvement — séjours en cours, réservations fermes, chambres actives"
               action={
-                <Pill tone="maj">
-                  <Sparkles className="size-3" /> Pointe à {pointe.valeur} % le {fmtCourt(pointe.jour)}
-                </Pill>
+                <div className="flex items-center gap-2">
+                  <LegendePrevision />
+                  <Pill tone="maj">
+                    <Sparkles className="size-3" /> Pointe à {pointe.taux} % le {fmtCourt(pointe.jour)}
+                  </Pill>
+                </div>
               }
             />
-            <div className="px-3 pt-4 pb-2">
-              <Sparkline points={prevision.map((p) => ({ jour: fmtCourt(p.jour).slice(0, 3), valeur: p.valeur }))} />
-              <div className="mt-1 flex justify-between px-2">
-                {prevision.filter((_, i) => i % 2 === 0).map((p) => (
-                  <span key={p.jour} className="text-[10px] text-ink-3">
-                    {fmtCourt(p.jour).slice(0, 6)}
-                  </span>
-                ))}
-              </div>
+            <div className="px-4 pt-4 pb-2">
+              <PrevisionOccupation />
             </div>
             <div className="grid grid-cols-3 divide-x divide-line-soft border-t border-line-soft">
               {[
-                { l: 'Occupation prévue (7 j)', v: `${Math.round(prevision.slice(0, 7).reduce((s, p) => s + p.valeur, 0) / 7)} %` },
-                { l: 'Nuitées fermes', v: prevision.reduce((s, p) => s + Math.round((p.valeur / 100) * state.chambres.length), 0) },
+                { l: 'Occupation prévue (7 j)', v: `${Math.round(serie.slice(0, 7).reduce((s, p) => s + p.taux, 0) / 7)} %` },
+                { l: 'Nuitées fermes', v: serie.reduce((s, p) => s + p.chambres, 0) },
                 { l: 'Chambres à vendre ce soir', v: state.chambres.length - kpi.vendues },
               ].map((s) => (
                 <div key={s.l} className="px-4 py-3">
@@ -231,6 +215,14 @@ export function Dashboard({ onNavigate }) {
                 </div>
               ))}
             </div>
+          </Card>
+
+          <Card>
+            <CardHeader
+              titre="Relève des shifts"
+              sousTitre="Trois agents de 8 h — temps restant en direct"
+            />
+            <ChronoGlobal tournees={state.tournees} />
           </Card>
 
           <Card>

@@ -20,6 +20,7 @@ import { SHIFTS } from '../data';
 import { useApp } from '../store';
 import { fmtLong, money } from '../lib/date';
 import { ApercuDocument, RapportTourneeDoc } from '../components/Document';
+import { DureeShift } from '../components/Chrono';
 import { Button, Card, CardHeader, Pill, cx, useToast } from '../components/ui';
 
 // Libellé lisible d'un shift à partir de sa clé (`matin`, `apres-midi`, `nuit`).
@@ -217,6 +218,16 @@ export function Tournees() {
 
           {/* Colonne de clôture ------------------------------------------- */}
           <div className="space-y-4">
+            <Card>
+              <CardHeader
+                titre="Chronomètre du shift"
+                sousTitre={`${tournee.agent} · ${SHIFTS.find((s) => s.cle === tournee.shift)?.plage ?? ''}`}
+              />
+              <div className="px-5 py-4">
+                <DureeShift tournee={tournee} />
+              </div>
+            </Card>
+
             <Card>
               <CardHeader titre="Clôture du shift" sousTitre={`Rapport signé par ${tournee.agent}`} />
               <div className="space-y-3 px-5 py-4">

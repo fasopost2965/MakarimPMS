@@ -7,8 +7,9 @@
 
 import { useMemo, useState } from 'react';
 import { CalendarPlus, Check, Filter, MousePointerClick, Users, X } from 'lucide-react';
-import { CANAUX, FORMULES, TYPES_CHAMBRE } from '../data';
-import { chambresDisponibles, useApp } from '../store';
+import { CANAUX, FORMULES, TYPES_CHAMBRE, TYPES_SEJOUR } from '../data';
+import { InfoBulle } from '../components/InfoBulle';
+import { chambresDisponibles, prixDuJour, useApp } from '../store';
 import { fmtCourt, isoAdd, isoDiff, money, nuits } from '../lib/date';
 import { montantHebergement } from '../lib/pricing';
 import { Button, Card, Modal, Pill, cx, useToast } from '../components/ui';
@@ -25,11 +26,25 @@ function NouvelleReservation({ open, onClose }) {
   const [occupants, setOccupants] = useState(2);
   const [formule, setFormule] = useState('BB');
   const [chambreChoisie, setChambreChoisie] = useState(null);
+  const [typeSejour, setTypeSejour] = useState('nuit');
 
-  const depart = isoAdd(arrivee, nbNuits);
-  const dispo = useMemo(() => chambresDisponibles(state, arrivee, depart), [state, arrivee, depart]);
+  const demiJournee = state.parametres?.demiJournee ?? 200;
+  const depart = typeSejour === 'nuit' ? isoAdd(arrivee, nbNuits) : arrivee;
+  // Demi-journée : pas de nuit à réserver, on propose les chambres propres
+  // non occupées (la disponibilité « par nuit » ne s'applique pas).
+  const dispo = useMemo(
+    () =>
+      typeSejour === 'nuit'
+        ? chambresDisponibles(state, arrivee, depart)
+        : state.chambres.filter((c) => c.statut === 'propre' && c.active !== false),
+    [state, arrivee, depart, typeSejour],
+  );
   const chambre = dispo.find((c) => c.numero === chambreChoisie) ?? null;
-  const prix = chambre ? montantHebergement(chambre.type, formule, occupants, nbNuits) : 0;
+  const prix = !chambre
+    ? 0
+    : typeSejour === 'nuit'
+      ? montantHebergement(chambre.type, formule, occupants, nbNuits, state.parametres?.grille)
+      : demiJournee;
   const valide = client.trim().length > 1 && Boolean(chambre);
 
   function soumettre() {
@@ -42,8 +57,11 @@ function NouvelleReservation({ open, onClose }) {
       canal,
       formule,
       occupants,
+      typeSejour,
     });
-    push(`Réservation créée — ${client.trim()}, chambre ${chambre.numero}, ${money(prix)} MAD.`);
+    push(
+      `Réservation créée — ${client.trim()}, chambre ${chambre.numero}, ${money(prix)} MAD${typeSejour !== 'nuit' ? ' (demi-journée)' : ''}.`,
+    );
     setClient('');
     setChambreChoisie(null);
     onClose();
@@ -61,7 +79,9 @@ function NouvelleReservation({ open, onClose }) {
           <div className="text-[12px]">
             <span className="text-ink-3">Total séjour </span>
             <span className="tnum text-[15px] font-semibold text-ink">{money(prix)} MAD</span>
-            <span className="text-ink-3"> · {nbNuits} nuit(s)</span>
+            <span className="text-ink-3">
+              {' '}· {typeSejour === 'nuit' ? `${nbNuits} nuit(s)` : TYPES_SEJOUR[typeSejour].label}
+            </span>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={onClose}>Annuler</Button>
@@ -72,6 +92,38 @@ function NouvelleReservation({ open, onClose }) {
         </div>
       }
     >
+      <div className="mb-4">
+        <span id="resa-type" className="flex items-center gap-1.5 text-[12px] font-semibold text-ink-2">
+          Type de séjour
+          <InfoBulle titre="Séjour à la demi-journée">
+            Une matinée ou un après-midi se facture au forfait ({demiJournee} MAD) : pas de nuitée,
+            donc pas de taxe de séjour, et la chambre redevient vendable le soir. Le forfait se règle
+            dans « Tarifs & paramètres ».
+          </InfoBulle>
+        </span>
+        <div role="group" aria-labelledby="resa-type" className="mt-1.5 flex flex-wrap gap-1.5">
+          {Object.entries(TYPES_SEJOUR).map(([cle, t]) => (
+            <button
+              key={cle}
+              type="button"
+              onClick={() => {
+                setTypeSejour(cle);
+                setChambreChoisie(null);
+              }}
+              className={cx(
+                'rounded-full border px-3 py-1.5 text-[11px] font-medium transition-colors',
+                typeSejour === cle
+                  ? 'border-maj bg-maj-50 text-maj'
+                  : 'border-line bg-surface text-ink-2 hover:bg-sand-50',
+              )}
+            >
+              {t.label}
+              {t.forfait ? ` · ${t.forfait} MAD` : ''}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <label htmlFor="resa-client" className="text-[12px] font-semibold text-ink-2">
@@ -122,7 +174,7 @@ function NouvelleReservation({ open, onClose }) {
           />
         </div>
 
-        <div>
+        <div className={typeSejour === 'nuit' ? '' : 'hidden'}>
           <span id="resa-nuitees" className="text-[12px] font-semibold text-ink-2">
             Nuitées
           </span>
@@ -149,7 +201,7 @@ function NouvelleReservation({ open, onClose }) {
           </div>
         </div>
 
-        <div>
+        <div className={typeSejour === 'nuit' ? '' : 'hidden'}>
           <label htmlFor="resa-formule" className="text-[12px] font-semibold text-ink-2">
             Formule
           </label>
@@ -371,20 +423,36 @@ export function Reservations() {
           open
           onClose={() => setDetail(null)}
           title={detail.client}
-          subtitle={`Chambre ${detail.chambre} · ${isoDiff(detail.depart, detail.arrivee)} nuits · ${CANAUX[detail.canal]?.label ?? 'Direct'}`}
+          subtitle={`Chambre ${detail.chambre} · ${
+            detail.typeSejour && detail.typeSejour !== 'nuit'
+              ? TYPES_SEJOUR[detail.typeSejour].label
+              : `${isoDiff(detail.depart, detail.arrivee)} nuits`
+          } · ${CANAUX[detail.canal]?.label ?? 'Direct'}`}
           width="max-w-md"
           footer={
-            <div className="flex justify-between gap-2">
+            <div className="flex flex-wrap justify-between gap-2">
               {detail.origine === 'resa' && detail.arrivee === state.date && detail.statut === 'confirmee' ? (
-                <Button
-                  onClick={() => {
-                    actions.checkIn(detail.id);
-                    push(`Check-in effectué — chambre ${detail.chambre}.`);
-                    setDetail(null);
-                  }}
-                >
-                  <Check className="size-3.5" /> Enregistrer l’arrivée
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    onClick={() => {
+                      actions.checkIn(detail.id);
+                      push(`Check-in effectué — chambre ${detail.chambre}.`);
+                      setDetail(null);
+                    }}
+                  >
+                    <Check className="size-3.5" /> Enregistrer l’arrivée
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      actions.marquerNoShow(detail.id);
+                      push(`No-show enregistré — ${detail.client} : première nuit facturée.`, 'info');
+                      setDetail(null);
+                    }}
+                  >
+                    <X className="size-3.5" /> Non présenté
+                  </Button>
+                </div>
               ) : detail.origine === 'resa' && detail.statut === 'confirmee' ? (
                 <Button
                   variant="outline"
@@ -409,7 +477,10 @@ export function Reservations() {
               ['Départ', fmtCourt(detail.depart)],
               ['Formule', FORMULES.find((f) => f.code === detail.formule)?.label ?? detail.formule],
               ['Occupants', `${detail.occupants ?? 2} personne(s)`],
-              ['Prix de la nuit', `${money(TYPES_CHAMBRE[state.chambres.find((c) => c.numero === detail.chambre)?.type]?.prix ?? 0)} MAD`],
+              [
+                'Prix appliqué',
+                `${money(prixDuJour(state, state.chambres.find((c) => c.numero === detail.chambre)?.type))} MAD`,
+              ],
               ['Statut', detail.statut === 'en_sejour' ? 'En séjour' : 'Confirmée'],
             ].map(([k, v]) => (
               <div key={k} className="flex justify-between">
@@ -419,8 +490,22 @@ export function Reservations() {
             ))}
           </dl>
           <div className="mt-3 flex items-center gap-2 rounded-lg bg-sand-100 px-3 py-2 text-[11px] text-ink-2">
-            <Users className="size-3.5 text-ink-3" /> {nuits(detail.arrivee, detail.depart)} nuit(s) · total estimé{' '}
-            {money(montantHebergement(state.chambres.find((c) => c.numero === detail.chambre)?.type, detail.formule, detail.occupants ?? 2, nuits(detail.arrivee, detail.depart)))} MAD
+            <Users className="size-3.5 text-ink-3" />{' '}
+            {detail.typeSejour && detail.typeSejour !== 'nuit'
+              ? 'demi-journée'
+              : `${nuits(detail.arrivee, detail.depart)} nuit(s)`}{' '}
+            · total estimé{' '}
+            {money(
+              detail.typeSejour && detail.typeSejour !== 'nuit'
+                ? (state.parametres?.demiJournee ?? 200)
+                : montantHebergement(
+                    state.chambres.find((c) => c.numero === detail.chambre)?.type,
+                    detail.formule,
+                    detail.occupants ?? 2,
+                    nuits(detail.arrivee, detail.depart),
+                    state.parametres?.grille,
+                  ),
+            )} MAD
           </div>
         </Modal>
       )}

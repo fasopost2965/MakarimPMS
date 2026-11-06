@@ -87,6 +87,30 @@ export function regieRestaurant(state) {
   };
 }
 
+// Saison applicable à la date d'exploitation, à partir du mois.
+export function saisonActive(state) {
+  const mois = Number(state.date.slice(5, 7));
+  const saisons = state.parametres?.saisons ?? [];
+  if (mois >= 7 && mois <= 8) return saisons.find((s) => s.nom === 'Haute saison') ?? null;
+  if (mois >= 4 && mois <= 6) return saisons.find((s) => s.nom === 'Moyenne saison') ?? null;
+  if (mois === 9 || mois >= 10 || mois === 1) {
+    return saisons.find((s) => s.nom === 'Épaule') ?? null;
+  }
+  return saisons.find((s) => s.nom === 'Basse saison') ?? null;
+}
+
+// Prix effectif d'un type de chambre à la date d'exploitation : grille
+// publiée × coefficient de saison. Le coefficient est arrondi au dirham.
+export function prixDuJour(state, type) {
+  const base = state.parametres?.grille?.[type]?.prix ?? 0;
+  const coef = saisonActive(state)?.coef ?? 1;
+  return Math.round(base * coef);
+}
+
+export function articlesEnAlerte(state) {
+  return state.stock.filter((a) => a.stock <= a.seuil);
+}
+
 // Écrans réellement ouverts à un profil : les droits paramétrés par la
 // Direction priment sur la matrice documentée, qui sert de valeur par défaut.
 export function ecransDuRole(state, profil) {
@@ -111,11 +135,73 @@ function reducer(state, action) {
       const sejourId = `S-${seqS}`;
       const folioId = `F-${1000 + seqF}`;
       const nb = nbNuits(resa.arrivee, resa.depart);
+
+      // Séjour à la demi-journée : forfait fixe, pas de nuit, donc pas de
+      // taxe de séjour (elle est due par nuit et par adulte — BR-FAC-007).
+      if (resa.typeSejour && resa.typeSejour !== 'nuit') {
+        const folioIdDJ = `F-${1000 + state.seq.folio + 1}`;
+        const sejourIdDJ = `S-${state.seq.sejour + 1}`;
+        const libelle = resa.typeSejour === 'matinee' ? 'Matinée (day-use)' : 'Après-midi (day-use)';
+        const ligneDJ = {
+          id: `${folioIdDJ}-1`,
+          libelle,
+          montant: state.parametres?.demiJournee ?? 200,
+          type: 'hebergement',
+          payeur: resa.societeId ? 'societe' : 'client',
+          dayUse: true,
+        };
+        const nextDJ = {
+          ...state,
+          seq: { ...state.seq, sejour: state.seq.sejour + 1, folio: state.seq.folio + 1 },
+          chambres: state.chambres.map((c) =>
+            c.numero === resa.chambre ? { ...c, statut: 'occupee', sejourId: sejourIdDJ, note: null } : c,
+          ),
+          reservations: state.reservations.map((r) =>
+            r.id === resa.id ? { ...r, statut: 'en_sejour', sejourId: sejourIdDJ } : r,
+          ),
+          sejours: [
+            ...state.sejours,
+            {
+              id: sejourIdDJ,
+              chambre: resa.chambre,
+              client: resa.client,
+              arrivee: resa.arrivee,
+              depart: resa.arrivee,
+              formule: 'RO',
+              occupants: resa.occupants,
+              folioId: folioIdDJ,
+              statut: 'en_cours',
+              typeSejour: resa.typeSejour,
+              clientId: resa.clientId ?? null,
+              societeId: resa.societeId ?? null,
+            },
+          ],
+          folios: [
+            ...state.folios,
+            {
+              id: folioIdDJ,
+              chambre: resa.chambre,
+              client: resa.client,
+              sejourId: sejourIdDJ,
+              clientId: resa.clientId ?? null,
+              societeId: resa.societeId ?? null,
+              statut: 'ouvert',
+              lignes: [ligneDJ],
+              paiements: [],
+            },
+          ],
+        };
+        return {
+          ...nextDJ,
+          journal: journal(nextDJ, `Check-in demi-journée — ${resa.client}, chambre ${resa.chambre}`, 'jade'),
+        };
+      }
+
       const lignes = [
         {
           id: `${folioId}-1`,
           libelle: `Hébergement ${nb} nuit${nb > 1 ? 's' : ''} — ${resa.formule}`,
-          montant: montantHebergement(chambre.type, resa.formule, resa.occupants, nb),
+          montant: montantHebergement(chambre.type, resa.formule, resa.occupants, nb, state.parametres?.grille),
           type: 'hebergement',
           // Le payeur par défaut suit la nature du client : une entreprise
           // règle l'hébergement, un particulier se règle lui-même. La ligne
@@ -210,6 +296,8 @@ function reducer(state, action) {
 
     case 'CREATE_RESERVATION': {
       const seq = state.seq.resa + 1;
+      // Demi-journée : pas de nuit, donc départ le jour même.
+      const typeSejour = action.payload.typeSejour ?? 'nuit';
       const next = {
         ...state,
         seq: { ...state.seq, resa: seq },
@@ -220,7 +308,8 @@ function reducer(state, action) {
             chambre: String(action.payload.chambre),
             client: action.payload.client,
             arrivee: action.payload.arrivee,
-            depart: action.payload.depart,
+            depart: typeSejour === 'nuit' ? action.payload.depart : action.payload.arrivee,
+            typeSejour,
             canal: action.payload.canal,
             formule: action.payload.formule,
             occupants: action.payload.occupants,
@@ -232,7 +321,14 @@ function reducer(state, action) {
           },
         ],
       };
-      return { ...next, journal: journal(next, `Réservation — ${action.payload.client}, chambre ${action.payload.chambre}`, 'maj') };
+      return {
+        ...next,
+        journal: journal(
+          next,
+          `Réservation — ${action.payload.client}, chambre ${action.payload.chambre}${typeSejour !== 'nuit' ? ' (demi-journée)' : ''}`,
+          'maj',
+        ),
+      };
     }
 
     case 'CANCEL_RESERVATION': {
@@ -466,7 +562,7 @@ function reducer(state, action) {
       const folio = state.folios.find((f) => f.id === sejour.folioId);
       if (!chambre || !folio) return state;
 
-      const prix = prixNuit(chambre.type, sejour.formule, sejour.occupants);
+      const prix = prixNuit(chambre.type, sejour.formule, sejour.occupants, state.parametres?.grille);
       const taxe = PARAMS.taxeSejour * sejour.occupants;
       const nouveauDepart = isoAdd(sejour.depart, 1);
       const lignes = [
@@ -652,6 +748,325 @@ function reducer(state, action) {
       };
     }
 
+    // ---------------------------------------------------------------
+    // Publication de la grille tarifaire. C'est cette action qui rend les
+    // nouveaux prix effectifs : tant qu'elle n'a pas été exécutée, la
+    // grille reste un brouillon côté écran (BR-TR-003).
+    // ---------------------------------------------------------------
+    case 'PUBLIER_GRILLE': {
+      const grille = action.grille;
+      const invalides = Object.entries(grille).filter(
+        ([, g]) => !Number.isFinite(Number(g.prix)) || Number(g.prix) <= 0,
+      );
+      if (invalides.length > 0) return state;
+
+      const parametres = {
+        ...state.parametres,
+        grille: Object.fromEntries(
+          Object.entries(grille).map(([cle, g]) => [
+            cle,
+            { ...state.parametres.grille[cle], prix: Math.round(Number(g.prix)) },
+          ]),
+        ),
+        saisons: action.saisons ?? state.parametres.saisons,
+        demiJournee: action.demiJournee ?? state.parametres.demiJournee,
+        version: (state.parametres.version ?? 0) + 1,
+        publieeLe: state.date,
+        publieePar: action.par ?? 'Direction',
+      };
+      const next = { ...state, parametres };
+      return {
+        ...next,
+        journal: journal(
+          next,
+          `Grille tarifaire publiée — version ${parametres.version} (${parametres.publieePar})`,
+          'jade',
+        ),
+      };
+    }
+
+    // ---------------------------------------------------------------
+    // Chambres : création et paramétrage.
+    // ---------------------------------------------------------------
+    case 'AJOUTER_CHAMBRE': {
+      const numero = String(action.chambre.numero ?? '').trim();
+      if (!numero) return state;
+      if (state.chambres.some((c) => c.numero === numero)) return state;
+      const chambre = {
+        numero,
+        etage: Number(action.chambre.etage ?? Math.floor(Number(numero) / 100) ?? 0),
+        type: action.chambre.type ?? 'double',
+        statut: action.chambre.statut ?? 'propre',
+        sejourId: null,
+        minibar: Boolean(action.chambre.minibar),
+        active: true,
+      };
+      const next = { ...state, chambres: [...state.chambres, chambre] };
+      return { ...next, journal: journal(next, `Chambre ${numero} créée (${chambre.type})`, 'maj') };
+    }
+
+    case 'MAJ_CHAMBRE': {
+      const next = {
+        ...state,
+        chambres: state.chambres.map((c) =>
+          c.numero === action.numero ? { ...c, ...action.patch } : c,
+        ),
+      };
+      return {
+        ...next,
+        journal: journal(next, `Chambre ${action.numero} mise à jour`, 'neutral'),
+      };
+    }
+
+    // ---------------------------------------------------------------
+    // Fonctionnalités activables (stock, minibar, day-use, channel manager…).
+    // ---------------------------------------------------------------
+    case 'SET_OPTION': {
+      const parametres = {
+        ...state.parametres,
+        options: { ...state.parametres.options, [action.cle]: action.valeur },
+      };
+      const next = { ...state, parametres };
+      return {
+        ...next,
+        journal: journal(
+          next,
+          `Fonctionnalité « ${action.cle} » ${action.valeur ? 'activée' : 'désactivée'}`,
+          'neutral',
+        ),
+      };
+    }
+
+    case 'SET_HOTEL': {
+      const parametres = {
+        ...state.parametres,
+        hotel: { ...state.parametres.hotel, ...action.patch },
+      };
+      const next = { ...state, parametres };
+      return { ...next, journal: journal(next, 'Identité de l’établissement mise à jour', 'neutral') };
+    }
+
+    // ---------------------------------------------------------------
+    // Stock : entrées, sorties et consommation minibar.
+    // ---------------------------------------------------------------
+    case 'MOUVEMENT_STOCK': {
+      const article = state.stock.find((a) => a.id === action.articleId);
+      if (!article) return state;
+      const qte = Math.max(0, Number(action.qte) || 0);
+      if (qte === 0) return state;
+      const delta = action.type === 'entree' ? qte : -qte;
+      const nouveau = Math.max(0, article.stock + delta);
+      const mouvement = {
+        id: `M-${state.mouvementsStock.length + 1}-${Date.now()}`,
+        date: state.date,
+        heure: fmtHeure(),
+        articleId: article.id,
+        type: action.type,
+        qte,
+        motif: action.motif ?? '',
+        chambre: action.chambre ?? null,
+      };
+      const next = {
+        ...state,
+        stock: state.stock.map((a) => (a.id === article.id ? { ...a, stock: nouveau } : a)),
+        mouvementsStock: [mouvement, ...state.mouvementsStock],
+      };
+      return {
+        ...next,
+        journal: journal(
+          next,
+          `${action.type === 'entree' ? 'Entrée' : 'Sortie'} de stock — ${qte} × ${article.nom}`,
+          'neutral',
+        ),
+      };
+    }
+
+    // Consommation du minibar depuis la chambre : décrémente le stock et
+    // porte la ligne au folio (BR-RST-002, extension aux consommables).
+    case 'CONSOMMER_MINIBAR': {
+      const chambre = state.chambres.find((c) => c.numero === action.numero);
+      if (!chambre?.sejourId) return state;
+      const sejour = state.sejours.find((s) => s.id === chambre.sejourId);
+      const folio = state.folios.find((f) => f.id === sejour?.folioId);
+      if (!sejour || !folio) return state;
+
+      const lignes = [];
+      let stock = state.stock;
+      let index = 0;
+      for (const dotation of action.dotations ?? []) {
+        const article = stock.find((a) => a.id === dotation.articleId);
+        if (!article || article.stock < dotation.qte) continue;
+        index += 1;
+        lignes.push({
+          id: `${folio.id}-mb${folio.lignes.length + index}`,
+          libelle: `Minibar — ${dotation.qte} × ${article.nom}`,
+          montant: article.prix * dotation.qte,
+          type: 'restaurant',
+          payeur: 'client',
+        });
+        stock = stock.map((a) =>
+          a.id === article.id ? { ...a, stock: a.stock - dotation.qte } : a,
+        );
+      }
+      if (lignes.length === 0) return state;
+
+      const next = {
+        ...state,
+        stock,
+        folios: state.folios.map((f) =>
+          f.id === folio.id ? { ...f, lignes: [...f.lignes, ...lignes] } : f,
+        ),
+      };
+      return {
+        ...next,
+        journal: journal(
+          next,
+          `Minibar chambre ${chambre.numero} — ${lignes.length} ligne(s) portée(s) au folio`,
+          'maj',
+        ),
+      };
+    }
+
+    // ---------------------------------------------------------------
+    // Channel manager (simulation) : connexion, synchronisation, push.
+    // ---------------------------------------------------------------
+    case 'TOGGLE_CANAL': {
+      const next = {
+        ...state,
+        canauxDistribution: state.canauxDistribution.map((c) =>
+          c.id === action.id
+            ? {
+                ...c,
+                etat: c.etat === 'connecte' ? 'deconnecte' : 'connecte',
+                dernierSync: c.etat === 'connecte' ? '—' : fmtHeure(),
+              }
+            : c,
+        ),
+      };
+      const canal = next.canauxDistribution.find((c) => c.id === action.id);
+      return {
+        ...next,
+        journal: journal(
+          next,
+          `Canal ${canal.nom} ${canal.etat === 'connecte' ? 'connecté' : 'déconnecté'}`,
+          'neutral',
+        ),
+      };
+    }
+
+    case 'SYNC_CANAL': {
+      const next = {
+        ...state,
+        canauxDistribution: state.canauxDistribution.map((c) =>
+          c.id === action.id ? { ...c, dernierSync: fmtHeure(), erreurs: 0 } : c,
+        ),
+      };
+      const canal = next.canauxDistribution.find((c) => c.id === action.id);
+      return {
+        ...next,
+        journal: journal(next, `Synchronisation ${canal.nom} — ${fmtHeure()}`, 'jade'),
+      };
+    }
+
+    case 'POUSSER_TARIFS': {
+      const heure = fmtHeure();
+      const next = {
+        ...state,
+        canauxDistribution: state.canauxDistribution.map((c) =>
+          c.etat === 'connecte' ? { ...c, dernierSync: heure } : c,
+        ),
+      };
+      const nb = next.canauxDistribution.filter((c) => c.etat === 'connecte').length;
+      return {
+        ...next,
+        journal: journal(
+          next,
+          `Tarifs et disponibilités poussés vers ${nb} canal(aux) — grille v${next.parametres.version}`,
+          'jade',
+        ),
+      };
+    }
+
+    // ---------------------------------------------------------------
+    // No-show (BR-RES-007) : la réservation est marquée non présentée et la
+    // première nuit est due. L'annulation se fait sans suppression physique
+    // (BR-AUD-001).
+    // ---------------------------------------------------------------
+    case 'MARQUER_NO_SHOW': {
+      const resa = state.reservations.find((r) => r.id === action.id);
+      if (!resa || resa.statut !== 'confirmee') return state;
+      const chambre = state.chambres.find((c) => c.numero === resa.chambre);
+      const nb = nbNuits(resa.arrivee, resa.depart);
+      const prix = prixNuit(chambre?.type, resa.formule, resa.occupants, state.parametres?.grille);
+      const seq = state.seq.facture + 1;
+      const numero = `FA-2026-0${String(seq).padStart(3, '0')}`;
+
+      const next = {
+        ...state,
+        seq: { ...state.seq, facture: seq },
+        chambres: state.chambres.map((c) =>
+          c.numero === resa.chambre && c.statut === 'propre' ? { ...c, statut: 'propre' } : c,
+        ),
+        reservations: state.reservations.map((r) =>
+          r.id === resa.id ? { ...r, statut: 'no_show', noShowLe: state.date } : r,
+        ),
+        factures: [
+          {
+            id: numero,
+            client: resa.client,
+            type: resa.societeId ? 'societe' : 'hotel',
+            payeur: resa.societeId ? 'societe' : 'client',
+            societe: null,
+            chambre: resa.chambre,
+            montant: prix,
+            statut: 'emise',
+            date: state.date,
+            lignes: [
+              {
+                libelle: `No-show ${resa.client} — 1 nuit retenue (${nb} nuit(s) réservée(s))`,
+                montant: prix,
+                tva: PARAMS.tvaHebergement,
+              },
+            ],
+          },
+          ...state.factures,
+        ],
+      };
+      return {
+        ...next,
+        journal: journal(
+          next,
+          `No-show — ${resa.client}, chambre ${resa.chambre} : 1 nuit facturée (${numero})`,
+          'crimson',
+        ),
+      };
+    }
+
+    // ---------------------------------------------------------------
+    // Session : chaque agent se connecte avec son propre compte.
+    // ---------------------------------------------------------------
+    case 'LOGIN': {
+      const compte = action.compte;
+      if (!compte) return state;
+      return {
+        ...state,
+        session: { compteId: compte.id, profil: compte.profil, nom: compte.nom, ouverture: fmtHeure() },
+        profil: compte.profil,
+      };
+    }
+
+    case 'LOGOUT': {
+      const next = { ...state, session: null };
+      return {
+        ...next,
+        journal: journal(
+          next,
+          `${state.session?.nom ?? 'Un agent'} a fermé sa session`,
+          'neutral',
+        ),
+      };
+    }
+
     case 'SET_PROFIL':
       return { ...state, profil: action.payload };
 
@@ -756,6 +1171,22 @@ export function AppProvider({ children }) {
       cloturerTournee: (tourneeId, payload) =>
         dispatch({ type: 'CLOTURER_TOURNEE', tourneeId, ...payload }),
       setRoles: (roles) => dispatch({ type: 'SET_ROLES', roles }),
+      publierGrille: (grille, saisons, demiJournee, par) =>
+        dispatch({ type: 'PUBLIER_GRILLE', grille, saisons, demiJournee, par }),
+      ajouterChambre: (chambre) => dispatch({ type: 'AJOUTER_CHAMBRE', chambre }),
+      majChambre: (numero, patch) => dispatch({ type: 'MAJ_CHAMBRE', numero, patch }),
+      setOption: (cle, valeur) => dispatch({ type: 'SET_OPTION', cle, valeur }),
+      setHotel: (patch) => dispatch({ type: 'SET_HOTEL', patch }),
+      mouvementStock: (articleId, type, qte, motif, chambre) =>
+        dispatch({ type: 'MOUVEMENT_STOCK', articleId, type, qte, motif, chambre }),
+      consommerMinibar: (numero, dotations) =>
+        dispatch({ type: 'CONSOMMER_MINIBAR', numero, dotations }),
+      toggleCanal: (id) => dispatch({ type: 'TOGGLE_CANAL', id }),
+      syncCanal: (id) => dispatch({ type: 'SYNC_CANAL', id }),
+      pousserTarifs: () => dispatch({ type: 'POUSSER_TARIFS' }),
+      marquerNoShow: (id) => dispatch({ type: 'MARQUER_NO_SHOW', id }),
+      login: (compte) => dispatch({ type: 'LOGIN', compte }),
+      logout: () => dispatch({ type: 'LOGOUT' }),
       updateFichePolice: (ficheId, patch) =>
         dispatch({ type: 'UPDATE_FICHE_POLICE', ficheId, patch }),
       reset: () => {

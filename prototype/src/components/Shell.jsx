@@ -14,9 +14,12 @@ import {
   CircleDollarSign,
   ClipboardList,
   FileText,
+  Globe,
   IdCard,
   LayoutDashboard,
+  LogOut,
   Moon,
+  Package,
   RotateCcw,
   Search,
   Settings2,
@@ -46,8 +49,9 @@ export const NAV = [
   {
     groupe: 'Réception',
     items: [
-      { cle: 'police', label: 'Fiches de police', icon: IdCard },
-      { cle: 'tournees', label: 'Tours de quart', icon: ClipboardList },
+      { cle: 'police', label: 'Fiches de police', icon: IdCard, option: 'fichePolice' },
+      { cle: 'tournees', label: 'Tours de quart', icon: ClipboardList, option: 'tournees' },
+      { cle: 'stock', label: 'Stock & minibar', icon: Package, option: 'stock' },
     ],
   },
   {
@@ -55,6 +59,7 @@ export const NAV = [
     items: [
       { cle: 'caisse', label: 'Caisse & factures', icon: CircleDollarSign },
       { cle: 'documents', label: 'Documents & PDF', icon: FileText },
+      { cle: 'channel', label: 'Channel manager', icon: Globe, option: 'channelManager' },
       { cle: 'roles', label: 'Rôles & permissions', icon: ShieldCheck },
       { cle: 'tarifs', label: 'Tarifs & paramètres', icon: Settings2 },
     ],
@@ -68,15 +73,26 @@ export function ecransAutorises(profil, roles) {
   return roles?.[profil]?.ecrans ?? (PROFILS[profil] ?? PROFILS.direction).ecrans;
 }
 
-export function navFiltree(profil, roles) {
+export function navFiltree(profil, roles, options) {
   const autorises = ecransAutorises(profil, roles);
   return NAV.map((section) => ({
     ...section,
-    items: section.items.filter((item) => autorises.includes(item.cle)),
+    items: section.items.filter(
+      (item) => autorises.includes(item.cle) && (!item.option || options?.[item.option] !== false),
+    ),
   })).filter((section) => section.items.length > 0);
 }
 
-function Mark() {
+function Mark({ logo }) {
+  // Le logo est téléversé depuis « Tarifs & paramètres » ; sans logo, on
+  // retombe sur la marque géométrique par défaut.
+  if (logo) {
+    return (
+      <div className="grid size-10 place-items-center overflow-hidden rounded-xl border border-line bg-surface">
+        <img src={logo} alt="" className="size-full object-contain" />
+      </div>
+    );
+  }
   return (
     <div className="relative grid size-10 place-items-center overflow-hidden rounded-xl bg-maj text-white shadow-card">
       <svg viewBox="0 0 32 32" className="size-6" aria-hidden>
@@ -100,7 +116,7 @@ export function Sidebar({ active, onNavigate, onNightAudit }) {
     <aside className="hidden w-[252px] shrink-0 flex-col border-r border-line bg-sand-50 lg:flex">
       <div className="zellige border-b border-line-soft px-4 py-4">
         <div className="flex items-center gap-3">
-          <Mark />
+          <Mark logo={state.parametres?.hotel?.logo} />
           <div className="min-w-0">
             <p className="font-display truncate text-[17px] leading-tight text-ink">Makarim</p>
             <p className="mt-0.5 truncate text-[10px] font-medium tracking-[0.09em] text-ink-3 uppercase">
@@ -111,7 +127,7 @@ export function Sidebar({ active, onNavigate, onNightAudit }) {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">
-        {navFiltree(state.profil, state.roles).map((section) => (
+        {navFiltree(state.profil, state.roles, state.parametres?.options).map((section) => (
           <div key={section.groupe} className="mb-5">
             <p className="mb-1.5 px-2 text-[10px] font-semibold tracking-[0.11em] text-ink-3 uppercase">
               {section.groupe}
@@ -304,10 +320,22 @@ export function Topbar({ titre, sousTitre, onOpenMobileNav, onOpenPalette, onCha
                     </li>
                   ))}
                 </ul>
-                <p className="border-t border-line-soft px-3 py-2 text-[12px] leading-4 text-ink-3">
-                  Le serveur applique la même matrice sur chaque endpoint (BR-TR-004) :
-                  l’interface ne fait que refléter les droits.
-                </p>
+                <div className="border-t border-line-soft px-3 py-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuProfil(false);
+                      actions.logout();
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] font-medium text-crimson transition-colors hover:bg-crimson-100/50"
+                  >
+                    <LogOut className="size-3.5" /> Fermer ma session
+                  </button>
+                  <p className="mt-1.5 text-[11px] leading-4 text-ink-3">
+                    Le serveur applique la même matrice sur chaque endpoint (BR-TR-004) :
+                    l’interface ne fait que refléter les droits.
+                  </p>
+                </div>
               </div>
             </>
           )}
@@ -330,7 +358,7 @@ export function MobileNav({ open, onClose, active, onNavigate }) {
             ✕
           </Button>
         </div>
-        {navFiltree(state.profil, state.roles).map((section) => (
+        {navFiltree(state.profil, state.roles, state.parametres?.options).map((section) => (
           <div key={section.groupe} className="mb-3">
             <p className="px-2 pb-1 text-[10px] font-semibold tracking-[0.1em] text-ink-3 uppercase">{section.groupe}</p>
             {section.items.map((item) => {

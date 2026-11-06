@@ -60,8 +60,12 @@ prolongation d'une nuit au compte du client, émission de deux factures
 distinctes, encaissements, check-out, **régie restaurant** (ce que l'hôtel
 encaisse pour le restaurant et doit lui reverser).
 
-**Tarifs & paramètres** · grille 30 chambres, formules, saisons, fiscalité
-(10 % hébergement et pensions, 20 % annexes), politique d'annulation.
+**Tarifs & paramètres** · **grille éditable puis publiée** (versionnée et
+journalisée), coefficients de saison, forfait demi-journée, **logo et nom de
+l'établissement**, **modules activables**, fiscalité et politique d'annulation.
+
+**Connexion** · portail d'entrée : un compte par agent, rôle porté par le compte,
+déconnexion depuis le menu de profil.
 
 **Fiches de police** · registre d'hébergement : une fiche par séjour, contrôle
 des champs obligatoires (pièce d'identité, naissance, nationalité), édition et
@@ -74,6 +78,12 @@ caisse, clôture signée et rapport imprimable (cahier de transmission).
 **Rôles & permissions** · matrice rôles × écrans paramétrable par la Direction,
 avec verrous anti-lockout, aperçu de la navigation résultante et journalisation.
 
+**Stock & minibar** · inventaire, seuils critiques, mouvements d'entrée/sortie et
+consommation minibar déclarée depuis la chambre (ligne portée au folio).
+
+**Channel manager** · connexions aux plateformes, mapping des types de chambre,
+synchronisation et poussée des tarifs publiés (simulation).
+
 **Documents & PDF** · bibliothèque des pièces imprimables du jour : factures et
 notes d'hôtel (ventilation TVA), fiches de police, rapports de tournée, relevé de
 régie restaurant. Aperçu A4 puis impression navigateur (« Enregistrer en PDF »).
@@ -85,7 +95,7 @@ Le menu de profil de la barre supérieure applique la matrice corrigée
 
 | Profil | Écrans | Montants | Ce que ça démontre |
 |---|---|:--:|---|
-| Direction | tous (11 écrans) | oui | Supervision, clôture, tarifs, **paramétrage des rôles** |
+| Direction | tous (13 écrans) | oui | Supervision, clôture, tarifs, **paramétrage des rôles**, stock, distribution |
 | Réception | tableau de bord, chambres, réservations, caisse, restaurant, fiches de police, tours de quart, documents | oui | Encaisse et fait les départs (correction R1) |
 | Gouvernante | chambres, tours de quart | **non** | Aucune donnée de facturation (BR-HK-004) |
 | Restaurateur | restaurant, tours de quart | oui | Rôle créé pour L3 |
@@ -128,12 +138,25 @@ Direction peut l'ajuster (le serveur reste seul juge en production, BR-TR-004).
 | **Particuliers / entreprises** | typologie de client, fiche société (ICE, conditions), incidence sur la facturation (BR-CLI-001/006) |
 | **Facturation séparée** | payeur ligne par ligne, nuit supplémentaire au compte du client, deux factures société + client (BR-FAC-001, BR-SEJ-007) |
 | **Régie restaurant** | notes en chambre vs encaissement direct, relevé de ce que l'hôtel doit reverser au restaurant (BR-RST-002/005) |
+| **Publication de la grille** | prix éditables puis **publiés** (validation, version, journal) ; correction d'une publication qui ne s'appliquait pas (BR-TR-003) |
+| **Saisons & forfaits** | coefficients éditables par saison, forfait demi-journée paramétrable |
+| **Demi-journée** | matinée ou après-midi à 200 MAD, sans taxe de séjour, chambre revendable le soir |
+| **No-show** | bouton « Non présenté », statut conservé et première nuit facturée (BR-RES-007) |
+| **Prévision intelligente** | 14 jours recalculés sur les réservations réelles, objectif 63 %, recette estimée au survol |
+| **Chronomètre de shift** | temps écoulé/restant par agent, vue globale des trois shifts pour la Direction (BR-RH-003) |
+| **Stock & minibar** | inventaire, seuils, mouvements ; consommation minibar liée à la chambre et portée au folio (BR-STK-001/002) |
+| **Channel manager** | connexion, mapping, synchronisation et push des tarifs (simulation) |
+| **Chambres paramétrables** | création de chambre (numéro, étage, type, minibar) avec contrôle d'unicité |
+| **Identité & connexion** | logo et nom de l'hôtel paramétrables, portail de connexion, **un compte par agent** |
+| **Bulles d'aide** | composant accessible posé sur les notions non évidentes (no-show, régie, répartition, publication…) |
 | **Audit de design** (voir `docs/audits/AUDIT_DESIGN_PROTOTYPE_2026-11.md`) | contrastes WCAG corrigés (6 paires), échelle typographique ramenée de 12 à 8 tailles, 3 rayons et 2 ombres tokenisés, labels associés, toasts annoncés, lien d'évitement, cibles tactiles à 36 px, capacité de salle lue dans le référentiel |
 
 ## Vérification
 
 Build de production et parcours testés automatiquement (esbuild + jsdom) :
-11 écrans, check-in, housekeeping, envoi en chambre, confirmation de séminaire,
-encaissement, palette ⌘K, clôture de journée, répartition société / client,
-émission de deux factures, aperçu et impression d'un document, clôture de shift,
+13 écrans + portail de connexion : connexion/déconnexion, check-in, housekeeping,
+envoi en chambre, confirmation de séminaire, encaissement, palette ⌘K, clôture de
+journée, répartition société / client, émission de deux factures, aperçu et
+impression d'un document, clôture de shift, chronomètre, publication de la grille,
+création de chambre, mouvement de stock, synchronisation d'un canal,
 enregistrement de la matrice des rôles — **0 erreur console**.

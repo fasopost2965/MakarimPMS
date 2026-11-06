@@ -1,7 +1,10 @@
 import {
   BASE_DATE, isoAdd, isoDiff, nuits as nbNuits,
 } from './lib/date';
-import { CLIENTS, PROFILS, SHIFTS, TACHES_TOURNEE, TYPES_CHAMBRE } from './data';
+import {
+  ARTICLES_STOCK, CANAUX_DISTRIBUTION, CLIENTS, FORFAIT_DEMI_JOURNEE, HOTEL,
+  PROFILS, SAISONS, SHIFTS, TACHES_TOURNEE, TYPES_CHAMBRE,
+} from './data';
 import { montantHebergement, montantTaxeSejour } from './lib/pricing';
 
 // ------------------------------------------------------------------
@@ -445,6 +448,41 @@ export function buildInitialState(carte = []) {
 
   const clients = CLIENTS.map((c) => ({ ...c }));
 
+  // 11. Paramétrage d'exploitation — tout ce qui doit être modifiable par la
+  //     Direction sans redéploiement (BR-TR-003) : grille tarifaire publiée,
+  //     coefficients de saison, forfait demi-journée, identité de l'hôtel et
+  //     fonctionnalités activables.
+  const parametres = {
+    grille: Object.fromEntries(
+      Object.entries(TYPES_CHAMBRE).map(([cle, t]) => [cle, { prix: t.prix, capacite: t.capacite }]),
+    ),
+    saisons: SAISONS.map((s) => ({ ...s })),
+    demiJournee: FORFAIT_DEMI_JOURNEE,
+    hotel: { nom: HOTEL.nom, logo: null, ville: HOTEL.ville },
+    options: {
+      dayUse: true,
+      minibar: true,
+      stock: true,
+      channelManager: true,
+      fichePolice: true,
+      tournees: true,
+    },
+    version: 12,
+    publieeLe: date,
+    publieePar: 'Youssef Benali',
+  };
+
+  // 12. Stock et mouvements
+  const stock = ARTICLES_STOCK.map((a) => ({ ...a }));
+  const mouvementsStock = [
+    { id: 'M-1', date, heure: '07:20', articleId: 'ST-1', type: 'entree', qte: 48, motif: 'Livraison Sidi Ali' },
+    { id: 'M-2', date, heure: '09:05', articleId: 'ST-8', type: 'sortie', qte: 2, motif: 'Petit-déjeuner — service du matin' },
+    { id: 'M-3', date, heure: '11:30', articleId: 'ST-3', type: 'sortie', qte: 4, motif: 'Minibar — chambre 204' },
+  ];
+
+  // 13. Channel manager (simulation de connexion)
+  const canauxDistribution = CANAUX_DISTRIBUTION.map((c) => ({ ...c }));
+
   const journal = [
     { id: 'J-1', heure: '13:42', texte: 'Note restaurant 230 MAD envoyée au folio de la chambre 204', ton: 'maj' },
     { id: 'J-2', heure: '13:20', texte: 'Table T12 encaissée — 405 MAD (carte bancaire)', ton: 'jade' },
@@ -469,6 +507,12 @@ export function buildInitialState(carte = []) {
     fichesPolice,
     tournees,
     roles,
+    // Paramétrage, stock, distribution et session de connexion.
+    parametres,
+    stock,
+    mouvementsStock,
+    canauxDistribution,
+    session: null,
     journal,
     seq: { sejour: seqSejour, folio: seqFolio, resa: seqResa, commande: 205, evenement: 5, facture: 185, fiche: fichesPolice.length },
   };

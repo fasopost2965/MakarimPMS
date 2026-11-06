@@ -74,6 +74,7 @@ export const PROFILS = {
     ecrans: [
       'dashboard', 'chambres', 'reservations', 'restaurant', 'conference',
       'caisse', 'documents', 'police', 'tournees', 'roles', 'tarifs',
+      'stock', 'channel',
     ],
     montants: true,
   },
@@ -82,7 +83,10 @@ export const PROFILS = {
     personne: 'Salma Idrissi',
     initiales: 'SI',
     accueil: 'dashboard',
-    ecrans: ['dashboard', 'chambres', 'reservations', 'caisse', 'restaurant', 'police', 'tournees', 'documents'],
+    ecrans: [
+      'dashboard', 'chambres', 'reservations', 'caisse', 'restaurant',
+      'police', 'tournees', 'documents', 'stock',
+    ],
     montants: true,
   },
   gouvernante: {
@@ -114,7 +118,7 @@ export const PROFILS = {
     personne: 'Rachid Amrani',
     initiales: 'RA',
     accueil: 'chambres',
-    ecrans: ['chambres', 'tournees'],
+    ecrans: ['chambres', 'tournees', 'stock'],
     montants: false,
   },
 };
@@ -269,7 +273,9 @@ export const PERMISSIONS = [
   { cle: 'tournees', label: 'Tours de quart', groupe: 'Réception' },
   { cle: 'caisse', label: 'Caisse & factures', groupe: 'Administration' },
   { cle: 'documents', label: 'Documents & PDF', groupe: 'Administration' },
+  { cle: 'stock', label: 'Stock & minibar', groupe: 'Exploitation' },
   { cle: 'roles', label: 'Rôles & permissions', groupe: 'Administration' },
+  { cle: 'channel', label: 'Channel manager', groupe: 'Administration' },
   { cle: 'tarifs', label: 'Tarifs & paramètres', groupe: 'Administration' },
 ];
 
@@ -372,3 +378,86 @@ export const POLITIQUE = [
   'Garantie par empreinte bancaire ou acompte de 30 %',
   'Taxe de séjour 3 MAD / nuit / adulte, reversée au Trésor',
 ];
+
+// ------------------------------------------------------------------
+// Séjours à la demi-journée (day-use)
+// Un client peut prendre une chambre pour une matinée ou un après-midi,
+// sans nuitée : forfait fixe, sans taxe de séjour (pas de nuit passée),
+// et la chambre redevient vendable le soir même.
+// ------------------------------------------------------------------
+export const FORFAIT_DEMI_JOURNEE = 200;
+
+export const TYPES_SEJOUR = {
+  nuit: { label: 'Nuitée', court: 'Nuit', forfait: null },
+  matinee: { label: 'Matinée', court: 'Matinée', forfait: FORFAIT_DEMI_JOURNEE, fin: '13:00' },
+  'apres-midi': { label: 'Après-midi', court: 'Après-midi', forfait: FORFAIT_DEMI_JOURNEE, debut: '14:00' },
+};
+
+// ------------------------------------------------------------------
+// Stock — articles consommables et équipements de chambre.
+// Le stock « lié aux chambres » est le minibar : sa consommation se
+// déduit automatiquement quand l'option est active sur la chambre.
+// ------------------------------------------------------------------
+export const ARTICLES_STOCK = [
+  { id: 'ST-1', nom: 'Eau minérale 50 cl', categorie: 'Minibar', unite: 'bouteille', seuil: 60, stock: 48, prix: 15, minibar: true },
+  { id: 'ST-2', nom: 'Jus d’orange 25 cl', categorie: 'Minibar', unite: 'bouteille', seuil: 40, stock: 52, prix: 25, minibar: true },
+  { id: 'ST-3', nom: 'Boisson gazeuse 33 cl', categorie: 'Minibar', unite: 'canette', seuil: 40, stock: 30, prix: 20, minibar: true },
+  { id: 'ST-4', nom: 'Amandes grillées', categorie: 'Minibar', unite: 'sachet', seuil: 25, stock: 22, prix: 30, minibar: true },
+  { id: 'ST-5', nom: 'Savon 25 g', categorie: 'Linge & accueil', unite: 'pièce', seuil: 200, stock: 640, prix: 0, minibar: false },
+  { id: 'ST-6', nom: 'Gel douche 30 ml', categorie: 'Linge & accueil', unite: 'flacon', seuil: 200, stock: 410, prix: 0, minibar: false },
+  { id: 'ST-7', nom: 'Draps housse', categorie: 'Linge & accueil', unite: 'jeu', seuil: 60, stock: 58, prix: 0, minibar: false },
+  { id: 'ST-8', nom: 'Café moulu', categorie: 'Petit-déjeuner', unite: 'kg', seuil: 10, stock: 6, prix: 0, minibar: false },
+  { id: 'ST-9', nom: 'Ampoule LED E27', categorie: 'Maintenance', unite: 'pièce', seuil: 20, stock: 34, prix: 0, minibar: false },
+  { id: 'ST-10', nom: 'Papier toilette', categorie: 'Linge & accueil', unite: 'rouleau', seuil: 120, stock: 96, prix: 0, minibar: false },
+];
+
+export const CATEGORIES_STOCK = ['Minibar', 'Linge & accueil', 'Petit-déjeuner', 'Maintenance'];
+
+// Dotation du minibar par chambre (unités de chaque article) quand
+// l'option est activée. Sert au calcul de la consommation constatée.
+export const DOTATION_MINIBAR = [
+  { articleId: 'ST-1', qte: 2 },
+  { articleId: 'ST-2', qte: 1 },
+  { articleId: 'ST-3', qte: 1 },
+  { articleId: 'ST-4', qte: 1 },
+];
+
+// ------------------------------------------------------------------
+// Channel manager — connexion aux plateformes de distribution.
+// Le prototype simule le sens de circulation : on pousse tarifs et
+// disponibilités, on récupère les réservations. Rien ne sort réellement.
+// ------------------------------------------------------------------
+export const CANAUX_DISTRIBUTION = [
+  {
+    id: 'CH-1', nom: 'Booking.com', type: 'OTA',
+    etat: 'connecte', dernierSync: '13:42', reservationsJour: 2, mapping: 4, erreurs: 0,
+  },
+  {
+    id: 'CH-2', nom: 'Direct (moteur de réservation)', type: 'Directe',
+    etat: 'connecte', dernierSync: '13:40', reservationsJour: 1, mapping: 4, erreurs: 0,
+  },
+  {
+    id: 'CH-3', nom: 'Expedia Partner Central', type: 'OTA',
+    etat: 'deconnecte', dernierSync: '—', reservationsJour: 0, mapping: 0, erreurs: 0,
+  },
+  {
+    id: 'CH-4', nom: 'Airbnb', type: 'OTA',
+    etat: 'deconnecte', dernierSync: '—', reservationsJour: 0, mapping: 0, erreurs: 0,
+  },
+];
+
+// ------------------------------------------------------------------
+// Comptes de connexion (démonstration).
+// Chaque agent se connecte avec son propre compte ; le rôle est porté
+// par le compte, pas choisi à l'écran. Mot de passe identique pour tous
+// en démonstration — jamais en production.
+// ------------------------------------------------------------------
+export const COMPTES = [
+  { id: 'U-1', identifiant: 'y.benali', profil: 'direction', nom: 'Youssef Benali', email: 'y.benali@hotel-makarim.ma' },
+  { id: 'U-2', identifiant: 's.idrissi', profil: 'reception', nom: 'Salma Idrissi', email: 's.idrissi@hotel-makarim.ma' },
+  { id: 'U-3', identifiant: 'n.chafik', profil: 'gouvernante', nom: 'Naïma Chafik', email: 'n.chafik@hotel-makarim.ma' },
+  { id: 'U-4', identifiant: 'k.azzouzi', profil: 'restaurant', nom: 'Karim Azzouzi', email: 'k.azzouzi@hotel-makarim.ma' },
+  { id: 'U-5', identifiant: 'h.loukili', profil: 'comptable', nom: 'Hicham Loukili', email: 'h.loukili@hotel-makarim.ma' },
+  { id: 'U-6', identifiant: 'r.amrani', profil: 'maintenance', nom: 'Rachid Amrani', email: 'r.amrani@hotel-makarim.ma' },
+];
+export const MOT_DE_PASSE_DEMO = 'makarim2026';

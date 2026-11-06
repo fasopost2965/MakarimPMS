@@ -180,3 +180,119 @@ une contrainte d'impression, pas une dérive — une facture tient sur une page.
 Ces écarts sont à porter au registre (`docs/governance/ECARTS_DOC_VS_CODE.md`)
 au moment du portage, pas avant : le prototype ne fait pas foi sur le modèle de
 données.
+
+---
+
+## 5. Passe 2 — paramétrage, distribution et connexion
+
+Deuxième série de demandes d'exploitation. Le prototype compte désormais
+**13 écrans** et un portail de connexion.
+
+### 5.1 Publication de la grille tarifaire (correctif)
+
+La « publication » ne faisait que lever une notification : les prix n'étaient ni
+enregistrés ni appliqués. Désormais :
+
+1. la grille est **éditable** (prix par type de chambre, coefficients de saison,
+   forfait demi-journée) ;
+2. tant qu'elle n'est pas publiée, les parcours continuent d'utiliser la version
+   en vigueur — un bandeau « modifications non publiées » le signale ;
+3. la publication **valide** (prix > 0, coefficients entre 0,5 et 3, forfait
+   renseigné) puis **incrémente la version**, horodate et journalise l'auteur ;
+4. les prix publiés alimentent la tarification réelle : réservation, check-in,
+   prolongation, no-show, prévision de recette, poussée vers les canaux.
+
+Règle : **BR-TR-003** (aucun tarif codé en dur), **BR-AUD-002** (journalisation).
+
+### 5.2 Séjour à la demi-journée
+
+Forfait **200 MAD** (paramétrable), matinée ou après-midi : pas de nuitée, donc
+**pas de taxe de séjour**, et la chambre redevient vendable le soir. Le créneau
+remplace les nuitées dans le formulaire de réservation et apparaît comme tel sur
+le planning et le folio.
+
+### 5.3 Prévision d'occupation intelligente
+
+Le graphique est recalculé à chaque mouvement, sur 14 jours :
+
+- chambres **réellement occupées** chaque jour (séjours chevauchants +
+  réservations fermes, chambres actives seulement) ;
+- distinction visuelle **jour passé / jour en cours / prévision** ;
+- **ligne d'objectif** au taux cible de 63 % ;
+- au survol : chambres vendues, arrivées, départs, **recette estimée** à la
+  grille publiée × coefficient de saison.
+
+En production, la même série sort d'une vue d'occupation par date recalculée à
+chaque écriture — le composant ne change pas.
+
+### 5.4 No-show et prolongation
+
+- **No-show** : bouton « Non présenté » sur une réservation confirmée ; la
+  réservation passe en `no_show` (sans suppression) et la **première nuit est
+  facturée** (facture émise avec le prix de la grille). **BR-RES-007**.
+- **Prolongation** : action « Ajouter une nuit au compte du client » dans la
+  Caisse ; la nuit supplémentaire naît au nom du client, jamais de l'entreprise.
+  **BR-SEJ-007**.
+
+### 5.5 Bulles d'aide
+
+Composant `InfoBulle` accessible (bouton focusable, `aria-describedby`, aide
+visible au survol **et** au clavier), posé sur les notions non évidentes : no-show,
+prolongation, répartition société/client, régie restaurant, demi-journée,
+publication de grille, sortie de stock, channel manager, calcul de la prévision.
+
+### 5.6 Chronomètre de shift
+
+Trois shifts de 8 h. Chaque agent voit **temps écoulé / temps restant** avec une
+barre de progression ; la **Direction** voit les trois shifts en direct sur le
+tableau de bord. L'heure de début est celle du shift ; en production, ce sera
+l'horodatage serveur de la connexion (**BR-RH-003**).
+
+### 5.7 Stock et minibar lié aux chambres
+
+- inventaire par catégorie, **seuils critiques** avec alerte ;
+- mouvements d'entrée / sortie tracés (article, quantité, motif, heure) ;
+- **minibar lié aux chambres** : sur une chambre dont l'option est activée, la
+  déclaration de consommation décrémente le stock **et** porte la ligne au folio
+  du client dans le même geste ;
+- le module entier est **activable** dans les paramètres.
+
+Règles : **BR-STK-001**, **BR-STK-002**, **BR-RST-002**.
+
+### 5.8 Channel manager
+
+Connexions (Booking.com, direct, Expedia, Airbnb), état de connexion,
+synchronisation, **mapping des 4 types de chambre**, et **poussée des tarifs
+publiés** avec le coefficient de saison appliqué. Simulation assumée : aucune
+requête réseau, le sens de circulation est celui d'un vrai channel manager.
+
+### 5.9 Chambres et identité de l'établissement
+
+- **création de chambre** (numéro, étage, type, minibar) réservée à la Direction,
+  avec contrôle d'unicité — la chambre créée est immédiatement vendable ;
+- option **minibar** par chambre ;
+- **nom et logo** de l'établissement paramétrables (téléversement PNG/JPG/SVG,
+  400 Ko max), utilisés sur la page de connexion et dans la barre latérale.
+
+### 5.10 Page de connexion et comptes agents
+
+Portail de connexion moderne (panneau d'identité + formulaire), avec **un compte
+par agent** : le rôle est porté par le compte, pas choisi par l'utilisateur.
+Déconnexion depuis le menu de profil ; la session est journalisée.
+
+> Démonstration : mot de passe commun `makarim2026`, affiché à l'écran. En
+> production : mot de passe individuel, verrouillage après échecs, second facteur
+> pour la Direction, et lien avec `RH-003` (présence horodatée).
+
+---
+
+## 6. Limites connues de cette passe
+
+| Sujet | Limite | Suite |
+|---|---|---|
+| Demi-journée | la chambre reste « occupée » jusqu'au départ manuel le jour même | automatiser la libération à 13 h / 19 h |
+| Channel manager | simulation, aucun appel réseau | connecter un vrai CM (API + webhooks) |
+| Stock | pas de lien fournisseur ni de commande d'achat | module achats (hors périmètre 3★) |
+| Création de chambre | pas de suppression (volontaire : soft delete, BR-AUD-001) | statut « inactive » à la place |
+| Logo | stocké en `localStorage` (démonstration) | stockage objet côté serveur |
+| Connexion | comptes de démonstration en dur | table utilisateurs, hachage, MFA direction |

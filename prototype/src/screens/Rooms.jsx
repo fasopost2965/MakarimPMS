@@ -8,6 +8,8 @@
 import { useMemo, useState } from 'react';
 import {
   BedDouble,
+  Plus,
+  Wine,
   CheckCircle2,
   DoorOpen,
   Search,
@@ -16,10 +18,10 @@ import {
   Users,
   Wrench,
 } from 'lucide-react';
-import { PROFILS, STATUTS_CHAMBRE, TYPES_CHAMBRE } from '../data';
-import { soldeDuFolio, useApp } from '../store';
+import { DOTATION_MINIBAR, PROFILS, STATUTS_CHAMBRE, TYPES_CHAMBRE } from '../data';
+import { prixDuJour, soldeDuFolio, useApp } from '../store';
 import { fmtCourt, money } from '../lib/date';
-import { Button, Card, Drawer, Pill, cx, useToast } from '../components/ui';
+import { Button, Card, Drawer, Modal, Pill, cx, useToast } from '../components/ui';
 
 const FILTRES = [
   { cle: 'toutes', label: 'Toutes' },
@@ -40,6 +42,8 @@ export function Rooms() {
   const [filtre, setFiltre] = useState('toutes');
   const [recherche, setRecherche] = useState('');
   const [selection, setSelection] = useState(null);
+  const [creation, setCreation] = useState(false);
+  const [nouvelle, setNouvelle] = useState({ numero: '', etage: '4', type: 'double', minibar: false });
   const [etageActif, setEtageActif] = useState('tous');
 
   const chambre = selection ? state.chambres.find((c) => c.numero === selection) : null;
@@ -76,7 +80,10 @@ export function Rooms() {
           <p className="text-[11px] font-medium tracking-[0.1em] text-ink-3 uppercase">Exploitation · Housekeeping</p>
           <h2 className="font-display mt-1 text-[26px] leading-tight">Plan des chambres</h2>
           <p className="mt-1 text-[14px] text-ink-2">
-            30 chambres sur 3 étages · 12 doubles, 7 twins, 7 triples familiales, 4 suites junior.
+            {state.chambres.length} chambres sur {new Set(state.chambres.map((c) => c.etage)).size} étages ·{' '}
+            {Object.entries(TYPES_CHAMBRE)
+              .map(([cle, t]) => `${state.chambres.filter((c) => c.type === cle).length} ${t.court.toLowerCase()}`)
+              .join(', ')}.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -93,6 +100,11 @@ export function Rooms() {
           <Button variant="outline" onClick={() => push('Rapport de gouvernante exporté (PDF)', 'info')}>
             <Sparkles className="size-3.5" /> Rapport gouvernante
           </Button>
+          {state.profil === 'direction' && (
+            <Button onClick={() => setCreation(true)}>
+              <Plus className="size-3.5" /> Nouvelle chambre
+            </Button>
+          )}
         </div>
       </div>
 
@@ -210,12 +222,25 @@ export function Rooms() {
         title={`Chambre ${chambre?.numero ?? ''}`}
         subtitle={
           chambre
-            ? `${TYPES_CHAMBRE[chambre.type].label} · ${chambre.etage}ᵉ étage${montants ? ` · ${TYPES_CHAMBRE[chambre.type].prix} MAD / nuit` : ''}`
+            ? `${TYPES_CHAMBRE[chambre.type].label} · ${chambre.etage}ᵉ étage${montants ? ` · ${prixDuJour(state, chambre.type)} MAD / nuit` : ''}`
             : ''
         }
         footer={
           chambre && (
-            <div className="flex gap-2">
+            <div className="space-y-2">
+              {state.parametres?.options?.minibar && chambre.minibar && chambre.statut === 'occupee' && (
+                <Button
+                  variant="soft"
+                  className="w-full"
+                  onClick={() => {
+                    actions.consommerMinibar(chambre.numero, DOTATION_MINIBAR);
+                    push(`Minibar chambre ${chambre.numero} déclaré — montant porté au folio.`, 'success');
+                  }}
+                >
+                  <Wine className="size-3.5" /> Déclarer la consommation minibar
+                </Button>
+              )}
+              <div className="flex gap-2">
               {chambre.statut === 'hors_service' ? (
                 <Button className="flex-1" onClick={() => changer('a_nettoyer', `Chambre ${chambre.numero} remise en service — à nettoyer`)}>
                   <CheckCircle2 className="size-3.5" /> Remettre en service
@@ -236,12 +261,47 @@ export function Rooms() {
                   )}
                 </>
               )}
+              </div>
             </div>
           )
         }
       >
         {chambre && (
           <div className="space-y-4">
+            {state.parametres?.options?.minibar && (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-sand-50 px-3 py-2">
+                <div>
+                  <p className="text-[12px] font-medium text-ink">Minibar lié à la chambre</p>
+                  <p className="text-[11px] text-ink-3">
+                    La consommation déclarée part au folio et décrémente le stock.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={Boolean(chambre.minibar)}
+                  aria-label="Minibar de la chambre"
+                  onClick={() => {
+                    actions.majChambre(chambre.numero, { minibar: !chambre.minibar });
+                    push(
+                      `Minibar ${chambre.minibar ? 'désactivé' : 'activé'} — chambre ${chambre.numero}.`,
+                      'info',
+                    );
+                  }}
+                  className={cx(
+                    'h-5 w-9 shrink-0 rounded-full border transition-colors',
+                    chambre.minibar ? 'border-maj bg-maj' : 'border-line-strong bg-sand-200',
+                  )}
+                >
+                  <span
+                    className={cx(
+                      'block size-3.5 rounded-full bg-surface transition-transform',
+                      chambre.minibar ? 'translate-x-[18px]' : 'translate-x-[3px]',
+                    )}
+                  />
+                </button>
+              </div>
+            )}
             <Card className="p-4">
               <div className="flex items-start justify-between">
                 <div>
@@ -351,6 +411,86 @@ export function Rooms() {
           </div>
         )}
       </Drawer>
+
+      {/* Création d'une chambre — ouverte à la Direction */}
+      <Modal
+        open={creation}
+        onClose={() => setCreation(false)}
+        title="Nouvelle chambre"
+        subtitle="Une chambre ajoutée devient immédiatement vendable"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setCreation(false)}>Annuler</Button>
+            <Button
+              disabled={!nouvelle.numero.trim() || state.chambres.some((c) => c.numero === nouvelle.numero.trim())}
+              onClick={() => {
+                actions.ajouterChambre({
+                  numero: nouvelle.numero.trim(),
+                  etage: Number(nouvelle.etage),
+                  type: nouvelle.type,
+                  minibar: nouvelle.minibar,
+                });
+                push(`Chambre ${nouvelle.numero.trim()} créée.`, 'success');
+                setNouvelle({ numero: '', etage: '4', type: 'double', minibar: false });
+                setCreation(false);
+              }}
+            >
+              <Plus className="size-3.5" /> Créer la chambre
+            </Button>
+          </div>
+        }
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label htmlFor="ch-numero" className="text-[12px] font-semibold text-ink-2">Numéro</label>
+            <input
+              id="ch-numero"
+              value={nouvelle.numero}
+              onChange={(e) => setNouvelle((n) => ({ ...n, numero: e.target.value }))}
+              placeholder="401"
+              className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+            />
+            {state.chambres.some((c) => c.numero === nouvelle.numero.trim()) && (
+              <p className="mt-1 text-[11px] text-crimson">Ce numéro existe déjà.</p>
+            )}
+          </div>
+          <div>
+            <label htmlFor="ch-etage" className="text-[12px] font-semibold text-ink-2">Étage</label>
+            <input
+              id="ch-etage"
+              type="number"
+              min="0"
+              value={nouvelle.etage}
+              onChange={(e) => setNouvelle((n) => ({ ...n, etage: e.target.value }))}
+              className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label htmlFor="ch-type" className="text-[12px] font-semibold text-ink-2">Type</label>
+            <select
+              id="ch-type"
+              value={nouvelle.type}
+              onChange={(e) => setNouvelle((n) => ({ ...n, type: e.target.value }))}
+              className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-[12px] outline-none focus:border-maj focus:ring-2 focus:ring-maj/25"
+            >
+              {Object.entries(TYPES_CHAMBRE).map(([cle, t]) => (
+                <option key={cle} value={cle}>
+                  {t.label} — {prixDuJour(state, cle)} MAD / nuit
+                </option>
+              ))}
+            </select>
+          </div>
+          <label className="flex cursor-pointer items-center gap-2 sm:col-span-2">
+            <input
+              type="checkbox"
+              checked={nouvelle.minibar}
+              onChange={(e) => setNouvelle((n) => ({ ...n, minibar: e.target.checked }))}
+              className="size-4 rounded border-line-strong"
+            />
+            <span className="text-[12px] text-ink-2">Chambre équipée d’un minibar</span>
+          </label>
+        </div>
+      </Modal>
     </div>
   );
 }

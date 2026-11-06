@@ -28,6 +28,9 @@ import { Police } from './screens/Police';
 import { Tournees } from './screens/Tournees';
 import { Documents } from './screens/Documents';
 import { Roles } from './screens/Roles';
+import { Stock } from './screens/Stock';
+import { Channel } from './screens/Channel';
+import { Login } from './screens/Login';
 
 const PAGES = {
   dashboard: { titre: 'Tableau de bord', sousTitre: 'Pilotage de l’exploitation · Hôtel Makarim 3★', Composant: Dashboard },
@@ -40,6 +43,8 @@ const PAGES = {
   tournees: { titre: 'Tours de quart', sousTitre: 'Relève des trois shifts · cahier de transmission', Composant: Tournees },
   documents: { titre: 'Documents & PDF', sousTitre: 'Factures, fiches de police, rapports de tournée', Composant: Documents },
   roles: { titre: 'Rôles & permissions', sousTitre: 'Paramétrage des accès par la Direction', Composant: Roles },
+  stock: { titre: 'Stock', sousTitre: 'Consommables, linge et minibar des chambres', Composant: Stock },
+  channel: { titre: 'Channel manager', sousTitre: 'Distribution en ligne · tarifs et disponibilités', Composant: Channel },
   tarifs: { titre: 'Tarifs & paramètres', sousTitre: 'Grille, formules, fiscalité et identité', Composant: Rates },
 };
 
@@ -176,6 +181,11 @@ function Contenu() {
       window.removeEventListener('makarim:reset', onReset);
     };
   }, [actions, push]);
+
+  // Portail : sans session ouverte, aucun écran de l'application n'est rendu.
+  // Ce retour anticipé est placé après tous les hooks (règle des hooks) —
+  // il ne doit jamais précéder un useEffect ou un useMemo.
+  if (!state.session) return <Login />;
 
   return (
     <div className="flex h-screen overflow-hidden bg-sand-100">
